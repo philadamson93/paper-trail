@@ -1,4 +1,4 @@
-One-time project bootstrap for the claude-writing-tools workflow. Do all of the following:
+One-time project bootstrap for the paper-trail workflow. Do all of the following:
 
 ## 1. Discover existing conventions
 
@@ -17,7 +17,7 @@ Ask each question, offering the inferred value as the default. Accept a short an
 
 1. **PDF directory** — which folder holds reference PDFs? (default: inferred or `background/`)
 2. **Naming convention** — how are PDFs named? (default: inferred or `{citekey}.pdf`)
-3. **Bib file(s)** — confirm the auto-detected list or provide overrides.
+3. **Bib file(s)** — confirm the auto-detected list or provide overrides. For multi-chapter projects with multiple `.bib` files, include all by default (the auditor may need to verify citations from any chapter); list the actively-edited chapter's bib file first if known.
 4. **Institutional access** — free-text note on what access the user has for paywalled papers (e.g., "Stanford library proxy", "NIH library", "personal only"). Used by `/fetch-paper` to tailor retrieval prompts.
 
 ## 3. Check available tool capabilities
@@ -50,7 +50,7 @@ Below the frontmatter, add a short explanatory header and empty Summary / Detail
 
 Create the configured PDF directory if it doesn't exist (`mkdir -p`).
 
-Ask whether the user plans to use `/check-style` for submission-guideline compliance. If yes, scaffold `compliance_table.md` at the project root from `templates/compliance_table.md`.
+When copying from `templates/claims_ledger.md`, replace any placeholder values (e.g., `last_bootstrap` empty) with real values before writing — the ledger should never contain literal placeholders after init completes.
 
 ## 5. Confirm
 
@@ -68,4 +68,5 @@ Next: /fetch-paper <citekey> to grab a missing PDF, or /ground-claim path/to/cha
 
 - Don't do any grounding, downloading, or auditing yet — that's what the other commands are for.
 - Don't overwrite an existing `claims_ledger.md` without confirming first.
-- Don't hard-code paths; everything the other skills need must come from the ledger frontmatter so users can move files without breaking the workflow.
+- Don't leave literal template placeholders (e.g., `YYYY-MM-DD`) in the written ledger — fill them with real values or empty strings.
+- Don't hard-code paths; everything the other commands need must come from the ledger frontmatter so users can move files without breaking the workflow.

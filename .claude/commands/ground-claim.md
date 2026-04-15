@@ -22,6 +22,10 @@ The user reviews the triage and decides what to accept. If they accept a proposa
 
 Read `pdf_dir`, `pdf_naming`, `bib_files` from `claims_ledger.md` YAML frontmatter. If missing, prompt the user to run `/init-writing-tools` first and stop.
 
+## Multi-cite citations
+
+LaTeX `\cite{a,b,c}` (comma-separated keys) produces **one ledger entry per citekey**. All entries for the same sentence share the same claim text and claim key, but record different citekey / source page / support level / remediation. If different sub-claims of the sentence rely on different citations, note the covered sub-claim in each entry's source excerpt.
+
 ## Pre-flight: ensure source PDFs exist
 
 For every unique citekey in scope:
@@ -44,6 +48,7 @@ Assign one of:
 - **SUPPORTING** — our claim, paper cited as evidence for it. Evidence bar: paper's evidence compatible with our framing.
 - **BACKGROUND** — definition, priority of invention, general context. Evidence bar: paper contains the concept.
 - **CONTRASTING** — "unlike X, we...". Evidence bar: paper actually takes the contrasted position.
+- **FRAMING** — citation gestures at a broad topic or motivation without extracting a specific claim from the paper. Evidence bar: paper addresses the topic. When support is weak, typical remediation is `ACCEPT_AS_FRAMING` or `REMOVE`.
 
 ### Step 2 — Locate source evidence
 
@@ -63,7 +68,7 @@ Choose one:
 - **UNSUPPORTED** — no evidence found on careful read. Possible hallucination or wrong citation.
 - **CONTRADICTED** — evidence actively contradicts the claim. **Critical flag.**
 - **MISATTRIBUTED** — claim is true but this is not the source for it.
-- **STALE** — the claim text in the manuscript has changed since last verification (hash mismatch).
+- **STALE** — the claim text in the manuscript has changed since last verification (claim key mismatch).
 - **PENDING** — not yet checked (pre-flight state).
 
 ### Step 4 — Propose remediation
@@ -90,21 +95,27 @@ Append or update the entry in `claims_ledger.md`. Each entry has:
 - **Manuscript section** — e.g., `2.2.3`.
 - **Citekey**.
 - **Claim text** — the current sentence from the manuscript.
-- **Claim hash** — sha1 (or equivalent) of the normalized (lowercased, whitespace-collapsed) claim text. Used for stale detection.
-- **Claim type** — one of the five above.
+- **Claim key** — sha1 of the normalized (lowercased, whitespace-collapsed) claim text if a hashing tool is available; otherwise store the normalized text itself as the key. Used for stale detection via hash or string comparison on re-run.
+- **Claim type** — one of the six above.
 - **Source excerpt** — verbatim from the PDF with page number.
 - **Support level**.
 - **Remediation** — category + concrete edit, or `—` if CONFIRMED.
 - **Last verified** — today's ISO date.
 
-Maintain both the `## Summary` table (one row per claim) and the `## Details` section (one block per claim).
+Maintain both the `## Summary` table (one row per claim) and the `## Details` section (one block per claim). Summary table schema:
+
+```
+| ID | Section | Cite | Type | Support | Source page | Flag | Last verified |
+```
+
+Keep this schema aligned with the triage report format below so users don't have to reconcile two views.
 
 ## Stale detection
 
 When running in `--recheck` mode, or at the start of any run:
 
-- For each existing ledger entry, re-compute the claim hash from the current manuscript text (look up the sentence by section + citekey, or best-match if the section has moved).
-- If the current hash differs from the stored hash, set status to `STALE` and add a `RECHECK` flag.
+- For each existing ledger entry, re-compute the claim key from the current manuscript text (look up the sentence by section + citekey, or best-match if the section has moved).
+- If the current key differs from the stored key, set status to `STALE` and add a `RECHECK` flag.
 - In non-recheck mode, `STALE` entries are re-verified during this run.
 
 ## End-of-run triage report

@@ -4,16 +4,16 @@ pdf_naming: "{citekey}.pdf"
 bib_files:
   - references.bib
 institutional_access: ""
-last_bootstrap: YYYY-MM-DD
+last_bootstrap:  # populated by /init-writing-tools
 ---
 
 # Claims Ledger
 
 Internal audit artifact for every cited claim in the manuscript. Each entry records:
 
-- The claim sentence (and a hash of it, for stale detection)
+- The claim sentence (and a hash / normalized key, for stale detection)
 - The cited paper
-- The claim type (DIRECT / PARAPHRASED / SUPPORTING / BACKGROUND / CONTRASTING)
+- The claim type (DIRECT / PARAPHRASED / SUPPORTING / BACKGROUND / CONTRASTING / FRAMING)
 - Exact source text supporting (or failing to support) the claim, with page number
 - A support level (CONFIRMED / PARTIALLY_SUPPORTED / OVERSTATED / UNSUPPORTED / CONTRADICTED / MISATTRIBUTED / STALE / PENDING)
 - A remediation (REWORD / RESCOPE / RECITE / SPLIT / ADD_EVIDENCE / REMOVE / ACCEPT_AS_FRAMING) with a concrete suggested edit when support is not CONFIRMED
@@ -24,8 +24,8 @@ Populated and maintained by `/ground-claim`.
 
 ## Summary
 
-| ID | Section | Cite | Type | Support | Flag | Last verified |
-|----|---------|------|------|---------|------|---------------|
+| ID | Section | Cite | Type | Support | Source page | Flag | Last verified |
+|----|---------|------|------|---------|-------------|------|---------------|
 
 ## Details
 

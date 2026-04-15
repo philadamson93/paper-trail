@@ -1,28 +1,31 @@
 # paper-trail
 
-A small set of Claude Code slash-commands for rigorous scientific writing with LLMs: evidence-grounded claim verification, reference hygiene, and submission-guide compliance. Distilled from a real thesis project, packaged for lab sharing. Not plug-and-play — a starting point you fork to your own conventions.
+LLM workflows for writing and reviewing scientific papers: evidence-grounded claim verification and reference hygiene.
+
+Shipped as **Claude Code slash-commands** — drop the `.claude/commands/*.md` files in place and they're live. The command content is plain structured prompt text, so Codex CLI, Cursor, or direct paste into any capable LLM also work if you're not on Claude Code.
+
+Distilled from a real thesis project and packaged for lab sharing. Not plug-and-play — a starting point you fork to your own conventions.
 
 ## Core principle: raise, don't fix
 
-**These commands never edit the manuscript.** They read the manuscript, read the source papers, run verification, and write to audit artifacts (claims ledger, compliance table). Every problem they find is surfaced in a triage report with:
+**These commands never edit the manuscript.** They read the manuscript, read the source papers, run verification, and write to an audit artifact — the **claims ledger**. Every problem they find is surfaced in a triage report with:
 
 - Exactly where in the manuscript the issue is (section, line)
-- The **source-paper page number** for the relevant passage (for citation issues)
+- The **source-paper page number** for the relevant passage
 - A concrete suggested edit — as a proposal, not an application
 
-The user reviews the report and decides what to accept. This keeps control of the prose where it belongs and avoids churn from well-intentioned but wrong auto-fixes. The one exception is `/verify-bib --fix`, which only ever writes to `.bib` files (not the manuscript), and only when the user explicitly passes the flag.
+The user reviews and decides what to accept. This keeps control of the prose where it belongs and avoids churn from well-intentioned but wrong auto-fixes. The one exception is `/verify-bib --fix`, which only ever writes to `.bib` files (never the manuscript), and only when the user explicitly passes the flag.
 
 ## What this addresses
 
-LLMs produce fluent, well-structured, subtly wrong text. Fluency is load-bearing; errors hide in plausible prose. These workflows each target one specific failure mode that tends to appear only at submission time — when it's most expensive to fix.
+LLMs produce fluent, well-structured, subtly wrong text. Fluency is load-bearing; errors hide in plausible prose. These workflows target specific failure modes that tend to surface only at submission time — when they're most expensive to fix.
 
 | Failure mode | Symptom at submission | Workflow |
 |--------------|----------------------|----------|
 | Hallucinated or overstated attributions | A cited paper doesn't actually support the claim, or supports a weaker version | `/ground-claim` |
 | Fabricated or stale BibTeX metadata | Wrong authors, wrong DOI, arXiv preprint now published, duplicate keys | `/verify-bib` |
-| Submission-guideline gaps discovered late | Margins, missing sections, co-author attribution, file naming | `/check-style` |
 
-## The three workflows
+## The two workflows
 
 ### 1. Evidence grounding (`/ground-claim`)
 
@@ -31,11 +34,11 @@ Maintains a **claims ledger** — a markdown file that sits alongside the manusc
 Two non-obvious design choices:
 
 1. **Grouped by source paper, not by manuscript section.** When a paper supports multiple claims, you read it once and verify all of them together. This scales; per-section verification doesn't.
-2. **Verbatim source text is stored, not inserted into the draft.** The ledger is an audit artifact — the receipt proving a paraphrase in the manuscript is faithful to the source. The draft paraphrases; the ledger preserves the original text so any reviewer can check.
+2. **Verbatim source text is stored, not inserted into the draft.** The ledger is an audit artifact — the receipt proving a paraphrase is faithful to the source. The draft paraphrases; the ledger preserves the original so any reviewer can check.
 
-The ledger uses sentence hashes: when manuscript text changes, affected entries are flagged `STALE` automatically on the next run.
+Claims track a hash (or normalized key) of their sentence, so when manuscript text changes, affected entries are flagged `STALE` on the next run automatically.
 
-**Claim type taxonomy** (assigned per claim):
+**Claim type taxonomy:**
 
 | Type | Description | Verification bar |
 |------|-------------|------------------|
@@ -43,7 +46,8 @@ The ledger uses sentence hashes: when manuscript text changes, affected entries 
 | PARAPHRASED | Summarizes paper's argument in our words | Semantic match |
 | SUPPORTING | Our claim, paper cited as evidence | Paper's evidence compatible with our framing |
 | BACKGROUND | Definition, priority, general context | Paper contains the concept |
-| CONTRASTING | "Unlike X, we..." | Paper actually takes the contrasted position |
+| CONTRASTING | "Unlike X, we..." | Paper takes the contrasted position |
+| FRAMING | Citation gestures at a broad topic without a specific extractable claim | Paper addresses the topic |
 
 **Support levels:**
 
@@ -51,7 +55,7 @@ The ledger uses sentence hashes: when manuscript text changes, affected entries 
 |--------|---------|---------------------|
 | CONFIRMED | Evidence directly supports | — |
 | PARTIALLY_SUPPORTED | Supports part, sub-element missing | SPLIT, RESCOPE |
-| OVERSTATED | True but our wording is stronger than paper's | REWORD |
+| OVERSTATED | True but wording is stronger than paper's | REWORD |
 | UNSUPPORTED | No evidence found on careful read | RECITE, REMOVE |
 | CONTRADICTED | Evidence actively contradicts | REMOVE, RECITE — **critical** |
 | MISATTRIBUTED | Claim is true, wrong source for it | RECITE |
@@ -78,21 +82,16 @@ Two-pass audit of every BibTeX entry against CrossRef, arXiv, and optionally Pap
 - **Moderate**: misspelled surnames, wrong pages/volume/year, missing required fields
 - **Minor**: arXiv→published upgrades available, missing issue numbers, duplicate keys
 
-Report by default; `--fix` to write corrections (backs up first).
+Report by default; `--fix` writes corrections to the `.bib` file only (backs up first). Never touches the manuscript.
 
-### 3. Compile-time compliance (`/check-style`)
+## Commands
 
-Point the skill at your submission guide URL (thesis template, journal author info, conference style sheet). It builds a requirement-indexed compliance table keyed to source URLs, marks each `COMPLIANT` / `VERIFY` / `NOT-COMPLIANT`, and re-runs on demand. Compile + visual PDF scan for margins, widows, orphans.
-
-## Skills
-
-| Skill | Purpose |
-|-------|---------|
+| Command | Purpose |
+|---------|---------|
 | `/init-writing-tools` | One-time bootstrap: detect PDF layout and .bib files, write config |
 | `/fetch-paper` | Download open-access PDFs or surface retrieval prompts for paywalled ones |
 | `/ground-claim` | Evidence grounding against source papers (single claim or whole document) |
 | `/verify-bib` | BibTeX metadata audit; `--fix` to write corrections |
-| `/check-style` | Submission-guide compliance table + compile checks |
 
 ## Installation
 
@@ -105,7 +104,7 @@ git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
 ln -s ~/src/paper-trail/.claude/commands/*.md ~/.claude/commands/
 ```
 
-Every project can invoke these. `git pull` in the clone to update.
+Every Claude Code project can invoke these. `git pull` in the clone to update.
 
 ### Option B — Vendor-copy (per-project, customizable)
 
@@ -119,6 +118,14 @@ cp -r /tmp/paper-trail/templates ./
 
 The `.claude/commands/` directory travels with your project. Edit the commands to taste — you own them now.
 
+### Using with other LLM tools
+
+Not on Claude Code? The `.md` files are plain structured prompts. Adapt as needed:
+
+- **Codex CLI** — copy command text into your Codex configuration.
+- **Cursor** — adapt into project rules (`.cursor/rules/` or equivalent).
+- **Direct paste** — copy the content of a `.md` file into your chat and ask the model to follow it against your document.
+
 ### After install, in your writing project
 
 ```
@@ -129,7 +136,7 @@ This is the only command you always run first. It detects your conventions, writ
 
 ## MCP requirements
 
-Skills declare capabilities and degrade gracefully — they adapt to whichever tools are available.
+Commands declare capabilities and degrade gracefully — they adapt to whichever tools are available.
 
 ### Essential
 
@@ -150,7 +157,7 @@ Without these, commands fall back to asking the user to paste relevant PDF secti
 
 ### Fallback (no MCP)
 
-- `pdftotext` from poppler (`brew install poppler` / `apt install poppler-utils`) lets the skills read PDFs via shell.
+- `pdftotext` from poppler (`brew install poppler` / `apt install poppler-utils`) lets the commands read PDFs via shell.
 - CrossRef and arXiv REST APIs work via plain HTTP fetches — slower but zero setup.
 
 ## Configuration
@@ -162,13 +169,13 @@ Config lives in YAML frontmatter at the top of `claims_ledger.md` — the ledger
 pdf_dir: background/
 pdf_naming: "{citekey}.pdf"
 bib_files:
-  - references.bib
+  - merlinonc/references.bib
 institutional_access: "Stanford library proxy"
 last_bootstrap: 2026-04-15
 ---
 ```
 
-Edit this by hand if your layout changes; no re-init needed.
+Edit by hand if your layout changes; no re-init needed.
 
 ## A note on "verbatim"
 
@@ -176,7 +183,7 @@ The ledger stores exact source text for verification. **This text does not go in
 
 ## Adapt, don't adopt
 
-These commands are a starting point. The project they came from needed grouping by paper, five claim types, and an eight-status support taxonomy. Yours may not. Trim, extend, rename, replace — the point is the workflow, not the specific labels.
+These commands are a starting point. The project they came from needed grouping by paper, six claim types, and an eight-status support taxonomy. Yours may not. Trim, extend, rename, replace — the point is the workflow, not the specific labels.
 
 ## License
 
