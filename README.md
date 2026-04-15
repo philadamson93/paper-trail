@@ -2,8 +2,6 @@
 
 A small set of Claude Code slash-commands for rigorous scientific writing with LLMs: evidence-grounded claim verification, reference hygiene, and submission-guide compliance. Distilled from a real thesis project, packaged for lab sharing. Not plug-and-play — a starting point you fork to your own conventions.
 
-The name is a double meaning: the commands build an **audit trail** for every cited claim in your **paper**.
-
 ## Core principle: raise, don't fix
 
 **These commands never edit the manuscript.** They read the manuscript, read the source papers, run verification, and write to audit artifacts (claims ledger, compliance table). Every problem they find is surfaced in a triage report with:
