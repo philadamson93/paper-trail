@@ -18,7 +18,7 @@ Ask each question, offering the inferred value as the default. Accept a short an
 1. **PDF directory** — which folder holds reference PDFs? (default: inferred or `background/`)
 2. **Naming convention** — how are PDFs named? (default: inferred or `{citekey}.pdf`)
 3. **Bib file(s)** — confirm the auto-detected list or provide overrides. For multi-chapter projects with multiple `.bib` files, include all by default (the auditor may need to verify citations from any chapter); list the actively-edited chapter's bib file first if known.
-4. **Institutional access** — free-text note on what access the user has for paywalled papers (e.g., "Stanford library proxy", "NIH library", "personal only"). Used by `/fetch-paper` to tailor retrieval prompts.
+4. **Institutional access** — free-text note on what access the user has for paywalled papers (e.g., "university library proxy", "NIH library", "personal only"). Used by `/fetch-paper` to tailor retrieval prompts.
 
 ## 3. Check available tool capabilities
 
@@ -58,11 +58,11 @@ After config is written, parse **every** configured `.bib` file and count cite k
 
 ```
 PDF coverage:
-  merlinonc/references.bib:  17/18 present  (missing: xu20253dino)
-  DFD_Folder/SSFD.bib:       42/42 present
-  DMI_Latex/references.bib:  23/25 present  (missing: khancomparison, matsumoto2011redox)
+  references.bib:           32/35 present  (missing: smith2023method, jones2024eval, doe2022survey)
+  chapter1/references.bib:  18/18 present
+  chapter2/references.bib:  21/22 present  (missing: liu2021benchmark)
 
-Total missing: 3 PDFs. Run /fetch-paper <citekey> to retrieve each.
+Total missing: 4 PDFs. Run /fetch-paper <citekey> to retrieve each.
 ```
 
 Surfacing missing PDFs at bootstrap lets the user resolve them before `/ground-claim` runs — cheaper than discovering mid-audit.

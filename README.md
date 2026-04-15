@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.jpg" alt="paper-trail" width="180">
+</p>
+
 # paper-trail
 
 LLM workflows for writing and reviewing scientific papers: evidence-grounded claim verification and reference hygiene.
@@ -70,12 +74,16 @@ pdf_dir: background/
 pdf_naming: "{citekey}.pdf"
 bib_files:
   - references.bib
-institutional_access: "Stanford library proxy"
+institutional_access: "university library proxy"
 last_bootstrap: 2026-04-15
 ---
 ```
 
 Edit by hand if your layout changes; no re-init needed.
+
+## Examples
+
+See [`examples/claims_ledger_example.md`](examples/claims_ledger_example.md) for a sample populated ledger with seven entries spanning different claim types (DIRECT, FRAMING), support levels (CONFIRMED, OVERSTATED, CONTRADICTED, PARTIALLY_SUPPORTED), and remediation categories (REWORD, RESCOPE). Includes a multi-cite case and a real-world typo catch.
 
 ## License
 
