@@ -2,28 +2,13 @@
 
 LLM workflows for writing and reviewing scientific papers: evidence-grounded claim verification and reference hygiene.
 
-Shipped as **Claude Code slash-commands** — drop the `.claude/commands/*.md` files in place and they're live. The command content is plain structured prompt text, so Codex CLI, Cursor, or direct paste into any capable LLM also work if you're not on Claude Code.
+Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, also usable with Codex CLI, Cursor, or direct paste.
 
-Distilled from a real thesis project and packaged for lab sharing. Not plug-and-play — a starting point you fork to your own conventions.
+## The problem
 
-## Core principle: raise, don't fix
+Scientific papers routinely cite 50–100 references. Verifying that every claim in a manuscript actually matches what its cited source says is laborious work — usually deferred until peer review, often incomplete, and the mistakes that slip through propagate into the downstream literature. LLM-assisted writing makes this worse: plausibly-phrased attributions are easier to produce and harder to spot-check.
 
-**These commands never edit the manuscript.** They read the manuscript, read the source papers, run verification, and write to an audit artifact — the **claims ledger**. Every problem they find is surfaced in a triage report with:
-
-- Exactly where in the manuscript the issue is (section, line)
-- The **source-paper page number** for the relevant passage
-- A concrete suggested edit — as a proposal, not an application
-
-The user reviews and decides what to accept. This keeps control of the prose where it belongs and avoids churn from well-intentioned but wrong auto-fixes. The one exception is `/verify-bib --fix`, which only ever writes to `.bib` files (never the manuscript), and only when the user explicitly passes the flag.
-
-## What this addresses
-
-LLMs produce fluent, well-structured, subtly wrong text. Fluency is load-bearing; errors hide in plausible prose. These workflows target specific failure modes that tend to surface only at submission time — when they're most expensive to fix.
-
-| Failure mode | Symptom at submission | Workflow |
-|--------------|----------------------|----------|
-| Hallucinated or overstated attributions | A cited paper doesn't actually support the claim, or supports a weaker version | `/ground-claim` |
-| Fabricated or stale BibTeX metadata | Wrong authors, wrong DOI, arXiv preprint now published, duplicate keys | `/verify-bib` |
+paper-trail automates the mechanical part of that work — locating the claim in the source, extracting the relevant passage with a page number, classifying how the claim is supported (or not), and recording it in an audit-trail markdown file alongside the manuscript so a reviewer can see the receipts.
 
 ## The two workflows
 
@@ -93,9 +78,9 @@ Report by default; `--fix` writes corrections to the `.bib` file only (backs up 
 | `/ground-claim` | Evidence grounding against source papers (single claim or whole document) |
 | `/verify-bib` | BibTeX metadata audit; `--fix` to write corrections |
 
-## Installation
+## Installation and usage
 
-Two options, pick based on how you want updates to work.
+Two install options — pick based on how you want updates to work.
 
 ### Option A — Clone + symlink (user-wide, auto-updates)
 
@@ -116,23 +101,19 @@ cp -r /tmp/paper-trail/.claude ./
 cp -r /tmp/paper-trail/templates ./
 ```
 
-The `.claude/commands/` directory travels with your project. Edit the commands to taste — you own them now.
+The `.claude/commands/` directory travels with your project. Edit the commands to taste.
 
 ### Using with other LLM tools
 
-Not on Claude Code? The `.md` files are plain structured prompts. Adapt as needed:
+The `.md` files are plain structured prompts. If you're not on Claude Code:
 
 - **Codex CLI** — copy command text into your Codex configuration.
 - **Cursor** — adapt into project rules (`.cursor/rules/` or equivalent).
-- **Direct paste** — copy the content of a `.md` file into your chat and ask the model to follow it against your document.
+- **Direct paste** — copy the content of a `.md` file into a chat and ask the model to follow it against your document.
 
-### After install, in your writing project
+### First run
 
-```
-/init-writing-tools
-```
-
-This is the only command you always run first. It detects your conventions, writes config, and scaffolds the ledger.
+In your writing project, invoke `/init-writing-tools` once. It detects your layout (bib files, PDF folder, naming convention), asks a few clarifying questions, and writes a `claims_ledger.md` with config at the project root. After that, use `/fetch-paper`, `/ground-claim`, and `/verify-bib` as needed.
 
 ## MCP requirements
 
@@ -177,13 +158,19 @@ last_bootstrap: 2026-04-15
 
 Edit by hand if your layout changes; no re-init needed.
 
+## Design principle: raise, don't fix
+
+**These commands never edit the manuscript.** They read the manuscript, read the source papers, run verification, and write to an audit artifact — the claims ledger. Every problem they find is surfaced in a triage report with:
+
+- Exactly where in the manuscript the issue is (section, line)
+- The source-paper page number for the relevant passage
+- A concrete suggested edit — as a proposal, not an application
+
+The user reviews and decides what to accept. This keeps control of the prose where it belongs and avoids churn from well-intentioned but wrong auto-fixes. The one exception is `/verify-bib --fix`, which writes only to `.bib` files (never the manuscript), and only when the user explicitly passes the flag.
+
 ## A note on "verbatim"
 
 The ledger stores exact source text for verification. **This text does not go in your draft.** The draft paraphrases; the ledger preserves the original as a receipt. Keep excerpts minimal — a sentence or phrase that pins the claim — but quote exactly, including minor extraction artifacts (hyphenation, whitespace), to preserve the audit trail.
-
-## Adapt, don't adopt
-
-These commands are a starting point. The project they came from needed grouping by paper, six claim types, and an eight-status support taxonomy. Yours may not. Trim, extend, rename, replace — the point is the workflow, not the specific labels.
 
 ## License
 
