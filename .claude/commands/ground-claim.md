@@ -95,10 +95,10 @@ Append or update the entry in `claims_ledger.md`. Each entry has:
 - **Manuscript section** — e.g., `2.2.3`.
 - **Citekey**.
 - **Claim text** — the current sentence from the manuscript.
-- **Claim key** — sha1 of the normalized claim text if a hashing tool is available; otherwise store the normalized text itself as the key. Used for stale detection via hash or string comparison on re-run. **Normalization rules** — apply identically on first verification and re-run, or stale detection will produce false positives:
+- **Claim key** — sha1 of the normalized claim text if a hashing tool is available; otherwise store the normalized text itself as the key. Used for stale detection via hash or string comparison on re-run. **Normalization rules** — apply in this order, identically on first verification and re-run, or stale detection will produce false positives:
   1. Lowercase.
-  2. Collapse runs of whitespace (including newlines) to a single space.
-  3. Strip LaTeX commands and their arguments: `\cite{...}`, `\citep{...}`, `\citet{...}`, `\ref{...}`, `\label{...}`, `\emph{...}`, `\textbf{...}`, non-breaking tildes `~`.
+  2. Strip LaTeX commands and their arguments: `\cite{...}`, `\citep{...}`, `\citet{...}`, `\ref{...}`, `\label{...}`, `\emph{...}`, `\textbf{...}`, non-breaking tildes `~`.
+  3. Collapse runs of whitespace (including newlines) to a single space. Applied *after* command stripping so any whitespace artifacts introduced by stripping are absorbed.
   4. Retain all other punctuation as-is (no stripping of commas, em-dashes, parentheses, etc.).
 - **Claim type** — one of the six above.
 - **Source excerpt** — verbatim from the PDF with page number.
@@ -138,7 +138,9 @@ When running in `--recheck` mode, or at the start of any run:
 
 ### Updating an existing entry
 
-When the claim key matches an existing entry:
+Entries are identified by the `(claim_key, citekey)` tuple, not by claim key alone. This matters for multi-cite sentences where two or three entries share a claim key but differ in citekey — lookup must match on both.
+
+When a `(claim_key, citekey)` tuple matches an existing entry:
 
 - **Support level unchanged** — update `Last verified` in place; leave the rest.
 - **Support level changed** — append a dated history note to the Details block (e.g., `_2026-04-15: was OVERSTATED → now CONFIRMED after reword_`). Never silently overwrite the previous verdict.

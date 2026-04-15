@@ -54,12 +54,15 @@ When copying from `templates/claims_ledger.md`, replace any placeholder values (
 
 ## 5. PDF coverage check
 
-After config is written, parse the first-listed `.bib` file and count cite keys. Compare against PDFs in `pdf_dir` (applying the configured naming pattern). Report coverage:
+After config is written, parse **every** configured `.bib` file and count cite keys. Compare against PDFs in `pdf_dir` (applying the configured naming pattern). Report coverage **per bib file** so multi-chapter projects surface missing PDFs across all chapters, not just the first:
 
 ```
-PDF coverage: 17/18 cite keys have matching PDFs in background/.
-  Missing: xu20253dino
-  → Run /fetch-paper xu20253dino to retrieve.
+PDF coverage:
+  merlinonc/references.bib:  17/18 present  (missing: xu20253dino)
+  DFD_Folder/SSFD.bib:       42/42 present
+  DMI_Latex/references.bib:  23/25 present  (missing: khancomparison, matsumoto2011redox)
+
+Total missing: 3 PDFs. Run /fetch-paper <citekey> to retrieve each.
 ```
 
 Surfacing missing PDFs at bootstrap lets the user resolve them before `/ground-claim` runs — cheaper than discovering mid-audit.
