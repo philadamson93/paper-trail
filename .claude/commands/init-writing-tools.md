@@ -1,4 +1,4 @@
-One-time project bootstrap for the paper-trail workflow. Do all of the following:
+One-time project bootstrap for the `paper-trail` workflow. Do all of the following:
 
 ## 1. Discover existing conventions
 
