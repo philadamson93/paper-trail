@@ -27,6 +27,7 @@ Each command is a self-contained prompt in `.claude/commands/*.md` — open the 
 
 ```bash
 git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
+mkdir -p ~/.claude/commands
 ln -s ~/src/paper-trail/.claude/commands/*.md ~/.claude/commands/
 ```
 
@@ -50,7 +51,7 @@ In your writing project, invoke `/init-writing-tools` once. It detects your layo
 
 Commands declare capabilities and degrade gracefully — they adapt to whichever tools are available.
 
-- **Essential:** `pdf-reader` (local PDFs with page attribution) and `paper-search` (arXiv / bioRxiv / medRxiv / PubMed download). Without these, commands fall back to asking the user to paste relevant sections and download papers manually.
+- **Essential:** `pdf-reader` (local PDFs with page attribution) and `paper-search` (arXiv / bioRxiv / medRxiv / PubMed download). Multiple community implementations exist — browse [awesome-mcp-servers](https://github.com/modelcontextprotocol/servers) or [mcpservers.org](https://mcpservers.org/) and install via `claude mcp add <name>`. Without these, commands fall back to asking the user to paste relevant sections and download papers manually.
 - **Recommended (free):** [PapersFlow MCP](https://github.com/papersflow-ai/papersflow-mcp) — purpose-built citation verification over 474M+ papers. Direct upgrade to `/verify-bib`:
 
   ```bash

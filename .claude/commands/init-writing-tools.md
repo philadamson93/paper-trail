@@ -4,7 +4,7 @@ One-time project bootstrap for the paper-trail workflow. Do all of the following
 
 Scan the current project:
 
-- Look for `*.bib` files at any depth. Note their paths.
+- Look for `*.bib` files at any depth. Note their paths. **Exclude** `.bib` files inside `background/`, `drafts/`, `scratch/`, `vendor/`, or other nested reference-material subtrees by default — these typically belong to vendored third-party projects, not the manuscript. List only top-level or chapter-level bib files.
 - Look for directories commonly used for reference PDFs: `background/`, `papers/`, `refs/`, `pdfs/`, `literature/`. Note which exist and how many PDFs each contains.
 - If PDFs are present, cross-reference filenames against cite keys in the detected .bib files to infer the naming convention. Candidates: `{citekey}.pdf`, `{author}{year}.pdf`, `{first-word-of-title}.pdf`, or free-form.
 - Check for an existing `claims_ledger.md` at the project root. If present, surface that init has already been run and ask whether to update in place or re-init from scratch.
@@ -52,14 +52,26 @@ Create the configured PDF directory if it doesn't exist (`mkdir -p`).
 
 When copying from `templates/claims_ledger.md`, replace any placeholder values (e.g., `last_bootstrap` empty) with real values before writing — the ledger should never contain literal placeholders after init completes.
 
-## 5. Confirm
+## 5. PDF coverage check
+
+After config is written, parse the first-listed `.bib` file and count cite keys. Compare against PDFs in `pdf_dir` (applying the configured naming pattern). Report coverage:
+
+```
+PDF coverage: 17/18 cite keys have matching PDFs in background/.
+  Missing: xu20253dino
+  → Run /fetch-paper xu20253dino to retrieve.
+```
+
+Surfacing missing PDFs at bootstrap lets the user resolve them before `/ground-claim` runs — cheaper than discovering mid-audit.
+
+## 6. Confirm
 
 Print a one-line summary of what was set up and what comes next:
 
 ```
 Bootstrap complete.
   Ledger:   <path>
-  PDF dir:  <path> (N existing PDFs)
+  PDF dir:  <path> (N existing PDFs, K missing)
   Bib:      <path>
 Next: /fetch-paper <citekey> to grab a missing PDF, or /ground-claim path/to/chapter.tex to verify citations.
 ```

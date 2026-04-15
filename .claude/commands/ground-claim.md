@@ -48,7 +48,7 @@ Assign one of:
 - **SUPPORTING** — our claim, paper cited as evidence for it. Evidence bar: paper's evidence compatible with our framing.
 - **BACKGROUND** — definition, priority of invention, general context. Evidence bar: paper contains the concept.
 - **CONTRASTING** — "unlike X, we...". Evidence bar: paper actually takes the contrasted position.
-- **FRAMING** — citation gestures at a broad topic or motivation without extracting a specific claim from the paper. Evidence bar: paper addresses the topic. When support is weak, typical remediation is `ACCEPT_AS_FRAMING` or `REMOVE`.
+- **FRAMING** — citation gestures at a broad topic or motivation without a specific sentence-level claim extracted from the paper. The citation is a pointer to a conversation, not a piece of evidence. Evidence bar: paper addresses the topic. **Contrast with BACKGROUND:** BACKGROUND extracts a specific concept, definition, or priority-of-invention *from* the paper; FRAMING extracts nothing specific — it just marks adjacency. When support is weak, typical remediation is `ACCEPT_AS_FRAMING` or `REMOVE`.
 
 ### Step 2 — Locate source evidence
 
@@ -95,7 +95,11 @@ Append or update the entry in `claims_ledger.md`. Each entry has:
 - **Manuscript section** — e.g., `2.2.3`.
 - **Citekey**.
 - **Claim text** — the current sentence from the manuscript.
-- **Claim key** — sha1 of the normalized (lowercased, whitespace-collapsed) claim text if a hashing tool is available; otherwise store the normalized text itself as the key. Used for stale detection via hash or string comparison on re-run.
+- **Claim key** — sha1 of the normalized claim text if a hashing tool is available; otherwise store the normalized text itself as the key. Used for stale detection via hash or string comparison on re-run. **Normalization rules** — apply identically on first verification and re-run, or stale detection will produce false positives:
+  1. Lowercase.
+  2. Collapse runs of whitespace (including newlines) to a single space.
+  3. Strip LaTeX commands and their arguments: `\cite{...}`, `\citep{...}`, `\citet{...}`, `\ref{...}`, `\label{...}`, `\emph{...}`, `\textbf{...}`, non-breaking tildes `~`.
+  4. Retain all other punctuation as-is (no stripping of commas, em-dashes, parentheses, etc.).
 - **Claim type** — one of the six above.
 - **Source excerpt** — verbatim from the PDF with page number.
 - **Support level**.
@@ -110,13 +114,39 @@ Maintain both the `## Summary` table (one row per claim) and the `## Details` se
 
 Keep this schema aligned with the triage report format below so users don't have to reconcile two views.
 
-## Stale detection
+**Valid `Flag` column values** (use exactly one; keeps the column sortable):
+
+| Flag | When |
+|------|------|
+| `—` | No flag. Use for CONFIRMED entries. |
+| `REVIEW` | Non-critical support-level issue (OVERSTATED, PARTIALLY_SUPPORTED, MISATTRIBUTED). |
+| `CRITICAL` | CONTRADICTED or UNSUPPORTED entry. Surface at top of triage. |
+| `RECHECK` | STALE — claim text changed since last verification. Re-verify on next run. |
+| `NEEDS_PDF` | PDF unavailable. Entry stays PENDING until the PDF is retrieved. |
+
+## Re-run semantics
+
+Every run against an existing ledger must preserve history and handle stale detection deterministically. These rules govern how old entries interact with new evidence.
+
+### Stale detection
 
 When running in `--recheck` mode, or at the start of any run:
 
 - For each existing ledger entry, re-compute the claim key from the current manuscript text (look up the sentence by section + citekey, or best-match if the section has moved).
-- If the current key differs from the stored key, set status to `STALE` and add a `RECHECK` flag.
+- If the current key differs from the stored key, set status to `STALE` and add the `RECHECK` flag.
 - In non-recheck mode, `STALE` entries are re-verified during this run.
+
+### Updating an existing entry
+
+When the claim key matches an existing entry:
+
+- **Support level unchanged** — update `Last verified` in place; leave the rest.
+- **Support level changed** — append a dated history note to the Details block (e.g., `_2026-04-15: was OVERSTATED → now CONFIRMED after reword_`). Never silently overwrite the previous verdict.
+- **Source excerpt or page changed** — update and note in the history.
+
+### Claim ID numbering
+
+Claim IDs (`C001`, `C002`, ...) are **global and sequential across runs**. Never restart numbering. The next ID is the highest existing `C###` in the ledger plus one. If you import entries from another ledger, renumber to avoid collisions.
 
 ## End-of-run triage report
 
@@ -148,7 +178,6 @@ For every flagged entry, the user should be able to (a) go directly to the cited
 
 - **Never edit the manuscript (`.tex`) file.** This command writes only to `claims_ledger.md`. Every manuscript-facing proposal is surfaced in the triage report for user acceptance.
 - Never suggest inserting a verbatim source excerpt into the manuscript. The draft paraphrases; the ledger preserves.
-- Never silently overwrite a ledger entry. Preserve the previous status in a history note or append a dated revision.
 - Never mark a claim `CONFIRMED` when you couldn't read the PDF. Use `PENDING` + `NEEDS_PDF`.
 - Never hallucinate evidence. If no supporting text is found, mark `UNSUPPORTED` and let the user decide.
 - Never treat `PARAPHRASED` and `SUPPORTING` as interchangeable — the verification bar differs, and so does the remediation if support is weak.
