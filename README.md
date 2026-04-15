@@ -6,9 +6,9 @@ Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, al
 
 ## Why `paper-trail`
 
-Scientific papers routinely cite 50–100 references. Verifying that every claim in a manuscript actually matches what its cited source says is laborious — usually deferred until peer review, often incomplete, and the mistakes that slip through propagate into the downstream literature. LLM-assisted writing makes this worse: plausibly-phrased attributions are easier to produce and harder to spot-check.
+Scientific papers routinely cite 50–100 references. Verifying that every claim in a manuscript actually matches what its cited source says is laborious, mistake-prone, and the mistakes that slip through thepropagate into the downstream literature. LLM-assisted writing makes this worse, where plausibly-phrased attributions are easier to produce and harder to spot-check.
 
-`paper-trail` automates the mechanical part: locating the claim in the source, extracting the relevant passage with a page number, classifying how the claim is supported (or not), and recording it in an audit-trail markdown file alongside the manuscript so a reviewer can see the receipts.
+`paper-trail` automates the mechanical part: locating the claim in the source, extracting the relevant passage with a page number, classifying how the claim is supported (or not), and recording it in an audit-trail markdown file alongside the manuscript so an author or reviewer can see the receipts.
 
 ## Commands
 
