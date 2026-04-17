@@ -16,6 +16,28 @@ Scientific papers routinely cite 50–100 references. Verifying that every claim
 
 `paper-trail` helps automate this: locating the claim in the source, extracting the relevant passage with a page number, classifying how the claim is supported (or not), and recording it in an audit-trail markdown file alongside the manuscript so an author or reviewer can see the receipts.
 
+### How it works, in one example
+
+```mermaid
+flowchart LR
+    A["Cited claim<br/>('following Smith 2022…')"] --> B["Fetch<br/>source PDF"]
+    B --> C["Read PDF in full<br/>(methods, results,<br/>tables, figures)"]
+    C --> D["Locate evidence<br/>for the claim"]
+    D --> E{"Adjudicate"}
+    E --> F["CONFIRMED / OVERSTATED /<br/>UNSUPPORTED / INDIRECT_SOURCE /<br/>AMBIGUOUS / …"]
+    F --> G["Ledger entry<br/>(quote + page + verdict)"]
+```
+
+Say a paper includes: *"following the method in Smith et al. 2022, we pretrained for 100 epochs on 1.2M images"* — one citation, two factual claims. `/paper-trail`:
+
+1. **Resolves** `Smith et al. 2022` in the paper's bibliography.
+2. **Fetches** the Smith 2022 PDF (arXiv / open-access, or prompts for institutional access if paywalled).
+3. **Reads** the PDF in full — abstract, methods, results, tables, figure captions — searching for the "100 epochs" procedure and the "1.2M images" dataset.
+4. **Adjudicates** per claim: `CONFIRMED` if the numbers match; `OVERSTATED` if Smith says 95 epochs; `UNSUPPORTED` if no epoch count appears anywhere; `INDIRECT_SOURCE` if Smith actually credits another paper for that procedure; `AMBIGUOUS` if reasonable readers would disagree on the evidence.
+5. **Records** the verdict + quoted source passage + page number in `claims_ledger.md`. Critical issues surface at the top for the author/reviewer to triage.
+
+Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand.
+
 ## Getting started — `/paper-trail`
 
 `paper-trail` exposes a single entry point: the **`/paper-trail`** slash command. It operates in two workflow modes:
