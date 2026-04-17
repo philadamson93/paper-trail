@@ -18,18 +18,21 @@ This orchestrates `/verify-bib`, `/fetch-paper`, and `/ground-claim` against a p
 - `/paper-trail <path-to-pdf> --sequential` — process one item at a time (rate-limited MCPs, small context budgets).
 - `/paper-trail <path-to-pdf> --batch-size N` — override parallel batch size (default 10).
 - `/paper-trail <path-to-pdf> --recheck` — re-verify all existing ledger entries in the target output-dir.
+- `/paper-trail <path-to-pdf> --triage` — run interactive triage on `AMBIGUOUS` entries in an existing output-dir (no re-grounding).
 
 ## Initial questions
 
 Use `AskUserQuestion` for any value not provided via args or reliably inferrable from the working directory. Skip a question when the answer is unambiguous from context.
 
-1. **Input PDF path** — if not given positionally.
+1. **Input PDF** — if not given positionally. Offer two ways to provide it:
+   - **Paste a path** (absolute or relative).
+   - **Search by name** — ask the user for the paper's filename or title fragment (e.g., "deuterium metabolic imaging" or "DMI Adamson 2023"). Then run a filesystem search (`Glob` + lightweight `find`) against likely locations (the user's home directory, `~/Documents`, `~/Downloads`, `~/Desktop`, and cwd). If multiple candidates match, present them to the user via `AskUserQuestion` to pick; if zero candidates match, iterate with the user on a different search fragment. Never silently pick a PDF — always confirm.
 2. **Output directory** — default `./paper-trail-<pdf-stem>/` in cwd, confirmable or overridable.
 3. **Mode** — `full` (default) or `single`.
 4. **Institutional access** — short free-text note (e.g., "university library proxy", "personal only"). Used by Phase 2 paywall prompts. If a project `claims_ledger.md` exists with this field, offer its value as the default.
 5. **(single mode only)** — "Describe the claim you want to ground" — free text. Interpret semantically against the input PDF body text; do not require a verbatim quote.
 
-Keep the question count at or below these five. Anything else is inferred or set to a sensible default.
+Keep the question count at or below these five (not counting the internal search-candidates pick for Q1 when search-by-name is chosen). Anything else is inferred or set to a sensible default.
 
 ## Artifact layout
 
@@ -163,6 +166,30 @@ Never suggest Sci-Hub, LibGen, or similar. Inherit the `/fetch-paper` policy.
 - Subagents write their results to the ledger atomically per entry. If a subagent crashes mid-pass, already-written entries remain valid.
 - Claim IDs (`C001`, `C002`, …) are allocated sequentially across all subagents; serialize ID allocation to avoid collisions.
 
+## Phase 4 — Ambiguity triage
+
+After Phase 3 completes, count `AMBIGUOUS` entries in the ledger. `AMBIGUOUS` means the subagent read the cited paper fully (attestation log present) but could not confidently pick between two or more candidate verdicts on the evidence it found — see `/ground-claim` "Ambiguity triage" for the required entry format and semantics.
+
+### When `AMBIGUOUS` entries exist
+
+Prompt the user via `AskUserQuestion`:
+
+- **Question**: "N claim(s) were flagged AMBIGUOUS — the agent read the cited papers fully but couldn't confidently pick a verdict. Triage now or defer?"
+- **Options**: `Triage now` (recommended) | `Defer to /paper-trail <pdf> --triage later`
+
+If the user picks "triage now", run the `/ground-claim --triage` workflow inline: iterate through each `AMBIGUOUS` entry, present the claim ID, citekey, evidence quote, candidate verdicts, and reasoning; collect the user's chosen verdict via `AskUserQuestion`; update the ledger with a dated history note.
+
+If the user defers, note the count in the triage report and exit. Re-run `/paper-trail <pdf> --triage` later to pick up where left off.
+
+### `--triage` invocation (standalone)
+
+When invoked with `--triage`, skip Phases 0–3 entirely. Read the existing ledger in the output directory and run only the triage workflow above on `AMBIGUOUS` entries. No new grounding is performed.
+
+### Do not
+
+- **Do not auto-resolve `AMBIGUOUS` entries** based on your own best guess. The whole point of surfacing ambiguity is to get a human call on close verdicts.
+- **Do not skip the triage prompt** at end of run if `AMBIGUOUS` entries exist. Surfacing them is the whole feature — silently leaving them in the ledger defeats the purpose.
+
 ## Single-claim mode
 
 When `--mode=single` or the user selects `single` at prompt time:
@@ -214,18 +241,23 @@ paper-trail audit: <input-paper-title>
     MODERATE:  Y
     MINOR:     Z
   Claim audit (Phase 3): N claims processed.
-    CONFIRMED:           …
-    PARTIALLY_SUPPORTED: …
-    OVERSTATED:          …
-    UNSUPPORTED:         …  ← review
-    CONTRADICTED:        …  ← critical
-    MISATTRIBUTED:       …
-    STALE:               …
-    PENDING (needs PDF): …
+    CONFIRMED:            …
+    PARTIALLY_SUPPORTED:  …
+    OVERSTATED:           …
+    OVERGENERAL:          …
+    CITED_OUT_OF_CONTEXT: …
+    UNSUPPORTED:          …  ← review
+    CONTRADICTED:         …  ← critical
+    MISATTRIBUTED:        …
+    INDIRECT_SOURCE:      …
+    AMBIGUOUS:            …  ← awaiting user triage
+    STALE:                …
+    PENDING (needs PDF):  …
 
 Requiring attention:
 - <CRITICAL bib issues, one per line>
 - <CONTRADICTED / UNSUPPORTED claims with source-page pointers, one per line>
+- <AMBIGUOUS count; "run /paper-trail <pdf> --triage to resolve" if > 0>
 ```
 
 Every flagged entry includes the source paper page number (for claims) or authoritative source URL (for bib) so the user can verify directly.

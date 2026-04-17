@@ -21,6 +21,7 @@ The user reviews the triage and decides what to accept. If they accept a proposa
 - `/ground-claim path/to/document.tex` — whole-document audit (all `\cite{}` calls)
 - `/ground-claim --recheck` — re-verify every ledger entry (detect STALE entries)
 - `/ground-claim --review` — triage only; print flagged ledger entries without re-reading PDFs
+- `/ground-claim --triage` — interactive triage of `AMBIGUOUS` entries (see "Ambiguity triage" below)
 
 ## Read config
 
@@ -189,8 +190,11 @@ Choose one:
 - **CONTRADICTED** — evidence actively contradicts the claim. **Critical flag.**
 - **MISATTRIBUTED** — claim is true, but this is not the source for it at all.
 - **INDIRECT_SOURCE** — cited paper *does* contain the fact, but it cites another source for that same fact. Technically true; not the primary source. Reference-hygiene issue, not factual error. Typical remediation is `CITE_PRIMARY` — extract the primary source from the cited paper's own bibliography and suggest citing it directly (or in addition).
+- **AMBIGUOUS** — you completed the minimum-reading requirement and documented the evidence, but reasonable readers could disagree between two or more verdicts on the same evidence. This is the **escape hatch for genuine uncertainty**, not a fallback for shortcutting. You must record: (a) the verbatim evidence you found, (b) the candidate verdicts you're choosing between (e.g., "CONFIRMED vs OVERSTATED"), (c) why each is plausible given the evidence, (d) what specifically would disambiguate (e.g., "if the paper's Fig. 4 shows p-values I couldn't access, that would resolve it toward CONFIRMED"). AMBIGUOUS entries are surfaced to the user for triage via `/ground-claim --triage` or at the end of a `/paper-trail` run — the user picks a verdict, and the entry is updated with a history note.
 - **STALE** — the claim text in the manuscript has changed since last verification (claim key mismatch).
 - **PENDING** — not yet checked (pre-flight state).
+
+**`AMBIGUOUS` is not a shortcut.** The attestation log requirement from Step 2 still applies — you cannot return `AMBIGUOUS` without having read the paper in full and documented your search. Using `AMBIGUOUS` to avoid work is a bug, not a feature. If you haven't met the minimum-reading bar, return `PENDING` with `NEEDS_RECHECK` instead.
 
 ### Step 4 — Propose remediation
 
@@ -224,8 +228,8 @@ Append or update the entry in `claims_ledger.md`. Each entry has:
   4. Retain all other punctuation as-is (no stripping of commas, em-dashes, parentheses, etc.).
 - **Claim type** — one of the six above.
 - **Source excerpt** — verbatim from the PDF with page number.
-- **Support level**.
-- **Remediation** — category + concrete edit, or `—` if CONFIRMED.
+- **Support level**. For `AMBIGUOUS`, the Details block must additionally include the Ambiguity-triage fields (candidate verdicts, reasoning for each, would-disambiguate) — see "Ambiguity triage" below.
+- **Remediation** — category + concrete edit, or `—` if CONFIRMED. For `AMBIGUOUS`, remediation is deferred until triage resolves the verdict.
 - **Last verified** — today's ISO date.
 
 Maintain both the `## Summary` table (one row per claim) and the `## Details` section (one block per claim). Summary table schema:
@@ -242,6 +246,7 @@ Keep this schema aligned with the triage report format below so users don't have
 |------|------|
 | `—` | No flag. Use for CONFIRMED entries. |
 | `REVIEW` | Non-critical support-level issue (OVERSTATED, OVERGENERAL, PARTIALLY_SUPPORTED, CITED_OUT_OF_CONTEXT, MISATTRIBUTED, INDIRECT_SOURCE). |
+| `AMBIGUOUS` | Agent read the paper fully but could not confidently pick a verdict. Awaiting user triage via `/ground-claim --triage` or the end-of-run `/paper-trail` triage prompt. |
 | `CRITICAL` | CONTRADICTED or UNSUPPORTED entry. Surface at top of triage. |
 | `RECHECK` | STALE — claim text changed since last verification. Re-verify on next run. |
 | `NEEDS_PDF` | PDF unavailable. Entry stays PENDING until the PDF is retrieved. |
@@ -272,6 +277,48 @@ When a `(claim_key, citekey)` tuple matches an existing entry:
 
 Claim IDs (`C001`, `C002`, ...) are **global and sequential across runs**. Never restart numbering. The next ID is the highest existing `C###` in the ledger plus one. If you import entries from another ledger, renumber to avoid collisions.
 
+## Ambiguity triage
+
+When an agent returns `AMBIGUOUS` for a claim, the ledger entry records candidate verdicts and reasoning but cannot be finalized autonomously. Triage mode resolves these entries interactively with the user. Ambiguity is expected — verifying claims against messy real-world papers produces genuinely hard calls — and it is better surfaced than papered over.
+
+### Required fields in an `AMBIGUOUS` entry
+
+The Details block for any `AMBIGUOUS` claim must contain:
+
+```
+Support: AMBIGUOUS
+  Candidate verdicts:  <V1>, <V2>[, <V3>]
+  Evidence found:      "<verbatim quote>" (p. <N>, section <...>)
+  Reasoning for <V1>:  <one sentence grounded in the quote>
+  Reasoning for <V2>:  <one sentence grounded in the quote>
+  Would disambiguate:  <specific thing that, if known, would resolve the call —
+                        e.g., "access to Fig. 4 p-values", "knowing whether
+                        'approximately' means ±5% or ±20%", "confirmation that
+                        the cited paper's dataset overlaps with ours">
+  Attestation log:     <Section checklist + phrasings searched, per Step 2 —
+                        full-paper read confirmed>
+```
+
+If any of these fields are missing, the entry is not a valid `AMBIGUOUS` — return `PENDING` with `NEEDS_RECHECK` instead.
+
+### Triage workflow (`/ground-claim --triage`)
+
+Iterate through every `AMBIGUOUS` entry in the ledger. For each:
+
+1. **Present via `AskUserQuestion`.** The question body shows: claim ID, manuscript claim text, citekey, evidence quote + page, candidate verdicts with reasoning, would-disambiguate line. The options are the candidate verdicts, each with a short description (e.g., "CONFIRMED — Evidence in Results §3.2 directly matches the claim"). If more than 3 candidate verdicts exist, show the top 3 + "Other / need more context".
+2. **On user response:**
+   - Update the entry's Support level to the chosen verdict (or leave AMBIGUOUS if the user picked "skip" or "more context").
+   - Append a dated history note to the Details block: `_<YYYY-MM-DD>: was AMBIGUOUS → <chosen verdict> by user triage; note: <any free-text the user added>_`.
+   - Remove the `AMBIGUOUS` flag from the Summary table and replace with the appropriate flag for the chosen verdict (per the Flag table above).
+   - If the resolved verdict is not `CONFIRMED`, prompt the user with a second `AskUserQuestion` for remediation category; allow a free-text override.
+3. **Report at end of triage:** how many AMBIGUOUS entries were resolved vs. deferred, and which claim IDs remain AMBIGUOUS.
+
+### Do not
+
+- **Do not auto-pick a verdict for an `AMBIGUOUS` entry based on your best guess.** The whole point of `AMBIGUOUS` is that the agent refused to pick — triage is the user's call.
+- **Do not downgrade `AMBIGUOUS` to `CONFIRMED`** (or any other verdict) without the user's explicit selection.
+- **Do not hide ambiguity.** If in doubt while grounding, prefer `AMBIGUOUS` over forcing `CONFIRMED` / `UNSUPPORTED` — surfacing uncertainty is better than a false-confident verdict.
+
 ## End-of-run triage report
 
 Print a structured summary. Surface `CONTRADICTED` and `UNSUPPORTED` at the top — these are the entries most needing user attention. Every flagged entry must include the source paper page number so the user can look up the relevant passage directly.
@@ -281,11 +328,18 @@ Grounding summary: N claims processed.
   CONFIRMED:           X
   PARTIALLY_SUPPORTED: Y
   OVERSTATED:          Z
+  OVERGENERAL:         Z'
+  CITED_OUT_OF_CONTEXT: Z''
   UNSUPPORTED:         A   ← review
   CONTRADICTED:        B   ← critical
   MISATTRIBUTED:       C
+  INDIRECT_SOURCE:     C'
+  AMBIGUOUS:           F   ← awaiting user triage
   STALE:               D
   PENDING (needs PDF): E
+
+If F > 0:
+  F claims flagged AMBIGUOUS. Run `/ground-claim --triage` to resolve.
 
 Requiring attention:
 - C014 (sec 2.2.3, blankemeier2024merlin p. 9) — OVERSTATED.
