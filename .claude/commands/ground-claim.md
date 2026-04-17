@@ -46,7 +46,9 @@ For each claim:
 
 ### Step 1 — Classify the claim
 
-Assign one of:
+Assign a claim type **and** a classification confidence. Misclassification cascades: Step 2's search strategy and evidence bar both branch on type, so an under-classified claim escapes scrutiny.
+
+**Claim types:**
 
 - **DIRECT** — attributes a specific finding to the paper ("X et al. showed Y"). Evidence bar: near-verbatim match.
 - **PARAPHRASED** — summarizes the paper's argument in our words. Evidence bar: semantic match.
@@ -54,6 +56,22 @@ Assign one of:
 - **BACKGROUND** — definition, priority of invention, general context. Evidence bar: paper contains the concept.
 - **CONTRASTING** — "unlike X, we...". Evidence bar: paper actually takes the contrasted position.
 - **FRAMING** — citation gestures at a broad topic or motivation without a specific sentence-level claim extracted from the paper. The citation is a pointer to a conversation, not a piece of evidence. Evidence bar: paper addresses the topic. **Contrast with BACKGROUND:** BACKGROUND extracts a specific concept, definition, or priority-of-invention *from* the paper; FRAMING extracts nothing specific — it just marks adjacency. When support is weak, typical remediation is `ACCEPT_AS_FRAMING` or `REMOVE`.
+
+**Classification confidence:**
+
+Output one of `high` / `medium` / `low` alongside the type. Record in the ledger Details block as `Claim type: <TYPE> (<confidence>)`.
+
+- `high` — the claim language unambiguously fits one type (e.g., "X et al. (2020) reported Y=3.2" — clearly DIRECT).
+- `medium` — two types are plausible (e.g., could be PARAPHRASED or BACKGROUND depending on how specific the paper's own language is).
+- `low` — genuinely unclear; the claim could be several types. Do not force a confident pick.
+
+**Strict-default rule (guards against cascading miscalls):**
+
+When confidence is `medium` or `low`, apply the **strictest** evidence bar available — treat the claim as DIRECT for Step 2's search strategy regardless of the tentative type. Better to search harder for a FRAMING claim than to let a DIRECT claim escape with a gentle "the paper addresses the topic" check. The final support level in Step 3 still uses the tentative type's evidence bar, but the *search effort* is maximally conservative.
+
+**Post-evidence self-check (at end of Step 2):**
+
+Once evidence is located (or its absence documented), ask: *does the evidence I found fit the type I classified?* For example, if classified FRAMING but the source excerpt is a specific numerical claim with a direct attribution, reclassify as DIRECT and re-run Step 2's search with that type's strategy. This loop runs at most twice to bound cost.
 
 ### Step 2 — Locate source evidence
 
@@ -226,11 +244,14 @@ Append or update the entry in `claims_ledger.md`. Each entry has:
   2. Strip LaTeX commands and their arguments: `\cite{...}`, `\citep{...}`, `\citet{...}`, `\ref{...}`, `\label{...}`, `\emph{...}`, `\textbf{...}`, non-breaking tildes `~`.
   3. Collapse runs of whitespace (including newlines) to a single space. Applied *after* command stripping so any whitespace artifacts introduced by stripping are absorbed.
   4. Retain all other punctuation as-is (no stripping of commas, em-dashes, parentheses, etc.).
-- **Claim type** — one of the six above.
+- **Claim type** — one of the six above, with confidence: `Claim type: <TYPE> (<high|medium|low>)` (per Step 1).
 - **Source excerpt** — verbatim from the PDF with page number.
+- **Sub-claim attributed** *(multi-cite entries only)* — for a sentence cited by multiple refs, state which slice of the sentence this citekey actually supports. Example: claim "Prior work has explored sparse attention [5], efficient KV caching [12], and quantization [17]" → each entry's `Sub-claim attributed:` field names the specific sub-aspect (e.g., for the `[5]` entry: "sparse attention mechanisms"). When a single citekey appears to cover the whole sentence, write `full sentence`. When genuinely unclear which sub-aspect this citekey supports, return `AMBIGUOUS` with the candidate sub-aspects listed.
 - **Support level**. For `AMBIGUOUS`, the Details block must additionally include the Ambiguity-triage fields (candidate verdicts, reasoning for each, would-disambiguate) — see "Ambiguity triage" below.
 - **Remediation** — category + concrete edit, or `—` if CONFIRMED. For `AMBIGUOUS`, remediation is deferred until triage resolves the verdict.
 - **Last verified** — today's ISO date.
+
+**When invoked as a subagent by `/paper-trail`** — write the Details block to `<output-dir>/.inflight/<claim_id>.md` instead of directly editing `ledger.md`. The main orchestrator merges inflight files into `ledger.md` sequentially after each batch returns (see `/paper-trail` Phase 3.3). Do not attempt concurrent ledger edits; they will clobber. Your assigned claim ID is handed to you by the orchestrator at dispatch.
 
 Maintain both the `## Summary` table (one row per claim) and the `## Details` section (one block per claim). Summary table schema:
 
@@ -247,6 +268,7 @@ Keep this schema aligned with the triage report format below so users don't have
 | `—` | No flag. Use for CONFIRMED entries. |
 | `REVIEW` | Non-critical support-level issue (OVERSTATED, OVERGENERAL, PARTIALLY_SUPPORTED, CITED_OUT_OF_CONTEXT, MISATTRIBUTED, INDIRECT_SOURCE). |
 | `AMBIGUOUS` | Agent read the paper fully but could not confidently pick a verdict. Awaiting user triage via `/ground-claim --triage` or the end-of-run `/paper-trail` triage prompt. |
+| `UNVERIFIED_ATTESTATION` | Post-grounding verifier (see `/paper-trail` Phase 3.5) sampled a line from this entry's attestation log and could not confirm it in the cited PDF. The support-level verdict may be based on a fabricated or shallow attestation; re-grounding recommended. |
 | `CRITICAL` | CONTRADICTED or UNSUPPORTED entry. Surface at top of triage. |
 | `RECHECK` | STALE — claim text changed since last verification. Re-verify on next run. |
 | `NEEDS_PDF` | PDF unavailable. Entry stays PENDING until the PDF is retrieved. |

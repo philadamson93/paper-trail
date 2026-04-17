@@ -150,8 +150,28 @@ Never suggest Sci-Hub, LibGen, or similar. Inherit the `/fetch-paper` policy.
 ### Step 3.1 — Claim extraction
 - Scan the input PDF body text. Exclude the references section, figure/table captions, and any clearly-marked supplementary / appendix sections.
 - Detect inline citation markers matching the auto-detected style from Phase 0: author-year `(Author et al., YYYY)`, numbered `[N]`, or superscript numerals.
-- Every sentence containing one or more markers is a candidate claim. Map each marker to the corresponding `refs.bib` citekey.
-- For multi-marker sentences (e.g., `[5, 12, 17]`), produce one claim entry per (sentence, citekey) pair, matching the existing `/ground-claim` multi-cite semantics.
+
+### Disambiguation heuristics (prevent phantom citations)
+
+Citation-marker detection in running prose is noisy. Year-in-parens in body text (`"data from 2014"`, `"since 2008, …"`) and superscript footnote markers can masquerade as citations. Apply these heuristics to avoid generating phantom claims:
+
+- **Author-year style**: a match requires an author-name token directly adjacent to the year — one of:
+  - `(Surname[, et al.][,] YYYY[a-z]?)`
+  - `Surname[, et al.][,] (YYYY[a-z]?)`
+  - `Surname et al., YYYY[a-z]?` (narrative form)
+
+  A bare `(YYYY)` or `(YYYY–YYYY)` *without* an adjacent surname token is **not** a citation. Flag it as "possibly not a citation" and do not queue a claim.
+- **Numbered style**: every `[N]` or `^N` must resolve to a `refs.bib` entry for which `N` was assigned during Phase 0. Unresolved numbers (reference not found in the parsed bibliography) are recorded in `parse_report.md` with surrounding text and page number, but are **not** queued for grounding. This catches footnote markers and equation numbers misread as citations.
+- **Style consistency**: once the paper's citation style is confirmed from the first few clean matches, enforce consistency thereafter. A paper that uses numbered citations throughout and produces a lone author-year match deep in the body is almost certainly a false positive.
+- **Context filters**: skip matches that appear inside math environments (between `$...$` or similar delimiters), inside figure/table captions (already excluded above), and inside the references section itself (a reference's own internal citations are not part of *this* paper's claims).
+
+Record low-confidence matches in `parse_report.md` so a human can spot-check; do not queue them for grounding.
+
+### From markers to claims
+
+- Every sentence containing one or more **confirmed** citation markers is a candidate claim.
+- Map each marker to the corresponding `refs.bib` citekey.
+- For multi-marker sentences (e.g., `[5, 12, 17]`), produce one claim entry per `(sentence, citekey)` pair — matching the existing `/ground-claim` multi-cite semantics. The grounding subagent handling each entry is responsible for determining which *sub-aspect* of the sentence its citekey supports (see `/ground-claim` Step 5 "Sub-claim attributed" field).
 
 ### Step 3.2 — Group and dispatch
 - Group claim candidates by their cited source paper (citekey).
@@ -162,9 +182,65 @@ Never suggest Sci-Hub, LibGen, or similar. Inherit the `/fetch-paper` policy.
   - **Rigor beats compute.** Subagent prompts must explicitly forbid shortcutting — no skimming, no abstract-only reads, no declaring `UNSUPPORTED` / `CONTRADICTED` without a full attestation log. It is materially better to spend extra tokens per subagent than to propagate a false verdict into the ledger.
 - Refs marked `NEEDS_PDF` from Phase 2 → their claims are written to the ledger with status `PENDING` and flag `NEEDS_PDF`. Do not spawn a grounding subagent for them.
 
-### Step 3.3 — Concurrent ledger writes
-- Subagents write their results to the ledger atomically per entry. If a subagent crashes mid-pass, already-written entries remain valid.
-- Claim IDs (`C001`, `C002`, …) are allocated sequentially across all subagents; serialize ID allocation to avoid collisions.
+### Step 3.3 — Inflight-file layout (prevents concurrent-write clobbering)
+
+Subagents do **not** write directly to `ledger.md`. Concurrent `Edit` / `Write` calls from batched subagents will race and clobber each other (the runtime does not serialize file edits across agents). Use a per-claim inflight-file layout instead:
+
+1. Each grounding subagent writes one file per claim to `<output-dir>/.inflight/<claim_id>.md`. The file contains the Details block for that single claim (frontmatter-style fields + quoted source excerpt + search log + attestation log + any AMBIGUOUS-specific fields).
+2. After every Phase 3 batch returns, the main orchestrator merges sequentially:
+   - Reads every file in `.inflight/`.
+   - Appends each claim's Details block to `ledger.md`'s `## Details` section.
+   - Updates the Summary table with one row per entry.
+   - Deletes the merged inflight files.
+3. Claim IDs (`C001`, `C002`, …) are allocated by the **main orchestrator** before dispatch — each subagent is handed its assigned ID, so concurrent subagents cannot collide on ID allocation.
+
+Partial progress survives a crashed subagent: any inflight files written before the crash remain on disk. At end-of-run `.inflight/` should be empty; a non-empty `.inflight/` on startup is a resumption signal that Phase 3 was interrupted mid-batch.
+
+## Phase 3.5 — Attestation verification
+
+Attestation logs (Step 2 of `/ground-claim`) are self-reported — a grounding subagent that skimmed the abstract and invented plausible-looking attestation fields would pass. To counter this, every claim verdict is spot-checked by an independent verifier subagent.
+
+### Dispatch
+
+For every claim entry produced in Phase 3 (regardless of support level — including `CONFIRMED`), spawn one lightweight verifier subagent. Verifiers run in parallel batches per the configured batch size.
+
+### Verifier workflow
+
+Each verifier subagent:
+
+1. Reads one ledger entry (Summary row + Details block + attestation log).
+2. Picks one line at random from the attestation log's `Specific checks:` list — e.g., `Table 2 (dataset sizes)`, `Fig. 4 caption (accuracy numbers)`, `Eq. 3 surrounding prose`.
+3. Opens the cited source PDF at the claimed page / section and confirms:
+   - The specific check exists (the claimed table / figure / equation is there on the claimed page).
+   - The `Closest adjacent passage` quote is present verbatim at the claimed page.
+4. Writes a verifier result to `<output-dir>/.inflight/<claim_id>.verify.md`:
+
+```
+Verifier result:
+  Claim ID:       C<N>
+  Check sampled:  <one random line from Specific checks>
+  Passage found:  YES | NO | PARTIAL
+  Notes:          <YES → "ok"; NO → what the verifier found instead;
+                   PARTIAL → what matched and what didn't>
+```
+
+### Handling verifier results
+
+After all verifier subagents return, the orchestrator merges `.verify.md` files into `ledger.md`:
+
+- **Verifier confirmed (YES)** → no change to the entry.
+- **Verifier could not confirm (NO or PARTIAL)** → add `UNVERIFIED_ATTESTATION` to the entry's Flag column; append a dated history note to Details: `_<YYYY-MM-DD>: verifier could not confirm attestation — sampled check "<...>" not found as attested; verifier notes: <...>_`. The support level is **not** automatically changed — the flag is the signal.
+- `UNVERIFIED_ATTESTATION`-flagged entries are surfaced in the end-of-run triage report alongside `CONTRADICTED` and `UNSUPPORTED`, because they indicate the original subagent may have fabricated the attestation.
+
+### Default: verify every claim, not sampled
+
+For v1, verify every claim. Rigor beats compute. A `--verifier-sample=<pct>` flag may be added later once we have cost data from real runs; not a v1 default.
+
+### Do not
+
+- Do not auto-correct verdicts based on verifier output. The verifier flags; the user (or a re-grounding pass) resolves.
+- Do not skip verification on `CONFIRMED` entries. A falsely-confirmed claim is as dangerous as a falsely-denied one.
+- Do not let a verifier subagent also produce the original verdict. Each verifier targets exactly one claim entry, and that entry must have been produced by a different subagent.
 
 ## Phase 4 — Ambiguity triage
 
