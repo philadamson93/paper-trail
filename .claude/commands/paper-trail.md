@@ -19,6 +19,7 @@ This orchestrates `/verify-bib`, `/fetch-paper`, and `/ground-claim` against a p
 - `/paper-trail <path-to-pdf> --batch-size N` — override parallel batch size (default 10).
 - `/paper-trail <path-to-pdf> --recheck` — re-verify all existing ledger entries in the target output-dir.
 - `/paper-trail <path-to-pdf> --triage` — run interactive triage on `AMBIGUOUS` entries in an existing output-dir (no re-grounding).
+- `/paper-trail <path-to-pdf> --fetch-substitute=<never|ask|always>` — policy for Phase 2 when a target paper's primary URL is paywalled but a related-but-not-identical paper (e.g., an arXiv preprint of the same work, an earlier arXiv version, a workshop paper vs. a later journal version) is available. Default: `ask` (prompt the user via `AskUserQuestion` at dispatch time).
 
 ## Initial questions
 
@@ -158,6 +159,34 @@ For each unique citekey in `refs.bib`:
 - The subagent follows the existing download-order fallback: `paper-search` MCP → `papersflow` → CrossRef open-access → direct arXiv.
 - Save to `<output-dir>/pdfs/<citekey>.pdf`.
 
+### Fetch substitution policy
+
+Fetch subagents must never silently substitute a different paper's PDF for the target. But "different paper" is a spectrum — sometimes a paywalled journal DOI has an open-access preprint at arXiv that is substantively the same work (same authors, overlapping content, possibly an earlier or later version). Whether to use such a substitute is a user-level design decision, not a tool-level policy.
+
+When a Phase 2 subagent hits a paywall and identifies a candidate substitute (a related but not identical paper at a different URL), it does **not** auto-fetch. Instead it returns a structured substitution candidate to the orchestrator:
+
+```
+Substitution candidate for <citekey>:
+  Target:      <primary URL — paywalled / unreachable>
+  Target DOI:  <if applicable>
+  Candidate:   <alternative URL>
+  Relationship: <preprint of published | earlier arXiv version | workshop version
+                 of later journal | other — describe>
+  Risk notes:  <older version may predate published revisions; may have different
+                wording, missing figures, or different results — whatever applies>
+```
+
+The orchestrator applies the configured `--fetch-substitute` policy:
+
+- **`never`** — mark `<citekey>` as `NEEDS_PDF`; do not fetch the candidate. The user must retrieve the target manually or skip via `--skip-paywalled`.
+- **`ask` (default)** — prompt the user via `AskUserQuestion`:
+  - Question body: the structured substitution candidate above.
+  - Options: `Use substitute` / `Mark NEEDS_PDF` / `Skip this ref`.
+  - User's choice is recorded in `parse_report.md` and in every downstream claim entry's attestation log.
+- **`always`** — accept the substitute automatically, but record prominently in `parse_report.md` and flag every downstream claim's attestation log with the substitution and its provenance risk.
+
+**Regardless of policy**, any substitution that occurs is **always logged** in both `parse_report.md` and the attestation log of every claim grounded against that substituted PDF. Provenance is never hidden. Downstream grounding subagents must read the substitution note and include a per-claim caveat in their attestation logs.
+
 ### Post-fetch paywall handling
 
 After all fetch subagents return, print a structured paywalled/failed list:
@@ -223,7 +252,7 @@ Subagents do **not** write directly to `ledger.md`. Concurrent `Edit` / `Write` 
 1. Each grounding subagent writes one file per claim to `<output-dir>/.inflight/<claim_id>.md`. The file contains the Details block for that single claim (frontmatter-style fields + quoted source excerpt + search log + attestation log + any AMBIGUOUS-specific fields).
 2. After every Phase 3 batch returns, the main orchestrator merges sequentially:
    - Reads every file in `.inflight/`.
-   - Appends each claim's Details block to `ledger.md`'s `## Details` section.
+   - Appends each claim's Details block to `ledger.md`'s `## Details` section under a single `### <claim_id> — <citekey>` subheading per entry. Do **not** prepend a wrapper heading if the inflight file already starts with its own — strip or skip the inflight file's leading heading to avoid duplicated `### Cxxx` lines in the merged ledger.
    - Updates the Summary table with one row per entry.
    - Deletes the merged inflight files.
 3. Claim IDs (`C001`, `C002`, …) are allocated by the **main orchestrator** before dispatch — each subagent is handed its assigned ID, so concurrent subagents cannot collide on ID allocation.
