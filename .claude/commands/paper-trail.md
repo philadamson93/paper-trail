@@ -1,0 +1,242 @@
+End-to-end audit of an input PDF (reader / reviewer mode). Given a single PDF — typically someone else's paper you're reviewing, vetting, or reading skeptically — extract its reference list, verify bib metadata, fetch open-access source PDFs, and ground every in-text citation against its source. Produces a self-contained audit artifact.
+
+This orchestrates `/verify-bib`, `/fetch-paper`, and `/ground-claim` against a per-paper output directory. It does **not** touch project-level config and does **not** require `/init-writing-tools`.
+
+## Core principle: one-shot reader mode
+
+- All artifacts live inside a single `<output-dir>/`. Never write outside it.
+- No dependency on a project `claims_ledger.md`. If one exists in cwd, ignore it — this command is for auditing *external* papers.
+- Reuse the existing ledger schema (`templates/claims_ledger.md`) verbatim; per-paper additions (input-paper frontmatter block, Critical-findings header) live in this command, not in the template.
+
+## Invocation forms
+
+- `/paper-trail` — fully interactive; prompts for every setting.
+- `/paper-trail <path-to-pdf>` — skip the input-PDF question, prompt for the rest.
+- `/paper-trail <path-to-pdf> --mode=single` — single-claim mode (see below).
+- `/paper-trail <path-to-pdf> --skip-paywalled` — don't block on paywalled refs; mark them `NEEDS_PDF` and continue.
+- `/paper-trail <path-to-pdf> --skip=key1,key2` — exclude specific citekeys from fetch + grounding.
+- `/paper-trail <path-to-pdf> --sequential` — process one item at a time (rate-limited MCPs, small context budgets).
+- `/paper-trail <path-to-pdf> --batch-size N` — override parallel batch size (default 10).
+- `/paper-trail <path-to-pdf> --recheck` — re-verify all existing ledger entries in the target output-dir.
+
+## Initial questions
+
+Use `AskUserQuestion` for any value not provided via args or reliably inferrable from the working directory. Skip a question when the answer is unambiguous from context.
+
+1. **Input PDF path** — if not given positionally.
+2. **Output directory** — default `./paper-trail-<pdf-stem>/` in cwd, confirmable or overridable.
+3. **Mode** — `full` (default) or `single`.
+4. **Institutional access** — short free-text note (e.g., "university library proxy", "personal only"). Used by Phase 2 paywall prompts. If a project `claims_ledger.md` exists with this field, offer its value as the default.
+5. **(single mode only)** — "Describe the claim you want to ground" — free text. Interpret semantically against the input PDF body text; do not require a verbatim quote.
+
+Keep the question count at or below these five. Anything else is inferred or set to a sensible default.
+
+## Artifact layout
+
+`<output-dir>/`:
+
+- `ledger.md` — audit artifact. Reuses `templates/claims_ledger.md` schema (YAML frontmatter + Summary table + Details blocks + severity taxonomies) with two additions (see "Ledger additions" below).
+- `refs.bib` — synthetic BibTeX built from the parsed + looked-up references.
+- `pdfs/` — fetched source PDFs, each named `<citekey>.pdf`.
+- `parse_report.md` — bibliography parser diagnostics: refs found, DOI hit rate, bibliography-style auto-detected, low-confidence entries flagged by line number.
+
+### Ledger additions for reader mode
+
+Beyond the standard `claims_ledger.md` frontmatter, include:
+
+```yaml
+---
+input_paper:
+  path: <absolute path to input PDF>
+  title: <resolved title>
+  authors: <resolved author list>
+  doi: <DOI if known>
+  year: <year>
+mode: full | single
+pdf_dir: pdfs/
+pdf_naming: "{citekey}.pdf"
+bib_files:
+  - refs.bib
+institutional_access: <from Q4>
+last_bootstrap: <today's ISO date>
+---
+```
+
+Above the `## Summary` table, render a `## Critical findings` section that surfaces:
+
+- `CRITICAL` bib-audit entries (fabricated / chimeric / non-resolving DOIs) from Phase 1.
+- `CONTRADICTED` and `UNSUPPORTED` claim entries from Phase 3.
+
+Each finding links to its detail block lower in the file. This is the "do I need to panic" view for the reader.
+
+## Phase 0 — Bibliography extraction
+
+Goal: produce `refs.bib` and `parse_report.md`.
+
+### Step 0.1 — Input-paper metadata
+- Extract the input paper's title, authors, DOI (if printed on page 1 or resolvable from the filename).
+- Record in the ledger frontmatter.
+
+### Step 0.2 — Parse bibliography from the PDF
+- Locate the "References" / "Bibliography" / "Literature Cited" section in the input PDF. Scan from the end backwards; stop at the first recognizable section header.
+- Auto-detect the style:
+  - **Numbered** — entries prefixed by `[N]`, `N.`, or superscript numbering that aligns with in-text markers.
+  - **Author-year** — entries begin with author surname(s) + year.
+  - **Other** — flag as low-confidence in `parse_report.md` but still attempt extraction.
+- For each entry, extract whichever fields are recoverable: authors, title, venue, year, volume/issue/pages, DOI, arXiv ID.
+- Derive a citekey per entry:
+  - Author-year style → `<firstauthor><year>` (e.g., `smith2023`), with a suffix letter for collisions.
+  - Numbered style → `ref<N>` initially; promote to `<firstauthor><year>` once authors/year are extracted.
+
+### Step 0.3 — Enrichment / verification lookup
+- For each parsed entry, attempt external lookup in this order (first hit wins): **PapersFlow MCP** (if available) → **CrossRef** (by DOI, else by title+author+year) → **arXiv** (for preprint-shaped entries).
+- Reconcile parsed values against the authoritative source. If any field disagrees, prefer the authoritative value; record the PDF-parsed value in `parse_report.md` as a "parser diff" so we can audit parser quality.
+- Parallelize this step in batches per the configured batch size.
+
+### Step 0.4 — Emit artifacts
+- Write `refs.bib` in standard BibTeX. Preserve both parsed and looked-up values where they disagree, preferring the authoritative value in the bib and noting the parsed value in `parse_report.md`.
+- Write `parse_report.md` with:
+  - Total entries parsed; total enriched; total with DOI; total flagged low-confidence.
+  - Auto-detected bibliography style.
+  - Per-entry parser diffs (authoritative vs parsed) for entries where they differ.
+  - Explicit list of unparseable / low-confidence lines by line number so a human can spot-check.
+
+### Large-paper guardrail
+If more than 200 references are parsed, print the count and confirm before continuing to Phase 1. Offer the user a chance to `--skip` or narrow scope.
+
+## Phase 1 — Verify bib
+
+Run `/verify-bib` logic against `<output-dir>/refs.bib`, parallelized.
+
+- Spawn one subagent per reference, batched per the configured batch size.
+- Each subagent follows the `/verify-bib` per-entry workflow (existence, author match, bibliographic fields, preprint upgrades, duplicates) and returns a severity-classified result.
+- Collect results and populate the ledger's `## Critical findings` section with every `CRITICAL` entry.
+- Do **not** auto-apply `--fix` corrections in reader mode. Raise, don't fix. (The user is not the author — they don't get to correct the input paper's bib.)
+
+## Phase 2 — Fetch PDFs
+
+For each unique citekey in `refs.bib`:
+
+- If `<output-dir>/pdfs/<citekey>.pdf` already exists → mark "already present" and skip.
+- Else spawn a subagent invoking `/fetch-paper <citekey>` logic (batched per the configured batch size).
+- The subagent follows the existing download-order fallback: `paper-search` MCP → `papersflow` → CrossRef open-access → direct arXiv.
+- Save to `<output-dir>/pdfs/<citekey>.pdf`.
+
+### Post-fetch paywall handling
+
+After all fetch subagents return, print a structured paywalled/failed list:
+
+```
+N refs could not be retrieved:
+  <citekey>  (DOI: <doi>)  — paywalled
+  <citekey>  — retrieval failed: <reason>
+  ...
+
+Total fetched: M / (M+N)
+```
+
+- If `--skip-paywalled` was passed → mark those refs' eventual claim entries as `PENDING` with `NEEDS_PDF`, and continue to Phase 3.
+- Otherwise → stop and surface two options to the user:
+  1. Drop PDFs into `<output-dir>/pdfs/<citekey>.pdf` via institutional access, then re-invoke `/paper-trail <pdf>` to resume.
+  2. Re-invoke with `--skip-paywalled` to continue without them.
+
+Never suggest Sci-Hub, LibGen, or similar. Inherit the `/fetch-paper` policy.
+
+## Phase 3 — Ground claims
+
+### Step 3.1 — Claim extraction
+- Scan the input PDF body text. Exclude the references section, figure/table captions, and any clearly-marked supplementary / appendix sections.
+- Detect inline citation markers matching the auto-detected style from Phase 0: author-year `(Author et al., YYYY)`, numbered `[N]`, or superscript numerals.
+- Every sentence containing one or more markers is a candidate claim. Map each marker to the corresponding `refs.bib` citekey.
+- For multi-marker sentences (e.g., `[5, 12, 17]`), produce one claim entry per (sentence, citekey) pair, matching the existing `/ground-claim` multi-cite semantics.
+
+### Step 3.2 — Group and dispatch
+- Group claim candidates by their cited source paper (citekey).
+- For each source paper with at least one non-skipped citekey, spawn a subagent (batched per the configured batch size) that:
+  - Opens that single source PDF once.
+  - Verifies every claim citing it in one pass (matches the `/ground-claim` "process claims grouped by source paper" rule).
+  - **Follows the `/ground-claim` per-claim workflow in full**: Step 1 classify → Step 2 locate evidence (*including* the minimum-reading requirement, negative-evidence protocol, indirect-attribution check, out-of-context check, and Step 2 self-check) → Step 3 assess support → Step 4 propose remediation → Step 5 append to ledger.
+  - **Rigor beats compute.** Subagent prompts must explicitly forbid shortcutting — no skimming, no abstract-only reads, no declaring `UNSUPPORTED` / `CONTRADICTED` without a full attestation log. It is materially better to spend extra tokens per subagent than to propagate a false verdict into the ledger.
+- Refs marked `NEEDS_PDF` from Phase 2 → their claims are written to the ledger with status `PENDING` and flag `NEEDS_PDF`. Do not spawn a grounding subagent for them.
+
+### Step 3.3 — Concurrent ledger writes
+- Subagents write their results to the ledger atomically per entry. If a subagent crashes mid-pass, already-written entries remain valid.
+- Claim IDs (`C001`, `C002`, …) are allocated sequentially across all subagents; serialize ID allocation to avoid collisions.
+
+## Single-claim mode
+
+When `--mode=single` or the user selects `single` at prompt time:
+
+1. Run Phase 0 normally — we still need the full `refs.bib` to resolve the claim's citation.
+2. Ask the user: "Describe the claim you want to ground" (free text).
+3. Read the input PDF body text and semantically match the description to one or more candidate sentences. Do **not** require verbatim quoting — the user may paraphrase, reference a section heading ("the part about transformer scaling laws"), or just describe a topic.
+4. For each candidate sentence, resolve its citation markers to citekeys via `refs.bib`.
+5. Present the matched sentence(s) + cited citekey(s) to the user via `AskUserQuestion` for confirmation. If multiple candidates match, let the user pick.
+6. Scope Phases 1, 2, 3 to **only** the confirmed citekey(s) — typically 1–2 refs total.
+7. Ledger artifact is still written in full (frontmatter + Critical findings + Summary + Details), but with only those 1–2 refs' worth of entries.
+
+## Resumability
+
+Running `/paper-trail` against a pre-existing `<output-dir>`:
+
+- If `refs.bib` exists → skip Phase 0 extraction. Ask the user before re-running Phase 0 (which would overwrite parser diagnostics).
+- For each ref with a PDF already in `pdfs/` → skip its Phase 2 fetch; mark "already present".
+- Ledger entries with a non-`PENDING` support level → skip re-grounding in Phase 3, unless `--recheck` was passed.
+- `PENDING` + `NEEDS_PDF` entries → retry their fetch in Phase 2 and grounding in Phase 3.
+- `--recheck` semantics match `/ground-claim --recheck`: recompute claim keys, set `STALE` flags, re-verify.
+
+## Agent / batching topology
+
+Default parallelism: 10 concurrent subagents per phase. Override with `--batch-size N` or `--sequential` (equivalent to `--batch-size 1`).
+
+- Phase 0 enrichment: one subagent per parsed reference.
+- Phase 1 verify: one subagent per reference.
+- Phase 2 fetch: one subagent per reference.
+- Phase 3 ground: one subagent per unique cited source paper (not per claim — one paper handles all its own claims in a single pass).
+
+Each phase waits for all subagents to return before advancing to the next. This is not the most aggressive parallelization possible, but it keeps the ledger writes orderly and makes partial-progress states interpretable.
+
+### Skip handling
+- `--skip=key1,key2` excludes those citekeys from Phases 2 and 3. Their ledger entries become `PENDING` / `NEEDS_PDF`.
+- `--skip-paywalled` auto-adds to the skip list any citekey Phase 2 couldn't fetch.
+- The user can also drop specific citekeys interactively via `AskUserQuestion` at the post-fetch pause (see Phase 2).
+
+## End-of-run triage report
+
+Print a structured summary mirroring `/ground-claim`'s end-of-run format, with a header for the input paper:
+
+```
+paper-trail audit: <input-paper-title>
+  Output: <output-dir>/ledger.md
+  Refs:   N parsed, M fetched, K skipped (NEEDS_PDF)
+  Bib audit (Phase 1):
+    CRITICAL:  X
+    MODERATE:  Y
+    MINOR:     Z
+  Claim audit (Phase 3): N claims processed.
+    CONFIRMED:           …
+    PARTIALLY_SUPPORTED: …
+    OVERSTATED:          …
+    UNSUPPORTED:         …  ← review
+    CONTRADICTED:        …  ← critical
+    MISATTRIBUTED:       …
+    STALE:               …
+    PENDING (needs PDF): …
+
+Requiring attention:
+- <CRITICAL bib issues, one per line>
+- <CONTRADICTED / UNSUPPORTED claims with source-page pointers, one per line>
+```
+
+Every flagged entry includes the source paper page number (for claims) or authoritative source URL (for bib) so the user can verify directly.
+
+## Do not
+
+- **Never modify a project-level `claims_ledger.md`.** Reader mode writes only within `<output-dir>/`.
+- **Never require `/init-writing-tools`.** This command is self-contained.
+- **Never run `/verify-bib --fix` in reader mode.** The input paper is not the user's to correct.
+- **Never bypass paywalls.** Inherit the `/fetch-paper` policy (no Sci-Hub, no LibGen, no misrepresenting preprint as published).
+- **Never silently ground a claim against an un-fetched PDF.** Use `PENDING` + `NEEDS_PDF`.
+- **Never drop parser diffs on the floor.** If the PDF-parsed value disagrees with the authoritative source, record both in `parse_report.md` — this is the signal we use to iterate on parser quality.
+- **Never collapse multi-cite claims into one entry.** One ledger entry per `(claim_key, citekey)` tuple, per the existing `/ground-claim` rule.
+- **Never mark the run "complete" if a phase partially failed.** Print the in-progress state so re-runs can resume from the right place.

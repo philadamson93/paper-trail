@@ -16,12 +16,15 @@ Scientific papers routinely cite 50–100 references. Verifying that every claim
 
 ## Commands
 
-| Command | Purpose |
-|---------|---------|
-| `/init-writing-tools` | One-time bootstrap: detect PDF layout and `.bib` files, write config |
-| `/fetch-paper` | Download open-access PDFs or surface retrieval prompts for paywalled ones |
-| `/ground-claim` | Verify cited claims against source PDFs; maintain a claims ledger |
-| `/verify-bib` | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` to write corrections |
+There are two workflows. **Author mode** (existing): you're writing a paper, and the tools verify your own citations against your own `.bib` and PDF directory. **Reader mode** (new): you hand the tool someone else's PDF, and it audits the paper's references and in-text citations end-to-end.
+
+| Command | Mode | Purpose |
+|---------|------|---------|
+| `/init-writing-tools` | author | One-time bootstrap: detect PDF layout and `.bib` files, write config |
+| `/fetch-paper` | author | Download open-access PDFs or surface retrieval prompts for paywalled ones |
+| `/ground-claim` | author | Verify cited claims against source PDFs; maintain a claims ledger |
+| `/verify-bib` | author | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` to write corrections |
+| `/paper-trail` | reader | End-to-end audit of an input PDF: extract references, verify bib, fetch sources, ground every citation; writes a self-contained artifact |
 
 Each command is a self-contained prompt in `.claude/commands/*.md` — open the file for full detail (invocation modes, taxonomies, constraints). None of them edit the manuscript: issues are surfaced as proposals in a report or ledger for the user to accept.
 
