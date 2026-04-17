@@ -39,7 +39,7 @@ Say a paper includes: *"following the method in Smith et al. 2022, we pretrained
 
 Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand.
 
-See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a real run on a published paper — including the parsed bibliography, parser diagnostics, the full ledger, and a walkthrough of the real catches (a CRITICAL author-swap on a widely-cited reference, two `CITED_OUT_OF_CONTEXT` findings, a scope-drift `OVERGENERAL`).
+See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a smoketest run on one of my prior published papers.
 
 ## Getting started — `/paper-trail`
 
