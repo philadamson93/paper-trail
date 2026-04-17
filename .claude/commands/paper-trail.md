@@ -1,39 +1,58 @@
-End-to-end audit of an input PDF (reader / reviewer mode). Given a single PDF — typically someone else's paper you're reviewing, vetting, or reading skeptically — extract its reference list, verify bib metadata, fetch open-access source PDFs, and ground every in-text citation against its source. Produces a self-contained audit artifact.
+The single entry point for the `paper-trail` workflow. Given a paper to audit, extract its reference list, verify bib metadata, fetch open-access source PDFs, and ground every in-text citation against its source. Produces a self-contained audit artifact.
 
-This orchestrates `/verify-bib`, `/fetch-paper`, and `/ground-claim` against a per-paper output directory. It does **not** touch project-level config and does **not** require `/init-writing-tools`.
+Two workflow modes:
 
-## Core principle: one-shot reader mode
+- **Reader mode** (default) — audit someone else's paper end-to-end from a single PDF. Used for peer review, literature vetting, skeptical reading. Self-contained: no project config, no manuscript editing.
+- **Author mode** — audit your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs in a directory). Orchestrates `/init-writing-tools` (first run only), `/verify-bib`, `/fetch-paper`, and `/ground-claim` against your writing project; writes to `claims_ledger.md` at the project root per the existing author-mode conventions.
 
-- All artifacts live inside a single `<output-dir>/`. Never write outside it.
-- No dependency on a project `claims_ledger.md`. If one exists in cwd, ignore it — this command is for auditing *external* papers.
-- Reuse the existing ledger schema (`templates/claims_ledger.md`) verbatim; per-paper additions (input-paper frontmatter block, Critical-findings header) live in this command, not in the template.
+Both modes share the per-claim workflow (Step 1 classify → Step 2 locate evidence with full attestation → Step 3 support level → Step 4 remediation → Step 5 ledger write), the same taxonomies, and the same Phase 3.5 attestation verifier. The difference is **who owns the paper** and therefore what gets written where.
+
+## Core principle: one orchestrator, two workflows
+
+- **Reader mode** writes everything inside a single `<output-dir>/`. Never touches project-level config. If a project `claims_ledger.md` exists in cwd, ignore it — reader mode is for *external* papers.
+- **Author mode** writes to the project's existing `claims_ledger.md` (or bootstraps one via `/init-writing-tools` on first run). Never edits the manuscript; all remediations are surfaced as proposals for the user to accept.
+- Both modes reuse the ledger schema at `templates/claims_ledger.md` verbatim.
 
 ## Invocation forms
 
-- `/paper-trail` — fully interactive; prompts for every setting.
-- `/paper-trail <path-to-pdf>` — skip the input-PDF question, prompt for the rest.
-- `/paper-trail <path-to-pdf> --mode=single` — single-claim mode (see below).
+Reader mode (default when a PDF path is given):
+
+- `/paper-trail` — fully interactive; prompts for every setting (including which workflow).
+- `/paper-trail <path-to-pdf>` — reader mode against that PDF; prompts for remaining settings.
+- `/paper-trail <path-to-pdf> --scope=single` — single-claim grounding scope (see below).
 - `/paper-trail <path-to-pdf> --skip-paywalled` — don't block on paywalled refs; mark them `NEEDS_PDF` and continue.
 - `/paper-trail <path-to-pdf> --skip=key1,key2` — exclude specific citekeys from fetch + grounding.
 - `/paper-trail <path-to-pdf> --sequential` — process one item at a time (rate-limited MCPs, small context budgets).
 - `/paper-trail <path-to-pdf> --batch-size N` — override parallel batch size (default 10).
 - `/paper-trail <path-to-pdf> --recheck` — re-verify all existing ledger entries in the target output-dir.
 - `/paper-trail <path-to-pdf> --triage` — run interactive triage on `AMBIGUOUS` entries in an existing output-dir (no re-grounding).
-- `/paper-trail <path-to-pdf> --fetch-substitute=<never|ask|always>` — policy for Phase 2 when a target paper's primary URL is paywalled but a related-but-not-identical paper (e.g., an arXiv preprint of the same work, an earlier arXiv version, a workshop paper vs. a later journal version) is available. Default: `ask` (prompt the user via `AskUserQuestion` at dispatch time).
+- `/paper-trail <path-to-pdf> --fetch-substitute=<never|ask|always>` — policy for Phase 2 when a target paper's primary URL is paywalled but a related-but-not-identical paper (e.g., an arXiv preprint of the same work, an earlier arXiv version, a workshop paper vs. a later journal version) is available. Default: `ask`.
+
+Author mode:
+
+- `/paper-trail --author` — author mode against the current writing project (expects a `.tex` file + `.bib` + source PDFs in cwd, or config in `claims_ledger.md`).
+- `/paper-trail --author path/to/document.tex` — author mode against a specific manuscript file.
+- `/paper-trail --author --scope=single` — ground one specific claim (prompts for claim description).
+- All the `--skip-paywalled` / `--sequential` / `--batch-size` / `--recheck` / `--triage` / `--fetch-substitute` flags apply in author mode too.
 
 ## Initial questions
 
 Use `AskUserQuestion` for any value not provided via args or reliably inferrable from the working directory. Skip a question when the answer is unambiguous from context.
 
-1. **Input PDF** — if not given positionally. Offer two ways to provide it:
-   - **Paste a path** (absolute or relative).
-   - **Search by name** — ask the user for the paper's filename or title fragment (e.g., "deuterium metabolic imaging" or "DMI Adamson 2023"). Then run a filesystem search (`Glob` + lightweight `find`) against likely locations (the user's home directory, `~/Documents`, `~/Downloads`, `~/Desktop`, and cwd). If multiple candidates match, present them to the user via `AskUserQuestion` to pick; if zero candidates match, iterate with the user on a different search fragment. Never silently pick a PDF — always confirm.
-2. **Output directory** — default `./paper-trail-<pdf-stem>/` in cwd, confirmable or overridable.
-3. **Mode** — `full` (default) or `single`.
-4. **Institutional access** — short free-text note (e.g., "university library proxy", "personal only"). Used by Phase 2 paywall prompts. If a project `claims_ledger.md` exists with this field, offer its value as the default.
-5. **(single mode only)** — "Describe the claim you want to ground" — free text. Interpret semantically against the input PDF body text; do not require a verbatim quote.
+1. **Workflow** — `reader` (default) or `author`. Skip this question if the invocation already specifies: presence of `--author` or a `.tex` path implies author mode; a PDF path argument implies reader mode.
+2. **Input** — what paper are we auditing?
+   - **Reader mode:** the input PDF. Offer two ways to provide it:
+     - **Paste a path** (absolute or relative).
+     - **Search by name** — ask for the paper's filename or title fragment (e.g., "deuterium metabolic imaging" or "DMI Adamson 2023"). Run a filesystem search (`Glob` + lightweight `find`) against likely locations (`~/Documents`, `~/Downloads`, `~/Desktop`, and cwd). If multiple candidates match, let the user pick via `AskUserQuestion`; if zero match, iterate on the search fragment. Never silently pick a PDF — always confirm.
+   - **Author mode:** path to the manuscript `.tex` file (or confirm auto-detected one in cwd). If no `claims_ledger.md` exists at the project root, offer to run `/init-writing-tools` first.
+3. **Output location**
+   - **Reader mode:** output directory, default `./paper-trail-<pdf-stem>/`, confirmable or overridable.
+   - **Author mode:** uses the existing project `claims_ledger.md`; no separate output dir.
+4. **Scope** — grounding scope for this run: `full` (default — ground every claim) or `single` (ground one claim the user describes).
+5. **Institutional access** — short free-text note (e.g., "university library proxy", "personal only"). Used by Phase 2 paywall prompts. If a project `claims_ledger.md` exists with this field, offer its value as the default.
+6. **(single scope only)** — "Describe the claim you want to ground" — free text. Interpret semantically against the input PDF (reader mode) or the manuscript (author mode); do not require a verbatim quote.
 
-Keep the question count at or below these five (not counting the internal search-candidates pick for Q1 when search-by-name is chosen). Anything else is inferred or set to a sensible default.
+Keep the question count at or below these six (not counting the internal search-candidates pick for Q2 when search-by-name is chosen). Anything else is inferred or set to a sensible default.
 
 ## Artifact layout
 
@@ -56,7 +75,8 @@ input_paper:
   authors: <resolved author list>
   doi: <DOI if known>
   year: <year>
-mode: full | single
+workflow: reader | author
+scope: full | single
 pdf_dir: pdfs/
 pdf_naming: "{citekey}.pdf"
 bib_files:
@@ -329,17 +349,57 @@ When invoked with `--triage`, skip Phases 0–3 entirely. Read the existing ledg
 - **Do not auto-resolve `AMBIGUOUS` entries** based on your own best guess. The whole point of surfacing ambiguity is to get a human call on close verdicts.
 - **Do not skip the triage prompt** at end of run if `AMBIGUOUS` entries exist. Surfacing them is the whole feature — silently leaving them in the ledger defeats the purpose.
 
-## Single-claim mode
+## Single-claim scope (`--scope=single`)
 
-When `--mode=single` or the user selects `single` at prompt time:
+Applies in both reader and author modes.
 
-1. Run Phase 0 normally — we still need the full `refs.bib` to resolve the claim's citation.
+When `--scope=single` or the user selects `single` at prompt time:
+
+1. Run Phase 0 normally — we still need the full `refs.bib` (reader mode) or the project's `.bib` files (author mode) to resolve the claim's citation.
 2. Ask the user: "Describe the claim you want to ground" (free text).
-3. Read the input PDF body text and semantically match the description to one or more candidate sentences. Do **not** require verbatim quoting — the user may paraphrase, reference a section heading ("the part about transformer scaling laws"), or just describe a topic.
-4. For each candidate sentence, resolve its citation markers to citekeys via `refs.bib`.
+3. Read the paper body text (input PDF in reader mode, manuscript `.tex` in author mode) and semantically match the description to one or more candidate sentences. Do **not** require verbatim quoting — the user may paraphrase, reference a section heading ("the part about transformer scaling laws"), or just describe a topic.
+4. For each candidate sentence, resolve its citation markers to citekeys.
 5. Present the matched sentence(s) + cited citekey(s) to the user via `AskUserQuestion` for confirmation. If multiple candidates match, let the user pick.
 6. Scope Phases 1, 2, 3 to **only** the confirmed citekey(s) — typically 1–2 refs total.
 7. Ledger artifact is still written in full (frontmatter + Critical findings + Summary + Details), but with only those 1–2 refs' worth of entries.
+
+## Author mode (`--author`)
+
+Author mode runs the same underlying workflow as reader mode (extract refs → verify bib → fetch sources → ground claims → attestation verify → triage), but against the user's own writing project rather than an external PDF. It orchestrates the existing component commands instead of re-implementing their logic.
+
+### Input-paper discovery
+
+Unlike reader mode where the input is a single PDF, author mode operates on a writing project:
+
+- **Bib files** — read from `claims_ledger.md` frontmatter `bib_files:` if it exists; else auto-detect (top-level `*.bib`, excluding `background/`, `drafts/`, `vendor/`).
+- **Manuscript** — `.tex` file(s) at the project root, or a specific path if provided.
+- **PDF directory** — from `claims_ledger.md` `pdf_dir:`, else auto-detect (`background/`, `papers/`, `refs/`, `pdfs/`, `literature/`).
+- If no `claims_ledger.md` exists → prompt to run `/init-writing-tools` first. Author mode does not bypass initialization.
+
+### Phase mapping
+
+| Phase | Reader mode | Author mode |
+|-------|-------------|-------------|
+| 0 — bibliography | Parse refs from input PDF | Skip — use existing `.bib` file(s) directly |
+| 1 — verify bib | `/verify-bib refs.bib` | `/verify-bib <project-bib-file>` (same logic, raise-don't-fix — no `--fix` applied by orchestrator; user can invoke `/verify-bib --fix` manually afterwards) |
+| 2 — fetch PDFs | Fetch open-access source PDFs | `/fetch-paper <citekey>` for each missing PDF per the configured `pdf_naming` pattern |
+| 3 — ground claims | Extract claims from input PDF body text | `/ground-claim path/to/document.tex` — extracts `\cite{...}` markers from LaTeX (matches the existing command's bulk mode) |
+| 3.5 — attestation verifier | Spot-check every claim | Same |
+| 4 — ambiguity triage | Same | Same |
+
+### Artifact layout
+
+No separate output-dir. Everything writes into the project's existing structure:
+
+- `claims_ledger.md` at the project root (author-mode canonical artifact; already maintained by `/ground-claim`).
+- Source PDFs into the configured `pdf_dir/`.
+- Bibliography fixes (if user runs `/verify-bib --fix` afterwards) into the configured `.bib` file with timestamped backup.
+
+### Do not (author mode)
+
+- **Never edit the manuscript `.tex`** (same as `/ground-claim`). Remediations are surfaced as proposals.
+- **Never apply `/verify-bib --fix` automatically** — surface CRITICAL/MODERATE/MINOR findings and let the user decide whether to run `/verify-bib --fix` as a separate step.
+- **Never write a separate `./paper-trail-*/` output-dir in author mode** — the project's `claims_ledger.md` is the canonical artifact.
 
 ## Resumability
 
@@ -401,13 +461,22 @@ Requiring attention:
 
 Every flagged entry includes the source paper page number (for claims) or authoritative source URL (for bib) so the user can verify directly.
 
-## Do not
+## Do not (both modes)
 
-- **Never modify a project-level `claims_ledger.md`.** Reader mode writes only within `<output-dir>/`.
-- **Never require `/init-writing-tools`.** This command is self-contained.
-- **Never run `/verify-bib --fix` in reader mode.** The input paper is not the user's to correct.
 - **Never bypass paywalls.** Inherit the `/fetch-paper` policy (no Sci-Hub, no LibGen, no misrepresenting preprint as published).
 - **Never silently ground a claim against an un-fetched PDF.** Use `PENDING` + `NEEDS_PDF`.
-- **Never drop parser diffs on the floor.** If the PDF-parsed value disagrees with the authoritative source, record both in `parse_report.md` — this is the signal we use to iterate on parser quality.
+- **Never drop parser diffs on the floor.** If a PDF-parsed value disagrees with the authoritative source, record both in `parse_report.md` — this is the signal we use to iterate on parser quality.
 - **Never collapse multi-cite claims into one entry.** One ledger entry per `(claim_key, citekey)` tuple, per the existing `/ground-claim` rule.
 - **Never mark the run "complete" if a phase partially failed.** Print the in-progress state so re-runs can resume from the right place.
+- **Never edit the manuscript.** Both modes: remediations are surfaced as proposals in the triage report.
+
+### Reader-mode-specific
+
+- **Never modify a project-level `claims_ledger.md`.** Reader mode writes only within `<output-dir>/`.
+- **Never run `/verify-bib --fix` in reader mode.** The input paper is not the user's to correct.
+
+### Author-mode-specific
+
+- **Never write a `./paper-trail-*/` output-dir in author mode.** The project's existing `claims_ledger.md` is the canonical artifact.
+- **Never apply `/verify-bib --fix` automatically.** Surface findings and let the user decide whether to run the fix as a separate step.
+- **Never proceed without a `claims_ledger.md` or its equivalent config.** Prompt to run `/init-writing-tools` first.
