@@ -96,7 +96,8 @@ Edit by hand if your layout changes; no re-init needed.
 
 ## Examples
 
-See [`examples/claims_ledger_example.md`](examples/claims_ledger_example.md) for a sample populated ledger with seven entries spanning different claim types (DIRECT, FRAMING), support levels (CONFIRMED, OVERSTATED, CONTRADICTED, PARTIALLY_SUPPORTED), and remediation categories (REWORD, RESCOPE). Includes a multi-cite case and a real-world typo catch.
+- [`examples/claims_ledger_example.md`](examples/claims_ledger_example.md) — sample **author-mode** claims ledger with seven entries spanning different claim types (DIRECT, FRAMING), support levels (CONFIRMED, OVERSTATED, CONTRADICTED, PARTIALLY_SUPPORTED), and remediation categories (REWORD, RESCOPE). Includes a multi-cite case and a real-world typo catch.
+- [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) — real **reader-mode** `/paper-trail` audit on a published paper. Contains the parsed 56-entry `refs.bib`, parser diagnostics, a 6-claim ledger, and a walkthrough of the catches: a CRITICAL author-swap bib error, two `CITED_OUT_OF_CONTEXT` findings, and a scope-drift `OVERGENERAL`. Source PDFs are not included.
 
 ## License
 
