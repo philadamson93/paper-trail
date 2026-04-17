@@ -37,7 +37,7 @@ Say a paper includes: *"following the method in Smith et al. 2022, we pretrained
 4. **LLM adjudicates** each claim: `CONFIRMED` if the numbers match; `OVERSTATED` if Smith says 95 epochs; `UNSUPPORTED` if no epoch count appears anywhere; `INDIRECT_SOURCE` if Smith actually credits another paper for that procedure; `AMBIGUOUS` if reasonable readers would disagree on the evidence.
 5. **Records** the verdict + quoted source passage + page number in `claims_ledger.md`. Critical issues surface at the top for the author/reviewer to triage.
 
-Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand.
+Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand in the review process... the trust is typically placed in the author to have done the work with proper rigor.
 
 See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a smoketest run on one of my prior published papers.
 
