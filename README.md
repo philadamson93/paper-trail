@@ -4,7 +4,7 @@
 
 # paper-trail
 
-`paper-trail` introduces LLM-powered citation auditing and evidence grounding.
+`paper-trail` introduces LLM-powered citation auditing and evidence grounding for scientific papers.
 
 Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, also usable with Codex CLI, Cursor, or direct paste. 
 
