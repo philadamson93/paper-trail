@@ -97,6 +97,21 @@ When invoked with `--fix`:
 
 Never apply `--fix` without the explicit flag, and never apply it silently.
 
+## Emitting a verified bib for downstream use (when invoked by `/paper-trail`)
+
+When `/paper-trail` invokes this command over a Phase 0 PDF-parsed bib (reader mode), the workflow needs the authoritative metadata in Phases 2 (fetch) and 3 (ground) — but must not silently overwrite the input-paper's printed bibliography in `refs.bib`, because that would erase the audit surface. To serve both roles:
+
+- **Do not** write the authoritative corrections back to the input `refs.bib`. Treat it as a frozen record of what the paper actually printed.
+- **Do** emit `<same-dir>/<basename>.verified.bib` (e.g., `refs.verified.bib`) containing the authoritative metadata per entry. For each entry:
+  - Start from the printed entry's fields.
+  - Apply non-CRITICAL corrections (author-spelling fixes, filled DOIs, corrected years/venues, preprint→published upgrades).
+  - Annotate changed fields with an `audit_corrected` BibTeX field: `audit_corrected = {<field1>=<printed-value> -> <authoritative-value>; <field2>=<...>}`.
+  - For CRITICAL entries (chimeric authors, wrong DOI, fabricated): keep the printed entry *as-is* in `.verified.bib` with an `audit_flag = {CRITICAL}` marker and a `audit_note = {see ledger finding <citekey>}` pointing into the audit report. The user decides whether to accept the correction during triage — we cannot silently resolve chimera on their behalf.
+- The `audit_corrected` / `audit_flag` / `audit_note` fields are custom; they don't interfere with BibTeX parsing for tools that ignore unknown fields. Phases 2 and 3 read the standard fields and ignore audit annotations.
+- If no corrections were needed (rare but possible for clean bibs), still emit `<basename>.verified.bib` as a copy of the input, to give downstream phases a stable filename to consume.
+
+Phases 2 and 3 in `/paper-trail` **must prefer `refs.verified.bib` over `refs.bib` if it exists**. `refs.bib` stays in place as the printed-as-seen record; `refs.verified.bib` is the authoritative working bib. This keeps audit traceability and reliable downstream fetching from fighting each other.
+
 ## Do not
 
 - **Never edit the manuscript (`.tex`) file.** This command touches `.bib` files only, and only in `--fix` mode.

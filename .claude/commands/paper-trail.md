@@ -121,28 +121,34 @@ Before anything else, extract text from the input PDF and confirm it is readable
   - Author-year style → `<firstauthor><year>` (e.g., `smith2023`), with a suffix letter for collisions.
   - Numbered style → `ref<N>` initially; promote to `<firstauthor><year>` once authors/year are extracted.
 
-### Step 0.3 — Dual-source extraction + enrichment
+### Step 0.3 — Cross-check count against an authoritative source
 
-The PDF parser in Step 0.2 is fallible — bibliography layouts vary and OCR introduces noise. Cross-check the parsed list against an authoritative source list to catch misses.
+The PDF parser in Step 0.2 is fallible — bibliography layouts vary and OCR introduces noise. Do a **count-only** reconciliation against an authoritative list to catch missed entries, but do **not** enrich individual entries' metadata here.
 
-- **Dual-source extraction:**
-  - (a) PDF-parsed list from Step 0.2 (existing).
-  - (b) If the input paper has a resolvable DOI, fetch its reference list from CrossRef (`https://api.crossref.org/works/<DOI>` — the `reference` array) and / or from PapersFlow / OpenAlex. This is the authoritative "who did the authors actually cite" list, to the extent publishers report it.
-- **Reconcile:**
-  - If (a) count and (b) count differ, record the diff in `parse_report.md` (e.g., "PDF parser found 42 refs, CrossRef reports 45").
-  - For per-entry reconciliation, attempt external lookup on each parsed entry (first hit wins): **PapersFlow MCP** (if available) → **CrossRef** (by DOI, else by title+author+year) → **arXiv** (for preprint-shaped entries). If any field disagrees, prefer the authoritative value; record the PDF-parsed value in `parse_report.md` as a "parser diff" so we can audit parser quality.
-  - Any entry present in (b) but not (a) is added to `refs.bib` with a `parser_source: crossref` marker and flagged low-confidence (we have the authoritative metadata but didn't see it in the PDF — possibly the parser missed an entry).
-- Parallelize per-entry enrichment in batches per the configured batch size.
+- If the input paper has a resolvable DOI, fetch its reference list from CrossRef (`https://api.crossref.org/works/<DOI>` — the `reference` array) and / or from PapersFlow / OpenAlex. This is the authoritative "who did the authors actually cite" list, to the extent publishers report it.
+- Compare counts. If the PDF-parsed count and CrossRef-reported count differ, record the diff in `parse_report.md` (e.g., "PDF parser found 42 refs, CrossRef reports 45").
+- For any entry that CrossRef/OpenAlex reports but the PDF parser missed, add the missing entry to `refs.bib` using CrossRef metadata and mark it `parser_source: crossref_count_fill`. Flag low-confidence in `parse_report.md` — the authoritative source asserts it, but we didn't see it in the PDF's reference list.
+
+**Do not enrich the metadata of PDF-parsed entries here.** Per-entry metadata enrichment (resolving incomplete authors, correcting swapped surnames, filling missing DOIs, etc.) is the job of Phase 1's `/verify-bib`, which compares the printed metadata against CrossRef/arXiv/PapersFlow and raises each disagreement as a **bib-audit finding**. If Phase 0 silently corrects a chimeric author list against CrossRef, Phase 1 has nothing to flag and a real authoring error goes unreported. Chimeric entries, author-swap typos, and title truncations in the printed bibliography are exactly the kind of thing this tool exists to surface — it must see them before it corrects them.
 
 ### Step 0.4 — Emit artifacts
-- Write `refs.bib` in standard BibTeX. Preserve both parsed and looked-up values where they disagree, preferring the authoritative value in the bib and noting the parsed value in `parse_report.md`.
-- Write `parse_report.md` with:
+
+**Emit a PDF-parsed `refs.bib`**, not an enriched one:
+
+- Each entry's fields reflect what the PDF actually printed: whatever the parser could recover for authors, title, venue, year, volume/issue/pages, DOI (if printed), arXiv ID (if printed). For fields the parser couldn't recover, omit the field rather than inventing a value from CrossRef.
+- Each entry carries a `parser_source` field: `pdf_parsed` (parsed from the PDF bibliography), `crossref_count_fill` (added in Step 0.3 because CrossRef reported it but the parser missed it), or `unresolved` (the parser could not recover a usable entry; see `parse_report.md` for the raw line).
+- Citekeys per Step 0.2's rules — author-year `<firstauthor><year>` or numbered `ref<N>` until authors/year extracted.
+
+Phase 1 will read this bib, enrich and audit each entry, and (if any corrections were accepted during audit) emit a `refs.verified.bib` for Phases 2–3 to consume. Phases 2–3 **must prefer `refs.verified.bib` over `refs.bib` if the former exists**, because it carries the authoritative metadata needed for reliable PDF fetching and claim matching.
+
+Write `parse_report.md` with:
   - Total entries parsed from PDF; total from authoritative source (CrossRef / PapersFlow); diff count.
-  - Total enriched; total with DOI; total flagged low-confidence.
+  - Total with DOI printed in the PDF; total flagged low-confidence.
   - Auto-detected bibliography style.
-  - Per-entry parser diffs (authoritative vs parsed) for entries where they differ.
   - Explicit list of unparseable / low-confidence lines by line number so a human can spot-check.
-  - List of entries added from the authoritative source that the PDF parser missed.
+  - List of entries added from the authoritative source that the PDF parser missed (`crossref_count_fill`).
+
+Do **not** include per-entry parser diffs (authoritative vs parsed) in `parse_report.md` — those now live in Phase 1's bib-audit findings (as MODERATE / MINOR entries against each disagreement). Mixing them into `parse_report.md` duplicates surfacing and obscures which issues the user still has to action.
 
 ### Step 0.5 — Confirmation gate
 
@@ -163,12 +169,24 @@ If more than 200 references are parsed, print the count and confirm before conti
 
 ## Phase 1 — Verify bib
 
-Run `/verify-bib` logic against `<output-dir>/refs.bib`, parallelized.
+Run `/verify-bib` logic against `<output-dir>/refs.bib` (the PDF-parsed bib from Phase 0). Phase 1 is where printed-vs-authoritative disagreements become **findings** the user can see.
 
 - Spawn one subagent per reference, batched per the configured batch size.
 - Each subagent follows the `/verify-bib` per-entry workflow (existence, author match, bibliographic fields, preprint upgrades, duplicates) and returns a severity-classified result.
-- Collect results and populate the ledger's `## Critical findings` section with every `CRITICAL` entry.
-- Do **not** auto-apply `--fix` corrections in reader mode. Raise, don't fix. (The user is not the author — they don't get to correct the input paper's bib.)
+- For every disagreement between the PDF-parsed entry and the authoritative source (CrossRef / arXiv / PapersFlow), raise an explicit finding:
+  - **Author-list mismatch** — e.g., printed authors `Florian K, Jure Z, Anuroop S` but CrossRef returns `Knoll F, Zbontar J, Sriram A, …` with 23 authors total. Severity `CRITICAL` for chimeric entries (first/last names swapped, names invented, author count wrong by more than ±1).
+  - **Title truncation / fabrication** — printed title differs from authoritative title by more than a subtitle or trailing punctuation. Severity `MODERATE`.
+  - **Wrong year / venue** — printed year off by more than 1 from the authoritative issued date; wrong journal / conference. Severity `MODERATE`.
+  - **Missing DOI** — authoritative source has a DOI; bib entry does not. Severity `MINOR`.
+  - **Preprint→published upgrade** — bib entry cites arXiv; authoritative source has a peer-reviewed publication. Severity `MINOR`.
+  - **Duplicates** — two bib entries resolve to the same authoritative paper. Severity `MODERATE`.
+- Collect results and populate the ledger's `## Critical findings` section with every `CRITICAL` entry and a structured MODERATE / MINOR summary.
+- **Emit a corrected bib for downstream phases.** After all subagents return, write `<output-dir>/refs.verified.bib`:
+  - Start from `refs.bib` (the PDF-parsed version).
+  - For each entry with a non-CRITICAL authoritative correction available, apply the correction to `refs.verified.bib` (not to `refs.bib`) and record the change in the entry's BibTeX as `audit_corrected: "<field>=<printed> -> <authoritative>"`.
+  - For CRITICAL entries (chimeric author lists etc.), *do not* silently replace — keep the printed entry in `refs.verified.bib` with the original fields, and add an `audit_flag: CRITICAL` annotation plus a comment pointing to the ledger finding. The user must decide whether to accept the correction.
+  - Phases 2 and 3 **must read `refs.verified.bib` if it exists**, falling back to `refs.bib`. This is how the authoritative metadata reaches fetch / grounding without silently overwriting the audit surface.
+- Do **not** auto-apply `--fix` corrections to `refs.bib` in reader mode. Raise, don't fix. (The user is not the author — they don't get to correct the input paper's bib.) `refs.verified.bib` is an internal tool artifact for Phases 2–3, not a corrected copy of the input paper's bibliography — this distinction matters for audit traceability.
 
 ## Phase 2 — Fetch PDFs
 
