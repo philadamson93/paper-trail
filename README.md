@@ -28,6 +28,16 @@ There are two workflows. **Author mode** (existing): you're writing a paper, and
 
 Each command is a self-contained prompt in `.claude/commands/*.md` — open the file for full detail (invocation modes, taxonomies, constraints). None of them edit the manuscript: issues are surfaced as proposals in a report or ledger for the user to accept.
 
+## Features at a glance
+
+- **Thorough-reading enforcement.** Grounding agents must read the whole cited paper — tables and figure captions included — and record an attestation log before declaring `UNSUPPORTED` or `CONTRADICTED`. No abstract-only shortcuts.
+- **Claim-type-aware search strategy.** Different search strategies for factual, priority-of-invention, results, methods, and framing claims.
+- **Citation-hygiene taxonomy.** Flags go beyond right-vs-wrong: `INDIRECT_SOURCE` (cited paper itself credits another source for the fact — offers `CITE_PRIMARY` remediation), `OVERGENERAL` (scope mismatch), `CITED_OUT_OF_CONTEXT` (passage used in a different context than it appears in the source), alongside the standard `OVERSTATED` / `UNSUPPORTED` / `CONTRADICTED`.
+- **Ambiguity triage.** When an agent reads fully but cannot confidently pick a verdict, it returns `AMBIGUOUS` with candidate verdicts and reasoning — resolve interactively via `/ground-claim --triage` or the end-of-run `/paper-trail` prompt.
+- **Reader mode** (`/paper-trail`). Hand it a single PDF; it extracts the references, verifies the bib, fetches source PDFs, and grounds every in-text citation — writing everything to a self-contained per-paper output directory.
+
+Full behavior lives in the command prompts at `.claude/commands/*.md` — they are descriptive of the workflow, not wrappers around hidden code.
+
 ## Installation
 
 ### Option A — Clone + symlink (user-wide, auto-updates)
