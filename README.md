@@ -43,7 +43,7 @@ See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-
 
 ## Getting started — `/paper-trail`
 
-`paper-trail` exposes a single entry point: the **`/paper-trail`** slash command. It operates in two workflow modes:
+`paper-trail` exposes a single entry point: the **`/paper-trail`** slash command for use with Claude Code. It operates in two workflow modes:
 
 - **Reader mode** (default) — hand it a PDF of someone else's paper (peer review, literature vetting, skeptical reading). It extracts the references, verifies the bibliography, fetches open-access source PDFs, and grounds every in-text citation against its source. Writes a self-contained audit artifact to `./paper-trail-<stem>/`.
 - **Author mode** (`--author`) — point it at your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs in a directory). It audits the bibliography, fetches any missing sources, and grounds every cited claim. Writes to `claims_ledger.md` at the project root.
