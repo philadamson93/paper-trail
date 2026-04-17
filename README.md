@@ -16,16 +16,17 @@ Scientific papers routinely cite 50–100 references. Verifying that every claim
 
 `paper-trail` helps automate this: locating the claim in the source, extracting the relevant passage with a page number, classifying how the claim is supported (or not), and recording it in an audit-trail markdown file alongside the manuscript so an author or reviewer can see the receipts.
 
-### How it works, in one example
+### How it works
 
 ```mermaid
 flowchart TD
     A["Cited claim<br/>('following Smith 2022…')"] --> B["Fetch source PDF"]
     B --> C["Read PDF in full"]
     C --> D["Locate evidence"]
-    D --> E{Adjudicate}
+    D --> E{LLM adjudication}
     E --> F["CONFIRMED / OVERSTATED / UNSUPPORTED /<br/>INDIRECT_SOURCE / AMBIGUOUS / …"]
     F --> G["Ledger entry<br/>(quote + page + verdict)"]
+    classDef default font-size:14px;
 ```
 
 Say a paper includes: *"following the method in Smith et al. 2022, we pretrained for 100 epochs on 1.2M images"* — one citation, two factual claims. `/paper-trail`:
@@ -33,10 +34,12 @@ Say a paper includes: *"following the method in Smith et al. 2022, we pretrained
 1. **Resolves** `Smith et al. 2022` in the paper's bibliography.
 2. **Fetches** the Smith 2022 PDF (arXiv / open-access, or prompts for institutional access if paywalled).
 3. **Reads** the PDF in full — abstract, methods, results, tables, figure captions — searching for the "100 epochs" procedure and the "1.2M images" dataset.
-4. **Adjudicates** per claim: `CONFIRMED` if the numbers match; `OVERSTATED` if Smith says 95 epochs; `UNSUPPORTED` if no epoch count appears anywhere; `INDIRECT_SOURCE` if Smith actually credits another paper for that procedure; `AMBIGUOUS` if reasonable readers would disagree on the evidence.
+4. **LLM adjudicates** each claim: `CONFIRMED` if the numbers match; `OVERSTATED` if Smith says 95 epochs; `UNSUPPORTED` if no epoch count appears anywhere; `INDIRECT_SOURCE` if Smith actually credits another paper for that procedure; `AMBIGUOUS` if reasonable readers would disagree on the evidence.
 5. **Records** the verdict + quoted source passage + page number in `claims_ledger.md`. Critical issues surface at the top for the author/reviewer to triage.
 
 Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand.
+
+See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a real run on a published paper — including the parsed bibliography, parser diagnostics, the full ledger, and a walkthrough of the real catches (a CRITICAL author-swap on a widely-cited reference, two `CITED_OUT_OF_CONTEXT` findings, a scope-drift `OVERGENERAL`).
 
 ## Getting started — `/paper-trail`
 
@@ -113,8 +116,10 @@ Every cited claim is recorded in the ledger with three orthogonal values plus ev
 
 ## Why these verdicts are trustworthy
 
-- **Full-paper attestation.** Before any `UNSUPPORTED` or `CONTRADICTED` verdict, agents must record a section-by-section read checklist, a minimum of 3 distinct phrasings searched, and the closest adjacent passage. No abstract-only shortcuts.
-- **Independent attestation verifier.** Every grounding verdict is spot-checked by a separate subagent against the cited PDF to catch fabricated logs (`UNVERIFIED_ATTESTATION` flag).
+Every step that involves judgment — reading a PDF, picking out evidence, choosing a verdict, proposing a remediation — is performed by an LLM (Claude, via Claude Code). The trust model is **not** "trust the LLM"; it's process discipline *around* the LLM:
+
+- **Full-paper attestation.** Before any `UNSUPPORTED` or `CONTRADICTED` verdict, LLM agents must record a section-by-section read checklist, a minimum of 3 distinct phrasings searched, and the closest adjacent passage. No abstract-only shortcuts.
+- **Independent attestation verifier.** Every grounding verdict is spot-checked by a separate LLM subagent against the cited PDF to catch fabricated logs (`UNVERIFIED_ATTESTATION` flag).
 - **Chunked-read for long PDFs.** Source papers over 25 pages are read section-by-section with per-section attestation — avoids silent context truncation.
 - **Configurable fetch substitution.** When a target DOI is paywalled but a related preprint exists, `--fetch-substitute=<never|ask|always>` controls whether to accept the substitute; every substitution is logged.
 
@@ -194,8 +199,7 @@ Edit by hand if your layout changes; no re-init needed.
 
 ## Examples
 
-- [`examples/claims_ledger_example.md`](examples/claims_ledger_example.md) — sample **author-mode** claims ledger with seven entries spanning different claim types (DIRECT, FRAMING), support levels (CONFIRMED, OVERSTATED, CONTRADICTED, PARTIALLY_SUPPORTED), and remediation categories (REWORD, RESCOPE). Includes a multi-cite case and a real-world typo catch.
-- [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) — real **reader-mode** `/paper-trail` audit on a published paper. Contains the parsed 56-entry `refs.bib`, parser diagnostics, a 6-claim ledger, and a walkthrough of the catches: a CRITICAL author-swap bib error, two `CITED_OUT_OF_CONTEXT` findings, and a scope-drift `OVERGENERAL`. Source PDFs are not included.
+- [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) — real `/paper-trail` audit on a published paper. Contains the parsed 56-entry `refs.bib`, parser diagnostics, a 6-claim ledger, and a walkthrough of the catches: a CRITICAL author-swap bib error, two `CITED_OUT_OF_CONTEXT` findings, and a scope-drift `OVERGENERAL`. Source PDFs are not included.
 
 ## License
 
