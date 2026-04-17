@@ -6,9 +6,7 @@
 
 Does the paper you cited actually say that? `paper-trail` introduces LLM-powered citation auditing and evidence grounding for scientific papers.
 
-Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, also usable with Codex CLI, Cursor, or direct paste. 
-
-UI + API key version coming soon.
+Shipped as Claude Code slash commands; UI version coming soon.
 
 ## Why `paper-trail`
 
@@ -37,13 +35,36 @@ Say a paper includes: *"following the method in Smith et al. 2022, we pretrained
 4. **LLM adjudicates** each claim: `CONFIRMED` if the numbers match; `OVERSTATED` if Smith says 95 epochs; `UNSUPPORTED` if no epoch count appears anywhere; `INDIRECT_SOURCE` if Smith actually credits another paper for that procedure; `AMBIGUOUS` if reasonable readers would disagree on the evidence.
 5. **Records** the verdict + quoted source passage + page number in `claims_ledger.md`. Critical issues surface at the top for the author/reviewer to triage.
 
-Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand in the review process... the trust is typically placed in the author to have done the work with proper rigor.
+Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand in the review process — the trust is typically placed in the author to have done the work with proper rigor.
 
 See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a smoketest run on one of my prior published papers.
 
+## Installation
+
+### Option A — Clone + symlink (user-wide, auto-updates)
+
+```bash
+git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
+mkdir -p ~/.claude/commands
+ln -s ~/src/paper-trail/.claude/commands/*.md ~/.claude/commands/
+```
+
+### Option B — Vendor-copy (per-project, customizable)
+
+```bash
+git clone https://github.com/philadamson93/paper-trail.git /tmp/paper-trail
+cp -r /tmp/paper-trail/.claude ./
+cp -r /tmp/paper-trail/templates ./
+```
+
+### First run
+
+- **Reader mode:** just `/paper-trail <path-to-pdf>`. No setup required.
+- **Author mode:** in your writing project, run `/paper-trail --author` — if no `claims_ledger.md` exists it will prompt you to run `/init-writing-tools` first (a one-time bootstrap that detects your `.bib`/PDF layout and writes config).
+
 ## Getting started — `/paper-trail`
 
-`paper-trail` exposes a single entry point: the **`/paper-trail`** slash command for use with Claude Code (UI + API Key alternate workflow coming soon). It operates in two workflow modes:
+`paper-trail` exposes a single entry point: the **`/paper-trail`** slash command for use with Claude Code. It operates in two workflow modes:
 
 - **Reader mode** (default) — hand it a PDF of someone else's paper (peer review, literature vetting, skeptical reading). It extracts the references, verifies the bibliography, fetches open-access source PDFs, and grounds every in-text citation against its source. Writes a self-contained audit artifact to `./paper-trail-<stem>/`.
 - **Author mode** (`--author`) — point it at your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs in a directory). It audits the bibliography, fetches any missing sources, and grounds every cited claim. Writes to `claims_ledger.md` at the project root.
@@ -137,33 +158,6 @@ Full behavior lives in the command prompt at [`.claude/commands/paper-trail.md`]
 | [`/ground-claim`](.claude/commands/ground-claim.md) | Verify a specific claim (or a whole `.tex` file's citations) against source PDFs; maintain the claims ledger. Also provides the `--triage` invocation for resolving `AMBIGUOUS` entries. |
 
 None of these edit the manuscript — issues are surfaced as proposals for the user to accept.
-
-## Installation
-
-### Option A — Clone + symlink (user-wide, auto-updates)
-
-```bash
-git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
-mkdir -p ~/.claude/commands
-ln -s ~/src/paper-trail/.claude/commands/*.md ~/.claude/commands/
-```
-
-### Option B — Vendor-copy (per-project, customizable)
-
-```bash
-git clone https://github.com/philadamson93/paper-trail.git /tmp/paper-trail
-cp -r /tmp/paper-trail/.claude ./
-cp -r /tmp/paper-trail/templates ./
-```
-
-### Using with other LLM tools
-
-The `.md` files are plain structured prompts. On Codex CLI, copy the text into your Codex configuration; on Cursor, adapt into `.cursor/rules/`; elsewhere, paste into a chat and ask the model to follow it against your document.
-
-### First run
-
-- **Reader mode:** just `/paper-trail <path-to-pdf>`. No setup required.
-- **Author mode:** in your writing project, run `/paper-trail --author` — if no `claims_ledger.md` exists it will prompt you to run `/init-writing-tools` first (a one-time bootstrap that detects your `.bib`/PDF layout and writes config).
 
 ## MCP requirements
 
