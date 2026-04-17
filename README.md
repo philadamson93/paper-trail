@@ -146,6 +146,11 @@ Every step that involves judgment — reading a PDF, picking out evidence, choos
 
 Full behavior lives in the command prompt at [`.claude/commands/paper-trail.md`](.claude/commands/paper-trail.md) — descriptive of the workflow, not a wrapper around hidden code.
 
+## Cautions
+
+- **LLMs can make mistakes.** Despite the attestation log and verifier probe, the agent can misread tables, misclassify a claim, or get a verdict wrong. Every flagged entry (`UNSUPPORTED`, `CONTRADICTED`, `AMBIGUOUS`, `UNVERIFIED_ATTESTATION`, and citation-hygiene flags like `CITED_OUT_OF_CONTEXT` / `INDIRECT_SOURCE`) should be **manually verified** against the cited source before you act on it. Treat the ledger as a triage queue, not a verdict.
+- **This is editing and reviewing assistance — not a ground-truth accounting of prior published work.** A finding on someone else's published paper is a hypothesis surfaced by an LLM that read the cited source; it is not a scholarly judgment on that paper's accuracy. Use findings as leads to investigate, not as conclusions to cite or publish.
+
 ## Under the hood (component commands)
 
 `/paper-trail` orchestrates four component commands. Most users should just use `/paper-trail` — but these are individually invocable for advanced / targeted use.
