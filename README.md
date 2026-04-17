@@ -42,17 +42,59 @@ Both modes share the per-claim workflow, the same severity taxonomies, and the s
 
 See [`.claude/commands/paper-trail.md`](.claude/commands/paper-trail.md) for the full spec (all flags, phase structure, taxonomies, rigor requirements).
 
-## Features at a glance
+## What `/paper-trail` produces
 
-- **Thorough-reading enforcement.** Grounding agents must read the whole cited paper — tables and figure captions included — and record an attestation log before declaring `UNSUPPORTED` or `CONTRADICTED`. No abstract-only shortcuts.
-- **Claim-type-aware search strategy.** Different search strategies for factual, priority-of-invention, results, methods, and framing claims.
-- **Citation-hygiene taxonomy.** Flags go beyond right-vs-wrong: `INDIRECT_SOURCE` (cited paper itself credits another source for the fact — offers `CITE_PRIMARY` remediation), `OVERGENERAL` (scope mismatch), `CITED_OUT_OF_CONTEXT` (passage used in a different context than it appears in the source), alongside the standard `OVERSTATED` / `UNSUPPORTED` / `CONTRADICTED`.
-- **Attestation verifier.** Every grounding verdict is spot-checked by an independent subagent to catch fabricated attestation logs (`UNVERIFIED_ATTESTATION` flag).
-- **Ambiguity triage.** When an agent reads fully but cannot confidently pick a verdict, it returns `AMBIGUOUS` with candidate verdicts and reasoning — resolve interactively via `--triage`.
-- **Chunked-read for long PDFs.** Source papers over 25 pages are read section-by-section with per-section attestation, avoiding silent context truncation.
-- **Configurable fetch-substitution policy.** When a target DOI is paywalled but a related preprint exists, the user chooses (`never` / `ask` / `always`) whether to accept the substitute. All substitutions are always logged.
+Every cited claim is recorded in the ledger with three orthogonal values plus evidence. The taxonomies:
 
-Full behavior lives in the command prompt at [`.claude/commands/paper-trail.md`](.claude/commands/paper-trail.md). The file is descriptive of the workflow — not a wrapper around hidden code.
+### Claim type — *what kind of attribution is being made*
+
+| Type | Meaning | Evidence bar |
+|------|---------|--------------|
+| `DIRECT` | Attributes a specific finding to the paper ("X et al. showed Y") | Near-verbatim match |
+| `PARAPHRASED` | Summarizes the paper's argument in our words | Semantic match |
+| `SUPPORTING` | Our claim; paper cited as evidence for it | Paper's evidence compatible with our framing |
+| `BACKGROUND` | Definition, priority of invention, general context | Paper contains the concept |
+| `CONTRASTING` | "Unlike X, we…" | Paper takes the contrasted position |
+| `FRAMING` | Broad-topic gesture; no specific sentence-level claim extracted | Paper addresses the topic |
+
+### Support level — *how well the evidence backs the claim*
+
+| Support level | Meaning |
+|---------------|---------|
+| `CONFIRMED` | Evidence directly supports the claim |
+| `PARTIALLY_SUPPORTED` | Supports part; a sub-element is missing or weaker |
+| `OVERSTATED` | True, but our wording is stronger than the paper's — about *strength* |
+| `OVERGENERAL` | True within the paper's narrow scope, but our claim generalizes beyond it — about *scope* |
+| `CITED_OUT_OF_CONTEXT` | Passage exists in the paper, but used in a materially different context than it originally appears |
+| `UNSUPPORTED` | No evidence found on careful read |
+| `CONTRADICTED` | Evidence actively contradicts the claim (critical) |
+| `MISATTRIBUTED` | Claim is true, but this isn't the source for it |
+| `INDIRECT_SOURCE` | Paper contains the fact but itself credits another source for it — reference-hygiene issue |
+| `AMBIGUOUS` | Agent read fully but could not confidently pick between 2+ candidate verdicts; awaits user triage |
+| `STALE` | Claim text changed since last verification |
+| `PENDING` | Not yet checked (pre-flight, or blocked on a flag like `NEEDS_PDF` / `NEEDS_OCR` / `NEEDS_SUPPLEMENT`) |
+
+### Remediation — *concrete suggested fix when support isn't `CONFIRMED`*
+
+| Remediation | Action |
+|-------------|--------|
+| `REWORD` | Soften language to match evidence strength |
+| `RESCOPE` | Narrow the claim so evidence covers it fully |
+| `RECITE` | Wrong citation entirely; suggest a different source |
+| `CITE_PRIMARY` | Replace with the primary source the cited paper itself credits (dug out of that paper's own bibliography) |
+| `SPLIT` | Separate a composite claim from synthesized framing |
+| `ADD_EVIDENCE` | Add a second citation to cover what the first doesn't |
+| `REMOVE` | Not supportable and not essential |
+| `ACCEPT_AS_FRAMING` | Move the citation scope or hedge ("informed by", "following") |
+
+## Why these verdicts are trustworthy
+
+- **Full-paper attestation.** Before any `UNSUPPORTED` or `CONTRADICTED` verdict, agents must record a section-by-section read checklist, a minimum of 3 distinct phrasings searched, and the closest adjacent passage. No abstract-only shortcuts.
+- **Independent attestation verifier.** Every grounding verdict is spot-checked by a separate subagent against the cited PDF to catch fabricated logs (`UNVERIFIED_ATTESTATION` flag).
+- **Chunked-read for long PDFs.** Source papers over 25 pages are read section-by-section with per-section attestation — avoids silent context truncation.
+- **Configurable fetch substitution.** When a target DOI is paywalled but a related preprint exists, `--fetch-substitute=<never|ask|always>` controls whether to accept the substitute; every substitution is logged.
+
+Full behavior lives in the command prompt at [`.claude/commands/paper-trail.md`](.claude/commands/paper-trail.md) — descriptive of the workflow, not a wrapper around hidden code.
 
 ## Under the hood (component commands)
 
