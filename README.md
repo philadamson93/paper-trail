@@ -14,29 +14,58 @@ Scientific papers routinely cite 50–100 references. Verifying that every claim
 
 `paper-trail` helps automate this: locating the claim in the source, extracting the relevant passage with a page number, classifying how the claim is supported (or not), and recording it in an audit-trail markdown file alongside the manuscript so an author or reviewer can see the receipts.
 
-## Commands
+## Getting started — `/paper-trail`
 
-There are two workflows. **Author mode** (existing): you're writing a paper, and the tools verify your own citations against your own `.bib` and PDF directory. **Reader mode** (new): you hand the tool someone else's PDF, and it audits the paper's references and in-text citations end-to-end.
+`paper-trail` exposes a single entry point: the **`/paper-trail`** slash command. It operates in two workflow modes:
 
-| Command | Mode | Purpose |
-|---------|------|---------|
-| `/init-writing-tools` | author | One-time bootstrap: detect PDF layout and `.bib` files, write config |
-| `/fetch-paper` | author | Download open-access PDFs or surface retrieval prompts for paywalled ones |
-| `/ground-claim` | author | Verify cited claims against source PDFs; maintain a claims ledger |
-| `/verify-bib` | author | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` to write corrections |
-| `/paper-trail` | reader | End-to-end audit of an input PDF: extract references, verify bib, fetch sources, ground every citation; writes a self-contained artifact |
+- **Reader mode** (default) — hand it a PDF of someone else's paper (peer review, literature vetting, skeptical reading). It extracts the references, verifies the bibliography, fetches open-access source PDFs, and grounds every in-text citation against its source. Writes a self-contained audit artifact to `./paper-trail-<stem>/`.
+- **Author mode** (`--author`) — point it at your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs in a directory). It audits the bibliography, fetches any missing sources, and grounds every cited claim. Writes to `claims_ledger.md` at the project root.
 
-Each command is a self-contained prompt in `.claude/commands/*.md` — open the file for full detail (invocation modes, taxonomies, constraints). None of them edit the manuscript: issues are surfaced as proposals in a report or ledger for the user to accept.
+Both modes share the per-claim workflow, the same severity taxonomies, and the same attestation-verifier and ambiguity-triage passes.
+
+### Invoke
+
+```bash
+# Reader mode
+/paper-trail                                # fully interactive; prompts for everything
+/paper-trail <path-to-pdf>                  # reader mode against that PDF
+/paper-trail <path-to-pdf> --skip-paywalled # don't block on paywalled refs
+
+# Author mode
+/paper-trail --author                       # author mode against the current writing project
+/paper-trail --author path/to/document.tex  # author mode against a specific manuscript
+
+# Either mode
+/paper-trail [...] --scope=single           # ground one claim the user describes
+/paper-trail [...] --triage                 # interactive triage for AMBIGUOUS entries
+```
+
+See [`.claude/commands/paper-trail.md`](.claude/commands/paper-trail.md) for the full spec (all flags, phase structure, taxonomies, rigor requirements).
 
 ## Features at a glance
 
 - **Thorough-reading enforcement.** Grounding agents must read the whole cited paper — tables and figure captions included — and record an attestation log before declaring `UNSUPPORTED` or `CONTRADICTED`. No abstract-only shortcuts.
 - **Claim-type-aware search strategy.** Different search strategies for factual, priority-of-invention, results, methods, and framing claims.
 - **Citation-hygiene taxonomy.** Flags go beyond right-vs-wrong: `INDIRECT_SOURCE` (cited paper itself credits another source for the fact — offers `CITE_PRIMARY` remediation), `OVERGENERAL` (scope mismatch), `CITED_OUT_OF_CONTEXT` (passage used in a different context than it appears in the source), alongside the standard `OVERSTATED` / `UNSUPPORTED` / `CONTRADICTED`.
-- **Ambiguity triage.** When an agent reads fully but cannot confidently pick a verdict, it returns `AMBIGUOUS` with candidate verdicts and reasoning — resolve interactively via `/ground-claim --triage` or the end-of-run `/paper-trail` prompt.
-- **Reader mode** (`/paper-trail`). Hand it a single PDF; it extracts the references, verifies the bib, fetches source PDFs, and grounds every in-text citation — writing everything to a self-contained per-paper output directory.
+- **Attestation verifier.** Every grounding verdict is spot-checked by an independent subagent to catch fabricated attestation logs (`UNVERIFIED_ATTESTATION` flag).
+- **Ambiguity triage.** When an agent reads fully but cannot confidently pick a verdict, it returns `AMBIGUOUS` with candidate verdicts and reasoning — resolve interactively via `--triage`.
+- **Chunked-read for long PDFs.** Source papers over 25 pages are read section-by-section with per-section attestation, avoiding silent context truncation.
+- **Configurable fetch-substitution policy.** When a target DOI is paywalled but a related preprint exists, the user chooses (`never` / `ask` / `always`) whether to accept the substitute. All substitutions are always logged.
 
-Full behavior lives in the command prompts at `.claude/commands/*.md` — they are descriptive of the workflow, not wrappers around hidden code.
+Full behavior lives in the command prompt at [`.claude/commands/paper-trail.md`](.claude/commands/paper-trail.md). The file is descriptive of the workflow — not a wrapper around hidden code.
+
+## Under the hood (component commands)
+
+`/paper-trail` orchestrates four component commands. Most users should just use `/paper-trail` — but these are individually invocable for advanced / targeted use.
+
+| Component | Purpose |
+|-----------|---------|
+| [`/init-writing-tools`](.claude/commands/init-writing-tools.md) | One-time bootstrap for author mode: detect `.bib` / PDF layout, write `claims_ledger.md` config. Run once per writing project. |
+| [`/verify-bib`](.claude/commands/verify-bib.md) | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` to write corrections. |
+| [`/fetch-paper`](.claude/commands/fetch-paper.md) | Download open-access PDFs or surface retrieval prompts for paywalled ones. |
+| [`/ground-claim`](.claude/commands/ground-claim.md) | Verify a specific claim (or a whole `.tex` file's citations) against source PDFs; maintain the claims ledger. Also provides the `--triage` invocation for resolving `AMBIGUOUS` entries. |
+
+None of these edit the manuscript — issues are surfaced as proposals for the user to accept.
 
 ## Installation
 
@@ -62,7 +91,8 @@ The `.md` files are plain structured prompts. On Codex CLI, copy the text into y
 
 ### First run
 
-In your writing project, invoke `/init-writing-tools` once. It detects your layout, asks a few questions, and writes a `claims_ledger.md` with config at the project root.
+- **Reader mode:** just `/paper-trail <path-to-pdf>`. No setup required.
+- **Author mode:** in your writing project, run `/paper-trail --author` — if no `claims_ledger.md` exists it will prompt you to run `/init-writing-tools` first (a one-time bootstrap that detects your `.bib`/PDF layout and writes config).
 
 ## MCP requirements
 
@@ -78,6 +108,8 @@ Commands declare capabilities and degrade gracefully — they adapt to whichever
 - **No MCP:** `pdftotext` from poppler lets commands read PDFs via shell; CrossRef and arXiv REST APIs work via plain HTTP fetches.
 
 ## Configuration
+
+Relevant only to author mode. Reader mode is self-contained per run and needs no config.
 
 Config lives in YAML frontmatter at the top of `claims_ledger.md`, written by `/init-writing-tools`:
 
