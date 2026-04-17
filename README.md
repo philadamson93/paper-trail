@@ -177,4 +177,8 @@ Edit by hand if your layout changes; no re-init needed.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — see [LICENSE](LICENSE).
+
+Use freely for personal work, academic research, non-profit projects, and internal research at any organization. Commercial use — selling the software, offering it as part of a paid SaaS, or incorporating it into a paid product — is not permitted under this license. If you'd like a commercial license, open an issue.
+
+Note: PolyForm NC is a *source-available* license, not OSI-approved "open source". All uses other than commercial resale are permitted.
