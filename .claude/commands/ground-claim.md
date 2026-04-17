@@ -77,12 +77,31 @@ Once evidence is located (or its absence documented), ask: *does the evidence I 
 
 Read the cited PDF. Extract the exact source text that speaks to the claim. Record it verbatim in the ledger with page number.
 
+**Pre-read checks (before minimum-reading requirement):**
+
+Before applying the section checklist, verify the PDF is readable and determine its length.
+
+1. **Text extractability.** Extract text from the PDF (via `pdftotext`, the `Read` tool, or equivalent). If the text-per-page is below ~200 characters, or extraction returns empty, the PDF is image-based (scanned):
+   - **OCR fallback chain:** (a) `tesseract` if available on PATH; (b) on macOS, `shortcuts run "Extract Text From PDF"` if available.
+   - If OCR succeeds → proceed with OCR text, and record the OCR method in `parse_report.md` so downstream trust is calibrated (OCR text has error rates).
+   - If no OCR is available → mark the entry `PENDING` with a `NEEDS_OCR` flag, return guidance for the user to OCR externally and re-invoke. Do **not** force a verdict on an un-read PDF.
+2. **Page count.** Extract the page count. If > 25 pages, enter chunked-read mode (see "Paper-length handling" below). If page count cannot be determined, assume chunked-read defensively.
+
 **Minimum reading requirement — no shortcuts.**
 
 Before returning *any* verdict (`CONFIRMED`, `UNSUPPORTED`, `OVERSTATED`, anything), you must have read the **entire** cited paper, not only the section most likely to contain the claim. Partial reads are the single biggest failure mode in automated citation auditing — an agent skims the abstract, doesn't find the claim, and declares `UNSUPPORTED` when the evidence was in Results. Do not do this.
 
-For every non-`FRAMING` claim, complete this section-read checklist and record it alongside the claim's entry in the ledger Details block:
+For every non-`FRAMING` claim, complete a section-read checklist built from **this paper's actual structure** and record it alongside the claim's entry in the ledger Details block.
 
+**Identify the paper's actual structure first.** IMRaD (Introduction / Methods / Results / Discussion) is the common case, but review articles, theses, short letters, math / theory papers, and opinion pieces have different structures. Before filling in a checklist:
+
+1. Read the paper's top-level section headers — from the PDF's bookmarks / outline if available, otherwise from scanning pages for heading formatting.
+2. Enumerate the *actual* sections this paper contains. Do not force an IMRaD checklist onto a paper that isn't IMRaD.
+3. The checklist reflects the real structure. If the paper has no section headers (some short letters, posters, opinion notes), the checklist becomes page ranges instead.
+
+Example checklists:
+
+Standard IMRaD paper:
 ```
 Paper length:       <N> pages
 Section checklist:
@@ -96,6 +115,30 @@ Section checklist:
   [ ] Conclusions / Summary
   [ ] Appendix / Supplementary material      (or: n/a if none in PDF)
 ```
+
+Review article:
+```
+Paper length:       <N> pages
+Section checklist:
+  [ ] Abstract
+  [ ] Introduction
+  [ ] <Section 1 title> — pages X–Y
+  [ ] <Section 2 title> — pages X–Y
+  [ ] …
+  [ ] Conclusion / Outlook
+  [ ] References (not for evidence; only to check indirect-attribution signals)
+```
+
+Short unstructured letter (no section headers):
+```
+Paper length:       <N> pages
+Page-read checklist:
+  [ ] Page 1 — <one-line summary of content>
+  [ ] Page 2 — <...>
+  [ ] …
+```
+
+Fill in the checklist for the *actual* paper before checking items off. The requirement is **exhaustive coverage of the actual paper**, not IMRaD-specific coverage. A FRAMING claim still requires checking the abstract + introduction at minimum (the bar is lower, not zero).
 
 Check each box only after actually reading that section. If the PDF references a supplement you cannot access and the claim is numerical or highly specific, return `PENDING` with a `NEEDS_SUPPLEMENT` note instead of forcing a verdict without it.
 
@@ -112,6 +155,21 @@ Check each box only after actually reading that section. If the PDF references a
 - Concluding from a single keyword search with one phrasing.
 
 If, partway through grounding, you realize you haven't read a section that could plausibly contain the claim — go back and read it before finalizing. Err on the side of more reading.
+
+**Paper-length handling — chunked read for long papers:**
+
+For PDFs **> 25 pages** (theses, long review articles, papers with integrated extensive supplements), reading the whole paper in a single pass risks silent truncation as context fills. Switch to chunked-read mode:
+
+1. Read the table of contents / bookmarks / detected section headers first. Build the section checklist from this.
+2. Process sections **in sequence**. For each section:
+   - Read the section in full.
+   - Write per-section notes to `<output-dir>/.inflight/<claim_id>.notes.md` (working file, separate from the final claim entry). Notes include: section title, pages covered, any quotes relevant to the claim, and a running signal of whether the claim could plausibly appear here.
+3. After all sections are read, synthesize the final verdict from the accumulated notes.
+4. The attestation log must enumerate **every** section covered *with at least one quote snippet per section* demonstrating the section was actually read. A chunked-read attestation that skips per-section evidence is invalid.
+
+Threshold `25` is a heuristic; adjust via future iteration. When page count is uncertain, or the paper is in the 20–30 page range, default to chunked-read mode.
+
+If chunked-read is interrupted, the `.inflight/<claim_id>.notes.md` file survives and can be picked up by a re-run.
 
 **Where to search, by claim type:**
 
@@ -272,6 +330,8 @@ Keep this schema aligned with the triage report format below so users don't have
 | `CRITICAL` | CONTRADICTED or UNSUPPORTED entry. Surface at top of triage. |
 | `RECHECK` | STALE — claim text changed since last verification. Re-verify on next run. |
 | `NEEDS_PDF` | PDF unavailable. Entry stays PENDING until the PDF is retrieved. |
+| `NEEDS_OCR` | PDF is image-based and no local OCR is available. Entry stays PENDING until the user OCRs the PDF externally and re-invokes. |
+| `NEEDS_SUPPLEMENT` | Claim is specific / numerical, and the relevant content likely lives in a supplement we cannot access. Entry stays PENDING until the supplement is provided. |
 
 ## Re-run semantics
 

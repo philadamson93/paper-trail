@@ -76,6 +76,15 @@ Each finding links to its detail block lower in the file. This is the "do I need
 
 Goal: produce `refs.bib` and `parse_report.md`.
 
+### Step 0.0 — Verify PDF is readable
+
+Before anything else, extract text from the input PDF and confirm it is readable:
+
+- Use `pdftotext`, the `Read` tool, or equivalent.
+- Count extracted characters per page. If the average is below ~200 chars/page (or extraction returns empty), the PDF is image-based (scanned).
+- **Image-based PDF handling:** attempt OCR fallback — `tesseract` on PATH, or macOS `shortcuts run "Extract Text From PDF"`. If OCR succeeds, proceed with OCR text and record the OCR method (and any confidence signal) in `parse_report.md`. If no OCR is available → emit a structured error telling the user to OCR externally and re-invoke; do **not** proceed into Phase 1/2/3 on an unreadable PDF.
+- Record text-extraction method and per-page character counts in `parse_report.md`.
+
 ### Step 0.1 — Input-paper metadata
 - Extract the input paper's title, authors, DOI (if printed on page 1 or resolvable from the filename).
 - Record in the ledger frontmatter.
@@ -91,21 +100,45 @@ Goal: produce `refs.bib` and `parse_report.md`.
   - Author-year style → `<firstauthor><year>` (e.g., `smith2023`), with a suffix letter for collisions.
   - Numbered style → `ref<N>` initially; promote to `<firstauthor><year>` once authors/year are extracted.
 
-### Step 0.3 — Enrichment / verification lookup
-- For each parsed entry, attempt external lookup in this order (first hit wins): **PapersFlow MCP** (if available) → **CrossRef** (by DOI, else by title+author+year) → **arXiv** (for preprint-shaped entries).
-- Reconcile parsed values against the authoritative source. If any field disagrees, prefer the authoritative value; record the PDF-parsed value in `parse_report.md` as a "parser diff" so we can audit parser quality.
-- Parallelize this step in batches per the configured batch size.
+### Step 0.3 — Dual-source extraction + enrichment
+
+The PDF parser in Step 0.2 is fallible — bibliography layouts vary and OCR introduces noise. Cross-check the parsed list against an authoritative source list to catch misses.
+
+- **Dual-source extraction:**
+  - (a) PDF-parsed list from Step 0.2 (existing).
+  - (b) If the input paper has a resolvable DOI, fetch its reference list from CrossRef (`https://api.crossref.org/works/<DOI>` — the `reference` array) and / or from PapersFlow / OpenAlex. This is the authoritative "who did the authors actually cite" list, to the extent publishers report it.
+- **Reconcile:**
+  - If (a) count and (b) count differ, record the diff in `parse_report.md` (e.g., "PDF parser found 42 refs, CrossRef reports 45").
+  - For per-entry reconciliation, attempt external lookup on each parsed entry (first hit wins): **PapersFlow MCP** (if available) → **CrossRef** (by DOI, else by title+author+year) → **arXiv** (for preprint-shaped entries). If any field disagrees, prefer the authoritative value; record the PDF-parsed value in `parse_report.md` as a "parser diff" so we can audit parser quality.
+  - Any entry present in (b) but not (a) is added to `refs.bib` with a `parser_source: crossref` marker and flagged low-confidence (we have the authoritative metadata but didn't see it in the PDF — possibly the parser missed an entry).
+- Parallelize per-entry enrichment in batches per the configured batch size.
 
 ### Step 0.4 — Emit artifacts
 - Write `refs.bib` in standard BibTeX. Preserve both parsed and looked-up values where they disagree, preferring the authoritative value in the bib and noting the parsed value in `parse_report.md`.
 - Write `parse_report.md` with:
-  - Total entries parsed; total enriched; total with DOI; total flagged low-confidence.
+  - Total entries parsed from PDF; total from authoritative source (CrossRef / PapersFlow); diff count.
+  - Total enriched; total with DOI; total flagged low-confidence.
   - Auto-detected bibliography style.
   - Per-entry parser diffs (authoritative vs parsed) for entries where they differ.
   - Explicit list of unparseable / low-confidence lines by line number so a human can spot-check.
+  - List of entries added from the authoritative source that the PDF parser missed.
+
+### Step 0.5 — Confirmation gate
+
+Before proceeding to Phase 1, surface the parse results to the user via `AskUserQuestion`:
+
+- **Question**: "Phase 0 parsed **N** references from the PDF; CrossRef reports **M** for this DOI. Does **N** match the reference count printed in the paper's bibliography?"
+- **Options**:
+  - `Confirm — proceed to Phase 1` (counts match or user has eyeballed `parse_report.md`).
+  - `Pause for review` (user wants to inspect `parse_report.md` before continuing — exit cleanly; resume with same output-dir later).
+  - `Override count — proceed with N (known-partial)` (user accepts partial and wants to continue).
+
+If CrossRef data is unavailable (no DOI, API down), ask only for PDF-parsed N and let the user eyeball.
+
+This confirmation gate is the single place where parser quality bubbles up to the user before it silently contaminates downstream phases.
 
 ### Large-paper guardrail
-If more than 200 references are parsed, print the count and confirm before continuing to Phase 1. Offer the user a chance to `--skip` or narrow scope.
+If more than 200 references are parsed, print the count and confirm before continuing to Phase 1 (in addition to Step 0.5's gate). Offer the user a chance to `--skip` or narrow scope.
 
 ## Phase 1 — Verify bib
 
@@ -177,7 +210,8 @@ Record low-confidence matches in `parse_report.md` so a human can spot-check; do
 - Group claim candidates by their cited source paper (citekey).
 - For each source paper with at least one non-skipped citekey, spawn a subagent (batched per the configured batch size) that:
   - Opens that single source PDF once.
-  - Verifies every claim citing it in one pass (matches the `/ground-claim` "process claims grouped by source paper" rule).
+  - Runs `/ground-claim` Step 2 pre-read checks (text extractability / image-based PDF → OCR fallback; page count → chunked-read mode if > 25 pages). For image-based PDFs with no OCR available, all claims citing that source are marked `PENDING` with `NEEDS_OCR` — do not force verdicts on unreadable PDFs.
+  - Verifies every claim citing it in one pass (matches the `/ground-claim` "process claims grouped by source paper" rule). For PDFs > 25 pages, this one pass becomes a chunked-section pass per `/ground-claim` Step 2 "Paper-length handling".
   - **Follows the `/ground-claim` per-claim workflow in full**: Step 1 classify → Step 2 locate evidence (*including* the minimum-reading requirement, negative-evidence protocol, indirect-attribution check, out-of-context check, and Step 2 self-check) → Step 3 assess support → Step 4 propose remediation → Step 5 append to ledger.
   - **Rigor beats compute.** Subagent prompts must explicitly forbid shortcutting — no skimming, no abstract-only reads, no declaring `UNSUPPORTED` / `CONTRADICTED` without a full attestation log. It is materially better to spend extra tokens per subagent than to propagate a false verdict into the ledger.
 - Refs marked `NEEDS_PDF` from Phase 2 → their claims are written to the ledger with status `PENDING` and flag `NEEDS_PDF`. Do not spawn a grounding subagent for them.
