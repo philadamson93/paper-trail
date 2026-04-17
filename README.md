@@ -19,12 +19,12 @@ Scientific papers routinely cite 50–100 references. Verifying that every claim
 ### How it works, in one example
 
 ```mermaid
-flowchart LR
-    A["Cited claim<br/>('following Smith 2022…')"] --> B["Fetch<br/>source PDF"]
-    B --> C["Read PDF in full<br/>(methods, results,<br/>tables, figures)"]
-    C --> D["Locate evidence<br/>for the claim"]
-    D --> E{"Adjudicate"}
-    E --> F["CONFIRMED / OVERSTATED /<br/>UNSUPPORTED / INDIRECT_SOURCE /<br/>AMBIGUOUS / …"]
+flowchart TD
+    A["Cited claim<br/>('following Smith 2022…')"] --> B["Fetch source PDF"]
+    B --> C["Read PDF in full"]
+    C --> D["Locate evidence"]
+    D --> E{Adjudicate}
+    E --> F["CONFIRMED / OVERSTATED / UNSUPPORTED /<br/>INDIRECT_SOURCE / AMBIGUOUS / …"]
     F --> G["Ledger entry<br/>(quote + page + verdict)"]
 ```
 
