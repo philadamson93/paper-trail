@@ -4,7 +4,7 @@
 
 # paper-trail
 
-LLM workflows for writing and reviewing scientific papers: evidence-grounded claim verification and reference hygiene.
+`paper-trail` introduces LLM-powered citation auditing and evidence grounding.
 
 Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, also usable with Codex CLI, Cursor, or direct paste. 
 
