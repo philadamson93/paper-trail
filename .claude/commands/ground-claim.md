@@ -1,5 +1,9 @@
 Verify that a cited claim in the manuscript is supported by its source paper. Maintain the claims ledger as an audit artifact. **The ledger stores verbatim source excerpts for verification; the draft paraphrases.** These are different roles — do not insert ledger text into the draft.
 
+## Core principle: rigor beats compute
+
+A false verdict — a `CONFIRMED` that should have been `OVERSTATED`, or an `UNSUPPORTED` that should have been `CONFIRMED` — is materially worse than spending extra tokens to prevent it. When grounding a claim, always prefer the more thorough path: read the whole paper, try more phrasings, inspect tables and figure captions, document what you searched. Do **not** pre-optimize for speed by skimming, sampling, or declaring "not found" after a shallow pass. The cost of a missed piece of evidence propagates downstream into the manuscript and the literature; the cost of extra reading stops here.
+
 ## Core principle: raise, don't fix
 
 This command **never edits the manuscript**. It writes only to the claims ledger. Every issue it finds is surfaced as a proposal in the triage report, with:
@@ -54,9 +58,123 @@ Assign one of:
 
 Read the cited PDF. Extract the exact source text that speaks to the claim. Record it verbatim in the ledger with page number.
 
+**Minimum reading requirement — no shortcuts.**
+
+Before returning *any* verdict (`CONFIRMED`, `UNSUPPORTED`, `OVERSTATED`, anything), you must have read the **entire** cited paper, not only the section most likely to contain the claim. Partial reads are the single biggest failure mode in automated citation auditing — an agent skims the abstract, doesn't find the claim, and declares `UNSUPPORTED` when the evidence was in Results. Do not do this.
+
+For every non-`FRAMING` claim, complete this section-read checklist and record it alongside the claim's entry in the ledger Details block:
+
+```
+Paper length:       <N> pages
+Section checklist:
+  [ ] Abstract
+  [ ] Introduction
+  [ ] Methods / Materials
+  [ ] Results (prose)
+  [ ] Results (all tables — list: Table 1, Table 2, …)
+  [ ] Results (all figure captions — list: Fig. 1 caption, Fig. 2 caption, …)
+  [ ] Discussion
+  [ ] Conclusions / Summary
+  [ ] Appendix / Supplementary material      (or: n/a if none in PDF)
+```
+
+Check each box only after actually reading that section. If the PDF references a supplement you cannot access and the claim is numerical or highly specific, return `PENDING` with a `NEEDS_SUPPLEMENT` note instead of forcing a verdict without it.
+
+**Tables and figure captions count as reading.** Numerical claims (dataset sizes, N values, batch sizes, accuracy numbers, pixel counts, hyperparameters) live in tables and figure captions far more often than in prose. If you haven't inspected the tables, you haven't read the paper.
+
+**Banned shortcuts — any of these invalidates your verdict:**
+
+- "The paper is about X, not Y." Papers routinely contain incidental claims outside their stated topic.
+- "Checked the abstract." The abstract simplifies — it is not the paper.
+- "Not in the introduction" used as a stand-in for "not in the paper".
+- "I couldn't find it" without a completed search-log attestation (see negative-evidence protocol below).
+- Skipping tables because they "look like methods details".
+- Skipping figure captions because "the result must also be in the prose".
+- Concluding from a single keyword search with one phrasing.
+
+If, partway through grounding, you realize you haven't read a section that could plausibly contain the claim — go back and read it before finalizing. Err on the side of more reading.
+
+**Where to search, by claim type:**
+
+- **DIRECT / factual** (numeric values, specific methods, experimental setup like "batch size 24", "trained for 100 epochs"): methods section first, then results tables. Look for near-verbatim match.
+- **Priority-of-invention** ("X et al. introduced / first proposed Y"): abstract + introduction + contributions list. Look for claim-of-novelty language ("we propose", "we introduce").
+- **Results** ("achieves 95% accuracy on Z"): abstract + results section + result tables + discussion. Verify exact number, unit, and scope.
+- **Methods / architecture** ("uses transformer / diffusion / U-Net"): methods section.
+- **FRAMING / BACKGROUND** (general motivation like "X is important", "Y is a challenge"): introduction + motivation paragraphs + related work.
+
+**Search procedure:**
+
+1. Start with keyword / phrase search for the most specific terms in the claim. Exact noun phrases ("deep feature distance", "diffusion posterior sampling") and numbers are strongest signals.
+2. If keyword search misses, expand to semantic matches (synonyms, paraphrases).
+3. Always check the abstract — the cleanest summary often lives there.
+4. For numeric claims, verify the exact number, unit, *and scope* (e.g., "95% accuracy" might be top-1 vs. top-5, in-distribution vs. OOD — specify which).
+
+**Negative-evidence protocol — required before marking `UNSUPPORTED` or `CONTRADICTED`:**
+
+These are the two highest-consequence verdicts. `UNSUPPORTED` accuses the manuscript of a possibly-hallucinated citation; `CONTRADICTED` claims the cited paper actively disagrees. Neither is appropriate after a shallow pass. Before returning either, record a complete attestation log in the Details block:
+
+```
+Attestation log:
+  Paper length:       <N> pages
+  Section checklist:  abstract ✓, intro ✓, methods ✓,
+                      results ✓ (prose + <K> tables + <M> figure captions),
+                      discussion ✓, conclusions ✓,
+                      appendix / supplement ✓ / not accessible / n/a
+  Phrasings searched: "<literal claim>",
+                      "<synonym / term-substitution variant>",
+                      "<semantic paraphrase>",
+                      … (minimum 3 distinct phrasings)
+  Specific checks:    e.g., Table 2 rows for dataset sizes,
+                      Fig. 4 caption for accuracy numbers,
+                      Eq. 3 surrounding prose for the derivation,
+                      …
+  Closest adjacent passage: "<verbatim quote>" (p. <N>)
+                            — reason it is not the claim:
+                            <one sentence>
+```
+
+Minimum phrasings:
+
+- **Three or more distinct phrasings** before `UNSUPPORTED`. Must include: (1) the claim's literal words; (2) at least one synonym or term-substitution variant; (3) at least one semantic paraphrase.
+- For **numerical claims**, also search alternate formats (`10,000` / `10k` / `ten thousand` / scientific notation / nearby unit conversions).
+- For **methodological claims**, include the method name *and* common abbreviations *and* alternative terminology (e.g., "Deep Image Prior" + "DIP"; "Generative Adversarial Network" + "GAN").
+- For **priority-of-invention claims**, check novelty phrasings: "we propose", "we introduce", "we are the first", "to our knowledge, the first", "novel".
+
+Invalid attestations (any of these invalidates an `UNSUPPORTED` verdict — return `PENDING` with a `NEEDS_RECHECK` flag instead):
+
+- Any section left unchecked.
+- Fewer than 3 phrasings tried.
+- No "closest adjacent passage" recorded (there is almost always *something* nearby worth quoting, even in a true negative).
+- Tables and figure captions not explicitly inspected for numerical / specific claims.
+
+`CONTRADICTED` additionally requires a direct verbatim quote of the contradicting passage — the attestation log above is necessary but not sufficient.
+
+**Check for indirect attribution — required for every non-`FRAMING` claim:**
+
+When you *do* find supporting text in the cited paper, also check whether *that paper* attributes the fact to another source (citation marker in the supporting sentence or adjacent paragraph). If yes, this is a signal for `INDIRECT_SOURCE` — see Step 3. Extract the primary-source reference from the cited paper's own bibliography so Step 4's `CITE_PRIMARY` remediation has something concrete to propose.
+
+**Check for out-of-context citation — required for every claim:**
+
+Record the paragraph's topic / section heading alongside the extracted quote (e.g., "Section 3.2 Results — baseline comparison"). If the passage is being used in our manuscript in a context materially different from where it appears in the cited paper — e.g., a stated limitation quoted as a contribution; a related-work summary quoted as the paper's own finding; a passing remark quoted as a central result — flag for `CITED_OUT_OF_CONTEXT` in Step 3.
+
+**Extraction rules:**
+
 - Keep excerpts minimal but complete — one to two sentences that unambiguously pin the claim.
 - Preserve extraction artifacts (hyphenation, odd whitespace) to maintain the audit trail. Do not clean up the source text.
 - For composite claims (multiple sub-claims in one sentence), extract evidence for each sub-claim. Note which sub-claims are not covered.
+
+**Self-check before moving to Step 3 — answer each question silently; if any is "no" or "unsure", return to Step 2 before proceeding:**
+
+1. Did I read every section of the paper — abstract, intro, methods, results prose *and* all tables *and* all figure captions, discussion, conclusions, and any appendix / supplement present in the PDF?
+2. For any section I did not read, is it clearly impossible for the claim to appear there? If not, I have not read enough.
+3. If I am about to return `UNSUPPORTED` or `CONTRADICTED`, have I completed the full attestation log with at least 3 distinct phrasings and a closest-adjacent quote?
+4. If I am about to return `CONFIRMED`, have I also verified that no *later* section of the paper qualifies, narrows, or walks back the claim I found? (Results and discussion commonly qualify what the abstract states.)
+5. For numerical or highly specific claims, did I inspect tables and figure captions directly — not only prose?
+6. Did I check whether the cited paper itself attributes this fact to another source (signal for `INDIRECT_SOURCE`)?
+7. Did I check whether the passage is used in a materially different context in the cited paper vs. our manuscript (signal for `CITED_OUT_OF_CONTEXT`)?
+8. Would a careful reviewer, given my search log and extracted quote, agree that the verdict is justified? If the attestation could be accused of shortcutting, strengthen it.
+
+Rigor beats compute. If in doubt, read more.
 
 ### Step 3 — Assess support level
 
@@ -64,10 +182,13 @@ Choose one:
 
 - **CONFIRMED** — evidence directly supports the claim.
 - **PARTIALLY_SUPPORTED** — supports part of the claim; a sub-element is missing or weaker.
-- **OVERSTATED** — true, but our wording is stronger than the paper's (e.g., "substantially outperforms" where paper says "outperforms").
-- **UNSUPPORTED** — no evidence found on careful read. Possible hallucination or wrong citation.
+- **OVERSTATED** — true, but our wording is stronger than the paper's (e.g., "substantially outperforms" where paper says "outperforms"). About *strength*.
+- **OVERGENERAL** — true within the paper's narrow scope, but our claim generalizes beyond that scope (e.g., paper shows a result on chest CT; we claim "medical imaging"). About *scope*, distinct from `OVERSTATED`'s strength dimension.
+- **CITED_OUT_OF_CONTEXT** — the passage supporting the claim exists in the cited paper, but it was written in a context materially different from how we're using it (e.g., citing a paper's stated limitation as if it were a contribution; citing a related-work summary as the paper's own finding; citing a passing remark as a central result). More subtle than `MISATTRIBUTED`.
+- **UNSUPPORTED** — no evidence found on careful read. Possible hallucination or wrong citation. Requires a search log in the Details block per Step 2.
 - **CONTRADICTED** — evidence actively contradicts the claim. **Critical flag.**
-- **MISATTRIBUTED** — claim is true but this is not the source for it.
+- **MISATTRIBUTED** — claim is true, but this is not the source for it at all.
+- **INDIRECT_SOURCE** — cited paper *does* contain the fact, but it cites another source for that same fact. Technically true; not the primary source. Reference-hygiene issue, not factual error. Typical remediation is `CITE_PRIMARY` — extract the primary source from the cited paper's own bibliography and suggest citing it directly (or in addition).
 - **STALE** — the claim text in the manuscript has changed since last verification (claim key mismatch).
 - **PENDING** — not yet checked (pre-flight state).
 
@@ -77,7 +198,8 @@ If support is not `CONFIRMED`, propose a remediation category AND a concrete sug
 
 - **REWORD** — soften language to match evidence strength.
 - **RESCOPE** — narrow the claim so evidence covers it fully.
-- **RECITE** — wrong citation; suggest a better source (name specific candidates from the bib or literature).
+- **RECITE** — wrong citation entirely; suggest a different source (name specific candidates from the bib or literature).
+- **CITE_PRIMARY** — cited paper is not the primary source for the fact; replace (or supplement) with the primary source that the cited paper itself credits. Name the specific primary source — pull it from the cited paper's own bibliography. Do not return a vague "find a better source".
 - **SPLIT** — composite claim; separate the cited sentence from synthesized framing.
 - **ADD_EVIDENCE** — add a second citation to cover what the first doesn't.
 - **REMOVE** — not supportable and not essential.
@@ -119,7 +241,7 @@ Keep this schema aligned with the triage report format below so users don't have
 | Flag | When |
 |------|------|
 | `—` | No flag. Use for CONFIRMED entries. |
-| `REVIEW` | Non-critical support-level issue (OVERSTATED, PARTIALLY_SUPPORTED, MISATTRIBUTED). |
+| `REVIEW` | Non-critical support-level issue (OVERSTATED, OVERGENERAL, PARTIALLY_SUPPORTED, CITED_OUT_OF_CONTEXT, MISATTRIBUTED, INDIRECT_SOURCE). |
 | `CRITICAL` | CONTRADICTED or UNSUPPORTED entry. Surface at top of triage. |
 | `RECHECK` | STALE — claim text changed since last verification. Re-verify on next run. |
 | `NEEDS_PDF` | PDF unavailable. Entry stays PENDING until the PDF is retrieved. |
