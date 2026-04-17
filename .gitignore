@@ -3,3 +3,7 @@
 *.swo
 .vscode/
 .idea/
+
+# Reader-mode output directories from /paper-trail runs (contain fetched PDFs
+# and audit artifacts scoped to a specific input paper; not shareable repo content).
+paper-trail-*/
