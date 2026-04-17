@@ -37,7 +37,7 @@ Say a paper includes: *"following the method in Smith et al. 2022, we pretrained
 
 Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand in the review process.
 
-See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a smoketest run on one of my prior published papers.
+See [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) for a full reader-mode audit against one of my prior published papers — 56 references, 88 claims, 2 real miscitations caught.
 
 ## Installation
 
@@ -198,7 +198,7 @@ Edit by hand if your layout changes; no re-init needed.
 
 ## Examples
 
-- [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) — real `/paper-trail` audit on a published paper. Contains the parsed 56-entry `refs.bib`, parser diagnostics, a 6-claim ledger, and a walkthrough of the catches: a CRITICAL author-swap bib error, two `CITED_OUT_OF_CONTEXT` findings, and a scope-drift `OVERGENERAL`. Source PDFs are not included.
+- [`examples/paper-trail-dfd-adamson-2025/`](examples/paper-trail-dfd-adamson-2025/) — full reader-mode audit of a peer-reviewed paper. 56 references parsed, 88 in-text citation claims extracted, 31 open-access source PDFs retrieved, 49 claims grounded, 2 `MISATTRIBUTED` miscitations caught (UNet architecture wrongly attributed to the fastMRI data-resource paper; HFEN LoG-filter specs wrongly attributed to a perceptual-difference-model paper). Contains `refs.bib`, `parse_report.md`, and the full `ledger.md` (~3,450 lines); source PDFs are not included.
 
 ## License
 

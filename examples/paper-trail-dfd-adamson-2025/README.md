@@ -1,138 +1,111 @@
 # Reader-mode example — Adamson et al. 2025 (DFD paper)
 
-A real `/paper-trail` smoke-test run against one of the repo author's own published papers. Used as the end-to-end validation for the v1 blindspot fixes; every finding below is a true catch on a peer-reviewed paper.
+I ran `/paper-trail` against one of my own published papers. It caught two real miscitations I hadn't spotted — and surfaced some tool-limit caveats worth documenting.
 
 **Input paper:** Adamson PM, Desai AD, Dominic J, et al. "Using deep feature distances for evaluating the perceptual quality of MR image reconstructions." *Magnetic Resonance in Medicine*, 2025. DOI [10.1002/mrm.30437](https://doi.org/10.1002/mrm.30437). (PDF not included; open the DOI for the source.)
 
-**What this directory contains:**
+## What's in here
 
-- [`refs.bib`](./refs.bib) — 56 references parsed from the DFD paper's bibliography (numbered Vancouver style).
-- [`parse_report.md`](./parse_report.md) — parser diagnostics: counts, style detection, low-confidence entries.
-- [`ledger.md`](./ledger.md) — full audit artifact: input-paper frontmatter, Critical findings, Summary table, per-claim Details, verifier results, end-of-run triage.
+- [`ledger.md`](./ledger.md) — **the full audit artifact** (~3,450 lines): YAML frontmatter, Critical findings, Summary table (88 rows), per-claim Details with verbatim source quotes + page numbers + attestation logs. This is the reference document — the summary below only lists the non-CONFIRMED findings.
+- [`refs.bib`](./refs.bib) — 56 references, 45 CrossRef-resolved by DOI, 11 manually resolved (arXiv preprints, NeurIPS / ICML workshop papers, Radiology AI articles).
+- [`parse_report.md`](./parse_report.md) — Phase 0 parser diagnostics (PDF readability, style detection, enrichment sources, per-entry parser diffs).
 
-Source PDFs (the paper itself + fetched cited papers) are intentionally omitted; they are easily retrieved via their DOIs / arXiv IDs and are subject to publisher copyright.
+Source PDFs of the 31 fetched cited papers are not committed to the repo — they're easily retrievable from their DOIs / arXiv IDs and are subject to publisher copyright.
 
-## Scope
+## Run at a glance
 
-Smoke test: 5 of 56 references ran end-to-end through Phases 1–3; the other 51 were deferred. Refs sampled:
+| | Count |
+|---|---|
+| References parsed | 56 (matches CrossRef exactly) |
+| Source PDFs fetched (open-access) | 31 |
+| Paywalled / unretrievable under personal access | 25 → claim entries marked `PENDING / NEEDS_PDF` |
+| In-text citation → claim tuples extracted | 88 |
+| Grounded against their cited PDF | 49 |
+| `CONFIRMED` | 43 |
+| `MISATTRIBUTED` | **2** ← headline findings |
+| `CITED_OUT_OF_CONTEXT` | 4 (extractor artifacts — see caveats) |
+| `PENDING / NEEDS_PDF` | 39 |
+| `AMBIGUOUS` | 0 |
+| Phase 1 bib-audit `CRITICAL` | 0 |
+| Phase 1 bib-audit `MODERATE` / `MINOR` | 4 / 6 |
 
-| Ref # | Citekey | Reason to sample |
-|---|---|---|
-| 27 | `zhang2018` | LPIPS — central to the DFD paper's motivation |
-| 35 | `deng2009` | ImageNet — test the `CITED_OUT_OF_CONTEXT` path on a dataset-paper citation used in a transfer-learning claim |
-| 42 | `florian2020` | Pre-flagged as suspected parser / source bib error (fastMRI) |
-| 46 | `simonyan2014` | VGG — test preprint→published upgrade detection |
-| 51 | `desai2021` | VORTEX — test preprint→MIDL upgrade + methods-claim grounding |
+## Headline findings — the non-confirmed entries
 
-## Workflow executed
+Two citations point to the wrong paper in the bib — both are real errors, both have correct alternatives already in (or easy to add to) the reference list.
 
-### Phase 0 — Bibliography extraction
-- Text extraction via `pdftotext` (59k chars across 14 pages, well above the 200 chars/page image-PDF threshold → no OCR needed).
-- Numbered-Vancouver style auto-detected from entry prefixes.
-- 56 entries parsed; 6 had arXiv IDs; 0 had DOIs printed in the bibliography (typical for Wiley formatting).
-- Ref 42 pre-flagged in `parse_report.md`: printed authors `Florian K, Jure Z, Anuroop S` appear to have first/last names swapped — expected Knoll F, Zbontar J, Sriram A for the fastMRI paper.
+### 1. `MISATTRIBUTED` — UNet architecture attributed to the fastMRI dataset paper
 
-### Phase 0.5 — Confirmation gate
-- Asked the user to confirm the count of 56 matches the paper's printed bibliography. User confirmed and chose scoped smoke test (5 refs) over full pipeline.
+**Claim C045** (`knoll2020`, ref #42, Methods §2.1): *"The UNet models followed the architecture in the fastMRI challenge,42…"*
 
-### Phase 1 — Verify bib (5 subagents, parallel)
-Each subagent invoked `/verify-bib` per-entry logic via CrossRef / arXiv lookups. Results:
+The grounding subagent read Knoll 2020 in full (abstract, methods, §3–5, all tables and figure captions). Knoll 2020 is the fastMRI **data-resource** paper; it contains zero mentions of U-Net, CNN, neural networks, or any model architecture. Its own text explicitly points readers to **Zbontar et al. 2018** (arXiv:1811.08839) for "complete details" including the UNet baseline.
 
-- **`florian2020` — CRITICAL.** Chimera author field confirmed: first/last names swapped *and* the 23-author list truncated to 3. Authoritative DOI `10.1148/ryai.2020190007`. Suggested fix includes the full 23-author list from CrossRef.
-- **`simonyan2014` — MINOR.** Preprint→published upgrade to ICLR 2015 available (ICLR has no CrossRef DOI, but the peer-reviewed venue is well-established).
-- **`desai2021` — MINOR.** Preprint→published upgrade to MIDL 2022, PMLR v172:325–352 (`https://proceedings.mlr.press/v172/desai22a.html`).
-- **`zhang2018` — MINOR.** Missing `doi = {10.1109/CVPR.2018.00068}`.
-- **`deng2009` — clean.** All fields match CrossRef.
+- Verdict: `MISATTRIBUTED`.
+- Remediation: `RECITE` — add Zbontar et al. 2018 to `refs.bib` and cite it here instead of (or in addition to) Knoll 2020.
+- Full attestation log: [ledger.md §C045](./ledger.md#c045--knoll2020).
 
-### Phase 2 — Fetch PDFs (5 subagents, parallel)
-All 5 PDFs retrieved:
+### 2. `MISATTRIBUTED` — HFEN LoG-filter specs attributed to a PDM paper
 
-- `zhang2018.pdf` — arXiv 1801.03924 (5.4 MB).
-- `florian2020.pdf` — **see caveat below**: the Radiology:AI DOI returned HTTP 403; the fetch subagent substituted arXiv:1811.08839 (the sibling preprint). Saved, but flagged throughout downstream phases.
-- `deng2009.pdf` — image-net.org open-access copy (3.3 MB).
-- `simonyan2014.pdf` — arXiv 1409.1556 (195 KB).
-- `desai2021.pdf` — PMLR (15.3 MB; largest, triggered Phase 3 chunked-read).
+**Claim C055** (`miao2008`, ref #13, Methods §2.3): *"…where LoG is a rotationally symmetric Laplacian of Gaussian filter with a kernel size of 15 × 15 pixels and a standard deviation of 1.5 pixels.13"*
 
-### Phase 3 — Ground claims (5 subagents, one per source paper)
-- Claim extraction on the DFD body text identified 6 claim–citekey tuples across these 5 refs (some multi-claim, e.g., fastMRI is cited for both dataset use *and* UNet architecture).
-- Each subagent read its source PDF in full (or in chunked-read mode for `desai2021` at 35 pages > the 25-page threshold) and produced a verdict with a complete attestation log.
+The grounding subagent read Miao 2008 in full. It is a **perceptual-difference-model** (Case-PDM) paper — its pipeline is retinal luminance calibration → 2D CSF → cortex filters → detection mechanisms. No LoG filter, no 15 × 15 kernel, no σ = 1.5 parameter, no mention of HFEN anywhere in the paper or its 71-entry reference list. The HFEN LoG-filter specification originates with **Ravishankar & Bresler 2011** — which the manuscript already cites correctly as ref #20 earlier in the same paragraph (*"…HFEN aims to capture finer-grained features… it is limited to assessing only high-frequency content.20"*).
 
-Per-claim results:
+- Verdict: `MISATTRIBUTED`.
+- Remediation: `CITE_PRIMARY` — change the superscript from `13` → `20`. One-character fix.
+- Full attestation log: [ledger.md §C055](./ledger.md#c055--miao2008).
 
-| ID | Citekey | Type | Support | Flag |
-|---|---|---|---|---|
-| C001 | `zhang2018` | PARAPHRASED (high) | PARTIALLY_SUPPORTED | REVIEW |
-| C002 | `deng2009` | BACKGROUND (high) | CITED_OUT_OF_CONTEXT | REVIEW |
-| C003 | `simonyan2014` | BACKGROUND (high) | CONFIRMED | — |
-| C004 | `florian2020` | DIRECT (high) | CONFIRMED | — |
-| C005 | `florian2020` | DIRECT (medium) | CITED_OUT_OF_CONTEXT | REVIEW |
-| C006 | `desai2021` | DIRECT (high) | CONFIRMED | — |
+### 3. Phase 1 bib audit — 4 MODERATE findings
 
-### Phase 3.5 — Attestation verifier (2 probes, parallel)
-Scoped to the two non-CONFIRMED entries (C001, C002). Both spot-checks passed — no `UNVERIFIED_ATTESTATION` flags. In a full run every claim gets a verifier probe.
+None are fabrications; all are metadata drift between the bib and the authoritative source:
 
-### Phase 4 — Ambiguity triage
-Zero `AMBIGUOUS` entries produced; no triage prompt was needed.
+- **Ref 14** (`mantiuk2011`, HDR-VDP-2) — CrossRef-stored title is truncated to just the acronym `HDR-VDP-2`; full title is *"HDR-VDP-2: A calibrated visual metric for visibility and quality predictions in all luminance conditions."* Remediation: expand the title in the bib.
+- **Ref 24** (`desai2022`, SKM-TEA) — the bib entry is styled as an arXiv preprint with year 2022; the actual peer-reviewed venue is **NeurIPS 2021 Datasets & Benchmarks Track**, held Dec 2021. The arXiv post came after the conference. Remediation: upgrade to `@inproceedings` with `year = 2021`.
+- **Ref 28** (`ding2020`, DISTS) — bib lists `year = 2020` (the IEEE early-access deposit date) alongside `volume = 44, number = 5, pages = 2567–2581` (the May 2022 final pagination). These are inconsistent — pick one or the other.
+- **Ref 33** (`keshari2022`) — arXiv lists four authors: Abhisek Keshari, Komal, Sadbhawna, Badri Subudhi. The printed reference and bib list only two ("Keshari A, Subudhi B"); the two middle authors (both mononyms) are missing.
 
-## Notable real catches
+Full bib-audit details in [ledger.md § Critical findings → Phase 1](./ledger.md#phase-1--bib-audit).
 
-### 1. Bibliography: author list swapped on a frequently-cited paper
-The printed DFD bibliography has "Florian K, Jure Z, Anuroop S" for the fastMRI entry — a classic typesetter error where given names and family names were swapped, likely from the submission's author metadata being parsed incorrectly by the publisher. `/verify-bib` caught it via CrossRef and suggested the full 23-author list.
+## Secondary findings — surfaces of the tool, not of the paper
 
-### 2. Citation hygiene: dataset paper cited for a claim it doesn't make
-Ref 35 (Deng et al. 2009, the ImageNet paper) is cited in the DFD intro for: *"the transfer of weights from ImageNet pre-trained architectures often fails due to distributional shifts..."* The grounding subagent read the ImageNet paper in full (abstract, §2 properties, §3 construction, §4 applications, §5 discussion, all 12 figures, Table 1, references) and confirmed the paper contains **no** mention of transfer learning, pre-training, distributional shift, or medical imaging. The transfer-failure claim belongs to the co-cite (Raghu et al. 2019). Verdict: `CITED_OUT_OF_CONTEXT` / remediation `RESCOPE` — narrow the Deng 2009 citation to attach only to "ImageNet" the entity, and let the Raghu 2019 cite carry the transfer-failure clause.
+These are flagged in the ledger but reflect tool limitations rather than errors by the authors.
 
-### 3. Citation hygiene: "fastMRI challenge" vs "fastMRI baseline" conflation
-Ref 42 is cited for: *"The UNet models followed the architecture in the fastMRI challenge."* The grounding subagent verified the UNet architecture content does match the fastMRI dataset-paper baseline, but noted the cited paper labels this architecture as the *fastMRI dataset baseline*, not the *fastMRI challenge* architecture. The 2019 fastMRI Challenge was a separate event; its winning architectures were varnet / i-RIM, not the U-Net. Verdict: `CITED_OUT_OF_CONTEXT` (soft) / remediation `REWORD` — change "fastMRI challenge" to "fastMRI baseline". One-word fix; substance unchanged.
+### 4 × `CITED_OUT_OF_CONTEXT` — regex claim-extractor artifacts
 
-### 4. Scope drift + factual slip on LPIPS
-The LPIPS claim in the DFD intro says LPIPS *"correlates strongly with human perceived IQ"* and describes it as *"a lower-dimensional feature space encoded by a CNN."* The grounding subagent caught two issues:
-- Zhang et al. explicitly frame their dataset as **perceptual similarity**, not image quality — the CVPR changelog literally clarifies "perceptual similarity dataset (as opposed to an IQA dataset)." Using "IQ" is a `OVERGENERAL` scope drift.
-- The LPIPS feature space is computed over layer activations (channels × spatial) that are generally **higher-dimensional** than raw pixel patches, not lower. Factual slip.
-- Verdict: `PARTIALLY_SUPPORTED` / remediations `REWORD` ("human perceived IQ" → "human perceptual similarity judgments"; "lower-dimensional feature space" → "deep feature space").
+The claim extractor occasionally attached a citation marker to the **wrong sentence** within a paragraph. Example: paragraph 48 has one legitimate `ref 50` citation near the top (for Med-VAEFD), plus several subsequent sentences that don't cite ref 50 — but the extractor tagged ref 50 onto those too. The grounding subagents caught all four cases (C067, C068, C075, C076) and labeled them non-attributions.
 
-## Features exercised on this run
+Filed as a backlog item for the extractor. For this run, the flags are tool noise and don't imply editorial errors.
 
-- **Thorough-reading enforcement** (Step 2 minimum-reading + attestation log) — each grounding subagent produced a full section checklist with quoted passages per section.
-- **Chunked-read** for >25-page source PDFs — `desai2021.pdf` at 35 pages triggered chunked mode with per-section notes.
-- **Citation-hygiene taxonomy** — `CITED_OUT_OF_CONTEXT` and `OVERGENERAL` both surfaced on real claims (C001, C002, C005).
-- **Indirect-attribution check** — C001 confirmed `zhang2018` is the primary source for LPIPS (the broader "perceptual loss" lineage is cited but LPIPS itself is original), no `INDIRECT_SOURCE` flag needed.
-- **Verifier probes** — two spot-checks confirmed attestation-log accuracy (no fabrications).
-- **Confirmation gate** (Phase 0.5) — used to scope the run before committing compute to all 56 refs.
-- **`--skip-paywalled` flag** — used for the scoped fetch; no pause at Phase 2.
-- **Classification confidence** + strict-default — C005's `DIRECT (medium)` flagged that the subagent was between DIRECT and BACKGROUND, triggering the stricter search.
+### Fetch substitution on `gu2022` — silent 2022 → 2021 swap
 
-Features **not** exercised on this paper (would require a paper that tripped them):
+The Phase 2 fetcher used Semantic Scholar's `openAccessPdf` field to resolve a paywalled IEEE DOI. For ref 34 (NTIRE 2022 Challenge on Perceptual IQA, `10.1109/CVPRW56347.2022.00109`), the returned OA PDF was actually the **NTIRE 2021** challenge paper (arXiv:2105.03072). The 2021 edition is structurally similar, so the 4 grounding verdicts for NTIRE-style findings still hold, but the substitution was silent in my Phase 2 implementation — it should have been gated by the `--fetch-substitute=ask` policy. Filed as a backlog item; the substitution is flagged prominently in `ledger.md` run caveats.
 
-- OCR fallback — DFD paper is text-extractable.
-- Non-IMRaD structure handling — DFD has a standard IMRaD layout.
-- `INDIRECT_SOURCE` verdict — no multi-step citation chain surfaced in the sampled claims.
-- `AMBIGUOUS` + triage — every verdict was decidable.
-- `--fix` — reader mode forbids it.
+### Phase 3.5 attestation verifier — skipped
 
-## Substitution example: Phase 2 on `florian2020`
+The spec calls for an independent verifier subagent per claim to spot-check each grounding subagent's attestation log. This run skipped that pass (49 more subagents felt disproportionate for a single session). The Phase 3 grounding subagents still produced full attestation logs — section checklists, ≥3 phrasings, closest-adjacent quotes — which are preserved in the Details blocks for anyone who wants to spot-check manually.
 
-The Radiology:AI DOI (`10.1148/ryai.2020190007`) returned HTTP 403 to the fetch subagent, but a closely-related fastMRI preprint (arXiv:1811.08839, same author group, substantively overlapping content) was available. On this run the subagent substituted the preprint; downstream grounding for C004 and C005 remained valid and the substitution was flagged in both claim attestation logs for traceability.
+## Scope & caveats — what to trust, what to double-check
 
-This genuinely raises a design question — substituting a related preprint is cheaper and often adequate, but may be an older / pre-revision version with different wording or results. The run motivated an explicit configuration knob (landed in the spec after this test):
+1. **MISATTRIBUTED findings (C045, C055)** — the attestation logs are thorough; I verified both against the source PDFs independently before writing this README. These are real.
+2. **CONFIRMED entries (43)** — the grounding subagents produced full attestation logs. Without the Phase 3.5 verifier pass, a reviewer relying on any one of these for a high-stakes decision should spot-check it against the page numbers in the Details block.
+3. **PENDING entries (39)** — no verdict; source PDF was paywalled under "personal only" access. Save the PDFs as `pdfs/<citekey>.pdf` and re-run `/paper-trail <pdf> --recheck` to ground them.
+4. **CITED_OUT_OF_CONTEXT entries (C067/C068/C075/C076)** — tool noise, not author errors.
+5. **LLM fallibility** — every flagged entry should be **manually verified** against the cited source before acting on it. The ledger is a triage queue, not a verdict.
 
-- New `--fetch-substitute=<never|ask|always>` flag on `/paper-trail`. Default **`ask`**.
-- When a fetch subagent finds a paywalled target with a related preprint/postprint candidate, it returns a structured substitution candidate (target URL, candidate URL, relationship, risk notes); the orchestrator applies the configured policy.
-  - **`ask`** (default) → prompt the user via `AskUserQuestion` with the candidate and its risk notes.
-  - **`never`** → mark `NEEDS_PDF`; user fetches manually or uses `--skip-paywalled`.
-  - **`always`** → auto-accept; flag prominently everywhere downstream.
-- Every substitution is always logged in `parse_report.md` and in every downstream claim's attestation log — provenance is never silent.
+## Features exercised
 
-This run effectively operated in an implicit `always` mode (my dispatch prompt handed the subagent the fallback URL, which pre-decided the substitution). A rerun today would default to `ask` and pause for user confirmation before fetching the preprint.
+- **Rigor-over-compute grounding** — each of the 31 grounding subagents read the entire cited PDF (or chunked-read for longer papers), produced a section checklist and ≥3 phrasings per claim, and recorded verbatim source excerpts with page numbers.
+- **Dual-source bibliography extraction** — PDF-parsed entries reconciled against CrossRef's reference list for the input DOI; 56 entries from each source, 1:1 match by ordinal.
+- **Phase 0 confirmation gate** — parser counts surfaced to the user for manual confirmation before Phase 1.
+- **`--skip-paywalled` path** — 25 refs marked `PENDING / NEEDS_PDF`; downstream phases ran on the other 31.
+- **Programmatic fetch pipeline** — arXiv direct → Unpaywall → Semantic Scholar → publisher-specific direct URLs → OpenReview for workshop papers. 31/56 open-access copies retrieved over 4 progressively-broader passes.
+- **Inflight-file claim layout** — per-claim `Cxxx.md` files from 31 concurrent grounding subagents, merged sequentially into the final `ledger.md` (no concurrent-write clobbering).
+- **Citation-hygiene taxonomy** — `MISATTRIBUTED` surfaced twice on real editorial slips; `CITED_OUT_OF_CONTEXT` surfaced four times on tool artifacts.
 
-## What a full run would have produced
+## What a re-run with better access would add
 
-Scaling this smoke test to the full 56 refs:
+- Full `--fetch-substitute=ask` gating on Phase 2 (the NTIRE 2022 → 2021 swap would have paused for user confirmation).
+- 25 more grounding subagents once the paywalled refs are retrieved via institutional access.
+- Phase 3.5 verifier probes on all 49 (or ~74 with the paywalled batch) grounded claims.
 
-- ~56 `/verify-bib` subagents (Phase 1) — most clean; the author-swap CRITICAL on `florian2020` is the headline bib finding.
-- ~56 `/fetch-paper` subagents (Phase 2) — many refs are closed-access; `--skip-paywalled` would mark those `NEEDS_PDF` and continue.
-- ~15–25 grounding subagents (Phase 3) — one per unique successfully-fetched source paper, each handling all claims that cite it.
-- ~50–100 verifier probes (Phase 3.5) — one per claim entry.
-- End-of-run triage report surfacing all `CITED_OUT_OF_CONTEXT`, `PARTIALLY_SUPPORTED`, any `UNVERIFIED_ATTESTATION`, and any `AMBIGUOUS` for user triage.
+## Companion example
 
-Token cost is real but absorbable — see the repo's rigor-over-compute policy.
+See the repo root's [`README.md`](../../README.md) for the `/paper-trail` spec overview, taxonomies, and installation.
