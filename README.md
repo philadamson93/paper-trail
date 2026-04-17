@@ -6,7 +6,7 @@
 
 LLM workflows for writing and reviewing scientific papers: evidence-grounded claim verification and reference hygiene.
 
-Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, also usable with Codex CLI, Cursor, or direct paste.
+Shipped as Claude Code slash-commands; the `.md` files are plain prompt text, also usable with Codex CLI, Cursor, or direct paste. UI + API key version coming soon.
 
 ## Why `paper-trail`
 
