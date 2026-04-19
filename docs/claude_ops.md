@@ -111,9 +111,9 @@ How will we know this works? (For paper-trail: which example PDF / `.bib` will w
 
 ### Commit Messages
 
-- **AI attribution is used in this repo.** Keep `Co-Authored-By: Claude ...` trailers on commits (consistent with existing history). This differs from the VISTA convention.
+- **No AI attribution.** Never include `Co-Authored-By: Claude` or similar trailers. (This reverses an earlier draft of this doc; the VISTA convention is the one to follow.)
+- **One sentence, max.** Keep messages concise and descriptive. No body paragraphs unless the user explicitly asks.
 - **One theme per commit** where reasonable — split config, core-logic, and doc changes into separate commits.
-- **One sentence per message**, concise and descriptive.
 
 ### Commit Frequency
 

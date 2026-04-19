@@ -8,3 +8,8 @@
 # and audit artifacts scoped to a specific input paper; not shareable repo content).
 # Anchored to repo root so curated examples under examples/paper-trail-*/ are not excluded.
 /paper-trail-*/
+
+# Machine-local Claude Code state (per-user permissions, auto-installed skills).
+# Workspace specs/scripts/prompts/commands under .claude/ are still tracked.
+.claude/settings.local.json
+.claude/skills/
