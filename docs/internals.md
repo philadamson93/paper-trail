@@ -20,5 +20,6 @@ The slash-command files and schemas *are* the spec, not a wrapper around hidden 
 - **Orchestrator phases (0 → 4) + invocation flags** — [`.claude/commands/paper-trail.md`](../.claude/commands/paper-trail.md).
 - **Verdict JSON schema + rollup rules + validation** — [`.claude/specs/verdict_schema.md`](../.claude/specs/verdict_schema.md).
 - **Ingest handle layout + GROBID pipeline** — [`.claude/specs/ingest.md`](../.claude/specs/ingest.md) and [`.claude/scripts/ingest_pdf.py`](../.claude/scripts/ingest_pdf.py).
+- **Pre-dispatch claim validator** (`TEXT_ANCHOR_MISSING`, `FRONT_MATTER_ANCHOR`, `CITEKEY_MARKER_MISMATCH`) — [`.claude/scripts/validate_claims.py`](../.claude/scripts/validate_claims.py).
 - **Dispatch prompts** (extractor / adjudicator / verifier) — [`.claude/prompts/`](../.claude/prompts/).
 - **HTML demo renderer** — [`.claude/scripts/render_html_demo.py`](../.claude/scripts/render_html_demo.py).
