@@ -1,12 +1,12 @@
 # Prerequisites
 
-Commands adapt to whichever tools are available, but quality is proportional to what's installed. The easiest path: ask Claude to install these for you.
+Commands adapt to whichever tools are available, but quality is proportional to what's installed. The easiest path:
 
 ```
-claude "set up paper-trail prereqs on this machine"
+/paper-trail-init
 ```
 
-Claude will install / start what's missing below and verify each is reachable.
+Probes every dependency below, reports what's missing, and offers to install each one with per-step confirmation. Safe to re-run. `/paper-trail` also auto-invokes the blocking checks at preflight, so you can skip straight to `/paper-trail <pdf>` on a fresh machine — it'll pause and bootstrap when needed.
 
 ## GROBID (recommended)
 

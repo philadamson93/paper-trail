@@ -27,6 +27,7 @@ Reader mode (default when a PDF path is given):
 - `/paper-trail <path-to-pdf> --recheck` — re-verify all existing ledger entries in the target output-dir.
 - `/paper-trail <path-to-pdf> --triage` — run interactive triage on `AMBIGUOUS` entries in an existing output-dir (no re-grounding).
 - `/paper-trail <path-to-pdf> --fetch-substitute=<never|ask|always>` — policy for Phase 2 when a target paper's primary URL is paywalled but a related-but-not-identical paper (e.g., an arXiv preprint of the same work, an earlier arXiv version, a workshop paper vs. a later journal version) is available. Default: `ask`.
+- `/paper-trail <path-to-pdf> --skip-preflight` — bypass the dependency check in Preflight; assume the caller has already staged `pdftotext` / GROBID / MCPs (CI / headless contexts).
 
 Author mode:
 
@@ -99,6 +100,32 @@ Above the `## Summary` table, render a `## Critical findings` section that surfa
 - `CONTRADICTED` and `UNSUPPORTED` claim entries from Phase 3.
 
 Each finding links to its detail block lower in the file. This is the "do I need to panic" view for the reader.
+
+## Preflight — Dependency check
+
+Before Phase 0, probe the host for the tools `/paper-trail` needs. All probes are read-only (no side effects).
+
+- **`pdftotext`** (required) — `command -v pdftotext`. If missing, the orchestrator cannot read the input PDF or run fallback ingest.
+- **GROBID** (optional, strongly recommended) — 3-second GET against `http://localhost:8070/api/isalive`. If unreachable, Phase 2.5 will use `pdftotext_fallback` (flat text, no per-section structure).
+- **`papersflow` MCP** (optional) — grep `claude mcp list` for `papersflow`. If absent, Phase 1 falls back to CrossRef + arXiv REST.
+
+Act on the probe:
+
+- **`pdftotext` missing** → block. Prompt via `AskUserQuestion`:
+  > `pdftotext` is missing. `/paper-trail` needs it to read the input PDF. Run `/paper-trail-init` now to install dependencies, or exit?
+
+  Options: `Run /paper-trail-init now` | `Exit and install manually`. If the user picks the first, invoke `/paper-trail-init`'s logic inline, then re-probe once before proceeding. If probe still fails, exit with guidance; do not continue to Phase 0.
+
+- **GROBID unreachable but Docker present** → non-blocking. Prompt once:
+  > GROBID isn't running. Start it now for full-fidelity ingest? (Ingest will otherwise fall back to `pdftotext_fallback`.)
+
+  Options: `Start GROBID via docker` | `Continue with fallback`. If the user picks start, invoke the GROBID step from `/paper-trail-init` inline (run the container, poll `/api/isalive`, proceed). If they pick fallback, record the decision in `parse_report.md` and move on.
+
+- **`papersflow` MCP absent** → informational only. Log to `parse_report.md`; do not prompt. The user can add it any time via `/paper-trail-init`.
+
+Preflight runs **only on fresh invocations**. On resumes (output-dir already populated), skip preflight and trust the prior decisions — re-probing mid-run is confusing and the user can always re-run `/paper-trail-init` independently.
+
+`--skip-preflight` opts out entirely (for CI / headless contexts where the caller has already staged everything).
 
 ## Phase 0 — Bibliography extraction
 

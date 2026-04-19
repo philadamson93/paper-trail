@@ -13,13 +13,13 @@
 </p>
 
 <p align="center">
-  <a href="https://philadamson93.github.io/paper-trail/demo.html">
-    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025">
-  </a>
+  <sub>This is what an online journal should look like:</sub>
 </p>
 
 <p align="center">
-  <sub>This is what an online journal should look like.</sub>
+  <a href="https://philadamson93.github.io/paper-trail/demo.html">
+    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025">
+  </a>
 </p>
 
 ---
@@ -68,13 +68,13 @@ git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
 cd ~/src/paper-trail
 ```
 
-For system prerequisites (GROBID, poppler, optional MCPs), ask Claude:
+On a fresh machine, bootstrap system prerequisites (GROBID, poppler, optional MCPs) with:
 
 ```
-claude "set up paper-trail prereqs on this machine"
+/paper-trail-init
 ```
 
-Details: [docs/prerequisites.md](docs/prerequisites.md).
+It probes each dependency, reports what's missing, and offers per-step installs. `/paper-trail` also auto-runs the blocking checks at preflight, so you can usually jump straight to `/paper-trail <pdf>`. Details: [docs/prerequisites.md](docs/prerequisites.md).
 
 Two ways to run:
 
@@ -87,8 +87,6 @@ Two ways to run:
   ```
 
   Then invoke `/paper-trail --author` from the project root.
-
-The older "symlink just the commands" install path does not work with v2 — the orchestrator needs `.claude/prompts/`, `.claude/specs/`, and `.claude/scripts/` at cwd.
 
 ## Run it
 

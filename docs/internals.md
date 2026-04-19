@@ -6,6 +6,7 @@
 
 | Command | Purpose |
 |---|---|
+| [`/paper-trail-init`](../.claude/commands/paper-trail-init.md) | Probe + optionally install system dependencies (pdftotext, Docker, GROBID, `papersflow` MCP). Auto-invoked by `/paper-trail`'s preflight when blocking deps are missing. |
 | [`/init-writing-tools`](../.claude/commands/init-writing-tools.md) | One-time author-mode bootstrap: detect `.bib` + PDF layout, write `claims_ledger.md` config. |
 | [`/verify-bib`](../.claude/commands/verify-bib.md) | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` writes corrections. |
 | [`/fetch-paper`](../.claude/commands/fetch-paper.md) | Download open-access PDFs or surface retrieval prompts for paywalled ones. |
