@@ -58,10 +58,16 @@ Keep the question count at or below these six (not counting the internal search-
 
 `<output-dir>/`:
 
-- `ledger.md` — audit artifact. Reuses `templates/claims_ledger.md` schema (YAML frontmatter + Summary table + Details blocks + severity taxonomies) with two additions (see "Ledger additions" below).
-- `refs.bib` — synthetic BibTeX built from the parsed + looked-up references.
-- `pdfs/` — fetched source PDFs, each named `<citekey>.pdf`.
-- `parse_report.md` — bibliography parser diagnostics: refs found, DOI hit rate, bibliography-style auto-detected, low-confidence entries flagged by line number.
+- `ledger.md` — audit artifact (**human-readable view, rendered from `ledger/claims/*.json`**). Reuses `templates/claims_ledger.md` schema with the additions below.
+- `ledger/claims/<claim_id>.json` — **source-of-truth verdict** per claim. Schema: `.claude/specs/verdict_schema.md`. The orchestrator renders `ledger.md` from these files after every merge; edits to `ledger.md` are overwritten on the next render.
+- `ledger/evidence/<claim_id>.json` — extractor output (Pass 1). Verdict fields are `PENDING`; used by the adjudicator in Pass 2 and retained for verifier bounces.
+- `ledger/verifications/<claim_id>__<sub_claim_id>.json` — verifier spot-check output (Phase 3.5).
+- `refs.bib` — PDF-parsed BibTeX (Phase 0).
+- `refs.verified.bib` — bib-audit-corrected copy emitted by Phase 1 (Phases 2–3 prefer this if present).
+- `pdfs/<citekey>.pdf` — fetched source PDFs.
+- `pdfs/<citekey>/` — per-PDF **ingest handle** (Phase 2.5 output): `meta.json`, `content.txt`, `sections/*.txt`, `figures/*.png`, `figures/index.json`, `ingest_report.json`. Schema: `.claude/specs/ingest.md`.
+- `parse_report.md` — bibliography parser diagnostics + ingest-mode summary (how many refs ingested via GROBID vs fallbacks).
+- `trace/<subagent_id>.jsonl` — per-subagent trace log for observability (see "Trace log").
 
 ### Ledger additions for reader mode
 
@@ -245,6 +251,37 @@ Total fetched: M / (M+N)
 
 Never suggest Sci-Hub, LibGen, or similar. Inherit the `/fetch-paper` policy.
 
+## Phase 2.5 — Ingest
+
+After every successful fetch, run the ingest pipeline to turn the PDF into Phase 3's structured handle. Spec: `.claude/specs/ingest.md`.
+
+### Pre-flight — GROBID availability check
+
+Before the first ingest call:
+
+1. Probe `http://localhost:8070/api/isalive` (or the `--grobid-url` override).
+2. If it responds `true` → proceed with full-fidelity ingest.
+3. If not → emit a one-time warning: *"GROBID not available — ingest will fall back to `pdftotext_fallback` mode (no per-section structure; figures still extracted). To enable full ingest, run `docker run --rm -d --name grobid -p 8070:8070 lfoppiano/grobid:0.8.2`."* Continue; do **not** block on GROBID.
+
+Per-run summary of ingest modes lands in `parse_report.md` so downstream consumers know which handles are `grobid` vs `pdftotext_fallback` vs `ocr_fallback`.
+
+### Per-ref ingest
+
+For each `<citekey>` with a fetched `<output-dir>/pdfs/<citekey>.pdf`:
+
+1. If `<output-dir>/pdfs/<citekey>/ingest_report.json` exists with `success: true`, skip (resumability).
+2. Else invoke `.claude/scripts/ingest_pdf.py --pdf <path>.pdf --citekey <citekey> --out-dir <output-dir>/pdfs/<citekey>/`.
+3. Record the resulting `ingest_mode` per citekey.
+
+### Failure handling
+
+- `ingest_mode: grobid` → full-fidelity handle; all Phase 3 primitives available.
+- `ingest_mode: ocr_fallback` → content.txt from OCR; no sections; figure extraction still attempted. Phase 3 dispatch marks claims against this handle with a trust-adjusted confidence.
+- `ingest_mode: pdftotext_fallback` → flat text, no sections, figures still extracted. Serviceable for most claim types; DIRECT claims against numerical tables may need vision inspection.
+- `ingest_mode: error` → mark every claim citing this source `PENDING` with `NEEDS_PDF`; surface in the run report.
+
+Ingest is idempotent. Re-invocation reuses the cached handle unless `--force-ingest` is passed.
+
 ## Phase 3 — Ground claims
 
 ### Step 3.1 — Claim extraction
@@ -273,86 +310,112 @@ Record low-confidence matches in `parse_report.md` so a human can spot-check; do
 - Map each marker to the corresponding `refs.bib` citekey.
 - For multi-marker sentences (e.g., `[5, 12, 17]`), produce one claim entry per `(sentence, citekey)` pair — matching the existing `/ground-claim` multi-cite semantics. The grounding subagent handling each entry is responsible for determining which *sub-aspect* of the sentence its citekey supports (see `/ground-claim` Step 5 "Sub-claim attributed" field).
 
-### Step 3.2 — Group and dispatch
-- Group claim candidates by their cited source paper (citekey).
-- For each source paper with at least one non-skipped citekey, spawn a subagent (batched per the configured batch size) that:
-  - Opens that single source PDF once.
-  - Runs `/ground-claim` Step 2 pre-read checks (text extractability / image-based PDF → OCR fallback; page count → chunked-read mode if > 25 pages). For image-based PDFs with no OCR available, all claims citing that source are marked `PENDING` with `NEEDS_OCR` — do not force verdicts on unreadable PDFs.
-  - Verifies every claim citing it in one pass (matches the `/ground-claim` "process claims grouped by source paper" rule). For PDFs > 25 pages, this one pass becomes a chunked-section pass per `/ground-claim` Step 2 "Paper-length handling".
-  - **Follows the `/ground-claim` per-claim workflow in full**: Step 1 classify → Step 2 locate evidence (*including* the minimum-reading requirement, negative-evidence protocol, indirect-attribution check, out-of-context check, and Step 2 self-check) → Step 3 assess support → Step 4 propose remediation → Step 5 append to ledger.
-  - **Rigor beats compute.** Subagent prompts must explicitly forbid shortcutting — no skimming, no abstract-only reads, no declaring `UNSUPPORTED` / `CONTRADICTED` without a full attestation log. It is materially better to spend extra tokens per subagent than to propagate a false verdict into the ledger.
-- Refs marked `NEEDS_PDF` from Phase 2 → their claims are written to the ledger with status `PENDING` and flag `NEEDS_PDF`. Do not spawn a grounding subagent for them.
+### Step 3.2 — Two-pass dispatch (extractor → adjudicator)
 
-#### Dispatch prompt requirements (binding on the orchestrator)
+Each claim is processed by **two subagents in sequence**, then a **third verifier subagent** in Phase 3.5. The three dispatch prompts are materialized in `.claude/prompts/` — the orchestrator reads the template, fills `{{slots}}` with per-claim values, and sends the result verbatim. No improvisation at dispatch time. See `.claude/specs/verdict_schema.md` for the exit-JSON contract both passes share.
 
-A grounding subagent is generic (`general-purpose`) and does **not** auto-load the `/ground-claim` spec. The orchestrator's dispatch prompt is the only thing standing between a compact "classify → full read → verdict" binary axis and the full citation-hygiene taxonomy (`OVERGENERAL`, `OVERSTATED`, `CITED_OUT_OF_CONTEXT`, `MISATTRIBUTED`, `INDIRECT_SOURCE`, `PARTIALLY_SUPPORTED`, `AMBIGUOUS`). A compact prompt consistently produces softer verdicts — agents default to `CONFIRMED` vs `UNSUPPORTED` and miss the subtler categories. Every dispatch prompt **must** include all four items below:
+**Why two passes:** at 50 parallel subagents the single-pass "read PDF → decide verdict" workflow drifts (subagents write Python, invent taxonomies, default to CONFIRMED). Splitting the work keeps each subagent's context narrow:
 
-1. **Instruct the subagent to read `.claude/commands/ground-claim.md` as step zero**, before classifying or reading the source PDF. The spec is the authoritative source for taxonomies, rigor requirements, and attestation-log format. Example dispatch line: *"Before doing anything else, read `.claude/commands/ground-claim.md` in full. Follow Steps 1–5 for each claim; produce attestation logs per the spec's negative-evidence protocol."*
-2. **Enumerate the non-CONFIRMED verdict categories explicitly** so the subagent actively considers them. Do not just say "assess support level" — say: *"Actively consider `OVERGENERAL` (scope drift — claim generalizes beyond the paper's scope), `OVERSTATED` (strength drift — our wording stronger than the paper's), `CITED_OUT_OF_CONTEXT` (passage exists but used in a materially different context), `MISATTRIBUTED` (claim is true but this isn't the source), `INDIRECT_SOURCE` (the paper credits another source for the fact). Defaulting to CONFIRMED when one of these applies is a verdict error."*
-3. **Pass full multi-cite context**. For each claim with co-cites (e.g., a sentence cited `27,28` or `1–4`), include in the dispatch prompt the full list of sibling citekeys on the same sentence *and* their printed titles/authors. The subagent needs this to evaluate `CITED_OUT_OF_CONTEXT` and `INDIRECT_SOURCE` — "this claim is really about Raghu 2019's finding, not Deng 2009's ImageNet dataset" is undetectable when the subagent doesn't know Raghu 2019 is cited alongside.
-4. **Specify the inflight-file template verbatim** (Details-block schema per Step 5) and require the subagent to produce it. Do not leave the template to the subagent's imagination — agents write ad-hoc structures otherwise, and the orchestrator's merge step then has to parse free-form prose.
+- **Pass 1 — Extractor** reads the paper handle, gathers evidence. Emits `ledger/evidence/<claim_id>.json` with `verdict` fields left `PENDING`.
+- **Pass 2 — Adjudicator** reads only the evidence JSON + the rubric (`verdict_schema.md`), no paper. Emits `ledger/claims/<claim_id>.json` with final verdicts.
 
-When the dispatch prompt omits any of (1–4), downstream verdicts are systematically softer than they should be. This is **not** a Sonnet-vs-Opus or temperature issue; it is a prompt-content issue. Fix it at dispatch time, not by retrying with a stronger model.
+Claim IDs (`C001`, `C002`, …) are allocated by the orchestrator before dispatch. Each subagent is handed its assigned ID; concurrent subagents cannot collide.
 
-### Step 3.3 — Inflight-file layout (prevents concurrent-write clobbering)
+#### Dispatch inputs
 
-Subagents do **not** write directly to `ledger.md`. Concurrent `Edit` / `Write` calls from batched subagents will race and clobber each other (the runtime does not serialize file edits across agents). Use a per-claim inflight-file layout instead:
+For each claim, the orchestrator computes the dispatch payload:
 
-1. Each grounding subagent writes one file per claim to `<output-dir>/.inflight/<claim_id>.md`. The file contains the Details block for that single claim (frontmatter-style fields + quoted source excerpt + search log + attestation log + any AMBIGUOUS-specific fields).
-2. After every Phase 3 batch returns, the main orchestrator merges sequentially:
-   - Reads every file in `.inflight/`.
-   - Appends each claim's Details block to `ledger.md`'s `## Details` section under a single `### <claim_id> — <citekey>` subheading per entry. Do **not** prepend a wrapper heading if the inflight file already starts with its own — strip or skip the inflight file's leading heading to avoid duplicated `### Cxxx` lines in the merged ledger.
-   - Updates the Summary table with one row per entry.
-   - Deletes the merged inflight files.
-3. Claim IDs (`C001`, `C002`, …) are allocated by the **main orchestrator** before dispatch — each subagent is handed its assigned ID, so concurrent subagents cannot collide on ID allocation.
-
-Partial progress survives a crashed subagent: any inflight files written before the crash remain on disk. At end-of-run `.inflight/` should be empty; a non-empty `.inflight/` on startup is a resumption signal that Phase 3 was interrupted mid-batch.
-
-## Phase 3.5 — Attestation verification
-
-Attestation logs (Step 2 of `/ground-claim`) are self-reported — a grounding subagent that skimmed the abstract and invented plausible-looking attestation fields would pass. To counter this, every claim verdict is spot-checked by an independent verifier subagent.
-
-### Dispatch
-
-For every claim entry produced in Phase 3 (regardless of support level — including `CONFIRMED`), spawn one lightweight verifier subagent. Verifiers run in parallel batches per the configured batch size.
-
-### Verifier workflow
-
-Each verifier subagent:
-
-1. Reads one ledger entry (Summary row + Details block + attestation log).
-2. Picks one line at random from the attestation log's `Specific checks:` list — e.g., `Table 2 (dataset sizes)`, `Fig. 4 caption (accuracy numbers)`, `Eq. 3 surrounding prose`.
-3. Opens the cited source PDF at the claimed page / section and confirms:
-   - The specific check exists (the claimed table / figure / equation is there on the claimed page).
-   - The `Closest adjacent passage` quote is present verbatim at the claimed page.
-4. Writes a verifier result to `<output-dir>/.inflight/<claim_id>.verify.md`:
-
-```
-Verifier result:
-  Claim ID:       C<N>
-  Check sampled:  <one random line from Specific checks>
-  Passage found:  YES | NO | PARTIAL
-  Notes:          <YES → "ok"; NO → what the verifier found instead;
-                   PARTIAL → what matched and what didn't>
+```json
+{
+  "claim_id": "C042",
+  "run_id": "run_20260418T1234Z",
+  "citekey": "hammernik2021",
+  "claim_text": "...",
+  "manuscript_section": "2.2.3",
+  "claim_type_hint": {"type": "PARAPHRASED", "confidence": "medium"},
+  "handle": "pdfs/hammernik2021/",
+  "ingest_mode": "grobid",
+  "co_citekeys": ["chen2022", "sandino2020"],
+  "run_output_dir": "<absolute path>"
+}
 ```
 
-### Handling verifier results
+— then substitutes each `{{slot}}` in `.claude/prompts/extractor-dispatch.md` with the matching value and sends the filled prompt to the extractor subagent. After validation of its `ledger/evidence/<claim_id>.json`, the orchestrator fills `.claude/prompts/adjudicator-dispatch.md` the same way and dispatches the adjudicator.
 
-After all verifier subagents return, the orchestrator merges `.verify.md` files into `ledger.md`:
+#### Grouping
 
-- **Verifier confirmed (YES)** → no change to the entry.
-- **Verifier could not confirm (NO or PARTIAL)** → add `UNVERIFIED_ATTESTATION` to the entry's Flag column; append a dated history note to Details: `_<YYYY-MM-DD>: verifier could not confirm attestation — sampled check "<...>" not found as attested; verifier notes: <...>_`. The support level is **not** automatically changed — the flag is the signal.
-- `UNVERIFIED_ATTESTATION`-flagged entries are surfaced in the end-of-run triage report alongside `CONTRADICTED` and `UNSUPPORTED`, because they indicate the original subagent may have fabricated the attestation.
+Group claims by cited source paper (citekey). All claims citing the same paper share one ingested handle, so reading-cost amortizes. The extractor processes each claim in the group one at a time (not bulk); the adjudicator runs per-claim. Parallelism is across papers, not across claims within a paper, to keep adjudicator contexts tiny.
 
-### Default: verify every claim, not sampled
+#### Refs without a handle
 
-For v1, verify every claim. Rigor beats compute. A `--verifier-sample=<pct>` flag may be added later once we have cost data from real runs; not a v1 default.
+Refs marked `NEEDS_PDF` in Phase 2 or `ingest_mode: error` in Phase 2.5 → orchestrator writes a stub `ledger/claims/<claim_id>.json` with `overall_verdict: PENDING` and `overall_flag: NEEDS_PDF`. No subagent is dispatched for these.
+
+#### Exit-JSON validation
+
+On extractor return:
+
+1. Validate `ledger/evidence/<claim_id>.json` against the schema. On failure, retry once with a pointed error message. On second failure, keep the malformed output at `<claim_id>.json.invalid` and flag the claim `SCHEMA_VIOLATION`.
+2. On success, dispatch the adjudicator.
+
+On adjudicator return: same validation → `ledger/claims/<claim_id>.json`. Validation failure blocks Phase 3.5 verification for that claim; proceed with others.
+
+### Step 3.3 — Ledger rendering
+
+After each batch of adjudications returns, the orchestrator re-renders `ledger.md` from all `ledger/claims/*.json` files. The markdown is a derived view:
+
+- Frontmatter (unchanged across runs)
+- `## Critical findings` section populated from `overall_flag` in `["CRITICAL", "AMBIGUOUS", "SCHEMA_VIOLATION"]`
+- `## Summary` table — one row per `ledger/claims/<claim_id>.json`, columns `| ID | Section | Cite | Type | Support | Source page | Flag | Last verified |`
+- `## Details` — one block per claim, rendered from the JSON (claim_text, sub_claims with verdicts + evidence, attestation summary, remediation, source_ref_urls click-through)
+
+Hand-edits to `ledger.md` are **lost on the next render**. If a user wants to annotate an entry, they should do so in the JSON's free-form `nuance` or `history[]` fields.
+
+## Phase 3.5 — Attestation verification (gating)
+
+Every adjudicated claim (regardless of overall verdict, including `CONFIRMED`) is spot-checked by a narrow verifier subagent before its verdict is considered final. The verifier sees only `{claim, one sampled evidence entry, rubric}` — no paper, no other sub-claims — so it can't drift.
+
+Dispatch template: `.claude/prompts/verifier-dispatch.md`.
+
+### Sampling
+
+For each `ledger/claims/<claim_id>.json`:
+
+1. Flatten `sub_claims[*].evidence[*]` into a list.
+2. Filter out figure-derived entries (marked `sample_type: "figure"` — out of scope for text verifier).
+3. Randomly pick one. If every evidence entry is figure-derived, sample from `attestation.closest_adjacent`.
+4. If no evidence at all (e.g., UNSUPPORTED with nothing to verify), skip verification — the adjudicator's closest-adjacent attestation stands.
+
+### Dispatch payload
+
+```json
+{
+  "claim_id": "C042",
+  "run_id": "...",
+  "sampled_evidence": { ... one evidence entry ... },
+  "handle": "pdfs/hammernik2021/",
+  "run_output_dir": "<absolute path>"
+}
+```
+
+Orchestrator fills `.claude/prompts/verifier-dispatch.md` with these slots.
+
+### Handling results
+
+Verifier emits `ledger/verifications/<claim_id>__<sub_claim_id>.json` with `result ∈ {PASS, PARTIAL, FAIL}` and `verdict_impact`:
+
+- `PASS` / `verdict_impact: none` → verdict stands.
+- `PARTIAL` / `flag_unverified_attestation` → patch the verdict JSON's `overall_flag` to include `UNVERIFIED_ATTESTATION`. Verdict itself unchanged.
+- `FAIL` / `bounce_to_re_ground` → re-dispatch the claim through extractor + adjudicator. Increment `attempts` on the claim's JSON; after 2 bounces, flag the claim `AMBIGUOUS` with `SCHEMA_VIOLATION` and stop (systematic extractor issue).
+
+### Default
+
+Verify every claim in v1. A `--verify-sample-rate=<pct>` flag may be added later based on cost data; not a v1 default. Rigor beats compute.
 
 ### Do not
 
-- Do not auto-correct verdicts based on verifier output. The verifier flags; the user (or a re-grounding pass) resolves.
-- Do not skip verification on `CONFIRMED` entries. A falsely-confirmed claim is as dangerous as a falsely-denied one.
-- Do not let a verifier subagent also produce the original verdict. Each verifier targets exactly one claim entry, and that entry must have been produced by a different subagent.
+- Do not auto-correct verdicts based on verifier output. The verifier flags (or bounces for re-grounding); it does not rewrite the verdict directly.
+- Do not skip verification on `CONFIRMED` entries — a falsely-confirmed claim is as dangerous as a falsely-denied one.
+- Do not let the same subagent produce both the adjudicated verdict and the verification. They must be separate dispatches.
 
 ## Phase 4 — Ambiguity triage
 
@@ -435,21 +498,65 @@ No separate output-dir. Everything writes into the project's existing structure:
 Running `/paper-trail` against a pre-existing `<output-dir>`:
 
 - If `refs.bib` exists → skip Phase 0 extraction. Ask the user before re-running Phase 0 (which would overwrite parser diagnostics).
-- For each ref with a PDF already in `pdfs/` → skip its Phase 2 fetch; mark "already present".
-- Ledger entries with a non-`PENDING` support level → skip re-grounding in Phase 3, unless `--recheck` was passed.
-- `PENDING` + `NEEDS_PDF` entries → retry their fetch in Phase 2 and grounding in Phase 3.
-- `--recheck` semantics match `/ground-claim --recheck`: recompute claim keys, set `STALE` flags, re-verify.
+- For each ref with a PDF already in `pdfs/<citekey>.pdf` → skip its Phase 2 fetch; mark "already present".
+- For each ref with `pdfs/<citekey>/ingest_report.json` reporting `success: true` → skip Phase 2.5 ingest. `--force-ingest` forces re-ingest.
+- Claims with a `ledger/claims/<claim_id>.json` whose `overall_verdict` is not `PENDING` → skip re-grounding in Phase 3, unless `--recheck` was passed.
+- `PENDING` + `NEEDS_PDF` claims → retry fetch + ingest + ground.
+- `SCHEMA_VIOLATION` claims → retry once with a fresh extractor dispatch. If it violates again, surface to user.
+- `--recheck` semantics match `/ground-claim --recheck`: recompute claim keys, set `STALE` flags on drift, re-verify.
 
 ## Agent / batching topology
 
-Default parallelism: 10 concurrent subagents per phase. Override with `--batch-size N` or `--sequential` (equivalent to `--batch-size 1`).
+**Default `--batch-size 1` (serial) in v1.** Parallelism is deferred to a later milestone once the serial path is validated end-to-end. Subagent drift at higher concurrency is the known-failure-mode we're paying explicit attention to — rigor over speed, serial over parallel, until we prove the serial path is rock-solid.
+
+Override with `--batch-size N` for parallel runs; understand that higher `N` empirically regresses verdict quality until we finish observability + retry hardening.
 
 - Phase 0 enrichment: one subagent per parsed reference.
 - Phase 1 verify: one subagent per reference.
 - Phase 2 fetch: one subagent per reference.
-- Phase 3 ground: one subagent per unique cited source paper (not per claim — one paper handles all its own claims in a single pass).
+- Phase 2.5 ingest: the ingest script is process-local (not a subagent); it runs once per ref, serially per batch.
+- Phase 3 ground: the orchestrator groups claims by cited source paper and runs extractor → adjudicator sequentially per claim within the group. Parallelism, when enabled, is across papers, not within.
+- Phase 3.5 verifier: one subagent per adjudicated claim.
 
-Each phase waits for all subagents to return before advancing to the next. This is not the most aggressive parallelization possible, but it keeps the ledger writes orderly and makes partial-progress states interpretable.
+Each phase waits for all subagents to return before advancing to the next.
+
+## Trace log
+
+Every subagent dispatch and final message is logged to `<output-dir>/trace/<subagent_id>.jsonl`. One file per subagent; newline-delimited JSON records. This is the local observability substrate — grep-able, diff-able, no vendor dependency.
+
+### Record schema
+
+Each line is one event:
+
+```json
+{
+  "ts": "2026-04-18T15:22:03.412Z",
+  "run_id": "run_20260418T1522Z",
+  "subagent_id": "extractor-C042",
+  "stage": "grounding",
+  "role": "extractor",
+  "claim_id": "C042",
+  "event": "dispatch",
+  "prompt_hash": "sha256:abcdef...",
+  "payload": {"claim_text": "...", "handle": "pdfs/hammernik2021/"}
+}
+```
+
+Events emitted:
+
+- `dispatch` — orchestrator sends a prompt to a subagent. `payload` = the dispatch slot values.
+- `final_message` — subagent returns. `payload` = the subagent's last message + exit path.
+- `validation_pass` / `validation_fail` — orchestrator's schema check result. On fail, `payload.errors` is populated.
+- `bounce` — verifier rejected; re-dispatching. `payload.reason` is the verifier's note.
+- `escalation` — the orchestrator gave up on a claim (second bounce, second schema fail).
+
+### Usage
+
+- `cat trace/*.jsonl | jq 'select(.event == "validation_fail")'` — find every schema violation across the run.
+- `grep '"claim_id":"C042"' trace/*.jsonl` — reconstruct the full history of one claim.
+- `jq -r 'select(.event == "final_message") | [.role, .claim_id, .payload.exit_path] | @tsv' trace/*.jsonl` — quick tabular view of all subagent outcomes.
+
+No Phoenix / Langfuse dependency in v1. If a vendor observability tool is needed later (M2+), it reads the same JSONL as its source.
 
 ### Skip handling
 - `--skip=key1,key2` excludes those citekeys from Phases 2 and 3. Their ledger entries become `PENDING` / `NEEDS_PDF`.
