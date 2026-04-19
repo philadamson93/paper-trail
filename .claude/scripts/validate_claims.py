@@ -2,14 +2,19 @@
 """
 Validate extracted claims against the manuscript text before Phase 3 dispatch.
 
-Runs two cheap, non-LLM checks per claim:
+Runs three cheap, non-LLM checks per claim:
 
   1. Text anchor — does the stored `claim_text` actually appear in `paper.txt`?
      We accept any sequential 5-word window from the claim that matches the
      paper (after whitespace/punctuation normalization). No match on any
      window → the claim is almost certainly paraphrased or fabricated.
 
-  2. Citekey / refnum consistency — for numbered-citation papers, we look at
+  2. Front-matter anchor — does the text-anchor fall above the Abstract /
+     Introduction heading? That means the "claim" was pulled from the title
+     / author / affiliation block, where superscript affiliation digits look
+     identical to numbered citation markers. No real citation lives there.
+
+  3. Citekey / refnum consistency — for numbered-citation papers, we look at
      citation markers (digit tokens) near the text-anchor position. If the
      claim's stored `citekey` resolves to a `refnum` and that refnum is NOT
      one of the nearby markers, the claim is attached to the wrong reference.
@@ -88,6 +93,45 @@ def load_paper_text(run_dir: Path) -> str:
         if candidate.exists():
             return candidate.read_text(errors="replace")
     return ""
+
+
+# ---------- Body-start detection ----------
+
+# Heading patterns that mark the transition from title/author/affiliation
+# block to real body text. Ordered by confidence; first hit wins.
+BODY_START_PATTERNS = [
+    re.compile(r"^\s*Abstract\s*$", re.MULTILINE),
+    re.compile(r"^\s*ABSTRACT\s*$", re.MULTILINE),
+    re.compile(r"^\s*A\s*B\s*S\s*T\s*R\s*A\s*C\s*T\s*$", re.MULTILINE),
+    re.compile(r"^\s*Abstract\s*[:.\-—–]", re.MULTILINE),
+    re.compile(r"^\s*Summary\s*$", re.MULTILINE),
+    # Fallback for arXiv preprints that skip Abstract in pdftotext output.
+    re.compile(r"^\s*(?:[IVX]+\.|\d+\.?)\s*Introduction\s*$", re.MULTILINE),
+    re.compile(r"^\s*Introduction\s*$", re.MULTILINE),
+]
+
+# Cap the search to the first 10 KB; anything farther isn't front-matter.
+BODY_START_SEARCH_LIMIT = 10_000
+
+
+def find_body_start_offset(paper: str) -> int:
+    """Return the raw offset where the paper body begins.
+
+    We return the *start* of the first heading line that looks like
+    "Abstract" / "ABSTRACT" / "Summary" / "1. Introduction", so anchors that
+    land on or after that offset are considered body text. If no heading is
+    recognizable, return 0 (no trimming — fail open so the rest of validation
+    still runs).
+    """
+    window = paper[:BODY_START_SEARCH_LIMIT]
+    earliest: int | None = None
+    for pat in BODY_START_PATTERNS:
+        m = pat.search(window)
+        if m is None:
+            continue
+        if earliest is None or m.start() < earliest:
+            earliest = m.start()
+    return earliest if earliest is not None else 0
 
 
 # ---------- Refs ----------
@@ -279,6 +323,7 @@ def validate(
     paper_norm: str,
     paper_norm_to_raw: list[int],
     citekey_to_refnum: dict[str, int],
+    body_start_offset: int,
 ) -> list[ClaimResult]:
     valid_refnums = set(citekey_to_refnum.values())
     results: list[ClaimResult] = []
@@ -319,7 +364,19 @@ def validate(
             )
             res.status = "FLAG"
 
-        # Check 2: citekey/refnum consistency (only runnable if we have both a
+        # Check 2: front-matter anchor. If we detected a body-start heading
+        # and this claim's anchor lives above it, the extractor pulled from
+        # the title/author/affiliation block where superscript affiliation
+        # digits look exactly like numbered citation markers.
+        if pos is not None and body_start_offset > 0 and pos < body_start_offset:
+            res.flags.append(
+                f"FRONT_MATTER_ANCHOR — claim text anchors at offset {pos}, above the detected body-start "
+                f"(Abstract / Introduction) at offset {body_start_offset}; author-affiliation superscripts "
+                f"are being read as citation markers"
+            )
+            res.status = "FLAG"
+
+        # Check 3: citekey/refnum consistency (only runnable if we have both a
         # position AND the bib carries refnum fields)
         if pos is not None and rn is not None and valid_refnums and not is_pending:
             nearby = nearby_refnums(paper_raw, pos, valid_refnums)
@@ -337,7 +394,9 @@ def validate(
 
 # ---------- Reporting ----------
 
-def render_report(run_dir: Path, results: list[ClaimResult], counts: dict) -> str:
+def render_report(
+    run_dir: Path, results: list[ClaimResult], counts: dict, body_start_offset: int
+) -> str:
     flagged = [r for r in results if r.status == "FLAG"]
     passed = [r for r in results if r.status == "PASS"]
     flag_breakdown: dict[str, int] = {}
@@ -349,6 +408,16 @@ def render_report(run_dir: Path, results: list[ClaimResult], counts: dict) -> st
     lines: list[str] = []
     lines.append(f"# Claim extraction validation — `{run_dir.name}`\n")
     lines.append(f"**{len(results)} claims total · {len(passed)} PASS · {len(flagged)} FLAG**\n")
+    if body_start_offset > 0:
+        lines.append(
+            f"Body-start heading detected at offset {body_start_offset} "
+            f"(everything above is title/author/affiliation block and is excluded from claim extraction).\n"
+        )
+    else:
+        lines.append(
+            "No body-start heading (Abstract / Introduction) detected — "
+            "FRONT_MATTER_ANCHOR check disabled for this run.\n"
+        )
     if flag_breakdown:
         lines.append("## Flag breakdown\n")
         for k, v in sorted(flag_breakdown.items(), key=lambda kv: -kv[1]):
@@ -395,6 +464,7 @@ def main():
     run = args.run_dir.resolve()
     paper_raw = load_paper_text(run)
     paper_norm, paper_norm_to_raw = build_normalized_index(paper_raw) if paper_raw else ("", [])
+    body_start_offset = find_body_start_offset(paper_raw) if paper_raw else 0
 
     verified = run / "refs.verified.bib"
     bib_path = verified if verified.exists() else run / args.bib
@@ -408,14 +478,16 @@ def main():
         print("no claims found — nothing to validate", file=sys.stderr)
         return 1
 
-    results = validate(claims, paper_raw, paper_norm, paper_norm_to_raw, citekey_to_refnum)
+    results = validate(
+        claims, paper_raw, paper_norm, paper_norm_to_raw, citekey_to_refnum, body_start_offset
+    )
     counts = {
         "total": len(results),
         "pass": sum(1 for r in results if r.status == "PASS"),
         "flag": sum(1 for r in results if r.status == "FLAG"),
     }
 
-    report = render_report(run, results, counts)
+    report = render_report(run, results, counts, body_start_offset)
     (run / args.output).write_text(report)
 
     # Console summary

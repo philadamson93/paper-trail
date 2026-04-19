@@ -286,13 +286,17 @@ Ingest is idempotent. Re-invocation reuses the cached handle unless `--force-ing
 ## Phase 3 — Ground claims
 
 ### Step 3.1 — Claim extraction
-- Scan the input PDF body text. Exclude the references section, figure/table captions, and any clearly-marked supplementary / appendix sections.
+- Scan the input PDF **body text only**. Exclude:
+  - The **title / author / affiliation block** — everything above the first `Abstract` / `ABSTRACT` / `Summary` heading (or, if the paper lacks an abstract, above the first `Introduction` heading). Superscript digits attached to author-name tokens in this block are **affiliation markers**, not citations — they look identical to numbered citation markers in flat `pdftotext` output and must not be queued as claims.
+  - The **references section** itself (a reference's own in-text citations are not part of *this* paper's claims).
+  - **Figure / table captions** and any clearly-marked supplementary / appendix sections.
 - Detect inline citation markers matching the auto-detected style from Phase 0: author-year `(Author et al., YYYY)`, numbered `[N]`, or superscript numerals.
 
 ### Disambiguation heuristics (prevent phantom citations)
 
 Citation-marker detection in running prose is noisy. Year-in-parens in body text (`"data from 2014"`, `"since 2008, …"`) and superscript footnote markers can masquerade as citations. Apply these heuristics to avoid generating phantom claims:
 
+- **Front-matter exclusion (numbered / superscript styles)**: never queue a claim whose text anchor falls above the body-start heading (see Step 3.1). In the title/author/affiliation block, `Author Surname¹` is an affiliation pointer to "Institution 1" in the affiliations list below the author names — it is **not** a citation to refs.bib entry #1, even when refnum 1 happens to exist. The Step 3.1.5 validator flags any residue as `FRONT_MATTER_ANCHOR`; don't rely on that alone — skip these at extraction.
 - **Author-year style**: a match requires an author-name token directly adjacent to the year — one of:
   - `(Surname[, et al.][,] YYYY[a-z]?)`
   - `Surname[, et al.][,] (YYYY[a-z]?)`
@@ -319,9 +323,10 @@ Before any Phase 3 dispatch, run the claim-extraction validator:
 python3 .claude/scripts/validate_claims.py --run-dir <output-dir>
 ```
 
-The validator enforces two invariants per extracted claim, with no LLM cost:
+The validator enforces three invariants per extracted claim, with no LLM cost:
 
 - **TEXT_ANCHOR_MISSING** — the claim's `claim_text` must fuzzy-match somewhere in `paper.txt`. If no 3-word content-token window (with up to 3 intervening words) appears in the manuscript, the stored claim_text is paraphrased or fabricated and should not be dispatched.
+- **FRONT_MATTER_ANCHOR** — the text anchor must fall on or after the detected body-start heading (`Abstract` / `ABSTRACT` / `Summary` / `Introduction`). Anchors above that line come from the title/author/affiliation block, where superscript affiliation digits look identical to numbered citation markers; those are phantom claims.
 - **CITEKEY_MARKER_MISMATCH** — once a text anchor is found, the citation markers within ±280 chars of that position must include the `refnum` that the claim's `citekey` resolves to. Range markers like `28–33` are expanded. A mismatch means the claim is attached to the wrong reference.
 
 The validator writes `claim_extraction_report.md` and exits non-zero if any claim flags. Default behavior is **strict** — the orchestrator must pause and surface the report via `AskUserQuestion` when flags exist. Options:
