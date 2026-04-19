@@ -1,0 +1,117 @@
+{
+  "claim_id": "C087",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "luisier2008",
+  "handle": "pdfs/luisier2008/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "\"This approach captures perturbative noise in the DFD formulations but does not accurately represent the correlated wavelet-domain noise that a Stein's Unbiased Risk Estimator (SURE)-based method;55 however, the simple approach still provides insights on the behavior of the DFDs under acquisition noise.\"",
+  "manuscript_section": "",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C087.a",
+      "text": "luisier2008 is a Stein's Unbiased Risk Estimator (SURE)-based method that handles correlated wavelet-domain noise.",
+      "evidence": [
+        {
+          "section": "Abstract / Index Terms",
+          "line": null,
+          "snippet": "SURE-LET Multichannel Image Denoising: Interscale Orthonormal Wavelet Thresholding ... the denoising algorithm is parameterized as a linear expansion of thresholds (LET) and optimized using Stein's unbiased risk estimate (SURE). ... Index Terms-Color image denoising, interscale dependencies, multichannel image denoising, nonredundant transforms, orthonormal wavelet transforms (OWTs), Stein's unbiased risk estimate (SURE)."
+        },
+        {
+          "section": "II. MULTICHANNEL SURE",
+          "line": 9,
+          "snippet": "These images are corrupted by an additive channel-wise Gaussian white noise of known interchannel covariance matrix , i.e., ..."
+        },
+        {
+          "section": "II. MULTICHANNEL SURE",
+          "line": 15,
+          "snippet": "Ideally, our aim would be to choose so that it minimizes the MSE defined in (3). A difficulty is that we do not have access to the original noise-free image . Fortunately, we can rely on an adapted version of Stein's unbiased risk estimate (SURE) [28] to accurately estimate this actual MSE, as shown in the following theorem."
+        },
+        {
+          "section": "II. MULTICHANNEL SURE",
+          "line": 16,
+          "snippet": "(5) is an unbiased estimator of the expected MSE, i.e., ..."
+        },
+        {
+          "section": "II. MULTICHANNEL SURE",
+          "line": 21,
+          "snippet": "In this section, we show how to adapt the monochannel SURE-based denoiser presented in [29] to multichannel image denoising."
+        },
+        {
+          "section": "III. ALGORITHM / A. Color Image Denoising",
+          "line": 34,
+          "snippet": "Color spaces usually consist of channels and we mostly consider red-green-blue (RGB) representations here. In order to demonstrate the performance of our approach, we assume that the interchannel noise covariance matrix is given by ... As an illustration, suppose that we want to perform the denoising in the luminance-chrominance space YUV..."
+        },
+        {
+          "section": "V. CONCLUSION",
+          "line": 47,
+          "snippet": "We have proposed an extension of our previous monochannel denoiser to properly handle multichannel images. The resulting interscale-interchannel wavelet estimator consists of a linear expansion of thresholding functions, whose parameters are solved for by minimizing an unbiased estimate of the expected mean squared error between the noise-free signal and the denoised one."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Luisier & Blu (2008) is explicitly a SURE-based wavelet-domain denoising method (SURE-LET) that exploits interscale (and in this multichannel extension, interchannel) wavelet-domain noise correlations - directly matching the manuscript's invocation of 'a Stein's Unbiased Risk Estimator (SURE)-based method' that captures 'correlated wavelet-domain noise'. The extractor originally worked against a drifted claim_text ('noise level estimation methodologies') and returned MISATTRIBUTED; re-adjudicated against the authoritative manuscript sentence from the claim stub, the citation is CONFIRMED."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "No edit required. Note: if the manuscript is later reworded to invoke Luisier et al. for 'noise level estimation' (as an earlier extractor-side paraphrase suggested), the citation would become MISATTRIBUTED - SURE-LET assumes known noise statistics and estimates risk/MSE, not noise level. For noise-level estimation, cite Donoho & Johnstone (MAD wavelet estimator) or Foi et al. 2008 (Poisson-Gaussian noise parameter estimation)."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "SURE / Stein's unbiased risk estimate / SURE-based method",
+      "wavelet-domain denoising / wavelet thresholding",
+      "correlated noise / interscale / interchannel wavelet noise",
+      "noise level estimation / noise variance estimation (stale-claim check)",
+      "known noise / noise covariance / assumed noise statistics"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract / Index Terms",
+        "read": true
+      },
+      {
+        "section": "I. Introduction",
+        "read": true
+      },
+      {
+        "section": "II. MULTICHANNEL SURE",
+        "read": true
+      },
+      {
+        "section": "III. ALGORITHM (A. Interscale Predictor, B. New Interscale-Interchannel Thresholding Function)",
+        "read": true
+      },
+      {
+        "section": "IV. Results (A. Color Image Denoising, B. Multiband Image Denoising, Portilla BLS-GSM comparison)",
+        "read": true
+      },
+      {
+        "section": "V. CONCLUSION",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "The SURE machinery cites Stein [28] for the risk-estimation principle and prior Luisier work [29] for the monochannel SURE-LET denoiser, but the manuscript's attribution of 'a SURE-based method' to luisier2008 is proper primary-source attribution for the multichannel interscale-interchannel SURE-LET extension.",
+    "out_of_context_check": "Manuscript invokes luisier2008 as an example of a SURE-based wavelet-domain method that would handle correlated wavelet-domain noise; the cited paper is exactly that (SURE-LET with interscale/interchannel structure). Context matches. Note: the extractor's evidence JSON used a stale paraphrase ('noise level estimation methodologies of Luisier et al.') that does not match the authoritative claim_text from the stub; adjudication was performed against the stub's verbatim claim_text per schema priority."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

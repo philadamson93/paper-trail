@@ -1,0 +1,89 @@
+{
+  "claim_id": "C049",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "chen2022",
+  "handle": "pdfs/chen2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "The most commonly used IQ metrics to evaluate the IQ of MR reconstruction magnitude images are normalized root mean square error (NRMSE), peak signal-to-noise ratio (PSNR), and structural similarity index measure (SSIM).5",
+  "manuscript_section": "Introduction / Methods framing (IQ metrics)",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C049.a",
+      "text": "chen2022 supports that NRMSE/SSIM/PSNR are the most commonly used IQ metrics in MR reconstruction.",
+      "evidence": [
+        {
+          "section": "V. Meta-Analysis Results \u00a7 C. Evaluation Metrics",
+          "line": 2,
+          "snippet": "To compare the reconstructed images with the ground truth, most studies reported the structural similarity index measure (SSIM) and the peak signal-to-noise ratio (PSNR) [see Fig. 4(b)]. Fewer used NRMSE, MSE, and the signal-to-noise ratio (SNR). NRMSE and SSIM became more popular over time, whereas PSNR and NMSE decreased in popularity (see Table 5 in the Supplementary Material)."
+        },
+        {
+          "section": "V. Meta-Analysis Results \u00a7 C. Evaluation Metrics",
+          "line": 2,
+          "snippet": "Thus, quantitative metrics, such as SSIM, PSNR, and NRMSE, were the most prevalent."
+        },
+        {
+          "section": "V. Meta-Analysis Results \u00a7 C. Evaluation Metrics",
+          "line": 4,
+          "snippet": "Despite the difficulty of interpreting the qualitative metrics, quantitative metrics, e.g., SSIM, PSNR, and MSE, were not linearly dependent."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Chen2022 explicitly states 'quantitative metrics, such as SSIM, PSNR, and NRMSE, were the most prevalent' \u2014 the set of three metrics matches the manuscript's claim exactly. Minor reordering: chen2022 ranks SSIM/PSNR more frequent than NRMSE, while the manuscript orders 'NRMSE, PSNR, SSIM'; this does not affect the substantive claim about which three metrics are most common. Scope nuance: chen2022's surveyed literature is deep-learning CS-MRI specifically rather than all MR reconstruction broadly, but the metric-prevalence finding is the natural support for the manuscript's framing."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "NRMSE",
+      "SSIM",
+      "PSNR",
+      "evaluation metrics",
+      "image quality"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract (meta.json)",
+        "read": true
+      },
+      {
+        "section": "I. Introduction",
+        "read": true
+      },
+      {
+        "section": "V. Meta-Analysis Results \u00a7 C. Evaluation Metrics",
+        "read": true
+      },
+      {
+        "section": "V. Meta-Analysis Results \u00a7 D. Performance",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Chen2022 reports its own meta-analysis findings on metric prevalence across the surveyed CS-MRI literature; it does not credit another primary source for this claim. The finding is original to chen2022's systematic review/meta-analysis.",
+    "out_of_context_check": "Context matches: chen2022 is reporting on IQ metrics used to evaluate MR reconstruction (specifically deep-learning-based CS-MRI), which aligns with the manuscript's framing of 'IQ metrics to evaluate the IQ of MR reconstruction'. Minor nuance: chen2022's scope is deep-learning CS-MRI specifically, not all MR reconstruction approaches broadly, but the claim is about IQ metrics commonly used in the MR reconstruction literature, which chen2022 directly addresses."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

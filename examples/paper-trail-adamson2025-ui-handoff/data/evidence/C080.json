@@ -1,0 +1,93 @@
+{
+  "claim_id": "C080",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "mason2020",
+  "handle": "pdfs/mason2020/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Although there is a precedent for this in other radiologist reader studies of MR image quality, including Mason et al.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "BACKGROUND",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C080.a",
+      "text": "Mason et al. 2020 is a precedent radiologist reader study of MR image quality.",
+      "evidence": [
+        {
+          "section": "Abstract",
+          "line": 15,
+          "snippet": "In this study, we compare the image quality scores of five radiologists with the RMSE, SSIM, and other potentially useful IQMs... The comparison uses a database of MR images of the brain and abdomen that have been retrospectively degraded by noise, blurring, undersampling, motion, and wavelet compression for a total of 414 degraded images. A total of 1017 subjective scores were assigned by five radiologists."
+        },
+        {
+          "section": "I. INTRODUCTION",
+          "line": 6,
+          "snippet": "This study investigates correlations between RMSE, SSIM, and eight other common objective IQMs with radiologists' scoring of diagnostic MR image quality."
+        },
+        {
+          "section": "C. Radiologist Image Quality Assessment",
+          "line": 1,
+          "snippet": "Three body radiologists and two neuro radiologists were involved in the study. The radiologists scored only images from their subspecialties, using a 1-5 Likert scale. The radiologists were asked to rate the diagnostic quality of the images with respect to delineation of relevant anatomy and ability to confidently exclude a lesion on a 5-point scale."
+        },
+        {
+          "section": "IV. CONCLUSION",
+          "line": 1,
+          "snippet": "We measured the correlations between 10 full-reference objective IQMs and the subjective image quality score of five subspecialty radiologists."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Mason et al. 2020 is explicitly a reader study in which five subspecialty radiologists subjectively scored the diagnostic quality of 414 degraded MR images (brain and abdomen) on a 1-5 Likert scale, establishing it as a precedent radiologist reader study of MR image quality."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "radiologist reader study of MR image quality",
+      "radiologists scoring diagnostic quality of MR images / subjective radiologist ratings",
+      "expert radiologists evaluating MR image quality (reader study design)",
+      "Likert-scale scoring of MR image quality by radiologists"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract (meta.json)",
+        "read": true
+      },
+      {
+        "section": "I. INTRODUCTION",
+        "read": true
+      },
+      {
+        "section": "C. Radiologist Image Quality Assessment",
+        "read": true
+      },
+      {
+        "section": "IV. CONCLUSION",
+        "read": true
+      },
+      {
+        "section": "Unnamed (Index Terms)",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "Mason et al. is itself the primary reader study; it cites prior studies (Renieblas et al. [20], non-expert rater studies [16], [17]) but the reader study described is Mason's own work.",
+    "out_of_context_check": "The manuscript cites Mason as a precedent for a radiologist reader study of MR image quality. Mason 2020 is precisely that kind of study \u2014 five radiologists rated 414 degraded MR images for diagnostic quality. Context matches."
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

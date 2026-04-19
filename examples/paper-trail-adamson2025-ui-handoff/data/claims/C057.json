@@ -1,0 +1,45 @@
+{
+  "claim_id": "C057",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0032Z",
+  "citekey": "sandino2020",
+  "handle": "pdfs/sandino2020/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "We used two DFDs based on natural images, LPIPS and the Deep Image Structure and Texture Similarity index (DISTS),28 which have been used as benchmark IQ metrics in large-scale computer vision IQ metric studies.34 LPIPS uses an L2-norm for G, VGG-1646 trained on ImageNet for \ud835\udf19D , and additionally learns a linear combination of DFDs extracted from five different convolutional layers l based on perceptual judgment scores.",
+  "manuscript_section": "**Citekey:** `sandino2020` (ref #2)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C057.a",
+      "text": "We used two DFDs based on natural images, LPIPS and the Deep Image Structure and Texture Similarity index (DISTS),28 which have been used as benchmark IQ metrics in large-scale computer vision IQ metr",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF unavailable (paywalled or fetch failed); cannot ground."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": null,
+    "indirect_attribution_check": null,
+    "out_of_context_check": null
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "ding2020",
+      "gu2022"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "stub"
+}

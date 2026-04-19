@@ -1,0 +1,162 @@
+{
+  "claim_id": "C033",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "conde2022",
+  "handle": "pdfs/conde2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Although LPIPS and other DFDs28\u201333 outperform commonly used IQ metrics in measuring the perceptual quality of natural images, the relationship between the perceptual quality of MR images and DFDs is unknown.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C033.a",
+      "text": "conde2022 is a representative deep-feature-distance / perceptual-IQA work (i.e., it falls in the LPIPS-style family of learned deep-feature perceptual image-quality methods).",
+      "evidence": [
+        {
+          "section": "meta.json (title)",
+          "line": 3,
+          "snippet": "Conformer and Blind Noisy Students for Improved Image Quality Assessment"
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": 10,
+          "snippet": "Learning-based approaches for perceptual image quality assessment (IQA) usually require both the distorted and reference image for measuring the perceptual quality accurately. ... In this work, we explore the performance of transformer-based full-reference IQA models. We also propose a method for IQA based on semi-supervised knowledge distillation from full-reference teacher models into blind student models using noisy pseudo-labeled data. Our approaches achieved competitive results on the NTIRE 2022 Perceptual Image Quality Assessment Challenge: our full-reference model was ranked 4th, and our blind noisy student was ranked 3rd among 70 participants."
+        },
+        {
+          "section": "Introduction",
+          "line": 1,
+          "snippet": "Image quality assessment (IQA) aims at using computational models to measure the perceptual quality of images, which are degraded during acquisition, generation, compression or post-processing operations [47, 65]."
+        },
+        {
+          "section": "Related Work \u2014 Full-Reference IQA",
+          "line": 4,
+          "snippet": "Recently, learned CNN-based IQA methods have been actively studied and provide the most promising state-of-the-art results [6, 14, 21, 27, 44, 70]. Zhang et al. proposed a learned perceptual image patch similarity (LPIPS) metric [70], which shows that trained deep features that are optimized by the l2 distance between distorted and reference images are effective for IQA compared to the conventional IQA methods."
+        },
+        {
+          "section": "IQA Conformer Network",
+          "line": 24,
+          "snippet": "We use a Inception-ResNet-v2 [52] network pre-trained on ImageNet to extract feature maps from the reference and distorted image. ... a Conformer [22] encoder-decoder is trained to regress MOS using the MSE loss. ... we concatenate the feature maps from the following blocks: mixed5b, block35 2, block35 4, block35 6, block35 8 and block35 10. We do this for the reference and distorted images generating f_ref and f_dist, respectively. In order to obtain difference information between reference and distorted images, a difference feature map [is computed]."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "conde2022 is squarely a learned perceptual full-reference IQA method that compares deep features extracted from reference and distorted images (an Inception-ResNet-v2 backbone whose multi-block feature maps are differenced and regressed to MOS via a Conformer head) \u2014 i.e., a deep-feature-distance-style perceptual IQA model in the LPIPS lineage that the paper itself cites as a predecessor."
+    },
+    {
+      "sub_claim_id": "C033.b",
+      "text": "conde2022's perceptual-IQA method outperforms commonly used IQ metrics (e.g., PSNR, SSIM) on natural images.",
+      "evidence": [
+        {
+          "section": "Related Work \u2014 Full-Reference IQA",
+          "line": 4,
+          "snippet": "The most representative IQA FR metrics are the PSNR, which is related to the MSE between both images, and the SSIM proposed by Wang et al. [60]. These traditional methods have the advantage of convenience for optimization; however, they poorly predict humans perceived visual quality, especially for evaluating fine textures and details in the images [33]. ... Recently, learned CNN-based IQA methods have been actively studied and provide the most promising state-of-the-art results [6, 14, 21, 27, 44, 70]."
+        },
+        {
+          "section": "Cross Database Evaluations",
+          "line": 30,
+          "snippet": "To validate the generalization capabilities of our approach, we use our FR IQA Conformer trained on PIPAL [19] and we conduct the cross-dataset evaluation on two other benchmarks: TID2013 [42] and LIVE [47] (using the full datasets). As shown in Table 3, our model generalizes better than NTIRE 2021 [21] top methods: ASNA [45], RADN [49] and IQT [10]. It also achieves competitive results in comparison with other learnt methods like PieAPP [44], WaDIQaM [6] or LPIPS [70], which are trained on the specific datasets."
+        },
+        {
+          "section": "Cross Database Evaluations \u2014 Table 3 (LIVE / TID2013, SRCC / KRCC)",
+          "line": 31,
+          "snippet": "PSNR [26] 0.873 0.680 0.687 0.496 ; SSIM [60] 0.948 0.796 0.727 0.545 ; MS-SSIM [61] 0.951 0.805 0.786 0.605 ; VIF [47] 0.964 0.828 0.677 0.518 ; NLPD [31] 0.937 0.778 0.800 0.625 ; GMSD [63] 0.960 0.827 0.804 0.634"
+        },
+        {
+          "section": "Cross Database Evaluations \u2014 Table 3 (learnt methods, LIVE / TID2013, SRCC / KRCC)",
+          "line": 32,
+          "snippet": "WaDIQaM [6] 0.947 0.791 0.831 0.631 ; PieAPP [44] 0.919 0.750 0.876 0.683 ; LPIPS [70] 0.932 0.765 0.670 0.497 ; DISTS [14] 0.954 0.811 0.830 0.639 ; IQT-C [10] 0.917 0.737 0.804 0.607 ; Ours 0.921 0.752 0.82 0.630"
+        },
+        {
+          "section": "Abstract / Introduction (NTIRE 2022 result)",
+          "line": 10,
+          "snippet": "Our approaches achieved competitive results on the NTIRE 2022 Perceptual Image Quality Assessment Challenge: our full-reference model was ranked 4th, and our blind noisy student was ranked 3rd among 70 participants."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "On TID2013 (a standard natural-image IQA benchmark), conde2022's IQA Conformer reaches SRCC 0.82 vs PSNR 0.687 and SSIM 0.727 \u2014 a clear gain over commonly used IQ metrics on natural images. On LIVE the gap is small (0.921 vs SSIM 0.948), reflecting LIVE's relatively simple distortions where SSIM is already strong; the manuscript's generalization 'outperform commonly used IQ metrics' is broadly supported but most strongly on harder/perceptual benchmarks (PIPAL/TID2013) rather than uniformly across every traditional metric on every natural-image dataset."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Is conde2022 a representative deep-feature-distance / perceptual-IQA method (LPIPS-family / learned full-reference IQA)?",
+      "Does conde2022's IQA model outperform commonly used IQ metrics (PSNR, SSIM, MS-SSIM, etc.) on natural images?",
+      "On natural-image IQA benchmarks (PIPAL, TID2013, LIVE), does the conde2022 IQA Conformer / Blind Noisy Student score better correlation with human MOS than traditional PSNR/SSIM-style metrics?",
+      "Does conde2022 use deep features extracted from a CNN backbone (Inception-ResNet-v2) and compute a perceptual distance / score between reference and distorted feature maps, in the spirit of LPIPS / DFD methods?"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json (title + abstract)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Related Work (Image Quality Assessment / FR / Blind / Evaluation / Datasets)",
+        "read": true
+      },
+      {
+        "section": "Method",
+        "read": true
+      },
+      {
+        "section": "IQA Conformer Network",
+        "read": true
+      },
+      {
+        "section": "Implementation details",
+        "read": true
+      },
+      {
+        "section": "Blind Noisy Student",
+        "read": true
+      },
+      {
+        "section": "Cross Database Evaluations",
+        "read": true
+      },
+      {
+        "section": "Ablation Study",
+        "read": false
+      },
+      {
+        "section": "Team",
+        "read": false
+      },
+      {
+        "section": "Conclusion",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "conde2022 presents IQA Conformer + Blind Noisy Student as its own primary contributions. It cites LPIPS [70] (Zhang et al.) and IQT [10] (Cheon et al.) as predecessor learned-perceptual-IQA methods, but the conde2022 model itself is the primary; no indirect attribution issue for the sub-claim that conde2022 is a representative DFD/perceptual-IQA work that outperforms classical IQ metrics on natural images.",
+    "out_of_context_check": "The manuscript groups conde2022 under refs 28\u201333 as 'LPIPS and other DFDs' that 'outperform commonly used IQ metrics in measuring the perceptual quality of natural images.' conde2022 does not use the term 'DFD,' but it is a learned full-reference perceptual IQA method that operates on deep CNN feature maps (Inception-ResNet-v2 multi-block features differenced between reference and distorted images and regressed to MOS), and it explicitly positions itself in the LPIPS/learned-deep-feature IQA family while reporting performance on natural-image benchmarks (PIPAL, TID2013, LIVE) that exceeds classical PSNR/SSIM on the harder perceptual benchmarks. Categorical fit is appropriate; minor caveat is that on LIVE (relatively easy distortions) SSIM still beats conde2022, so the generalized 'outperform commonly used IQ metrics' is supported on perceptual-IQA datasets specifically, not uniformly on every traditional metric / dataset combination."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

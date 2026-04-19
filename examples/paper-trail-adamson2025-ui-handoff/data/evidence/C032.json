@@ -1,0 +1,165 @@
+{
+  "claim_id": "C032",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "lao2022",
+  "handle": "pdfs/lao2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "lao2022 is a representative perceptual IQ / DFD / NTIRE-style work.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C032.a",
+      "text": "lao2022 is a perceptual image quality assessment (IQA) work that uses deep features (ViT + shallow CNN) to score perceived image quality, i.e., a representative perceptual IQA / deep-feature-distance-style work.",
+      "evidence": [
+        {
+          "section": "meta.json (title)",
+          "line": 3,
+          "snippet": "Attentions Help CNNs See Better: Attention-based Hybrid Image Quality Assessment Network"
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": 15,
+          "snippet": "Image quality assessment (IQA) algorithm aims to quantify the human perception of image quality. ... we propose an Attention-based Hybrid Image Quality Assessment Network (AHIQ) ... we adopt a two-branch architecture, including a vision transformer (ViT) branch and a convolutional neural network (CNN) branch for feature extraction."
+        },
+        {
+          "section": "Introduction",
+          "line": 1,
+          "snippet": "The goal of Image Quality Assessment (IQA) is to allow computers to simulate the Human Visual System (HVS) through algorithms to score the perceptual quality of images."
+        },
+        {
+          "section": "Image Quality Assessment",
+          "line": 1,
+          "snippet": "Zhang et al. [55] proposed to use the learned perceptual image patch similarity (LPIPS) metric for FR-IQA and proved that deep features obtained through pre-trained DNNs outperform previous classic metrics by large margins."
+        },
+        {
+          "section": "Conclusion",
+          "line": 1,
+          "snippet": "we propose a novel network called Attention-based Hybrid Image Quality Assessment Network (AHIQ), for the full-reference image quality assessment task. The proposed hybrid architecture takes advantage of the global semantic features captured by ViT and local detailed textures from a shallow CNN during feature extraction."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Paper is squarely a perceptual full-reference IQA method; it uses deep ViT+CNN features (a deep-feature-distance-style framing) and is benchmarked on perceptual IQA datasets including PIPAL with GAN distortions."
+    },
+    {
+      "sub_claim_id": "C032.b",
+      "text": "lao2022 is an NTIRE-style work \u2014 specifically, it was submitted to and ranked first on the FR track of the NTIRE 2022 Perceptual IQA Challenge.",
+      "evidence": [
+        {
+          "section": "meta.json (abstract)",
+          "line": 15,
+          "snippet": "AHIQ ranked first on the Full Reference (FR) track of the NTIRE 2022 Perceptual Image Quality Assessment Challenge."
+        },
+        {
+          "section": "Introduction",
+          "line": 7,
+          "snippet": "the proposed architecture achieves outstanding performance on the PIPAL dataset with various GAN-based distortion and ranked first in the NTIRE 2022 challenge on perceptual image quality assessment."
+        },
+        {
+          "section": "NTIRE 2022 Perceptual IQA Challenge",
+          "line": 1,
+          "snippet": "This work is proposed to participate in the NTIRE 2022 perceptual image quality assessment challenge [13] ... Our ensemble approach won the first place in terms of PLCC, SROCC, and main score."
+        },
+        {
+          "section": "Conclusion",
+          "line": 1,
+          "snippet": "The ensembled version of our method ranked first place in the FR track of the NTIRE 2022 Perceptual Image Quality Assessment Challenge."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Direct, repeated self-statement across abstract, intro, dedicated NTIRE section, and conclusion that the work is an NTIRE 2022 Perceptual IQA Challenge entry (and the FR-track winner)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Is lao2022 a perceptual image quality assessment (IQA) method?",
+      "Does lao2022 use deep features (ViT/CNN) to compute a perceptual quality score, in the spirit of deep feature distance / LPIPS-style FR-IQA?",
+      "Did lao2022 participate in (and rank in) the NTIRE 2022 Perceptual Image Quality Assessment Challenge, making it an 'NTIRE-style' work?",
+      "Is the paper representative of the perceptual-IQA / NTIRE benchmark line of work (PIPAL, FR-IQA on GAN-based distortions)?"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json (title + abstract)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Image Quality Assessment (related work)",
+        "read": true
+      },
+      {
+        "section": "Methodology",
+        "read": true
+      },
+      {
+        "section": "NTIRE 2022 Perceptual IQA Challenge",
+        "read": true
+      },
+      {
+        "section": "Conclusion",
+        "read": true
+      },
+      {
+        "section": "Vision Transformer",
+        "read": false
+      },
+      {
+        "section": "Deformable Convolution",
+        "read": false
+      },
+      {
+        "section": "Feature Fusion Module",
+        "read": false
+      },
+      {
+        "section": "Patch-wise Prediction Module",
+        "read": false
+      },
+      {
+        "section": "Experiment 4.1. Datasets",
+        "read": false
+      },
+      {
+        "section": "Implementation Details",
+        "read": false
+      },
+      {
+        "section": "Comparison with the State-of-the-art Methods",
+        "read": false
+      },
+      {
+        "section": "Ablation Study",
+        "read": false
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Paper presents AHIQ as its own primary contribution; it does not credit another primary for being an IQA / NTIRE entry. NTIRE 2022 challenge organizers (ref [13] in lao2022) are cited as the challenge venue, not as the source of the method.",
+    "out_of_context_check": "The manuscript phrasing 'representative perceptual IQ / DFD / NTIRE-style work' is a loose categorization. lao2022 is unambiguously perceptual IQA and an NTIRE 2022 entrant; the 'DFD' (deep feature distance) framing is a reasonable family label since AHIQ is a deep-feature FR-IQA model that explicitly cites LPIPS-style deep-feature methods as predecessors, though the paper itself does not use the abbreviation 'DFD'."
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

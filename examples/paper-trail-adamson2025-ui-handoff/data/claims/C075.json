@@ -1,0 +1,130 @@
+{
+  "claim_id": "C075",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "vandersluijs2023",
+  "handle": "pdfs/vandersluijs2023/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Correlations in terms of SROCC of mean reader scores versus commonly used IQ metrics (PSNR, SSIM, and NRMSE), less routinely reported state-of-the-art IQ metrics (VIF, NQM, HFEN), out-of-domain DFDs (VGG-16 with ImageNet weights, LPIPS and DISTS with VGG-16 backbones and ImageNet weights, and ResNet50 with ImageNet weights), the in-domain DFD (SSFD), and domain-adjacent DFDs (RINFD and Med-VAEFD) are shown in Figure 3.",
+  "manuscript_section": "\u00a73 Results / \u00a72.6 framing (paragraph 57, figure-description sentence)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C075.a",
+      "text": "vandersluijs2023 supports the Med-VAEFD DFD component of the manuscript's SROCC-vs-mean-reader-score analysis shown in Figure 3.",
+      "evidence": [
+        {
+          "section": "Introduction",
+          "line": 5,
+          "snippet": "In this work, we address these challenges by introducing the first large-scale domain-specific variational autoencoder (VAE) designed for compression of high-resolution medical images. We use over one million medical images to train several domain-specific VAEs at various levels of compression."
+        },
+        {
+          "section": "Neural Compression of Medical Images",
+          "line": 11,
+          "snippet": "Motivated by prior work on large-scale neural compressors (Rombach et al., 2022), we learn functions g and h using a fully convolutional VAE with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence. We train six neural compressors with varying values of f (4, 8, and 16) and C (1, 4, and 16)."
+        },
+        {
+          "section": "Evaluation Suite",
+          "line": 13,
+          "snippet": "We use three evaluation tasks for quantitatively and qualitatively assessing compression methods with respect to diagnostic losslessness: (1) fine-grained classification, (2) expert reader study, and (3) perceptual quality metrics."
+        },
+        {
+          "section": "Expert Reader Study",
+          "line": 25,
+          "snippet": "We qualitatively assess image fidelity, diagnostic losslessness, and the presence of artifacts for bicubic interpolation (f \u2208 {4, 8, 16}) and our domain-specific VAEs with equivalent compression factors (Figure 2). Image fidelity for our neural compressor was 2.1 points higher than bicubic interpolation (p < 0.05). Diagnostic losslessness scores also favored our neural compressor by 1.37 points (p < 0.05)."
+        },
+        {
+          "section": "Perceptual Quality Assessments",
+          "line": 16,
+          "snippet": "We evaluate image fidelity by using standard perceptual quality metrics to compare reconstructed images x with the original x. We report Fr\u00e9chet Inception Distance (FID), peak signal-to-noise ratio (PSNR), and multi-scale structural similarity index measure (MS-SSIM)."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CITED_OUT_OF_CONTEXT",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "ARTIFACT OF CLAIM-EXTRACTOR PARAGRAPH-LEVEL MULTI-CITE OVER-TAGGING, analogous to C067. The manuscript sentence describes an SROCC analysis (mean reader scores vs. a battery of IQ metrics and DFDs) that is performed IN THE MANUSCRIPT ITSELF. vandersluijs2023's legitimate role is upstream: it is the primary source for the domain-specific medical VAE encoder that the manuscript repurposes as a feature extractor ('Med-VAEFD'). vandersluijs2023 computes no SROCC, correlates no reader scores against IQ metrics, and does not evaluate VIF, NQM, HFEN, LPIPS, DISTS, SSFD, or RINFD. Unlike C067 (where vandersluijs2023 had no legitimate attachment in the sentence at all and should be dropped), here vandersluijs2023 DOES belong in the manuscript \u2014 just attached to the Med-VAEFD definition sentence rather than to this Figure-3 results-description sentence."
+    }
+  ],
+  "overall_verdict": "CITED_OUT_OF_CONTEXT",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RESCOPE",
+    "suggested_edit": "Move the vandersluijs2023 citation off this Figure-3 SROCC-description sentence and re-attach it only to the sentence(s) where 'Med-VAEFD' is defined/introduced (where the manuscript explains that Med-VAEFD uses the domain-specific medical VAE of van der Sluijs et al., 2023 as a feature extractor). As written, vandersluijs2023 is cited next to an analysis (SROCC of reader scores vs. IQ metrics and DFDs) that is not performed in that paper. This is a paragraph-level multi-cite over-tagging artifact analogous to C067; the difference is that C067 had no legitimate attachment point for vandersluijs2023 in the sentence and should be dropped entirely, whereas here vandersluijs2023 is legitimately the primary for the Med-VAE encoder underlying Med-VAEFD and should be retained at that correct attachment point."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "SROCC / Spearman rank-order correlation of reader scores vs. PSNR/SSIM/NRMSE",
+      "reader study + correlation with image quality (IQ) metrics",
+      "Med-VAE used as a deep-feature distance / DFD (Med-VAEFD) rather than as a compressor",
+      "comparisons across VIF, NQM, HFEN, LPIPS, DISTS, SSFD, RINFD",
+      "rank / correlation / Spearman keywords anywhere in the paper"
+    ],
+    "section_checklist": [
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Our Approach",
+        "read": true
+      },
+      {
+        "section": "Neural Compression of Medical Images",
+        "read": true
+      },
+      {
+        "section": "Method",
+        "read": true
+      },
+      {
+        "section": "Method_2",
+        "read": true
+      },
+      {
+        "section": "Evaluation Suite",
+        "read": true
+      },
+      {
+        "section": "Experiments",
+        "read": true
+      },
+      {
+        "section": "Fine-Grained Classification",
+        "read": true
+      },
+      {
+        "section": "Expert Reader Study",
+        "read": true
+      },
+      {
+        "section": "Perceptual Quality Assessments",
+        "read": true
+      },
+      {
+        "section": "Discussion",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "The Expert Reader Study (line 25) and Perceptual Quality Assessments (lines 16, 27-28) sections together are the nearest adjacent content: vandersluijs2023 does run a radiologist Likert-scale reader study and does report PSNR/MS-SSIM/FID-variants, and even observes qualitatively that perceptual metrics can disagree with diagnostic losslessness (line 28: 'perceptual quality metrics ... are inadequate for capturing diagnostic losslessness'). However, the paper reports no SROCC or any other correlation coefficient between reader ratings and IQ metrics, and no DFD evaluation, so it cannot ground the Figure-3 SROCC sentence.",
+    "indirect_attribution_check": "Not an indirect attribution case: vandersluijs2023 does not credit another primary for an SROCC reader-vs-IQ analysis. The paper is the primary source for the Med-VAE encoder itself, but it is not the source of the SROCC analysis framework or any of the DFDs (RINFD, SSFD, LPIPS, DISTS, etc.) enumerated in the claim sentence.",
+    "out_of_context_check": "Strong out-of-context signal. The cited-in-manuscript sentence enumerates IQ metrics and DFDs being correlated to reader scores via SROCC in Figure 3 of the manuscript. vandersluijs2023's contribution (a medical image compressor + a diagnostic-losslessness evaluation suite built on classification tasks, a Likert reader study, and perceptual metrics) is upstream of that analysis. The correct attachment point for this citation is the definition of 'Med-VAEFD' (Med-VAE as a feature extractor), not the SROCC-results description. Consistent with the dispatch note, this is a paragraph-level multi-cite extractor artifact. Adjudication matches extractor verdict: CITED_OUT_OF_CONTEXT with RESCOPE remediation (move, do not drop), distinguishing this case from C067 where the analogous artifact warranted a drop because no legitimate attachment existed."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "hammernik2021",
+      "salem2002"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

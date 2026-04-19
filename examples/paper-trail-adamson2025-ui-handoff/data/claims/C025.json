@@ -1,0 +1,209 @@
+{
+  "claim_id": "C025",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "desai2022",
+  "handle": "pdfs/desai2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Many works assess MR reconstructions based on task-specific metrics for segmentation, classification, and detection,24\u201326 which brings the IQ assessment closer to the true clinical utility.",
+  "manuscript_section": "Introduction (framing of task-specific IQ assessment)",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C025.a",
+      "text": "Many works assess MR reconstructions based on task-specific metrics for segmentation, classification, and detection,24\u201326 which brings the IQ assessment closer to the true clinical utility.",
+      "evidence": [
+        {
+          "section": "Introduction.txt",
+          "line": 5,
+          "snippet": "We seek to address these challenges with the Stanford Knee MRI with Multi-Task Evaluation (SKM-TEA) dataset, a collection of raw MRI data, corresponding images, quantitative biomarkers, and dense tissue and pathology labels that together facilitate clinically relevant evaluation of MRI reconstruction and analysis methods."
+        },
+        {
+          "section": "Introduction.txt",
+          "line": 8,
+          "snippet": "(3) Benchmarking: We benchmark state-of-the-art MRI reconstruction and segmentation models using both traditional image and label metrics and the new clinically-relevant, quantitative MRI metrics enabled by this dataset."
+        },
+        {
+          "section": "Evaluation and Benchmarks.txt",
+          "line": 1,
+          "snippet": "In this section, we introduce a standardized evaluation pipeline for using quantitative parameter map estimates and dense annotations to quantify clinically-relevant indicators as a new metric for performance of reconstruction and segmentation models. We use this metric, along with standard image quality and pixel-wise metrics, to benchmark models for a subset of tasks in each track."
+        },
+        {
+          "section": "Raw Data Benchmark Track.txt",
+          "line": 3,
+          "snippet": "Tissue segmentation masks and localized pathology labels and bounding boxes can enable segmentation and detection tasks as well as localized image quality for evaluating reconstruction tasks in clinically pertinent regions."
+        },
+        {
+          "section": "Raw Data Benchmark Track.txt",
+          "line": 4,
+          "snippet": "Multi-Task MRI: Given spatially-localized image labels are aligned with SENSE reconstruction targets, data in this track can enable multi-task learning setups that capture the end-to-end imaging workflow, from reconstruction to analysis (segmentation, detection, and qMRI generation)."
+        },
+        {
+          "section": "Related Work.txt",
+          "line": 5,
+          "snippet": "These datasets also do not provide the raw k-space, which hampers end-to-end evaluation of the impact of reconstruction methods on downstream clinical utility."
+        },
+        {
+          "section": "Conclusion.txt",
+          "line": 1,
+          "snippet": "We find that existing evaluation metrics for both image and segmentation quality are discordant with qMRI biomarkers, particularly in physiologically relevant tissue subregions, which may warrant the need for the proposed evaluation framework for direct estimation of these biomarkers."
+        },
+        {
+          "section": "Results and Analysis.txt",
+          "line": 1,
+          "snippet": "While standard IQA metrics indicated reasonably high performance, T 2 error performance of these models was more variable (Table 3)... The discordance between relative differences for ML and qMRI metrics may suggest that standard ML metrics may not be a wholistic representation of relative performance differences between models. Thus, the use of only ML metrics for benchmark comparison may lead to inconsistencies between reported performance and practical utility."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED_WITH_MINOR",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "SKM-TEA evaluates reconstruction via segmentation + detection + qMRI parameter estimation; the manuscript's 'segmentation, classification, or other downstream tasks' framing is supported by the 'segmentation/other downstream tasks' portion. SKM-TEA's downstream tasks include detection (bounding-box pathology localization) rather than image-level classification per se, but this comfortably falls within the broader 'or other downstream tasks' framing."
+    }
+  ],
+  "overall_verdict": "CONFIRMED_WITH_MINOR",
+  "overall_flag": "MINOR",
+  "remediation": {
+    "category": "REWORD",
+    "suggested_edit": "Optionally tighten wording to 'segmentation, detection, or other downstream tasks' (or 'segmentation, classification, detection, or other downstream tasks') to better reflect that SKM-TEA's task suite is segmentation + detection + qMRI rather than image-level classification. Current phrasing is acceptable as a broad framing claim."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "segmentation (segmentation metrics: DSC, ASSD, VOE, CV used for evaluating reconstructions/segmentations)",
+      "downstream (downstream clinical utility; downstream tasks; end-to-end evaluation of reconstruction impact on downstream)",
+      "task-specific (task-specific metrics; multi-task evaluation; per-task evaluation across reconstruction/segmentation/detection/qMRI)",
+      "evaluation (evaluation framework; clinically-relevant evaluation; benchmark evaluation)",
+      "SKM-TEA (Stanford Knee MRI with Multi-Task Evaluation dataset name; multi-task evaluation framework)"
+    ],
+    "section_checklist": [
+      {
+        "section": "Introduction.txt",
+        "read": true
+      },
+      {
+        "section": "Background.txt",
+        "read": true
+      },
+      {
+        "section": "Related Work.txt",
+        "read": true
+      },
+      {
+        "section": "Dataset.txt",
+        "read": false
+      },
+      {
+        "section": "Dataset_2.txt",
+        "read": false
+      },
+      {
+        "section": "Data Collection.txt",
+        "read": false
+      },
+      {
+        "section": "Data Preparation.txt",
+        "read": false
+      },
+      {
+        "section": "Localized pathology labels.txt",
+        "read": false
+      },
+      {
+        "section": "Localized pathology labels_.txt",
+        "read": false
+      },
+      {
+        "section": "Meniscus.txt",
+        "read": false
+      },
+      {
+        "section": "Meniscus_.txt",
+        "read": false
+      },
+      {
+        "section": "Dataset Tracks.txt",
+        "read": true
+      },
+      {
+        "section": "Raw Data Benchmark Track.txt",
+        "read": true
+      },
+      {
+        "section": "DICOM Benchmark Track.txt",
+        "read": false
+      },
+      {
+        "section": "Evaluation and Benchmarks.txt",
+        "read": true
+      },
+      {
+        "section": "Metrics.txt",
+        "read": true
+      },
+      {
+        "section": "Metric Concordance.txt",
+        "read": false
+      },
+      {
+        "section": "Metric Concordance_.txt",
+        "read": false
+      },
+      {
+        "section": "Baselines.txt",
+        "read": true
+      },
+      {
+        "section": "Results and Analysis.txt",
+        "read": true
+      },
+      {
+        "section": "Limitations and Ethical Considerations.txt",
+        "read": true
+      },
+      {
+        "section": "Conclusion.txt",
+        "read": true
+      },
+      {
+        "section": "B Tissue Subregions.txt",
+        "read": false
+      },
+      {
+        "section": "B.1 Relevant Tissue Subregions.txt",
+        "read": false
+      },
+      {
+        "section": "B.2 Subregion Extraction.txt",
+        "read": false
+      },
+      {
+        "section": "C qMRI T 2 Pipeline.txt",
+        "read": false
+      },
+      {
+        "section": "E.1 Additional Segmentation Baselines.txt",
+        "read": false
+      },
+      {
+        "section": "E.2 T 2 Error.txt",
+        "read": false
+      },
+      {
+        "section": "E.3 ML-T 2 Metric Concordance in Tissue Sub-Regions.txt",
+        "read": false
+      }
+    ],
+    "closest_adjacent": "Evaluation and Benchmarks L1 explicitly states the paper introduces 'a standardized evaluation pipeline for using quantitative parameter map estimates and dense annotations to quantify clinically-relevant indicators as a new metric for performance of reconstruction and segmentation models.' Combined with the Raw Data Benchmark Track's framing of 'Multi-Task MRI: ...end-to-end imaging workflow, from reconstruction to analysis (segmentation, detection, and qMRI generation)' and the Related Work statement that omitting raw k-space 'hampers end-to-end evaluation of the impact of reconstruction methods on downstream clinical utility,' this is a near-verbatim match for the manuscript's claim that SKM-TEA assesses MR reconstructions via task-specific/downstream metrics.",
+    "indirect_attribution_check": "Desai 2022 is a primary dataset/methodology paper proposing the SKM-TEA dataset and the multi-task downstream evaluation framework itself. It is not relaying a downstream-task-evaluation idea from another primary; rather it operationalizes such evaluation. Direct attribution is appropriate.",
+    "out_of_context_check": "No out-of-context concern. SKM-TEA frames itself precisely as a benchmark for end-to-end MRI workflows with downstream-task (segmentation, detection, qMRI) evaluation of reconstruction quality. One mild nuance: the manuscript writes 'segmentation, classification, or other downstream tasks' while SKM-TEA's downstream task suite is segmentation + detection (bounding-box pathology localization) + qMRI parameter estimation rather than image-level classification per se. The cited paper does not explicitly include 'classification' as a benchmark task (the MRNet/OAI classification datasets are discussed in Related Work as comparators). Still, SKM-TEA's segmentation + detection + qMRI evaluation comfortably falls within 'segmentation ... or other downstream tasks,' so the citation is in-context for the broader framing claim."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication"
+}

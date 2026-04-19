@@ -1,0 +1,143 @@
+{
+  "claim_id": "C005",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "chen2022",
+  "handle": "pdfs/chen2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Compressed sensing and deep learning (DL) techniques offer significant potential to accelerate MR acquisitions and remain an active area of research.1\u20134 Metrics such as NRMSE, PSNR, and SSIM are routinely used to assess the image quality (IQ) of MR image reconstructions and benchmark research methods,5 but are used out of convention rather than because they are particularly well-suited metrics for assessing perceptual IQ.",
+  "manuscript_section": "Introduction (abstract / opening framing)",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C005.a",
+      "text": "Compressed sensing and deep learning (DL) techniques offer significant potential to accelerate MR acquisitions and remain an active area of research.1\u20134 Metrics such as NRMSE, PSNR, and SSIM are routi",
+      "evidence": [
+        {
+          "section": "I. Introduction",
+          "line": 3,
+          "snippet": "Among different undersampling techniques [1], compressed sensing (CS) yields an aggressive acceleration rate up to 12.5-fold [5]. CS assumes that, if the undersampled signals can be compressed accurately, they can be decompressed or reconstructed accurately [2], [6] without the need for full sampling."
+        },
+        {
+          "section": "I. Introduction",
+          "line": 4,
+          "snippet": "Driven by the growing research on deep learning in computer vision, deep-learning-based algorithms have gained popularity for CS-based MRI (CS-MRI) reconstruction. ... Compared with traditional nondeep-learning-based approaches, deep learning enables higher quality reconstruction [3], [8]-[10] and the acceleration ratio of MRI acquisition. With an exponentially increasing interest toward deep-learning-based CS-MRI, the complexity and diversity of the reconstruction algorithms have increased dramatically."
+        },
+        {
+          "section": "V. Meta-Analysis Results",
+          "line": 1,
+          "snippet": "Among the 92 studies that meet our meta-analysis inclusion criteria [...], the publication number increases exponentially from 2017 to 2020 [see Fig. 1(c)]. ... The rising publications underscore the increasing importance of deep-learning-based CS-MRI."
+        },
+        {
+          "section": "VII. Conclusion and Outlook",
+          "line": 1,
+          "snippet": "With the rapid rise of deep learning in computer vision, the past four years have witnessed substantial changes in the landscape of deep-learning-based CS-MRI techniques. ... we can envisage that the development of deep-learning-based fast CS-MRI will usher in a new era of digital healthcare and personalized medicine, which will be equipped with high throughput and low-cost imaging."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "chen2022 is a systematic review and meta-analysis of deep-learning-based CS-MRI documenting exponential growth in publications (2017-2020) and explicitly framing CS+DL as a means to accelerate MR acquisition; directly supports the manuscript's framing-style claim. The metrics-vs-radiologist-perception clause of the manuscript sentence is a separate assertion not attributed to chen2022 in this scoping; chen2022 discusses SSIM/PSNR/NRMSE prevalence and inter-metric correlation but does not address radiologist-perceived quality correlation in the read sections."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "deep learning compressed sensing MRI active area of research",
+      "CS-MRI deep learning growing / popularity / exponential interest",
+      "deep-learning-based CS-MRI accelerate MR acquisition",
+      "AI-based reconstruction accelerate MRI"
+    ],
+    "section_checklist": [
+      {
+        "section": "I. Introduction",
+        "read": true
+      },
+      {
+        "section": "II. Network Architectures",
+        "read": false
+      },
+      {
+        "section": "III. Image Redundancy",
+        "read": true
+      },
+      {
+        "section": "IV. Meta-Analysis Method",
+        "read": false
+      },
+      {
+        "section": "V. Meta-Analysis Results",
+        "read": true
+      },
+      {
+        "section": "VI. Challenges",
+        "read": false
+      },
+      {
+        "section": "VII. Conclusion and Outlook",
+        "read": true
+      },
+      {
+        "section": "C. Evaluation Metrics",
+        "read": true
+      },
+      {
+        "section": "B. Design",
+        "read": false
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "chen2022 is a review/meta-analysis; it cites primary works (e.g., Lustig 2007 for CS, DC-CNN, DAGAN) for the underlying techniques but speaks in its own voice as an authoritative survey of the field's activity and growth. Appropriate as a framing citation rather than a primary source citation.",
+    "out_of_context_check": "chen2022's framing of DL+CS-MRI as a rapidly growing research area aligns with the manuscript's 'active area of research' framing. Context match is appropriate."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "lustig2007",
+      "sandino2020",
+      "hammernik2021",
+      "hammernik2018"
+    ],
+    "sibling_verdicts": [
+      {
+        "citekey": "lustig2007",
+        "supports_sub_claim_ids": [],
+        "excerpt": "No ingested handle at pdfs/lustig2007/; sibling not touched in this evidence pass."
+      },
+      {
+        "citekey": "sandino2020",
+        "supports_sub_claim_ids": [],
+        "excerpt": "No ingested handle at pdfs/sandino2020/; sibling not touched in this evidence pass."
+      },
+      {
+        "citekey": "hammernik2021",
+        "supports_sub_claim_ids": [
+          "C005.a"
+        ],
+        "excerpt": "Title: 'Systematic evaluation of iterative deep neural networks for fast parallel MRI reconstruction with sensitivity-weighted coil combination' (Magn Reson Med, 2021). Per meta.json, paper systematically evaluates DL-based fast MRI reconstruction approaches, consistent with framing CS+DL as an active research area."
+      },
+      {
+        "citekey": "hammernik2018",
+        "supports_sub_claim_ids": [
+          "C005.a"
+        ],
+        "excerpt": "Title: 'Learning a Variational Network for Reconstruction of Accelerated MRI Data'. Per meta.json abstract: 'Generalized compressed sensing reconstruction formulated as a variational model is embedded in an unrolled gradient descent scheme... can easily be integrated into clinical workflow.' Directly demonstrates DL+CS for accelerating MRI."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

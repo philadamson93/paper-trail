@@ -1,0 +1,192 @@
+{
+  "claim_id": "C069",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "vandersluijs2023",
+  "handle": "pdfs/vandersluijs2023/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "We propose a second domain-adjacent DFD that leverages the Med-VAE pre-trained encoder of van der Sluijs et al. (50). The Med-VAE encoder uses a fully convolutional VAE trained on a combined corpus of approximately 1 million chest radiographs and full-field digital mammograms with a combined loss function (per-pixel L2 + perceptual + adversarial).",
+  "manuscript_section": "Methods (Domain-adjacent DFD: Med-VAE)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C069.a",
+      "text": "van der Sluijs et al. propose Med-VAE (a domain-specific VAE for medical image compression).",
+      "evidence": [
+        {
+          "section": "Introduction.txt",
+          "line": 5,
+          "snippet": "In this work, we address these challenges by introducing the first large-scale domain-specific variational autoencoder (VAE) designed for compression of high-resolution medical images. We use over one million medical images to train several domain-specific VAEs at various levels of compression."
+        },
+        {
+          "section": "Our Approach.txt",
+          "line": 1,
+          "snippet": "In this section, we introduce our domain-specific VAE for medical image compression (Section 2.1). We also discuss our evaluation suite for benchmarking compression methods with respect to diagnostic losslessness (Section 2.2)."
+        },
+        {
+          "section": "meta.json (title)",
+          "line": 1,
+          "snippet": "Title: 'Diagnostically Lossless Compression of Medical Images.' Abstract: '(1) use over one million medical images to train a domain-specific neural compressor and (2) develop a comprehensive evaluation suite for measuring compressed image quality.'"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "domain-specific VAE / domain-specific variational autoencoder",
+      "claim_value": "Med-VAE",
+      "nuance": "The paper introduces and proposes the medical-image VAE that the manuscript labels 'Med-VAE,' but the source paper itself never uses the name 'Med-VAE' (it refers to the model as 'our domain-specific VAE' / 'first large-scale domain-specific variational autoencoder ... for compression of high-resolution medical images'). The 'Med-VAE' brand name appears to have been adopted in subsequent work or by the manuscript authors; the underlying proposal is correctly attributed to van der Sluijs et al."
+    },
+    {
+      "sub_claim_id": "C069.b",
+      "text": "Med-VAE is a fully convolutional VAE.",
+      "evidence": [
+        {
+          "section": "Neural Compression of Medical Images.txt",
+          "line": 3,
+          "snippet": "Motivated by prior work on large-scale neural compressors (Rombach et al., 2022), we learn functions g and h using a fully convolutional VAE with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence."
+        },
+        {
+          "section": "content.txt",
+          "line": 11,
+          "snippet": "L11 [p2]: ... we learn functions g and h using a fully convolutional VAE with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Verbatim phrase 'fully convolutional VAE' appears in the Method section."
+    },
+    {
+      "sub_claim_id": "C069.c",
+      "text": "Trained on a combined corpus of ~1 million chest radiographs and full-field digital mammograms.",
+      "evidence": [
+        {
+          "section": "Neural Compression of Medical Images.txt",
+          "line": 4,
+          "snippet": "The training dataset D consists of X-ray data from two modalities: chest X-rays and full-field digital mammograms (FFDM). ... We use images from two chest X-ray datasets and six FFDM datasets: MIMIC-CXR (Johnson et al., 2019), CANDID-PTX (Feng et al., 2021), EMBED (Jeong et al., 2022), CSAW-CC (Sorkhei et al., 2021), RSNA Mammography (RSNA, 2023), VinDr-Mammo (Nguyen et al., 2022), INBreast (Moreira et al., 2012), and CMMD (Cai et al., 2023). The final dataset comprises 1,021,356 images."
+        },
+        {
+          "section": "Introduction.txt",
+          "line": 5,
+          "snippet": "We use over one million medical images to train several domain-specific VAEs at various levels of compression."
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": 1,
+          "snippet": "Abstract: '(1) use over one million medical images to train a domain-specific neural compressor ...'"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "1,021,356 images (chest X-rays + full-field digital mammograms)",
+      "claim_value": "approximately 1 million chest radiographs and full-field digital mammograms",
+      "nuance": "Exact corpus size is 1,021,356 images drawn from 2 chest X-ray datasets (MIMIC-CXR, CANDID-PTX) and 6 FFDM datasets (EMBED, CSAW-CC, RSNA Mammography, VinDr-Mammo, INBreast, CMMD). 'Approximately 1 million' and 'chest radiographs and full-field digital mammograms' both match exactly."
+    },
+    {
+      "sub_claim_id": "C069.d",
+      "text": "Med-VAE is trained with a combined loss function = per-pixel L2 + perceptual + adversarial.",
+      "evidence": [
+        {
+          "section": "Neural Compression of Medical Images.txt",
+          "line": 3,
+          "snippet": "Motivated by prior work on large-scale neural compressors (Rombach et al., 2022), we learn functions g and h using a fully convolutional VAE with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence."
+        },
+        {
+          "section": "content.txt (full document)",
+          "line": null,
+          "snippet": "Searched the full ingested content (content.txt + all section files) for 'L2', 'MSE', 'mean squared', 'per-pixel', 'pixel-wise', 'pixel loss', 'reconstruction loss'. The only hits for 'L2' are line-number tags (e.g., 'L2 [p1]:'), not loss-function references. There is no mention of an L2 / per-pixel L2 / MSE pixel reconstruction loss anywhere in the paper."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONTRADICTED",
+      "paper_value": "perceptual loss + patch-based adversarial objective + Kullback-Leibler (KL) divergence penalty",
+      "claim_value": "per-pixel L2 + perceptual + adversarial",
+      "nuance": "The source paper specifies a three-term loss: (1) perceptual loss, (2) patch-based adversarial objective, (3) KL-divergence penalty. The manuscript correctly lists perceptual and adversarial terms but (a) substitutes a 'per-pixel L2' reconstruction term that the paper never mentions, and (b) omits the KL-divergence term that the paper does specify. The KL term is structurally required for a VAE; the manuscript likely confused the VAE's KL term with an L2 reconstruction term, or imported the per-pixel L2 from Rombach et al. 2022's LDM autoencoder (which van der Sluijs cite as motivation but whose loss recipe they do not reproduce verbatim in the text)."
+    }
+  ],
+  "overall_verdict": "PARTIALLY_SUPPORTED",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "REWORD",
+    "suggested_edit": "Replace '(per-pixel L2 + perceptual + adversarial)' with '(perceptual + patch-based adversarial + KL-divergence)' to match the loss specification given in van der Sluijs et al. 2023 (Sec. 2.1: 'a fully convolutional VAE with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence'). If the manuscript intends to reference the Rombach et al. 2022 LDM autoencoder loss recipe (which does include an L1/L2 reconstruction term), cite Rombach et al. 2022 alongside or in place of van der Sluijs et al. for the loss-composition claim. Optionally, also note that van der Sluijs et al. do not name the model 'Med-VAE' in the cited paper itself."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Med-VAE / MedVAE",
+      "fully convolutional VAE",
+      "domain-specific VAE / variational autoencoder",
+      "1 million / over one million / 1,021,356",
+      "chest X-rays / chest radiographs / full-field digital mammograms / FFDM",
+      "L2 / MSE / per-pixel / pixel-wise / reconstruction loss",
+      "perceptual loss / LPIPS",
+      "adversarial / patch-based adversarial / discriminator",
+      "KL divergence / Kullback-Leibler"
+    ],
+    "section_checklist": [
+      {
+        "section": "Introduction.txt",
+        "read": true
+      },
+      {
+        "section": "Our Approach.txt",
+        "read": true
+      },
+      {
+        "section": "Neural Compression of Medical Images.txt",
+        "read": true
+      },
+      {
+        "section": "Method.txt",
+        "read": true
+      },
+      {
+        "section": "Method_2.txt",
+        "read": true
+      },
+      {
+        "section": "Evaluation Suite.txt",
+        "read": false
+      },
+      {
+        "section": "Experiments.txt",
+        "read": false
+      },
+      {
+        "section": "Fine-Grained Classification.txt",
+        "read": false
+      },
+      {
+        "section": "Perceptual Quality Assessments.txt",
+        "read": false
+      },
+      {
+        "section": "Expert Reader Study.txt",
+        "read": false
+      },
+      {
+        "section": "Discussion.txt",
+        "read": false
+      },
+      {
+        "section": "content.txt (full)",
+        "read": true
+      },
+      {
+        "section": "meta.json (abstract + metadata)",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "For C069.d (loss function): The paper's actual loss specification is 'a fully convolutional VAE with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence' (Sec. 2.1, content.txt L11). This is the closest passage to the manuscript's '(per-pixel L2 + perceptual + adversarial)' claim. It matches on perceptual + adversarial but contradicts on the third term: paper says KL, manuscript says per-pixel L2. For C069.a (Med-VAE name): The closest passage is 'we introduce our domain-specific VAE for medical image compression' / 'first large-scale domain-specific variational autoencoder (VAE) designed for compression of high-resolution medical images' \u2014 the model is proposed but never branded 'Med-VAE' in this paper.",
+    "indirect_attribution_check": "The paper cites Rombach et al. 2022 as motivation for the architecture and loss family ('Motivated by prior work on large-scale neural compressors (Rombach et al., 2022), we learn functions g and h using a fully convolutional VAE with a combination of...'). The specific loss combination (perceptual + adversarial + KL) is van der Sluijs's own training recipe for their medical-image VAE \u2014 not a fact relayed indirectly from Rombach. So the loss claim is a direct attribution to van der Sluijs et al. (just contradicted on the L2 term). The 'Med-VAE' brand name does not appear in the source paper at all; if the manuscript is using a name introduced in a follow-up paper by overlapping authors, that secondary work should also be cited.",
+    "out_of_context_check": "The manuscript uses van der Sluijs et al. as a domain-adjacent pre-trained encoder for a DFD pipeline. The source paper's actual context is medical image compression (latent representations for downstream classification, expert reader study, perceptual metrics). The encoder use case is compatible with the paper's own usage (the paper itself uses the latent z for fine-grained classification with HRNet linear probing), so there is no out-of-context misuse. The mismatch is on the loss specification (sub-claim d) and the 'Med-VAE' brand name (sub-claim a), not on the manner in which the model is being deployed."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "grounding"
+}

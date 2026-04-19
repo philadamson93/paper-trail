@@ -1,0 +1,173 @@
+{
+  "claim_id": "C003",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "hammernik2021",
+  "handle": "pdfs/hammernik2021/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Compressed sensing and deep learning (DL) techniques offer significant potential to accelerate MR acquisitions and remain an active area of research.1\u20134",
+  "manuscript_section": "Introduction (opening framing)",
+  "claim_type": {
+    "type": "BACKGROUND",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C003.a",
+      "text": "Hammernik 2021 is a representative deep-learning-based accelerated parallel MRI reconstruction work, supporting the framing that DL+CS for MR is an active research area.",
+      "evidence": [
+        {
+          "section": "_ INTRODUCTION.txt",
+          "line": 1,
+          "snippet": "Parallel imaging (PI) [1][2][3] forms the foundation of accelerated data acquisition in magnetic resonance imaging (MRI), which is tremendously time-consuming. In the last decade, PI combined with compressed sensing (CS) techniques have resulted in substantial improvements in acquisition speed and image quality. [4][5][6][7][8][9] ... Starting in 2016, deep learning algorithms have become extremely popular and effective tools in data-driven learning of inverse problems and have enabled progress beyond the limitations of CS."
+        },
+        {
+          "section": "_ INTRODUCTION.txt",
+          "line": 2,
+          "snippet": "Deep learning for image reconstruction is an enormously fast-growing field, which makes it challenging to keep an overview over the different approaches. For details on the developments of deep learning for MRI reconstruction, we refer the interested reader to survey papers. [10][11][12][13]"
+        },
+        {
+          "section": "K E Y W O R D S.txt",
+          "line": 1,
+          "snippet": "data consistency, deep learning, domain shift, down-up networks, fastMRI, iterative image reconstruction, parallel imaging"
+        },
+        {
+          "section": "Related work Acquisition.txt",
+          "line": 2,
+          "snippet": "Despite the tremendous volume of research, there remain several open questions in the field of learning MRI reconstruction. It is still an open question how well neural networks generalize to anatomical changes, and variations in training and test domain at a large scale."
+        },
+        {
+          "section": "Related work Acquisition.txt",
+          "line": 4,
+          "snippet": "The aim of this work is to bridge the gap of the aforementioned challenges that we have observed in deep learning for parallel MRI reconstruction. We study the influence of regularization networks, DC layers, and variations in the data, in a controlled experimental setup."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Hammernik 2021 (DOI 10.1002/mrm.28827) is a Magnetic Resonance in Medicine paper that systematically studies DL-based accelerated parallel MRI reconstruction (DUNET regularization + various data-consistency layers) on the fastMRI dataset. Its Introduction explicitly frames CS-PI as the prior art that DL approaches now extend, and characterizes deep learning for MR reconstruction as an 'enormously fast-growing field' with 'tremendous volume of research' \u2014 directly supporting the manuscript's framing that DL+CS for accelerated MR is an active research area. The paper itself is not a CS-only paper; rather it is a DL-for-MR paper that builds on CS, which is the typical citation pattern for the framing claim."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "compressed sensing",
+      "deep learning",
+      "accelerat (acceleration / accelerated MR acquisition)",
+      "active area / fast-growing / tremendous volume of research",
+      "MR acquisition / MRI reconstruction"
+    ],
+    "section_checklist": [
+      {
+        "section": "_ INTRODUCTION.txt",
+        "read": true
+      },
+      {
+        "section": "_ THEORY.txt",
+        "read": false
+      },
+      {
+        "section": "_ METHODS.txt",
+        "read": false
+      },
+      {
+        "section": "_ Learning unrolled optimization.txt",
+        "read": false
+      },
+      {
+        "section": "_ Network architectures.txt",
+        "read": false
+      },
+      {
+        "section": "_ Regularization networks.txt",
+        "read": false
+      },
+      {
+        "section": "_ Data consistency.txt",
+        "read": false
+      },
+      {
+        "section": "_ Experimental setup.txt",
+        "read": false
+      },
+      {
+        "section": "_ fastMRI datasets.txt",
+        "read": false
+      },
+      {
+        "section": "_ Data processing.txt",
+        "read": false
+      },
+      {
+        "section": "_ Training setup.txt",
+        "read": true
+      },
+      {
+        "section": "_ RESULTS.txt",
+        "read": false
+      },
+      {
+        "section": "_ DISCUSSION.txt",
+        "read": false
+      },
+      {
+        "section": "_ CONCLUSION.txt",
+        "read": true
+      },
+      {
+        "section": "Related work Acquisition.txt",
+        "read": true
+      },
+      {
+        "section": "Importance of DC.txt",
+        "read": false
+      },
+      {
+        "section": "Variations in DC.txt",
+        "read": false
+      },
+      {
+        "section": "Variations in regularization networks.txt",
+        "read": false
+      },
+      {
+        "section": "Robustness to variations in data.txt",
+        "read": false
+      },
+      {
+        "section": "FIGURE S2.txt",
+        "read": false
+      },
+      {
+        "section": "K E Y W O R D S.txt",
+        "read": true
+      },
+      {
+        "section": "2.txt",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "Introduction L1: 'PI combined with compressed sensing (CS) techniques have resulted in substantial improvements in acquisition speed and image quality... Starting in 2016, deep learning algorithms have become extremely popular and effective tools... and have enabled progress beyond the limitations of CS.' This is essentially a textbook framing sentence supporting the claim verbatim.",
+    "indirect_attribution_check": "The Introduction cites refs [4]-[9] for PI+CS advances and [10]-[13] for DL-for-MRI surveys, so the framing is partly relayed via cited surveys/prior work. However, the paper itself is a primary DL-for-MR research contribution (proposing DUNET, evaluating DC layers on fastMRI), so citing it as evidence that DL+CS for MR is an active area is a direct (not purely indirect) attribution.",
+    "out_of_context_check": "No evidence of out-of-context use. The manuscript's framing claim aligns with how Hammernik 2021 itself frames its own context (CS \u2192 DL transition; deep learning for MR reconstruction is a 'fast-growing field'). The citation is used as a representative DL-for-accelerated-MR work, which matches the paper's actual contribution."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "hammernik2018"
+    ],
+    "sibling_verdicts": [
+      {
+        "citekey": "hammernik2018",
+        "supports_sub_claim_ids": [
+          "C003.a"
+        ],
+        "excerpt": "From sibling meta.json abstract: 'To allow fast and high-quality reconstruction of clinical accelerated multi-coil MR data by learning a variational network that combines the mathematical structure of variational models with deep learning... Generalized compressed sensing reconstruction formulated as a variational model is embedded in an unrolled gradient descent scheme.' Hammernik 2018 is the seminal Variational Network paper that explicitly fuses CS reconstruction with deep learning for accelerated multi-coil MR \u2014 directly supporting the framing that CS+DL accelerate MR acquisitions and form an active research area."
+      }
+    ]
+  },
+  "stage": "adjudication"
+}

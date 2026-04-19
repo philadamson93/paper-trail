@@ -1,0 +1,162 @@
+{
+  "claim_id": "C035",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "gu2022",
+  "handle": "pdfs/gu2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "\"Although LPIPS and other DFDs28\u201333 outperform commonly used IQ metrics in terms of correlation with human perceptual judgments in large-scale computer vision studies,34 these studies evaluate DFDs on natural images belonging to the same domain as the images used for encoder training.\"",
+  "manuscript_section": "",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C035.a",
+      "text": "The gu2022 (NTIRE Perceptual IQA Challenge) results show that deep-feature-distance (DFD) methods (such as LPIPS, DISTS, PieAPP, SWD, and the deep-learning-based participating teams) outperform commonly used / traditional IQ metrics (PSNR, SSIM, FSIM, NIQE, PI) in correlating with human perceptual judgments on natural images.",
+      "evidence": [
+        {
+          "section": "meta.json (abstract)",
+          "line": 31,
+          "snippet": "Almost all of them have achieved much better results than existing IQA methods, while the winning method can demonstrate state-of-the-art performance."
+        },
+        {
+          "section": "Challenge Results",
+          "line": 1,
+          "snippet": "We choose PSNR, SSIM [54] and FSIM [59] as representative traditional IQA methods, PI [7] and NIQE [35] as representative blind IQA methods, and LPIPS [61], DISTS [12], PieAPP [39] and SWD [19] as representative deep-learning based methods."
+        },
+        {
+          "section": "Challenge Results",
+          "line": 3,
+          "snippet": "11 of 13 participating teams achieve an SRCC score higher than 0.75 on PIPAL, which significantly surpasses the highest performance of existing algorithms (0.65). The champion team achieves an SRCC score of 0.799 and a PLCC score of 0.790, refreshing the state-of-the-art performance on PIPAL."
+        },
+        {
+          "section": "Challenge Results",
+          "line": 3,
+          "snippet": "The top three teams in the challenge all achieve competitive results with existing methods on TID2013 and LIVE, showing their good generalization ability on traditional distortion types."
+        },
+        {
+          "section": "Challenge Results",
+          "line": 4,
+          "snippet": "One can observe that the objective scores predicted by the top solutions have higher correlations with the subjective evaluations than existing methods. ... the correlation between the evaluation of the champion solution (1st) and the subjective score reaches 0.95."
+        },
+        {
+          "section": "Introduction",
+          "line": 1,
+          "snippet": "It has been noticed that the contradiction between the quantitative evaluation results and the real perceptual quality is increasing [6, 7, 20]. This will also affect the development of image processing algorithms, if the IQA methods cannot objectively compare their perceptual quality."
+        },
+        {
+          "section": "Related Work",
+          "line": 1,
+          "snippet": "Zhang et al. [61] propose to use pre-trained deep networks to calculate the perceptual similarity and achieve good results."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source reports head-to-head benchmark numbers (champion SRCC ~0.799 / PLCC ~0.790; 11/13 teams >0.75 SRCC vs prior best 0.65) on PIPAL plus generalization on TID2013 and LIVE, directly supporting the manuscript's framing that DFD-style metrics outperform traditional IQ metrics on natural-image perceptual quality. Note: the manuscript sentence's restrictive 'on natural images belonging to the same domain as the images used for encoder training' qualifier is not itself sourced from gu2022 \u2014 it is the manuscript's reframing about the limitation of these natural-image studies; gu2022 is cited only for the antecedent 'DFDs outperform commonly used IQ metrics' fact, which is confirmed."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RECITE",
+    "suggested_edit": "Bib-level remediation: the fetched PDF for citekey 'gu2022' is the NTIRE 2021 Perceptual IQA Challenge report (Gu et al., arXiv:2105.03072, 2021), not the NTIRE 2022 challenge paper the citekey nominally targets. Substance of the cited claim is preserved (the 2022 challenge is a continuation of the same PIPAL benchmark series with the same comparison structure), but the bib entry should be reconciled: either (a) update the bib entry to the actual NTIRE 2022 challenge report (and re-verify against that paper) or (b) re-key this citation to gu2021 and update the manuscript reference accordingly. Track as a separate bibliography remediation item; the claim verdict against the substituted 2021 source is CONFIRMED."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Does gu2022 show that LPIPS / deep-feature-distance (DFD) IQA methods outperform commonly used (traditional) IQ metrics for natural images?",
+      "Do the NTIRE perceptual-IQA challenge results in gu2022 demonstrate deep-learning-based IQA methods surpassing PSNR / SSIM / FSIM / NIQE / PI baselines on perceptual quality of natural images?",
+      "Is gu2022 evidence that deep-feature-based perceptual quality metrics correlate better with human subjective scores on natural images than classical IQA metrics?",
+      "Does gu2022 benchmark LPIPS-style deep IQA against traditional IQA metrics and find the deep methods superior on natural-image perceptual quality?"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json (title + abstract)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Related Work",
+        "read": true
+      },
+      {
+        "section": "The NTIRE Challenge on Perceptual IQA",
+        "read": true
+      },
+      {
+        "section": "Challenge Results",
+        "read": true
+      },
+      {
+        "section": "Challenge Methods",
+        "read": true
+      },
+      {
+        "section": "LIPT (team description)",
+        "read": false
+      },
+      {
+        "section": "MACS (team description)",
+        "read": false
+      },
+      {
+        "section": "Huawei Noah's Ark (team description)",
+        "read": false
+      },
+      {
+        "section": "SI Analytics (team description)",
+        "read": false
+      },
+      {
+        "section": "THUIIGROUP1919 (team description)",
+        "read": false
+      },
+      {
+        "section": "MT-GTD (team description)",
+        "read": false
+      },
+      {
+        "section": "Yahaha (team description)",
+        "read": false
+      },
+      {
+        "section": "Gaussian Noise (team description)",
+        "read": false
+      },
+      {
+        "section": "tsubota (team description)",
+        "read": false
+      },
+      {
+        "section": "debut kele (team description)",
+        "read": false
+      },
+      {
+        "section": "The Amaurotia (team description)",
+        "read": false
+      },
+      {
+        "section": "HIFIC Compression ESRGAN x2 SPSR (team description)",
+        "read": false
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "gu2022 is itself the primary report of the NTIRE perceptual IQA challenge results. It cites LPIPS (Zhang et al. [61]), DISTS [12], PieAPP [39], SWD [19], and the PIPAL dataset [20] as predecessors, but the head-to-head benchmark numbers comparing DFD-style methods against traditional metrics on PIPAL/TID2013/LIVE are reported in this paper as a primary result of the challenge. No indirect-attribution downgrade warranted.",
+    "out_of_context_check": "The manuscript invokes gu2022 alongside refs 28\u201332/34 to support a general framing that DFDs outperform commonly used IQ metrics on natural images. gu2022's PIPAL test set focuses substantially on GAN-based perceptual distortions, but the paper also reports results on TID2013 and LIVE (classical natural-image IQA datasets) and frames its contribution against 'existing IQA methods' broadly, so the framing usage is consistent with the source's own framing. No CITED_OUT_OF_CONTEXT downgrade warranted."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "keshari2022"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "provenance_note": "PROVENANCE CAVEAT (carried from grounding evidence): The fetched PDF at pdfs/gu2022/ is the NTIRE 2021 Perceptual Image Quality Assessment Challenge paper (Gu et al., arXiv:2105.03072, pub_date 2021-06-28), not the NTIRE 2022 challenge paper that the citekey 'gu2022' nominally refers to. Per the v1 ledger note, this substitution was carried over because the structurally similar 2021 challenge paper still supports the manuscript's framing about deep-feature-distance methods outperforming traditional IQ metrics on natural-image perceptual quality (the 2022 challenge is a direct continuation of the same benchmark series, on the same PIPAL dataset family, with the same comparison structure). Substance of the claim verifies CONFIRMED against the substituted 2021 source. The bib-level mismatch is flagged via overall_flag=REVIEW + remediation.category=RECITE for separate bibliography remediation."
+}

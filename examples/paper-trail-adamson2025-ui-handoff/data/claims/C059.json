@@ -1,0 +1,96 @@
+{
+  "claim_id": "C059",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "gu2022",
+  "handle": "pdfs/gu2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "\"SROCC measures the strength of the monotonic (but not necessarily linear) relationship between reader scores and IQ metrics. We computed the inter-reader variability in our reader study via the SROCC of each reader score against the mean score of the other four readers. The inter-reader variability is then the mean of each of these five SROCC values. [...] computed, following precedent from large-scale computer vision IQ metric studies.34\"",
+  "manuscript_section": "",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C059.a",
+      "text": "SROCC (Spearman rank-order correlation coefficient) measures the strength of the monotonic (but not necessarily linear) relationship between two variables, and is the standard correlation metric used in large-scale computer vision IQ metric studies (precedent for which gu2022 is cited).",
+      "evidence": [
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA",
+          "line": 5,
+          "snippet": "Evaluation protocol. Our evaluation indicator, namely main score, consists of both Spearman rank-order correlation coefficient (SRCC) [45] and Person linear correlation coefficient (PLCC) [4]:"
+        },
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA",
+          "line": 6,
+          "snippet": "The SRCC evaluates the monotonicity of methods that whether the scores of high-quality images are higher (or lower) than low-quality images. The PLCC is often used to evaluate the accuracy of methods [45, 19]. ... By combining SRCC and PLCC, our indicator can measure the performance of participating models in an all-round way."
+        },
+        {
+          "section": "Challenge Results",
+          "line": 3,
+          "snippet": "[Challenge Results section reports per-team SRCC (and PLCC) scores as the official challenge ranking metric.]"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source uses 'SRCC' (Spearman rank-order correlation coefficient); manuscript uses 'SROCC' \u2014 same metric, common abbreviation variant (SROCC and SRCC are interchangeable acronyms for Spearman rank-order correlation in the IQA literature; not a value drift, so paper_value/claim_value left null and verdict remains CONFIRMED). Source paper is the NTIRE Perceptual IQA challenge (substituted edition standing in for gu2022), which uses SRCC as part of the official 'main score' alongside PLCC, supporting the manuscript's framing that Spearman is precedent in large-scale CV IQ metric studies. Source explicitly describes SRCC as evaluating 'monotonicity', directly matching the manuscript's 'monotonic (but not necessarily linear)' phrasing."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "SROCC / SRCC / Spearman rank-order correlation coefficient",
+      "Spearman correlation as evaluation metric in IQA",
+      "monotonic relationship / monotonicity / non-linear",
+      "standard metric / main score / evaluation protocol in IQA challenge"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract (meta.json)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Related Work",
+        "read": false
+      },
+      {
+        "section": "The NTIRE Challenge on Perceptual IQA",
+        "read": true
+      },
+      {
+        "section": "Challenge Methods",
+        "read": false
+      },
+      {
+        "section": "Challenge Results",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "The Spearman coefficient itself is attributed in this paper to ref [45] (likely the original Spearman/IQA-survey reference); however, gu2022's standing as 'precedent from large-scale computer vision IQ metric studies' is supported by its use of SRCC as the official challenge main score, not by it being the originator of SRCC. No misattribution for the framing/precedent claim.",
+    "out_of_context_check": "Manuscript context (DFD reader study borrowing the IQA Spearman precedent for inter-reader variability) aligns with source's explicit use of SRCC as the main evaluation indicator for a large-scale IQA benchmark challenge. No context mismatch. Note: fetched PDF is a substitute NTIRE Perceptual IQA proceedings version used in place of the exact gu2022 entry \u2014 same challenge series and evaluation protocol, so the precedent claim transfers."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

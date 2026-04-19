@@ -1,0 +1,112 @@
+{
+  "claim_id": "C013",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T1733Z",
+  "citekey": "linzhang2011",
+  "handle": "pdfs/linzhang2011/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Information-weighted SSIM (IWSSIM10) weights SSIM by assigning higher importance to regions of the image based on their information content. Multiscale SSIM (MSSSIM11) computes SSIM at various resolution levels across the image, while feature similarity index measure (FSIM12) compares features such as texture, edges, and gradients extracted with hand-crafted filters.",
+  "manuscript_section": "",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C013.a",
+      "text": "Lin Zhang et al. (2011) define and introduce FSIM (Feature Similarity Index), a full-reference image quality assessment metric based on phase congruency (PC) as the primary feature and image gradient magnitude (GM) as the secondary feature.",
+      "evidence": [
+        {
+          "section": "meta.json (title)",
+          "line": 3,
+          "snippet": "FSIM: A Feature Similarity Index for Image Quality Assessment"
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": 11,
+          "snippet": "In this paper, a novel feature-similarity (FSIM) index for IQA is proposed based on the fact that human visual system (HVS) understands an image mainly according to its low-level features. Specifically, the phase congruency (PC), which is a dimensionless measure of the significance of a local structure, is used as the primary feature in FSIM. Considering that PC is contrast invariant while the contrast information does affect HVS' perception of image quality, the image gradient magnitude (GM) is employed as the secondary feature in FSIM."
+        },
+        {
+          "section": "I. INTRODUCTION.txt",
+          "line": 6,
+          "snippet": "Based on the above analysis, in this paper we propose a novel low-level feature similarity induced IQA metric, namely FSIM (Feature SIMilarity)."
+        },
+        {
+          "section": "I. INTRODUCTION.txt",
+          "line": 7,
+          "snippet": "Therefore, PC is used as the primary feature in computing FSIM. Meanwhile, considering that PC is contrast invariant but image local contrast does affect HVS's perception on the image quality, the image gradient magnitude (GM) is computed as the secondary feature to encode the contrast information. PC and GM are complementary and they reflect different aspects of the HVS in assessing the input image."
+        },
+        {
+          "section": "III. THE FEATURE SIMILARITY FSIM INDEX FOR IQA.txt",
+          "line": 1,
+          "snippet": "With the extracted PC and GM features, in this section we present a novel Feature SIMilarity (FSIM) index for IQA. ... FSIM will be defined and computed based on PC 1 , PC 2 , G 1 and G 2 . Furthermore, by incorporating the image chrominance information into FSIM, an IQA index for color images, denoted by FSIM C , can be obtained."
+        },
+        {
+          "section": "A. The FSIM Index.txt",
+          "line": 7,
+          "snippet": "Therefore, we use PC m (x) = max(PC 1 (x), PC 2 (x)) to weight the importance of S L (x) in the overall similarity between f 1 and f 2 , and accordingly the FSIM index between f 1 and f 2 is defined as ..."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The paper's title literally is 'FSIM: A Feature Similarity Index for Image Quality Assessment' and Section III formally defines the FSIM index from PC (phase congruency) and GM (gradient magnitude). The manuscript's characterization that FSIM 'compares features such as texture, edges, and gradients extracted with hand-crafted filters' is a reasonable lay summary: PC is computed from log-Gabor filter banks (hand-crafted) and GM is an explicit gradient operator (Scharr/Sobel/Prewitt) \u2014 though strictly the paper's primary features are PC and GM, not 'texture/edges/gradients' as a triplet. This is acceptable framing-level paraphrase, not a misstatement."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "FSIM",
+      "feature similarity",
+      "Feature SIMilarity",
+      "phase congruency",
+      "gradient magnitude"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json",
+        "read": true
+      },
+      {
+        "section": "I. INTRODUCTION.txt",
+        "read": true
+      },
+      {
+        "section": "A. Phase congruency PC.txt",
+        "read": false
+      },
+      {
+        "section": "B. Gradient Magnitude GM.txt",
+        "read": false
+      },
+      {
+        "section": "III. THE FEATURE SIMILARITY FSIM INDEX FOR IQA.txt",
+        "read": true
+      },
+      {
+        "section": "A. The FSIM Index.txt",
+        "read": true
+      },
+      {
+        "section": "B. Extension to Color Image Quality Assessment.txt",
+        "read": false
+      },
+      {
+        "section": "IV. EXPERIMENTAL RESULTS AND DISCUSSIONS.txt",
+        "read": false
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "No indirect attribution. The paper presents FSIM as its own novel contribution ('in this paper we propose a novel low-level feature similarity induced IQA metric, namely FSIM') rather than crediting another primary source. Phase congruency and gradient magnitude as building blocks are credited to prior literature (refs [10]-[13] for PC), but the FSIM index combining them is introduced here.",
+    "out_of_context_check": "No out-of-context concern. The paper is the canonical FSIM definition paper; citing it for 'feature similarity index measure (FSIM12)' aligns exactly with its title, abstract, and stated contribution."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication"
+}

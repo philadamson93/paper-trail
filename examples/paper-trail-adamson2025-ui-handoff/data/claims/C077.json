@@ -1,0 +1,45 @@
+{
+  "claim_id": "C077",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0032Z",
+  "citekey": "wang2024",
+  "handle": "pdfs/wang2024/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "The correlation of SSIM and NRMSE decreases substantially under increasing acquisition noise, decreasing by 0.17\u20130.19 and 0.11\u20130.12, respectively, when k-space coil noise quadruples, corroborating the potential bias of SSIM and NRMSE under acquisition noise demonstrated in prior work.41 We observe that DFDs and HFEN continue to outperform other IQ metrics in terms of SROCC to reader scores as acquisition noise increases.",
+  "manuscript_section": "**Citekey:** `wang2024` (ref #41)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C077.a",
+      "text": "The correlation of SSIM and NRMSE decreases substantially under increasing acquisition noise, decreasing by 0.17\u20130.19 and 0.11\u20130.12, respectively, when k-space coil noise quadruples, corroborating the",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF unavailable (paywalled or fetch failed); cannot ground."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": null,
+    "indirect_attribution_check": null,
+    "out_of_context_check": null
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "linzhang2011",
+      "dameravenkata2000"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "stub"
+}

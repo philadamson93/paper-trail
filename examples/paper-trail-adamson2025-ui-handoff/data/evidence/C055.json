@@ -1,0 +1,223 @@
+{
+  "claim_id": "C055",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "miao2008",
+  "handle": "pdfs/miao2008/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "where LoG is a rotationally symmetric Laplacian of Gaussian filter with a kernel size of 15 \u00d7 15 pixels and a standard deviation of 1.5 pixels.13",
+  "manuscript_section": "Methods (HFEN metric definition)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C055.a",
+      "text": "miao2008 defines the HFEN (high-frequency error norm) image-quality metric.",
+      "evidence": [
+        {
+          "section": "content.txt + sections/*.txt (whole paper, all 19 sections)",
+          "line": null,
+          "snippet": "Exhaustive case-insensitive search across content.txt and all sections/*.txt for the terms 'HFEN', 'high-frequency error norm', 'high frequency error norm', 'high-frequency error', 'high frequency error', and 'error norm' returns ZERO matches. The string 'HFEN' does not appear anywhere in the extracted text of miao2008. The paper never names, defines, or describes any 'high-frequency error norm' metric."
+        },
+        {
+          "section": "I. INTRODUCTION.txt / content.txt L5 [p2]",
+          "line": 5,
+          "snippet": "'In this article, we experimentally measure fast MR image quality and compare results to seven image quality evaluation methods.... we classify features succinctly below where a (Case-PDM), b (Sarnoff's IDM), c (SSIM), d (NR), e (DCTune), f (IQM), and g (MSE).' \u2014 the paper enumerates exactly seven IQ models it studies; HFEN is not among them. The complete metric inventory of miao2008 is: Case-PDM, Sarnoff IDM, SSIM, NR, DCTune, IQM, MSE."
+        },
+        {
+          "section": "I. INTRODUCTION.txt / content.txt L5 [p2]",
+          "line": 5,
+          "snippet": "'Finally, in MRI there are particular objective image quality metrics, including signal-to-noise ratio, peak signal-to-noise ratio, CNR, mean-squared error (MSE), root-mean-squared error, and Shannon's information content.' \u2014 the paper's enumeration of 'objective image quality metrics' for MRI does NOT include HFEN or any high-frequency error norm."
+        },
+        {
+          "section": "II.A. Experimental conditions.txt / content.txt L6 [p3]",
+          "line": 6,
+          "snippet": "'Numerical observer evaluation is done with Case-PDM (v2...), Sarnoff's IDM, DCTune, SSIM, IQM, and NR. MSE is also included as an objective metric...' \u2014 again, the explicit list of evaluated models contains no HFEN."
+        }
+      ],
+      "figures_checked": [
+        {
+          "figure": "fig_p2_i0.png",
+          "question": "(not consulted) Per figures/index.json caption, this is the Case-PDM block diagram (Fig. 1) showing inputs (reference + test image) and outputs (perceived-difference spatial map) \u2014 not an HFEN definition.",
+          "vision_response": "Not consulted; caption metadata makes clear it is the Case-PDM architecture diagram with no high-frequency-error-norm content."
+        }
+      ],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": "HFEN (high-frequency error norm) image-quality metric",
+      "nuance": "miao2008 is a Case-PDM validation paper that compares Case-PDM against six other IQ models (IDM, SSIM, NR, DCTune, IQM, MSE). HFEN is never named, defined, or evaluated. The paper's metric inventory is fully enumerated and does not include HFEN."
+    },
+    {
+      "sub_claim_id": "C055.b",
+      "text": "miao2008 uses / defines a Laplacian-of-Gaussian (LoG) filter for the metric.",
+      "evidence": [
+        {
+          "section": "content.txt + sections/*.txt (whole paper)",
+          "line": null,
+          "snippet": "Exhaustive case-insensitive search for 'LoG', 'Laplacian of Gaussian', 'Laplacian-of-Gaussian', and 'Laplacian' returns ZERO matches. The word 'Laplacian' does not appear anywhere in the extracted text. The token 'LoG' does not appear as a standalone word."
+        },
+        {
+          "section": "II.A. Experimental conditions.txt / content.txt L8 [p3]",
+          "line": 8,
+          "snippet": "'Gaussian white noise with zero means and different standard deviations (=1-30) were added to the original image to create the noisy data sets. Blurred data sets were created by convolving the original image with a circular averaging filter (pillbox) of the radius 0.5-0.7.' \u2014 every appearance of 'Gaussian' in miao2008 refers to Gaussian-distributed *additive noise* used as a test stimulus, NOT to a Gaussian *filter kernel*. The blur stimulus uses a pillbox (circular averaging) filter, not a Gaussian or LoG filter."
+        },
+        {
+          "section": "II.B.1. Experimental setup.txt / content.txt L12 [p4] (TABLE I)",
+          "line": 12,
+          "snippet": "'TABLE I... 2-AFC Brain, abdomen Adding white noise or Gaussian blur in image, GRAPPA, zero-filling' \u2014 'Gaussian blur' here is one of the input *image degradations* applied to test images for the 2-AFC experiment, not a metric-computation filter. (And the actual blur applied was a pillbox per L8, suggesting 'Gaussian blur' in Table I is loose phrasing for the additive-noise / blur stimulus family.)"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": "rotationally symmetric Laplacian-of-Gaussian filter",
+      "nuance": "miao2008 contains no LoG / Laplacian-of-Gaussian filter at all. Its filtering content is restricted to (a) cortical filtering inside the Case-PDM model (mentioned only at the feature-classification level, not defined here), (b) circular-averaging (pillbox) blur applied as a *test-image artifact*, and (c) Gaussian additive noise applied as a *test-image artifact*. None of these is a LoG filter or a metric-computation kernel."
+    },
+    {
+      "sub_claim_id": "C055.c",
+      "text": "The LoG filter parameters are kernel size 15\u00d715 pixels and standard deviation 1.5 pixels.",
+      "evidence": [
+        {
+          "section": "content.txt + sections/*.txt (whole paper)",
+          "line": null,
+          "snippet": "Exhaustive case-insensitive search for '15\u00d715', '15x15', '15 \u00d7 15', '15 by 15', '1.5 pixel', '1.5 pixels', 'sigma', and 'kernel' returns ZERO matches relevant to a filter kernel. The token 'kernel' does not appear anywhere; 'sigma' does not appear as a Greek-letter or word reference for a filter parameter; '1.5' does not appear in any pixel/standard-deviation context."
+        },
+        {
+          "section": "II.A. Experimental conditions.txt / content.txt L8 [p3]",
+          "line": 8,
+          "snippet": "'image sizes of 256\u00d7256, 209\u00d7256, and 128\u00d7128 pixels' \u2014 the only \u00d7-delimited pixel dimensions in miao2008 are full-image sizes for the test images, not filter kernel sizes."
+        },
+        {
+          "section": "II.C.2. Data analysis.txt / content.txt L19",
+          "line": 19,
+          "snippet": "'where x \u00afand are mean and standard deviation for score x...' \u2014 the only 'standard deviation' references in miao2008 are statistics over (i) human-rating z-scores, (ii) Gaussian-noise stimulus levels (=1\u201330), and (iii) Case-PDM threshold variability (e.g., 'standard deviation is 0.45'). NONE is a Gaussian-kernel sigma, and 1.5 is not used as a sigma value."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": "kernel size = 15\u00d715 pixels; standard deviation = 1.5 pixels",
+      "nuance": "miao2008 contains no filter-kernel parameter specifications at all. The numbers 15 and 1.5 do not appear in any kernel/sigma context. Image-size pixel dimensions (256\u00d7256, 209\u00d7256, 128\u00d7128) are present but are unrelated to filter kernels. The 'standard deviation' values that do appear are score statistics or noise-stimulus levels, not Gaussian-kernel sigmas."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "HFEN (acronym, exact)",
+      "high-frequency error norm / high frequency error norm (full expansion, with and without hyphen)",
+      "high-frequency error / high frequency error (partial)",
+      "error norm (generic)",
+      "LoG (acronym, exact)",
+      "Laplacian of Gaussian / Laplacian-of-Gaussian (full expansion)",
+      "Laplacian (root term)",
+      "Gaussian (broad probe \u2014 hit only on Gaussian noise / Gaussian blur stimuli, not on a Gaussian kernel)",
+      "15\u00d715 / 15x15 / 15 \u00d7 15 / 15 by 15 (kernel-size phrasings)",
+      "1.5 pixel / 1.5 pixels (sigma phrasing)",
+      "sigma (Gaussian-kernel parameter)",
+      "kernel (generic filter-kernel term \u2014 absent from paper entirely)",
+      "standard deviation (broad probe \u2014 only score-statistic and noise-level hits)",
+      "filter (broad probe)",
+      "norm / cortical filter / cortex / CSF / metric / frequency (Case-PDM-internals probe)",
+      "Ravishankar / Bresler (indirect-attribution probe to Ravishankar & Bresler 2011, the actual HFEN primary source)"
+    ],
+    "section_checklist": [
+      {
+        "section": "_1_.txt",
+        "read": true
+      },
+      {
+        "section": "_DSCQS_.txt",
+        "read": true
+      },
+      {
+        "section": "I. INTRODUCTION.txt",
+        "read": true
+      },
+      {
+        "section": "II. METHODS.txt",
+        "read": true
+      },
+      {
+        "section": "II.A. Experimental conditions.txt",
+        "read": true
+      },
+      {
+        "section": "II.B. Human subject correlation_ DSCQS experiment.txt",
+        "read": true
+      },
+      {
+        "section": "II.B.1. Experimental setup.txt",
+        "read": true
+      },
+      {
+        "section": "II.B.2. Data analysis.txt",
+        "read": true
+      },
+      {
+        "section": "II.C. Minimizing context effects_ FMT experiment.txt",
+        "read": true
+      },
+      {
+        "section": "II.C.1. Experimental setup.txt",
+        "read": true
+      },
+      {
+        "section": "II.C.2. Data analysis.txt",
+        "read": true
+      },
+      {
+        "section": "II.D. Just perceptible difference_ 2-AFC experiment.txt",
+        "read": true
+      },
+      {
+        "section": "II.D.1. Experimental setup.txt",
+        "read": true
+      },
+      {
+        "section": "II.D.2. Data analysis.txt",
+        "read": true
+      },
+      {
+        "section": "III.C. Just perceptible difference _2-AFC_.txt",
+        "read": true
+      },
+      {
+        "section": "IV.A. Analysis of experiments.txt",
+        "read": true
+      },
+      {
+        "section": "IV.B. Comparison of models.txt",
+        "read": true
+      },
+      {
+        "section": "IV.C. Range of applicability of Case-PDM.txt",
+        "read": true
+      },
+      {
+        "section": "V. CONCLUSIONS.txt",
+        "read": true
+      },
+      {
+        "section": "content.txt (full extracted text, 42 lines)",
+        "read": true
+      },
+      {
+        "section": "figures/index.json (captions for 9 figures)",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "The closest filter/metric content in miao2008 is the Case-PDM model itself, summarized at content.txt L5 [p2]: 'we have used a perceptual difference model (Case-PDM) which mimics the functional anatomy of the visual pathway and contains components that model the optics and sensitivity of the retina, the spatial contrast sensitivity function, and the channels of spatial frequency found in the visual cortex.' The paper's feature-classification line lists 'cortical filtering {ab}' and 'Q-norm {ab}' as Case-PDM/IDM features, but these are mentioned only as feature labels \u2014 the paper does not define the cortical filters' kernels, sigmas, or sizes here (it defers to Salem et al. ref 24 and Huo's PhD thesis ref 54 for full Case-PDM specification). The closest 'filter' actually parameterized in miao2008 is the pillbox blur stimulus (content.txt L8 [p3]): 'a circular averaging filter (pillbox) of the radius 0.5-0.7' \u2014 a circular pillbox of small sub-pixel radius applied as a test-image degradation, not a 15\u00d715 LoG kernel for metric computation.",
+    "indirect_attribution_check": "miao2008 does NOT cite or attribute any high-frequency-error-norm work. Its 67-odd numbered references are dominated by Case-PDM / DSCQS / FMT / 2-AFC / Sarnoff IDM / SSIM / DCTune / IQM / NR / MSE / GRAPPA / SENSE / SPIRAL / WGRAPPA citations. No 'Ravishankar' or 'Bresler' string appears anywhere in the extracted text, so the paper does not point downstream to Ravishankar & Bresler 2011 (the actual primary source for HFEN with the 15\u00d715, sigma=1.5 LoG specification). There is no chain by which the cited HFEN/LoG specification could be reached from miao2008 by indirection.",
+    "out_of_context_check": "STRONG out-of-context signal. miao2008 is unambiguously a Case-PDM *validation* paper (Med Phys 35(6):2541, 2008; DOI 10.1118/1.2903207; title concerns perceptual-difference-model evaluation of MR image quality vs. human observers using DSCQS / FMT / 2-AFC experiments). Its scientific contribution is the experimental comparison of seven IQ models against human ratings \u2014 not the definition of a new metric, and certainly not the definition of HFEN. The cited HFEN+LoG(15\u00d715, sigma=1.5) specification is the well-known formulation from Ravishankar & Bresler, 'MR image reconstruction from highly undersampled k-space data by dictionary learning,' IEEE TMI 30(5):1028\u20131041, 2011 \u2014 a completely different paper with a completely different topic. The manuscript appears to be citing miao2008 as the source of an HFEN/LoG specification it does not contain."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "grounding"
+}
