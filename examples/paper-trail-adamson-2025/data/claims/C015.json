@@ -1,0 +1,47 @@
+{
+  "claim_id": "C015",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0032Z",
+  "citekey": "mantiuk2011",
+  "handle": "pdfs/mantiuk2011/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Perceptual difference models are a class of psycho-physical models that aim to mimic how humans perceive image quality by modeling the human visual processing system.13\u201317 Visual Information Fidelity (VIF18 ) uses natural image scene statistics to compute the mutual information between image pairs.",
+  "manuscript_section": "**Citekey:** `mantiuk2011` (ref #14)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C015.a",
+      "text": "Perceptual difference models are a class of psycho-physical models that aim to mimic how humans perceive image quality by modeling the human visual processing system.13\u201317 Visual Information Fidelity ",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF unavailable (paywalled or fetch failed); cannot ground."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": null,
+    "indirect_attribution_check": null,
+    "out_of_context_check": null
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "miao2008",
+      "miao2013",
+      "salem2002",
+      "daly1992"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "stub"
+}

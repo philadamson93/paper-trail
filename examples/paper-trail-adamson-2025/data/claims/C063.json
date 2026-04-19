@@ -1,0 +1,141 @@
+{
+  "claim_id": "C063",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "adamson2021",
+  "handle": "pdfs/adamson2021/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "To test the hypothesis that in-domain DFDs have more utility as a DFD IQ metric than out-of-domain DFDs, we propose a self-supervised feature distance (SSFD47) using an encoder \u03d5(l) trained in a self-supervised fashion on the D same MR dataset D used to train the reader study DL reconstruction models.",
+  "manuscript_section": "Methods (SSFD as in-domain DFD proposal)",
+  "claim_type": {
+    "type": "BACKGROUND",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C063.a",
+      "text": "adamson2021 is a precursor work that established the in-domain deep/self-supervised feature distance (DFD) framework or a related self-supervised MRI feature learning approach used for image-quality assessment.",
+      "evidence": [
+        {
+          "section": "Abstract",
+          "line": null,
+          "snippet": "In this study, we use SSL to extract image-level feature representations of MR images, and use those features to compute a self-supervised feature distance (SSFD) metric to assess MR image reconstruction quality. We demonstrate preliminary results showing the superiority of SSFD to common image quality metrics such as PSNR and SSIM, its robustness to image perturbations, and its ability to capture both pixel-level and global image quality information."
+        },
+        {
+          "section": "Introduction",
+          "line": null,
+          "snippet": "since features from MR images are fundamentally different from natural images due to their content, contrasts, and noise characteristics, the VGG-PL representations may be sub-optimal for assessing MR reconstruction quality. Furthermore, a large, labelled dataset such as ImageNet for each medical image domain is a burden to label accurately, which necessitates alternative methods for learning feature representations for medical images without requiring radiologist labels."
+        },
+        {
+          "section": "Introduction",
+          "line": null,
+          "snippet": "In this study, we propose to learn image-level feature representations of the underlying MR data via the pre-text task of context prediction, whereby a self-supervised model learns an inpainting task on the MRI domain of interest... We hypothesize that this distance metric will be better suited as an MR image quality metric than the pixel-wise metrics of SSIM and PSNR, or the VGG-PL based on natural image feature representations."
+        },
+        {
+          "section": "Self-supervised Feature Distance (SSFD)",
+          "line": null,
+          "snippet": "The encoder of the pre-trained SSL UNet described in Section 2.2 was used to calculate a self-supervised feature distance (SSFD) metric. The encoder was truncated following ReLU activations of a given convolutional layer in the UNet encoder. Ground truth and reconstructed image pairs were then separately passed through this truncated model, producing two feature space outputs. The SSFD was the element-wise mean square error between the two feature representations of the image pair."
+        },
+        {
+          "section": "Conclusion",
+          "line": 1,
+          "snippet": "This work introduces the SSFD image quality metric based on MR domain-specific feature representations learned from a self-supervised learning task."
+        },
+        {
+          "section": "Experimental Results and Discussion",
+          "line": null,
+          "snippet": "We find that SSFD can highlight examples of poor MR reconstruction quality, despite high SSIM, PSNR, and VGG-PL values. This is promising for using SSFD as an improved MR reconstruction quality control tool than traditional image quality metrics, and illustrates the potential benefit of image-domain-specific training."
+        },
+        {
+          "section": "Self-Supervised Learning Framework",
+          "line": 1,
+          "snippet": "A self-supervised UNet model (with 2 convolutions per level and 5 levels with 20-320 quadratically increasing filters) was trained to in-paint the zero-filled patches and restore the original image using a dropout rate of 0.1 and Group Normalization layers, and an Adam Optimizer with l2 loss."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "context-prediction (inpainting) SSL pre-training of a UNet encoder on the fastMRI knee dataset; SSFD = MSE between encoder feature representations of ground-truth vs. reconstructed image pairs; explicitly motivated by 'image-domain-specific training' being superior to ImageNet/VGG features for MR image quality assessment.",
+      "claim_value": "self-supervised encoder trained on a large unlabeled MR dataset, used as an in-domain self-supervised feature distance (SSFD / DFD) for image-quality assessment.",
+      "nuance": "The precursor framing is well-supported: adamson2021 (SSFD) is the original in-domain self-supervised MR feature-distance work by the same group, explicitly arguing for MR-domain-specific (vs. ImageNet/VGG) learned feature representations for image quality assessment. The SSL pre-text task in adamson2021 is context prediction / inpainting with a UNet, NOT contrastive (e.g., SimCLR) learning; if the manuscript's wider methods elsewhere reference SimCLR specifically, that is a methodological evolution, not a re-statement of adamson2021. The manuscript cites adamson2021 here as background/precursor for the in-domain DFD hypothesis, which is fully consistent with the source."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "No edit needed for the precursor sub-claim. Reviewer note: adamson2021 establishes the in-domain self-supervised MR feature-distance framework via context-prediction SSL (UNet inpainting). If the encoder \u03d5(l) used in this manuscript is SimCLR-trained (as stated elsewhere in the methods), that specific contrastive-SSL choice is a methodological extension and is not attributable to adamson2021; only the in-domain SSFD framing is."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "adamson2021 establishes a self-supervised / deep feature distance metric using MR-domain (in-domain) learned features",
+      "adamson2021 trains a self-supervised encoder on a large unlabeled MR (fastMRI) dataset and uses the encoder features as a distance metric (SSFD/DFD)",
+      "adamson2021 motivates and demonstrates that domain-specific (MR-trained) self-supervised feature representations outperform out-of-domain (ImageNet/VGG-PL) features for MR image quality assessment",
+      "adamson2021 uses SimCLR or any contrastive self-supervised learning approach to pre-train an MR encoder",
+      "adamson2021 introduces the in-domain vs. out-of-domain DFD terminology / hypothesis directly"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract (meta.json)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Dataset and Supervised Reconstruction Models",
+        "read": true
+      },
+      {
+        "section": "Self-Supervised Learning Framework",
+        "read": true
+      },
+      {
+        "section": "Self-supervised Learning: Context Prediction",
+        "read": true
+      },
+      {
+        "section": "Self-supervised Feature Distance (SSFD)",
+        "read": true
+      },
+      {
+        "section": "SSFD versus Encoder Layer",
+        "read": true
+      },
+      {
+        "section": "SSFD as a Quality Control Tool",
+        "read": true
+      },
+      {
+        "section": "SSFD vs. PSNR",
+        "read": true
+      },
+      {
+        "section": "VGG-16 Perceptual Loss",
+        "read": true
+      },
+      {
+        "section": "Experimental Results and Discussion",
+        "read": true
+      },
+      {
+        "section": "Conclusion",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "Closest passage to any SimCLR-specific element: 'In this study, we propose to learn image-level feature representations of the underlying MR data via the pre-text task of context prediction, whereby a self-supervised model learns an inpainting task on the MRI domain of interest.' The pre-text task in adamson2021 is context-prediction inpainting with a UNet, not SimCLR contrastive learning. No mention of SimCLR, NT-Xent, or contrastive losses appears anywhere in the source.",
+    "indirect_attribution_check": "adamson2021 does not credit any other primary work for the in-domain MR self-supervised feature-distance idea; it presents SSFD as its own contribution, citing prior SSL work generically (refs [12,13]) and UFLoss (ref [10]) as related but distinct precursors.",
+    "out_of_context_check": "The manuscript cites adamson2021 here in a BACKGROUND/precursor framing for an in-domain DFD (SSFD) proposal. adamson2021's own context \u2014 establishing MR-domain self-supervised feature representations as a superior image-quality metric vs. ImageNet/VGG features \u2014 directly supports that precursor framing. No context mismatch for the precursor sub-claim."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

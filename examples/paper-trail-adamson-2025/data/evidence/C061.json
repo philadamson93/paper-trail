@@ -1,0 +1,140 @@
+{
+  "claim_id": "C061",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "simonyan2014",
+  "handle": "pdfs/simonyan2014/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "simonyan2014 introduces the VGG architecture, used as the deep feature extractor in many DFD metrics (LPIPS uses VGG).",
+  "manuscript_section": "DFD-metrics framing (LPIPS family)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C061.a",
+      "text": "Simonyan & Zisserman 2014 introduces the VGG convolutional network architecture (very deep ConvNets with 16-19 weight layers using 3x3 convolution filters, branded as 'VGG' Net-D / Net-E by the authors).",
+      "evidence": [
+        {
+          "section": "abstract (meta.json)",
+          "line": 9,
+          "snippet": "In this work we investigate the effect of the convolutional network depth on its accuracy in the large-scale image recognition setting. Our main contribution is a thorough evaluation of networks of increasing depth using an architecture with very small (3 \u00d7 3) convolution filters, which shows that a significant improvement on the prior-art configurations can be achieved by pushing the depth to 16-19 weight layers."
+        },
+        {
+          "section": "CONFIGURATIONS.txt",
+          "line": 1,
+          "snippet": "The ConvNet configurations, evaluated in this paper, are outlined in Table 1, one per column. In the following we will refer to the nets by their names (A-E). All configurations follow the generic design presented in Sect. 2.1, and differ only in the depth: from 11 weight layers in the network A (8 conv. and 3 FC layers) to 19 weight layers in the network E (16 conv. and 3 FC layers)."
+        },
+        {
+          "section": "ARCHITECTURE.txt",
+          "line": 1,
+          "snippet": "During training, the input to our ConvNets is a fixed-size 224 \u00d7 224 RGB image... The image is passed through a stack of convolutional (conv.) layers, where we use filters with a very small receptive field: 3 \u00d7 3 (which is the smallest size to capture the notion of left/right, up/down, center)."
+        },
+        {
+          "section": "CLASSIFICATION EXPERIMENTS.txt",
+          "line": 2,
+          "snippet": "For the majority of experiments, we used the validation set as the test set. Certain experiments were also carried out on the test set and submitted to the official ILSVRC server as a \"VGG\" team entry to the ILSVRC-2014 competition (Russakovsky et al., 2014)."
+        },
+        {
+          "section": "COMPARISON WITH THE STATE OF THE ART.txt",
+          "line": 1,
+          "snippet": "In the classification task of ILSVRC-2014 challenge (Russakovsky et al., 2014), our \"VGG\" team secured the 2nd place with 7.3% test error using an ensemble of 7 models. After the submission, we decreased the error rate to 6.8% using an ensemble of 2 models."
+        },
+        {
+          "section": "CONCLUSION.txt",
+          "line": 14,
+          "snippet": "Method VOC-2012 (mean AP) ... VGG Net-D & Net-E, image-only 79.2 VGG Net-D & Net-E, image and bounding box 84.0"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The paper itself uses the 'VGG' name (the authors' Visual Geometry Group, Oxford) for its team submission and for its Net-D / Net-E models in result tables. The 16-layer (Net-D) and 19-layer (Net-E) configurations are the canonical 'VGG-16' and 'VGG-19' architectures widely adopted as feature extractors. Introduction of VGG is fully and directly supported by the source. The downstream usage portion of the manuscript claim ('used as the deep feature extractor in many DFD metrics; LPIPS uses VGG') is NOT verifiable from this source and must be confirmed against the LPIPS / DFD-metric papers themselves \u2014 simonyan2014 only establishes the architecture's existence, not its later adoption by perceptual-distance metrics."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "VGG / VGG team / VGG Net-D / VGG Net-E",
+      "very deep convolutional networks",
+      "16-19 weight layers / 16 weight layers / 19 weight layers",
+      "3 x 3 convolution filters / very small receptive field",
+      "ConvNet architecture / network depth"
+    ],
+    "section_checklist": [
+      {
+        "section": "INTRODUCTION.txt",
+        "read": true
+      },
+      {
+        "section": "CONVNET CONFIGURATIONS.txt",
+        "read": true
+      },
+      {
+        "section": "ARCHITECTURE.txt",
+        "read": true
+      },
+      {
+        "section": "CONFIGURATIONS.txt",
+        "read": true
+      },
+      {
+        "section": "DISCUSSION.txt",
+        "read": false
+      },
+      {
+        "section": "CLASSIFICATION FRAMEWORK.txt",
+        "read": false
+      },
+      {
+        "section": "TRAINING.txt",
+        "read": false
+      },
+      {
+        "section": "TESTING.txt",
+        "read": false
+      },
+      {
+        "section": "IMPLEMENTATION DETAILS.txt",
+        "read": false
+      },
+      {
+        "section": "CLASSIFICATION EXPERIMENTS.txt",
+        "read": true
+      },
+      {
+        "section": "SINGLE SCALE EVALUATION.txt",
+        "read": false
+      },
+      {
+        "section": "MULTI-CROP EVALUATION.txt",
+        "read": false
+      },
+      {
+        "section": "CONVNET FUSION.txt",
+        "read": false
+      },
+      {
+        "section": "COMPARISON WITH THE STATE OF THE ART.txt",
+        "read": true
+      },
+      {
+        "section": "CONCLUSION.txt",
+        "read": true
+      },
+      {
+        "section": "C PAPER REVISIONS.txt",
+        "read": false
+      }
+    ],
+    "closest_adjacent": "n/a \u2014 the source directly and verbatim refers to its own architecture as 'VGG' (Net-D, Net-E) and as a 'very deep' ConvNet with 16-19 weight layers using 3x3 filters; no near-miss needed.",
+    "indirect_attribution_check": "Direct attribution. Simonyan & Zisserman 2014 is the primary VGG paper; the architecture (VGG-16 = Net-D, VGG-19 = Net-E) is introduced and named by the authors themselves in this work. No indirect chain.",
+    "out_of_context_check": "The manuscript's first half (introducing VGG) matches the source's own framing exactly. The second half (LPIPS / DFD usage of VGG as feature extractor) is downstream usage that this source does not and cannot speak to \u2014 simonyan2014 predates LPIPS and contains no mention of perceptual-distance use. That portion needs verification against the LPIPS source (zhang2018), not against simonyan2014, but it does not contradict simonyan2014; it is simply outside its scope."
+  },
+  "stage": "grounding"
+}

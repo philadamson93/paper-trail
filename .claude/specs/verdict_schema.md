@@ -110,7 +110,7 @@ For backwards compatibility with the current `.inflight/` convention used by the
 - **`run_id`** — string, required. Format `run_<YYYYMMDDTHHMMZ>`. Allows joining across JSON files from the same run.
 - **`citekey`** — string, required. The bibtex key for the cited source.
 - **`handle`** — string, required. Path prefix to the ingested source artifacts (`pdfs/<citekey>/`). Relative to the run's output-dir.
-- **`ingest_mode`** — enum: `"grobid"` | `"ocr_fallback"` | `"abstract_only"` | `"not_ingested"`. Confidence-modulates the subagent's own behavior and the verifier's threshold.
+- **`ingest_mode`** — enum: `"grobid"` | `"ocr_fallback"` | `"pdftotext_fallback"` | `"error"`. Emitted by `scripts/ingest_pdf.py`; confidence-modulates subagent behavior and the verifier's threshold.
 - **`source_ref_urls`** — array of strings. Canonical click-through refs for a reader. Usually `file://...pdf#page=N` for local PDFs. Empty array if none.
 
 ### Claim

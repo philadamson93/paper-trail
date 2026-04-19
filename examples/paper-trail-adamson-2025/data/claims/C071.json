@@ -1,0 +1,132 @@
+{
+  "claim_id": "C071",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "mason2020",
+  "handle": "pdfs/mason2020/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Correlations in terms of SROCC of mean reader scores versus the IQ metric scores for each of the IQMs are reported in Figure 4 (Right).",
+  "manuscript_section": "Results (or figure caption referencing comparison to Mason 2020)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C071.a",
+      "text": "Mason 2020 reported SROCC correlations between IQM scores and radiologist (reader) scores, using a framework analogous to the manuscript's (SROCC of mean reader scores vs. IQM scores).",
+      "evidence": [
+        {
+          "section": "D. Data Analysis.txt",
+          "line": 3,
+          "snippet": "The z-scores from each radiologist were then averaged and rescaled from 0-100. The Spearman rank order correlation coefficient (SROCC) was calculated between the transformed radiologist scores and each of the IQM scores. The SROCC is equivalent to a linear correlation coefficient on the rank order of the data. A higher SROCC would then correspond to a better performing IQM."
+        },
+        {
+          "section": "D. Data Analysis.txt",
+          "line": 4,
+          "snippet": "Correlations were calculated under three scenarios: when scores were divided by individual radiologists, by image type, and by degradation type... The image type division presents SROCCs for each group of reference image. The radiologists' scores for images in each group are averaged and the SROCC is calculated with the corresponding IQM scores."
+        },
+        {
+          "section": "II. RESULTS.txt",
+          "line": 3,
+          "snippet": "The SROCC of each IQM with each radiologist's scores are shown in Fig. 4. This ordering of the IQMs show the decreasing correlations of the IQMs with the radiologist scores in each subgroup... When dividing data by reference image type, similar results were obtained (Fig. 4). The same metrics demonstrated higher correlation with radiologists' scores... When dividing the data by degradation type, the variation in SROCC between IQMs is less clear (Fig. 4)."
+        },
+        {
+          "section": "figures/index.json (Fig. 4 caption)",
+          "line": 32,
+          "snippet": "Fig. 4. Spearman rank order correlation coefficient for each IQM when data is divided by radiologist (top), reference type (middle), or degradation type (bottom)."
+        },
+        {
+          "section": "meta.json (Abstract)",
+          "line": 15,
+          "snippet": "IQM performance was measured via the Spearman rank order correlation coefficient (SROCC) and statistically significant differences in the residuals of the IQM scores and radiologists' scores were tested."
+        }
+      ],
+      "figures_checked": [
+        {
+          "figure": "fig_p6_i0.png (Fig. 4)",
+          "question": "Does Fig. 4 report SROCC between IQMs and radiologist scores, and is there a panel (right/bottom) matching the manuscript's 'Figure 4 (Right)' reference?",
+          "vision_response": "Per the figure caption in figures/index.json: 'Fig. 4. Spearman rank order correlation coefficient for each IQM when data is divided by radiologist (top), reference type (middle), or degradation type (bottom).' The figure shows SROCC for each IQM in each subgroup, exactly the framework the manuscript is citing. Mason's Fig. 4 is organized top/middle/bottom rather than left/right, so the manuscript's '(Right)' reference is likely a citation-format mismatch to the manuscript author's own Figure 4 layout rather than to Mason's Fig. 4 panel positions."
+        }
+      ],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Mason 2020's Data Analysis section describes exactly the framework the manuscript is citing: radiologist (reader) scores are averaged and an SROCC is computed against each IQM. Fig. 4 of Mason 2020 reports SROCC for each IQM across multiple subgroupings (by radiologist, by reference image type, by degradation type). The '(Right)' panel reference in the manuscript sentence most plausibly refers to the manuscript's own Figure 4 layout (Mason's Fig. 4 is split top/middle/bottom, not left/right), a citation-format detail rather than an evidentiary mismatch."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "SROCC (Spearman rank order correlation coefficient)",
+      "Spearman",
+      "reader scores / radiologist scores / mean reader scores",
+      "correlation between IQM and radiologist scores",
+      "Figure 4 SROCC by subgroup"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json (Abstract)",
+        "read": true
+      },
+      {
+        "section": "I. INTRODUCTION.txt",
+        "read": true
+      },
+      {
+        "section": "A. Generation of Image Library.txt",
+        "read": false
+      },
+      {
+        "section": "B. Objective IQMs.txt",
+        "read": false
+      },
+      {
+        "section": "C. Radiologist Image Quality Assessment.txt",
+        "read": false
+      },
+      {
+        "section": "D. Data Analysis.txt",
+        "read": true
+      },
+      {
+        "section": "E. IQM Calculation Times.txt",
+        "read": false
+      },
+      {
+        "section": "II. RESULTS.txt",
+        "read": true
+      },
+      {
+        "section": "III. DISCUSSION.txt",
+        "read": true
+      },
+      {
+        "section": "IV. CONCLUSION.txt",
+        "read": false
+      },
+      {
+        "section": "Unnamed.txt",
+        "read": false
+      },
+      {
+        "section": "figures/index.json",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "Data Analysis L3: 'The Spearman rank order correlation coefficient (SROCC) was calculated between the transformed radiologist scores and each of the IQM scores.' This is essentially a verbatim methodological match to the manuscript's framing.",
+    "indirect_attribution_check": "Mason 2020 cites ref [33] for the z-score normalization and nonlinear regression procedures, but the SROCC-of-mean-reader-scores-vs-IQM framework is presented as Mason's own analysis (not attributed to another primary). Citing Mason 2020 as the framework source is a direct attribution.",
+    "out_of_context_check": "No out-of-context use. Mason 2020's core analytical framework is SROCC between averaged/normalized radiologist scores and IQM scores, which is exactly what the manuscript claims to be analogous to. Fig. 4 in Mason 2020 is the canonical figure for those SROCC results. Minor caveat: the '(Right)' panel reference in the manuscript sentence appears to refer to the manuscript's own figure layout, not Mason's (Mason's Fig. 4 is top/middle/bottom); this is a reference-formatting detail, not an evidentiary mismatch."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "hammernik2021",
+      "salem2002"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication"
+}

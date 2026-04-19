@@ -1,0 +1,122 @@
+{
+  "claim_id": "C045",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "knoll2020",
+  "handle": "pdfs/knoll2020/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "network.2 The UNet models followed the architecture in the fastMRI challenge,42 while the unrolled models followed the fast iterative shrinkage-thresholding algorithm (FISTA) unrolled architecture43 implemented in.2 Reference images were computed from the fully sampled k-space data with the eSPIRIT method to integrate coil sensitivities.44 The magnitude of the complex image data was taken for both the evaluation by radiologists and the computation of IQ metrics.",
+  "manuscript_section": "Methods (model architectures for reconstruction experiments)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C045.a",
+      "text": "Knoll et al. 2020 specifies/defines the UNet baseline architecture used in the fastMRI challenge that the manuscript's UNet models followed.",
+      "evidence": [
+        {
+          "section": "content.txt (whole paper)",
+          "line": null,
+          "snippet": "Exhaustive case-insensitive search across content.txt and all sections/*.txt for the terms: 'U-Net', 'UNet', 'U Net', 'encoder', 'decoder', 'convolutional', 'CNN', 'baseline model', 'challenge baseline', 'architecture' (in the network sense), 'Zbontar', '1811.08839' returns ZERO matches. The paper never names, defines, diagrams, or otherwise specifies any neural-network architecture, let alone a U-Net. The only hits for 'architecture' / 'baseline' in the broader sense are absent \u2014 the word 'architecture' does not appear in the extracted text at all."
+        },
+        {
+          "section": "Description of the Dataset.txt",
+          "line": 1,
+          "snippet": "'The focus of our initial data release is to enable accelerated MRI acquisitions of two-dimensional (2D) fast spin-echo sequences...' \u2014 the paper is positioned strictly as a *dataset release*, not a model/architecture paper."
+        },
+        {
+          "section": "k-Space Dataset.txt",
+          "line": 4,
+          "snippet": "'The number of cases included as DICOM images in our fast-MRI dataset is substantially larger than the number of cases with k-space data... Complete details regarding this dataset, as well as relevant background material intended to empower investigators to tackle problems in image reconstruction, can be found in Zbontar et al (19).' \u2014 Knoll 2020 explicitly defers all 'background material' for image-reconstruction methods (including any baseline architectures) to Zbontar et al. (the arXiv:1811.08839 fastMRI tech report)."
+        },
+        {
+          "section": "content.txt",
+          "line": 1,
+          "snippet": "'These approaches train machine learning models with the goal of identifying the patterns of image artifacts that are introduced in the reconstructed images in accelerated acquisitions.' \u2014 the paper mentions 'machine learning models' only at this generic, motivational level. No specific model class (UNet, CNN, encoder-decoder, etc.) is named anywhere in the extracted text."
+        },
+        {
+          "section": "k-Space Dataset.txt",
+          "line": 1,
+          "snippet": "'Examples in the test and challenge sets contain undersampled k-space data... For the challenge and test set, unique examples are provided for the single-coil and the multicoil dataset. This ensures that information cannot be shared between the two challenges at the test stage.' \u2014 every occurrence of 'challenge' in the paper refers to the *dataset partition* (challenge set vs train/val/test), NOT to a model-architecture challenge baseline."
+        }
+      ],
+      "figures_checked": [
+        {
+          "figure": "fig_p3_i0.png",
+          "question": "(not consulted) Per figures/index.json caption, this figure is the sequence-parameter table (FOV, FS, PD, TE, TR, Tx-Rx, 2D legend) \u2014 not a network architecture diagram.",
+          "vision_response": "Not consulted; caption metadata makes clear it is a parameter-table figure with no network content."
+        },
+        {
+          "figure": "fig_p4_i0.png",
+          "question": "(not consulted) Per figures/index.json caption, 'Coronal proton density-weighted images with fat suppression (left) and without fat suppression (right). Both images were reconstructed from fully sampled k-space data using a sum-of-squares combination of component coil images.' \u2014 example reconstructions, not an architecture diagram.",
+          "vision_response": "Not consulted; caption metadata makes clear it is an example-images figure with no network content."
+        }
+      ],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Knoll et al. 2020 is the fastMRI *dataset* paper (Radiology: AI, DOI 10.1148/ryai.2020190007). It describes the k-space and DICOM data release, undersampling masks, dataset splits, and metadata fields \u2014 but contains no network architecture content. The paper itself defers methods/background to Zbontar et al. (its ref 19, i.e. arXiv:1811.08839, the fastMRI technical report), which is the actual primary source for the U-Net baseline used in the fastMRI challenge."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "U-Net / UNet / U Net (architecture name)",
+      "encoder / decoder / convolutional / CNN (architecture components)",
+      "neural network / deep learning / model / network (generic architecture terms)",
+      "baseline model / challenge baseline / architecture (challenge-baseline framing)",
+      "Zbontar / 1811.08839 / fastMRI: (indirect-attribution probe to the fastMRI tech report)"
+    ],
+    "section_checklist": [
+      {
+        "section": "Unnamed.txt",
+        "read": true
+      },
+      {
+        "section": "Description of the Dataset.txt",
+        "read": true
+      },
+      {
+        "section": "k-Space Dataset.txt",
+        "read": true
+      },
+      {
+        "section": "DICOM Dataset.txt",
+        "read": true
+      },
+      {
+        "section": "Discussion.txt",
+        "read": true
+      },
+      {
+        "section": "content.txt (full extracted text, 16 lines)",
+        "read": true
+      },
+      {
+        "section": "figures/index.json (captions)",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "k-Space Dataset.txt L4 / content.txt L11 (p4): 'Complete details regarding this dataset, as well as relevant background material intended to empower investigators to tackle problems in image reconstruction, can be found in Zbontar et al (19).' This is the closest the paper comes to addressing reconstruction methods/architectures \u2014 and it is an explicit pointer *out* of this paper to Zbontar et al. (arXiv:1811.08839, the fastMRI technical report), which is the actual primary for the U-Net baseline used in the fastMRI challenge. No passage in knoll2020 itself defines, names, or describes the UNet architecture.",
+    "indirect_attribution_check": "STRONG indirect-attribution signal. Knoll 2020 itself defers all 'relevant background material' for image-reconstruction methods to Zbontar et al. (its ref 19; this is arXiv:1811.08839, the fastMRI technical report by Zbontar, Knoll, Sriram, Muckley, Bruno, Defazio, Parente, Geras, Katsnelson, Chandarana, Zhang, Drozdzalv, Romero, Rabbat, Vincenti, Pinkerton, Wang, Owens, Zitnick, Recht, Sodickson, Lui, 2018/2020). The U-Net baseline that the fastMRI challenge actually used is defined in Zbontar et al., not in Knoll et al. 2020. The manuscript appears to be citing Knoll 2020 as the source of an architecture spec it does not contain.",
+    "out_of_context_check": "STRONG out-of-context signal. Knoll et al. 2020 is unambiguously a dataset-release paper (title: 'fastMRI: A Publicly Available Raw k-Space and DICOM Dataset of Knee Images for Accelerated MR Image Reconstruction Using Machine Learning'). Its sole contribution is the dataset itself: k-space data, DICOM images, undersampling masks, metadata fields, and acquisition parameters. The manuscript's sentence cites '42' = knoll2020 as the *architectural* source for the UNet baseline used in the fastMRI challenge. Knoll 2020 does double-duty here in the manuscript at large (it is also the natural cite for the fastMRI dataset itself), but for *this specific architectural attribution* the citation does not match the cited paper's content."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "xin2023"
+    ],
+    "sibling_verdicts": [
+      {
+        "citekey": "xin2023",
+        "supports_sub_claim_ids": [],
+        "excerpt": "xin2023 is listed as a co-cite sibling but no pdfs/xin2023/ directory exists in the run output (verified by ls of pdfs/). Its meta.json is therefore unavailable for this extraction. The sibling could not be inspected; sub-claim support from xin2023 is not assessed here."
+      }
+    ]
+  },
+  "stage": "grounding"
+}

@@ -67,6 +67,7 @@ Keep the question count at or below these six (not counting the internal search-
 - `pdfs/<citekey>.pdf` — fetched source PDFs.
 - `pdfs/<citekey>/` — per-PDF **ingest handle** (Phase 2.5 output): `meta.json`, `content.txt`, `sections/*.txt`, `figures/*.png`, `figures/index.json`, `ingest_report.json`. Schema: `.claude/specs/ingest.md`.
 - `parse_report.md` — bibliography parser diagnostics + ingest-mode summary (how many refs ingested via GROBID vs fallbacks).
+- `demo.html` — standalone HTML viewer rendered from the verdict JSONs (PDF.js viewer + claims sidebar). Produced by Phase 5.
 - `trace/<subagent_id>.jsonl` — per-subagent trace log for observability (see "Trace log").
 
 ### Ledger additions for reader mode
@@ -310,6 +311,27 @@ Record low-confidence matches in `parse_report.md` so a human can spot-check; do
 - Map each marker to the corresponding `refs.bib` citekey.
 - For multi-marker sentences (e.g., `[5, 12, 17]`), produce one claim entry per `(sentence, citekey)` pair — matching the existing `/ground-claim` multi-cite semantics. The grounding subagent handling each entry is responsible for determining which *sub-aspect* of the sentence its citekey supports (see `/ground-claim` Step 5 "Sub-claim attributed" field).
 
+### Step 3.1.5 — Validate extracted claims against the manuscript
+
+Before any Phase 3 dispatch, run the claim-extraction validator:
+
+```bash
+python3 .claude/scripts/validate_claims.py --run-dir <output-dir>
+```
+
+The validator enforces two invariants per extracted claim, with no LLM cost:
+
+- **TEXT_ANCHOR_MISSING** — the claim's `claim_text` must fuzzy-match somewhere in `paper.txt`. If no 3-word content-token window (with up to 3 intervening words) appears in the manuscript, the stored claim_text is paraphrased or fabricated and should not be dispatched.
+- **CITEKEY_MARKER_MISMATCH** — once a text anchor is found, the citation markers within ±280 chars of that position must include the `refnum` that the claim's `citekey` resolves to. Range markers like `28–33` are expanded. A mismatch means the claim is attached to the wrong reference.
+
+The validator writes `claim_extraction_report.md` and exits non-zero if any claim flags. Default behavior is **strict** — the orchestrator must pause and surface the report via `AskUserQuestion` when flags exist. Options:
+
+- `Drop flagged claims from this run` — exclude them from Phase 3 dispatch; record in `parse_report.md`.
+- `Re-run extraction for flagged claims only` — requeue those claims for Phase 3.1 with a pointed "this claim's text was not found in the manuscript; re-extract the actual sentence" message.
+- `Proceed anyway` — dispatch all claims including flagged ones; only use when the user has reviewed `claim_extraction_report.md` and accepted the risk.
+
+Running retroactively against an existing run is safe and informative — the report is diagnostic-only unless piped into a re-extraction pass.
+
 ### Step 3.2 — Two-pass dispatch (extractor → adjudicator)
 
 Each claim is processed by **two subagents in sequence**, then a **third verifier subagent** in Phase 3.5. The three dispatch prompts are materialized in `.claude/prompts/` — the orchestrator reads the template, fills `{{slots}}` with per-claim values, and sends the result verbatim. No improvisation at dispatch time. See `.claude/specs/verdict_schema.md` for the exit-JSON contract both passes share.
@@ -435,6 +457,18 @@ If the user defers, note the count in the triage report and exit. Re-run `/paper
 ### `--triage` invocation (standalone)
 
 When invoked with `--triage`, skip Phases 0–3 entirely. Read the existing ledger in the output directory and run only the triage workflow above on `AMBIGUOUS` entries. No new grounding is performed.
+
+## Phase 5 — Render HTML viewer
+
+After Phase 4 completes (or at the end of a `--triage`-only run), render the standalone HTML viewer:
+
+```bash
+python3 .claude/scripts/render_html_demo.py --run-dir <output-dir>
+```
+
+The script reads `ledger/claims/*.json`, `refs.bib` (or `refs.verified.bib` if present), `paper.txt`, and the input PDF, then emits `<output-dir>/demo.html` — a PDF.js-based viewer with a claims sidebar. Re-run after any `--recheck`, `--triage`, or partial resume to keep the viewer in sync with the JSONs.
+
+If the script fails or is unavailable, emit a non-fatal warning — the run's canonical artifacts (`ledger/claims/*.json` + `ledger.md`) are unaffected.
 
 ### Do not
 

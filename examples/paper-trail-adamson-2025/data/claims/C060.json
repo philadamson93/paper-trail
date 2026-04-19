@@ -1,0 +1,123 @@
+{
+  "claim_id": "C060",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "gu2022",
+  "handle": "pdfs/gu2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "We used two DFDs based on natural images, LPIPS and the Deep Image Structure and Texture Similarity index (DISTS),28 which have been used as benchmark IQ metrics in large-scale computer vision IQ metric studies.34",
+  "manuscript_section": "2.5.1 Out-of-domain DFDs (paper.txt L407-L410); ref 34 = gu2022",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C060.a",
+      "text": "gu2022 is a large-scale computer-vision IQ metric study (the NTIRE Perceptual Image Quality Assessment Challenge) in which LPIPS and DISTS are used/evaluated as benchmark (baseline) IQ metrics alongside other state-of-the-art deep-learning-based and traditional IQA methods on natural images.",
+      "evidence": [
+        {
+          "section": "meta.json (title)",
+          "line": 3,
+          "snippet": "\"title\": \"NTIRE 2021 Challenge on Perceptual Image Quality Assessment\""
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": 31,
+          "snippet": "\"This paper reports on the NTIRE 2021 challenge on perceptual image quality assessment (IQA), held in conjunction with the New Trends in Image Restoration and Enhancement workshop (NTIRE) workshop at CVPR 2021. ... The challenge has 270 registered participants in total. In the final testing stage, 13 participating teams submitted their models and fact sheets. Almost all of them have achieved much better results than existing IQA methods, while the winning method can demonstrate state-of-the-art performance.\""
+        },
+        {
+          "section": "Introduction (sections/Introduction.txt L2)",
+          "line": 2,
+          "snippet": "\"The NTIRE 2021 challenge takes a step forward in benchmarking perceptual IQA -the task of predicting the perceptual quality of an image obtained by perceptualoriented algorithms. We employ a new dataset called PIPAL [20] as our training set, which contains 200 reference images, 29k distorted images and 1.13M human judgements.\""
+        },
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA (sections/The NTIRE Challenge on Perceptual IQA.txt L1)",
+          "line": 1,
+          "snippet": "\"We host the NTIRE 2021 Perceptual Image Quality Assessment Challenge and the objective are three-fold: (1) to push developing state-of-the-art perceptual image quality assessment algorithms to deal with the novel GAN-based distortion types; (2) to compare different solutions and gain new insights; and (3) to promote a novel large perceptual IQA dataset (PIPAL [20, 19]).\""
+        },
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA (sections/The NTIRE Challenge on Perceptual IQA.txt L5-L6)",
+          "line": 5,
+          "snippet": "\"Evaluation protocol. Our evaluation indicator, namely main score, consists of both Spearman rank-order correlation coefficient (SRCC) [45] and Person linear correlation coefficient (PLCC) [4] ... The SRCC evaluates the monotonicity of methods that whether the scores of high-quality images are higher (or lower) than low-quality images.\" \u2014 same SRCC/SROCC methodology that the manuscript adopts."
+        },
+        {
+          "section": "Challenge Results (sections/Challenge Results.txt L1)",
+          "line": 1,
+          "snippet": "\"We also select some existing representative IQA methods as our baseline. Specifically, We choose PSNR, SSIM [54] and FSIM [59] as representative traditional IQA methods, PI [7] and NIQE [35] as representative blind IQA methods, and LPIPS [61], DISTS [12], PieAPP [39] and SWD [19] as representative deeplearning based methods.\" \u2014 explicitly names LPIPS and DISTS as benchmark/baseline IQ metrics."
+        },
+        {
+          "section": "Challenge Results (sections/Challenge Results.txt L3)",
+          "line": 3,
+          "snippet": "\"As shown in Table 1, 11 of 13 participating teams achieve an SRCC score higher than 0.75 on PIPAL, which significantly surpasses the highest performance of existing algorithms (0.65). The champion team achieves an SRCC score of 0.799 and a PLCC score of 0.790, refreshing the state-of-the-art performance on PIPAL.\" \u2014 confirms LPIPS/DISTS are reported as part of the comparative evaluation across baselines and submitted methods."
+        },
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA (sections/The NTIRE Challenge on Perceptual IQA.txt L3-L4)",
+          "line": 3,
+          "snippet": "\"More than 1.13 million human judgements are collected to assign mean opinion scores (MOS) for PIPAL images using the Elo rating system [16]. ... 753k human judgements are involved in preparing the validation and testing set.\" \u2014 establishes the 'large-scale' character (>1.88M human judgments across train/val/test) of the IQ-metric study."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "NTIRE 2021 Perceptual IQA Challenge: PIPAL natural-image dataset, ~1.88M total human MOS judgements, 270 registered participants, 13 teams in final testing, baselines include LPIPS and DISTS (alongside PSNR, SSIM, FSIM, PI, NIQE, PieAPP, SWD); evaluated by SRCC + PLCC.",
+      "claim_value": "LPIPS and DISTS 'have been used as benchmark IQ metrics in large-scale computer vision IQ metric studies' (manuscript ref 34 = gu2022).",
+      "nuance": "Citation function (LPIPS/DISTS as benchmark/baseline IQ metrics in a large-scale natural-image IQA study) is fully supported by gu2022's Challenge Results section, which explicitly names LPIPS and DISTS as 'representative deep-learning based methods' selected as baselines against the 13 challenge submissions. Year-mismatch caveat (also flagged on C035/C048): the manuscript's bibliography entry for ref 34 says 'NTIRE 2022 challenge', but the ingested PDF (and its title/abstract) is the NTIRE 2021 challenge organizers' report. This is an acknowledged citation-target substitution carried over from v1; the substantive claim about LPIPS/DISTS being used as benchmark IQ metrics in a large-scale natural-image IQA study is true of both the 2021 and 2022 NTIRE challenges, and gu2022 (NTIRE 2021) is itself a primary instance of such a study."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "LPIPS / DISTS as baseline / benchmark / representative deep-learning IQA methods",
+      "large-scale IQA study / large-scale perceptual quality benchmark / NTIRE Perceptual IQA Challenge",
+      "natural-image IQA / PIPAL dataset / GAN-based distortions / perceptual-oriented algorithms",
+      "evaluation by SRCC / Spearman rank-order correlation coefficient / monotonicity / PLCC",
+      "deep-learning IQA methods vs traditional IQA methods (PSNR, SSIM, FSIM, NIQE, PI) \u2014 comparison/benchmark setting"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json (title, authors, abstract, pub_date)",
+        "read": true
+      },
+      {
+        "section": "Introduction (sections/Introduction.txt)",
+        "read": true
+      },
+      {
+        "section": "Related Work (sections/Related Work.txt)",
+        "read": true
+      },
+      {
+        "section": "The NTIRE Challenge on Perceptual IQA (sections/The NTIRE Challenge on Perceptual IQA.txt)",
+        "read": true
+      },
+      {
+        "section": "Challenge Methods (sections/Challenge Methods.txt)",
+        "read": true
+      },
+      {
+        "section": "Challenge Results (sections/Challenge Results.txt)",
+        "read": true
+      },
+      {
+        "section": "Per-team write-ups (sections/LIPT.txt, Huawei Noah_s Ark.txt, THUIIGROUP1919.txt, MACS.txt, MT-GTD.txt, SI Analytics.txt, The Amaurotia.txt, Yahaha.txt, debut kele.txt, tsubota.txt, HIFIC Compression ESRGAN x2 SPSR.txt, Gaussian Noise.txt)",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "No indirect-attribution issue. gu2022 is itself the primary, organizer-authored report of the NTIRE 2021 Perceptual IQA Challenge \u2014 it directly hosts the comparative evaluation in which LPIPS [61] and DISTS [12] serve as deep-learning baselines. (LPIPS and DISTS' own original papers are referenced via [61] and [12] inside gu2022, but the manuscript's claim is about the 'study' that uses them as benchmarks, which is gu2022 itself, not the original LPIPS/DISTS papers.)",
+    "out_of_context_check": "No out-of-context issue. The manuscript uses gu2022 to support that LPIPS/DISTS have functioned as benchmark IQ metrics in a large-scale natural-image IQ-metric study; gu2022 explicitly enumerates LPIPS and DISTS in its baseline-IQA-methods list and reports their performance against challenge submissions on PIPAL \u2014 a direct, in-context match."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

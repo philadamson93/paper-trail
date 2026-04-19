@@ -1,0 +1,20 @@
+{
+  "claim_id": "C055",
+  "sub_claim_id": "C055.a",
+  "run_id": "run_20260418T2354Z",
+  "stage": "verification",
+  "sample_type": "attestation_log",
+  "result": "PASS",
+  "sampled": {
+    "sub_claim_id": "C055.a",
+    "section": "content.txt + sections/*.txt (whole paper)",
+    "line": null,
+    "snippet": "Exhaustive case-insensitive search across content.txt and all sections/*.txt for the terms 'HFEN', 'high-frequency error norm', 'high frequency error', 'error norm' returns ZERO matches. The paper never names, defines, or describes any 'high-frequency error norm' metric."
+  },
+  "observed": {
+    "at_claimed_location": "rg -i 'HFEN|high.{0,2}frequency error|error norm|Laplacian of Gaussian|LoG' over content.txt and sections/*.txt: zero whole-word matches for HFEN, Laplacian, or the LoG acronym. Zero matches for 'high-frequency error', 'error norm', '15x15'/'15 15', or 'sigma'. The only superficial hits were case-insensitive substring matches against the literal letters 'log' inside ordinary English words (methodology, pathology, pathologies, physiological, radiologist, radiologists) and the mathematical logarithm function rendered as 'log\u0351a\u0352', 'log\u0351x\u0352', 'log\u0351y\u0352' (all in III.C., the 2-AFC psychometric-fit section). Whole-word search rg -wi 'LoG|Laplacian|HFEN' returns zero hits in both content.txt and every sections/*.txt file.",
+    "numerical_match": null,
+    "note": "Confirmed absence. None of HFEN, 'high-frequency error norm', 'error norm', 'Laplacian', the LoG acronym, '15x15'/'15 \u00d7 15', or 'sigma' appear anywhere in miao2008's extracted text. Extractor's negative attestation is accurate; the MISATTRIBUTED verdict for C055.a is supported."
+  },
+  "verdict_impact": "none"
+}

@@ -1,0 +1,167 @@
+{
+  "claim_id": "C058",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "ding2020",
+  "handle": "pdfs/ding2020/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "ding2020 (DISTS) is a representative deep-feature-distance metric used as a baseline in IQ comparisons.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C058.a",
+      "text": "DISTS (ding2020) is a deep-feature-distance image-quality metric (full-reference IQA built on CNN/VGG feature representations).",
+      "evidence": [
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 4,
+          "snippet": "Our method is constructed by first nonlinearly transforming images to a multi-scale overcomplete representation, using a variant of the VGG convolutional neural network (CNN) [14]."
+        },
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 6,
+          "snippet": "show that the resulting Deep Image Structure and Texture Similarity (DISTS) index can be transformed into a proper metric in the mathematical sense."
+        },
+        {
+          "section": "Perceptual Distance Measure",
+          "line": 1,
+          "snippet": "Inspired by the form of SSIM [3], we defined separate quality measurements for the texture (using the global means) and the structure (using the global correlations) of each pair of corresponding feature maps"
+        },
+        {
+          "section": "Abstract (meta.json)",
+          "line": 6,
+          "snippet": "Using a convolutional neural network, we construct an injective and differentiable function that transforms images to multi-scale overcomplete representations... we describe an image quality method that combines correlations of these spatial averages (\"texture similarity\") with correlations of the feature maps (\"structure similarity\")."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "DISTS is explicitly built on VGG CNN feature maps and proven to be a proper distance metric, qualifying it unambiguously as a deep-feature-distance IQA metric."
+    },
+    {
+      "sub_claim_id": "C058.b",
+      "text": "DISTS is representative of/comparable to other deep-feature-based IQA baselines (e.g., LPIPS, DeepIQA, PieAPP) in standard IQ comparisons.",
+      "evidence": [
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 5,
+          "snippet": "Popular IQA measures, including PSNR, SSIM [3], FSIM [11], VIF [4], GMSD [12], DeepIQA [13], PieAPP [8], and LPIPS [7], predict that image (b) has a better perceived quality than image (c)... In contrast, the proposed DISTS model makes the correct prediction."
+        },
+        {
+          "section": "Performance on Quality Prediction",
+          "line": 2,
+          "snippet": "We compared DISTS against a set of full-reference IQA methods, including nine knowledge-driven models and three data-driven CNN-based models... As LPIPS [7] has different configurations, we chose the default one (known as LPIPS-VGG-lin)."
+        },
+        {
+          "section": "Performance on Quality Prediction",
+          "line": 3,
+          "snippet": "Results, reported in Table 1, demonstrate that DISTS performs favorably in comparison to both classic methods (e.g., PSNR and SSIM [3]) and CNN-based models (e.g., DeepIQA [13] and LPIPS [7])."
+        },
+        {
+          "section": "Performance on Quality Prediction",
+          "line": 4,
+          "snippet": "We also tested DISTS on BAPPS [7], a large-scale and highly-varied patch similarity dataset... showing that DISTS (which was not trained on BAPPS, or any similar database) achieves a comparable performance to LPIPS [7]"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Within ding2020 itself DISTS is the proposed (not baseline) method, but it is positioned alongside the same family of deep-feature IQA metrics (LPIPS, DeepIQA, PieAPP) routinely used as baselines in downstream IQ comparisons; the manuscript's usage as a 'representative deep-feature-distance metric used as a baseline' is consistent with how ding2020 establishes its category."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "DISTS is a deep-feature-based / CNN-feature-based full-reference image-quality metric",
+      "DISTS uses VGG feature representations to compute image quality (qualifies as a deep-feature-distance metric)",
+      "DISTS is a representative deep-feature IQA method commonly compared against / used as a baseline alongside LPIPS, PieAPP, DeepIQA in image-quality evaluations"
+    ],
+    "section_checklist": [
+      {
+        "section": "Unnamed (Introduction)",
+        "read": true
+      },
+      {
+        "section": "BACKGROUND",
+        "read": false
+      },
+      {
+        "section": "THE DISTS INDEX",
+        "read": true
+      },
+      {
+        "section": "Initial Transformation",
+        "read": false
+      },
+      {
+        "section": "Texture Representation",
+        "read": false
+      },
+      {
+        "section": "Perceptual Distance Measure",
+        "read": true
+      },
+      {
+        "section": "Connections to Other Full-Reference IQA Methods",
+        "read": true
+      },
+      {
+        "section": "EXPERIMENTS",
+        "read": false
+      },
+      {
+        "section": "Implementation Details",
+        "read": false
+      },
+      {
+        "section": "Model Training",
+        "read": false
+      },
+      {
+        "section": "Performance on Quality Prediction",
+        "read": true
+      },
+      {
+        "section": "Performance on Texture Similarity",
+        "read": false
+      },
+      {
+        "section": "Invariance to Geometric Transformations",
+        "read": false
+      },
+      {
+        "section": "Applications to Texture Classification and Retrieval",
+        "read": false
+      },
+      {
+        "section": "Ablation Study",
+        "read": false
+      },
+      {
+        "section": "CONCLUSIONS",
+        "read": false
+      }
+    ],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "ding2020 is the primary source for the DISTS metric \u2014 no indirect attribution; this is the originating publication.",
+    "out_of_context_check": "In ding2020 itself DISTS is the proposed novel method, not a baseline; the manuscript's 'used as a baseline' framing reflects downstream usage in subsequent IQ work, not ding2020's own self-positioning. The category claim ('representative deep-feature-distance metric') matches ding2020 exactly. No context mismatch on the substantive category claim."
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

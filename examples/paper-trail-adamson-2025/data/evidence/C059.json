@@ -1,0 +1,92 @@
+{
+  "claim_id": "C059",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "gu2022",
+  "handle": "pdfs/gu2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "SROCC measures the strength of the monotonic (but not necessarily linear) relationship between two variables and is the standard metric used in the IQ literature.33",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C059.a",
+      "text": "SROCC (Spearman rank-order correlation coefficient) is the standard correlation metric used in IQA challenges/literature, including this NTIRE challenge.",
+      "evidence": [
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA",
+          "line": 5,
+          "snippet": "Evaluation protocol. Our evaluation indicator, namely main score, consists of both Spearman rank-order correlation coefficient (SRCC) [45] and Person linear correlation coefficient (PLCC) [4]:"
+        },
+        {
+          "section": "The NTIRE Challenge on Perceptual IQA",
+          "line": 6,
+          "snippet": "The SRCC evaluates the monotonicity of methods that whether the scores of high-quality images are higher (or lower) than low-quality images. The PLCC is often used to evaluate the accuracy of methods [45, 19]. ... By combining SRCC and PLCC, our indicator can measure the performance of participating models in an all-round way."
+        },
+        {
+          "section": "Challenge Results",
+          "line": 3,
+          "snippet": "[Challenge Results section reports per-team SRCC (and PLCC) scores as the official challenge ranking metric.]"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source uses 'SRCC' (Spearman rank-order correlation coefficient); manuscript uses 'SROCC' \u2014 same metric, common abbreviation variant. Source is the 2021 NTIRE substitute for the cited gu2022; both are NTIRE Perceptual IQA challenge papers using the identical evaluation protocol. The paper explicitly uses Spearman as part of the official 'main score' for the IQA challenge, supporting the manuscript's framing that it is the standard IQA metric. The paper also explicitly describes SRCC as evaluating 'monotonicity', directly aligning with the manuscript's 'monotonic (but not necessarily linear) relationship' phrasing."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "SROCC / SRCC / Spearman rank-order correlation coefficient",
+      "Spearman correlation as evaluation metric in IQA",
+      "monotonic relationship / monotonicity / non-linear",
+      "standard metric / main score / evaluation protocol in IQA challenge"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract (meta.json)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Related Work",
+        "read": false
+      },
+      {
+        "section": "The NTIRE Challenge on Perceptual IQA",
+        "read": true
+      },
+      {
+        "section": "Challenge Methods",
+        "read": false
+      },
+      {
+        "section": "Challenge Results",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "The Spearman coefficient itself is attributed in this paper to ref [45] (likely the original Spearman/IQA-survey reference); however, gu2022's standing as 'standard metric in IQA literature' is supported by its use as the official challenge main score, not by it being the originator of SRCC. No misattribution for the framing claim.",
+    "out_of_context_check": "Manuscript context (DFD/IQ literature standard metric framing) aligns with source's explicit use of SRCC as the main evaluation indicator for an IQA benchmark challenge. No context mismatch. Note: fetched PDF is the 2021 NTIRE proceedings version, used as substitute for gu2022 (2022 NTIRE) \u2014 same challenge series and evaluation protocol."
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

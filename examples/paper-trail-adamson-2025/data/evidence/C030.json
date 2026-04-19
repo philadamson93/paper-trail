@@ -1,0 +1,170 @@
+{
+  "claim_id": "C030",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0036Z",
+  "citekey": "cong2022",
+  "handle": "pdfs/cong2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Although LPIPS and other DFDs[28\u201333] outperform commonly used IQ metrics in terms of correlation with human perceptual judgments in large-scale computer vision studies,[34] these studies evaluate DFDs on natural images belonging to the same domain as the images used for encoder training.",
+  "manuscript_section": "",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C030.a",
+      "text": "cong2022 is a representative deep-feature-based / perceptual image quality (IQA) method, of the family the manuscript refers to as 'DFDs' (along with LPIPS, DISTS, PieAPP, etc.).",
+      "evidence": [
+        {
+          "section": "meta.json (title)",
+          "line": null,
+          "snippet": "Image Quality Assessment with Gradient Siamese Network"
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": null,
+          "snippet": "In this work, we introduce Gradient Siamese Network (GSN) for image quality assessment. The proposed method is skilled in capturing the gradient features between distorted images and reference images in full-reference image quality assessment (IQA) task. ... Our network won the second place in NTIRE 2022 Perceptual Image Quality Assessment Challenge track 1 Full-Reference."
+        },
+        {
+          "section": "Introduction",
+          "line": 2,
+          "snippet": "In recent years, although deep learning techniques [19][20][21][22][23] have achieved success in IQA tasks, various emerging image processing methods have brought new challenges to IQA methods. ... To improve the IQA accuracy, we employ central differential convolution to gather low-quality image semantic features and detail differences, and image fine-grained is extracted. A multi-level feature fusion method is designed to use image feature information efficiently."
+        },
+        {
+          "section": "Proposed Method",
+          "line": 1,
+          "snippet": "The proposed GSN architecture ... consists of a weight-sharing Siamese Network, a multi-level feature fusion module, and a regression head. First, we utilize a Siamese network based on CDC and spatial attention to process the reference image and distorted image. ... Finally, a fully connected layer is used as a regression head to obtain the predicted quality scores."
+        },
+        {
+          "section": "Experiments / Results table",
+          "line": 1,
+          "snippet": "PSNR ... SSIM ... MS-SSIM ... DeepIQA ... PieAPP ... LPIPS ... DISTS ... GSN(ours) ... [comparison on LIVE, CSIQ, TID2013 and NTIRE 2022 FR Track]"
+        },
+        {
+          "section": "Related Work",
+          "line": 2,
+          "snippet": "Deep-learning-based IQA methods have achieved success in various image processing tasks. ... In particular, the NTIRE 2021 Perceptual Image Quality Assessment Challenge has verified the effectiveness of deep-learning-based IQA methods."
+        },
+        {
+          "section": "Dataset",
+          "line": 1,
+          "snippet": "Comparison experiments are established based on three public databases, including the LIVE Image Quality Assessment Database (LIVE), the Categorical Subjective Image Quality (CSIQ) database, and the Tampere image database 2013 (TID2013). Furthermore ... we evaluated the performance of the proposed method with other IQA algorithms on the NTIRE 2022 FR Track."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "cong2022 (Gradient Siamese Network, 2nd place NTIRE 2022 Perceptual IQA Challenge, full-reference track) is a deep-CNN-based perceptual full-reference IQA method that operates by comparing learned features between reference and distorted images and is benchmarked head-to-head against LPIPS, DISTS, and PieAPP \u2014 i.e., it sits inside the same DFD/perceptual-IQA family the manuscript groups together. The cited domain for evaluation is natural images (LIVE, CSIQ, TID2013, PIPAL/NTIRE), which is consistent with the manuscript's framing about DFDs being evaluated on natural images. Note: the cong2022 paper itself does not use the term 'DFD'; it uses 'IQA'/'perceptual IQA'. The manuscript's grouping is a reasonable label for this method but is the manuscript's terminology, not cong2022's."
+    },
+    {
+      "sub_claim_id": "C030.b",
+      "text": "cong2022 evaluates its perceptual IQA method on natural-image datasets belonging to the same general domain as the images used for the underlying CNN feature encoder \u2014 specifically natural-photographic IQA benchmarks (LIVE, CSIQ, TID2013, PIPAL/NTIRE 2022 FR).",
+      "evidence": [
+        {
+          "section": "Dataset",
+          "line": 1,
+          "snippet": "Comparison experiments are established based on three public databases, including the LIVE Image Quality Assessment Database (LIVE), the Categorical Subjective Image Quality (CSIQ) database, and the Tampere image database 2013 (TID2013). Furthermore, according to the official information provided, we evaluated the performance of the proposed method with other IQA algorithms on the NTIRE 2022 FR Track. With resolutions ranging from 438\u00d7634 pixels to 512\u00d7768 pixels, LIVE consisted of 29 reference images and 779 distorted images corrupted by 5 types of distortions. CSIQ includes 30 reference images and 866 distorted images corrupted by JPEG compression (JPEG), JPEG2000 compression (JP2K), white noise (WN), Gaussian blur (GB), additive pink Gaussian noise (AGB), and global contrast decrements. All images in CSIQ have a resolution of 384\u00d7521. TID2013 consists of 25 reference images and 3K distorted images, in which the distorted image is obtained by corrupting the reference image in 24 distorted types."
+        },
+        {
+          "section": "Experiments / Results table",
+          "line": 1,
+          "snippet": "our model trained by the PIPAL [11] is compared with [13, 14, 19, 37, 39, 43-53] on NTIRE 2022 FR Track dataset for evaluating IQA performance."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "All evaluation datasets (LIVE, CSIQ, TID2013, PIPAL/NTIRE 2022 FR) are natural-photographic image benchmarks. The paper does not evaluate on out-of-domain (e.g., medical or non-natural) imagery, consistent with the manuscript's characterization that DFD studies evaluate on natural images. The claim's stronger sub-assertion \u2014 that the natural images belong to the same domain as 'the images used for encoder training' \u2014 is implicit here: cong2022 uses CNN encoders (CDC-based) and trains on PIPAL natural images, then evaluates on natural-image IQA datasets, so train and test domains are both natural images. The paper does not explicitly frame this as a domain-match claim."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "cong2022 as a representative deep-feature-distance / perceptual IQA method",
+      "Does cong2022 propose a CNN-feature-based image quality measure benchmarked against LPIPS / DISTS / PieAPP?",
+      "On what image domain (natural vs. domain-specific, e.g., medical) is cong2022 trained and evaluated?",
+      "Is cong2022 a NTIRE 2022 perceptual IQA challenge submission that uses learned deep features for full-reference image quality?"
+    ],
+    "section_checklist": [
+      {
+        "section": "meta.json (title + abstract)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Related Work",
+        "read": true
+      },
+      {
+        "section": "Proposed Method",
+        "read": true
+      },
+      {
+        "section": "Method",
+        "read": true
+      },
+      {
+        "section": "Dataset",
+        "read": true
+      },
+      {
+        "section": "Experiments / Results",
+        "read": true
+      },
+      {
+        "section": "Siamese Network",
+        "read": false
+      },
+      {
+        "section": "Architecture Details",
+        "read": false
+      },
+      {
+        "section": "Multi-level Feature Fusion",
+        "read": false
+      },
+      {
+        "section": "Loss Function",
+        "read": false
+      },
+      {
+        "section": "Implementation detail",
+        "read": false
+      },
+      {
+        "section": "Ablations",
+        "read": false
+      },
+      {
+        "section": "NTIRE 2022 Perceptual IQA Challenge",
+        "read": false
+      },
+      {
+        "section": "Conclusion",
+        "read": false
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "cong2022 cites and benchmarks against LPIPS, DISTS, PieAPP, DeepIQA, etc.; it does not credit another primary for the deep-feature-perceptual-quality concept itself \u2014 it presents its own GSN method as a contribution within that established family.",
+    "out_of_context_check": "The manuscript groups cong2022 with LPIPS et al. as 'DFDs.' cong2022 self-describes as 'IQA' / 'perceptual IQA' and uses Siamese CNN feature comparison + gradient features. The functional role (deep-feature-based perceptual quality measure for natural images) matches; the label 'DFD' is the manuscript's terminology, not cong2022's. No material context mismatch \u2014 cong2022's claims about IQA methods are about natural images, which is exactly what the manuscript is asserting."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

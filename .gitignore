@@ -13,3 +13,5 @@
 # Workspace specs/scripts/prompts/commands under .claude/ are still tracked.
 .claude/settings.local.json
 .claude/skills/
+.claude/scripts/__pycache__/
+*.pyc

@@ -1,0 +1,137 @@
+{
+  "claim_id": "C027",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T2354Z",
+  "citekey": "zhao2022",
+  "handle": "pdfs/zhao2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "zhao2022 is a fastMRI dataset extension/companion paper providing pathology annotations for the fastMRI corpus.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C027.a",
+      "text": "zhao2022 (fastMRI+) is an extension/companion dataset paper to the fastMRI dataset, building directly on the fastMRI knee and brain MRI corpus.",
+      "evidence": [
+        {
+          "section": "Background _ Summary.txt",
+          "line": 4,
+          "snippet": "In this paper, we present wide availability of a complementary dataset of annotations, fastMRI+, consisting of human subspecialist expert clinical bounding box labelled pathology annotations for knee and brain MRI scans from the fastMRI multi-coil dataset"
+        },
+        {
+          "section": "MRI image dataset..txt",
+          "line": 1,
+          "snippet": "The fastMRI dataset is an open-source dataset, which contains raw and DICOM data from MRI acquisitions of knees and brains, described in detail elsewhere [9]. The images used in this study were directly obtained from the fastMRI dataset, reconstructed from fully sampled, multi-coil k-space data (both knee and brain)."
+        },
+        {
+          "section": "MRI image dataset..txt",
+          "line": 4,
+          "snippet": "All 1172 fastMRI knee MRI raw dataset studies were reconstructed and clinically annotated for fastMRI+."
+        },
+        {
+          "section": "MRI image dataset..txt",
+          "line": 5,
+          "snippet": "A sub selection of 1001 out of 5847 fastMRI brain MRI raw dataset studies were selected randomly for annotation."
+        },
+        {
+          "section": "meta.json (title)",
+          "line": 0,
+          "snippet": "fastMRI+, Clinical pathology annotations for knee and brain fully sampled magnetic resonance imaging data"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The paper explicitly describes itself as a 'complementary dataset of annotations' to the fastMRI multi-coil dataset, with images 'directly obtained from the fastMRI dataset.' Title phrasing 'fastMRI+' positions it as a named extension."
+    },
+    {
+      "sub_claim_id": "C027.b",
+      "text": "zhao2022 provides clinical pathology annotations (subspecialist-radiologist bounding boxes and study-level labels) for the fastMRI knee and brain MRI corpus.",
+      "evidence": [
+        {
+          "section": "Background _ Summary.txt",
+          "line": 4,
+          "snippet": "fastMRI+, consisting of human subspecialist expert clinical bounding box labelled pathology annotations for knee and brain MRI scans from the fastMRI multi-coil dataset: specifically encompassing 16154 bounding box annotations and 13 study-level labels for 22 different pathology categories on knee MRIs, as well as 7570 bounding box annotations and 643 study-level labels for 30 different pathology categories on brain MRIs."
+        },
+        {
+          "section": "meta.json (abstract)",
+          "line": 0,
+          "snippet": "This work introduces fastMRI+, which consists of 16154 subspecialist expert bounding box annotations and 13 study-level labels for 22 different pathology categories on the fastMRI knee dataset, and 7570 subspecialist expert bounding box annotations and 643 study-level labels for 30 different pathology categories for the fastMRI brain dataset."
+        },
+        {
+          "section": "MRI image dataset..txt",
+          "line": 3,
+          "snippet": "A subspecialist board certified musculoskeletal radiologist with 6 years in practice experience performed annotation for the knee dataset and a subspecialist board certified neuroradiologist with 2 years in practice experience performed annotation for the brain dataset. Annotation was performed with bounding box annotation to include the relevant label for a given pathology on a slice-by-slice level."
+        },
+        {
+          "section": "Background _ Summary.txt",
+          "line": 2,
+          "snippet": "While the fastMRI data has enabled exploration of ML-driven accelerated MRI reconstruction [10, 11], there is a lack of clinical pathology information to accompany the imaging data which has limited the reconstruction assessment"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Annotation type and provenance are explicit: bounding boxes plus study-level labels, performed by subspecialist board-certified radiologists (musculoskeletal radiologist for knee; neuroradiologist for brain), motivated specifically by the absence of clinical pathology labels in the original fastMRI release."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "fastMRI+ as extension/companion dataset to fastMRI (complementary dataset of annotations; built on fastMRI knee/brain corpus)",
+      "pathology annotations on fastMRI (bounding box pathology annotations; study-level labels; subspecialist radiologist annotation of fastMRI knee and brain MRI scans)",
+      "relationship to original fastMRI dataset (images directly obtained from fastMRI; addresses lack of clinical pathology information accompanying fastMRI imaging data)",
+      "annotation methodology and scope (subspecialist board-certified musculoskeletal/neuro-radiologist; 1172 knee studies; 1001 of 5847 brain studies; 22 knee pathology categories; 30 brain pathology categories)"
+    ],
+    "section_checklist": [
+      {
+        "section": "Background _ Summary.txt",
+        "read": true
+      },
+      {
+        "section": "Background Summary.txt",
+        "read": true
+      },
+      {
+        "section": "MRI image dataset..txt",
+        "read": true
+      },
+      {
+        "section": "Data Records.txt",
+        "read": true
+      },
+      {
+        "section": "technical Validation.txt",
+        "read": true
+      },
+      {
+        "section": "Usage Notes.txt",
+        "read": true
+      },
+      {
+        "section": "content.txt (full)",
+        "read": true
+      },
+      {
+        "section": "meta.json",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "Background _ Summary L4 is a near-verbatim self-description: 'we present wide availability of a complementary dataset of annotations, fastMRI+, consisting of human subspecialist expert clinical bounding box labelled pathology annotations for knee and brain MRI scans from the fastMRI multi-coil dataset.' Title in meta.json ('fastMRI+, Clinical pathology annotations for knee and brain fully sampled magnetic resonance imaging data') and MRI image dataset L1 ('The images used in this study were directly obtained from the fastMRI dataset') jointly establish the extension/companion + pathology-annotation framing that the manuscript sub-claim asserts.",
+    "indirect_attribution_check": "zhao2022 is the primary source of the fastMRI+ pathology annotations themselves (it announces and releases them via Synapse and the microsoft/fastmri-plus GitHub repository). It cites the original fastMRI paper (ref [9]) for the underlying imaging data, but the pathology-annotation contribution is original to this paper. Direct attribution to zhao2022 for fastMRI+ pathology annotations is appropriate.",
+    "out_of_context_check": "No out-of-context concern. The paper unambiguously frames itself as a complementary annotation dataset extending the fastMRI corpus with subspecialist-radiologist pathology labels, which is exactly what the manuscript sub-claim asserts."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "grounding"
+}

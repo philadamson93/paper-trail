@@ -1,0 +1,96 @@
+{
+  "claim_id": "C056",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "chen2022",
+  "handle": "pdfs/chen2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "Although less routinely reported than the preceding IQ metrics, MSSIM, IWSSIM, FSIM, and HFEN are also used as IQ metrics for evaluating MR reconstructions.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C056.a",
+      "text": "chen2022 review supports that MSSIM/IWSSIM/FSIM/HFEN are alternative-but-less-common IQ metrics in MR reconstruction.",
+      "evidence": [
+        {
+          "section": "C. Evaluation Metrics",
+          "line": 2,
+          "snippet": "To compare the reconstructed images with the ground truth, most studies reported the structural similarity index measure (SSIM) and the peak signal-to-noise ratio (PSNR) [see Fig.  4(b) ]. Fewer used NRMSE, MSE, and the signalto-noise ratio (SNR)."
+        },
+        {
+          "section": "C. Evaluation Metrics",
+          "line": 4,
+          "snippet": "The most highly correlated quantitative metrics are high-frequency error norm (HFEN), MAE, PSNR, and MAE."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PARTIALLY_SUPPORTED",
+      "paper_value": "chen2022 lists 'fewer used' metrics as NRMSE, MSE, SNR (plus qualitative metrics: image sharpness, OQ, EDV/EF/ESV by segmentation, Likert). HFEN is mentioned only as a correlated metric in the redundancy analysis. MSSIM/MS-SSIM, IW-SSIM, and FSIM do not appear anywhere in chen2022.",
+      "claim_value": "MSSIM, IWSSIM, FSIM, and HFEN are also used as IQ metrics (less routinely than SSIM/PSNR/etc.).",
+      "nuance": "Of the four metrics named in the manuscript sentence, only HFEN appears in chen2022, and not in a passage characterizing it as a less-routinely-reported alternative IQ metric \u2014 it shows up only in the inter-metric correlation discussion. MSSIM, IW-SSIM, and FSIM are absent from chen2022 entirely."
+    }
+  ],
+  "overall_verdict": "PARTIALLY_SUPPORTED",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RECITE",
+    "suggested_edit": "chen2022 does not enumerate MSSIM, IW-SSIM, or FSIM as MR-reconstruction IQ metrics; it lists 'fewer used' metrics as NRMSE/MSE/SNR and mentions HFEN only in a correlation context. Either (a) cite a source that explicitly catalogs MSSIM/IW-SSIM/FSIM/HFEN as alternative MR IQ metrics (e.g., a metrics-focused review), or (b) drop chen2022 from this sentence and re-cite per-metric."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "MSSIM | MS-SSIM | IWSSIM | IW-SSIM | FSIM | HFEN (case-insensitive regex across all chen2022 files)",
+      "alternative metric | less routinely (case-insensitive across content.txt and sections/)",
+      "multiscale | multi-scale | feature similarity | information-weighted | information weighted (case-insensitive across all chen2022 files)",
+      "Direct read of section 'C. Evaluation Metrics' end-to-end for any enumeration of less-common IQ metrics"
+    ],
+    "section_checklist": [
+      {
+        "section": "I. Introduction",
+        "read": false
+      },
+      {
+        "section": "II. Network Architectures",
+        "read": false
+      },
+      {
+        "section": "III. Image Redundancy",
+        "read": false
+      },
+      {
+        "section": "IV. Meta-Analysis Method / A. Data Collection",
+        "read": false
+      },
+      {
+        "section": "V. Meta-Analysis Results / C. Evaluation Metrics",
+        "read": true
+      },
+      {
+        "section": "VI. Challenges",
+        "read": false
+      },
+      {
+        "section": "VII. Conclusion and Outlook",
+        "read": false
+      },
+      {
+        "section": "content.txt (full-text grep sweep)",
+        "read": true
+      }
+    ],
+    "closest_adjacent": "C. Evaluation Metrics, sentence: 'most studies reported the structural similarity index measure (SSIM) and the peak signal-to-noise ratio (PSNR) [see Fig. 4(b)]. Fewer used NRMSE, MSE, and the signal-to-noise ratio (SNR).' This is the only chen2022 passage that frames a 'less-routinely-reported' tier of IQ metrics, but its members (NRMSE, MSE, SNR) do not match the manuscript's list (MSSIM, IWSSIM, FSIM, HFEN). HFEN appears separately as a correlated-metrics note: 'The most highly correlated quantitative metrics are high-frequency error norm (HFEN), MAE, PSNR, and MAE.'",
+    "indirect_attribution_check": "chen2022 does not credit another primary for an MSSIM/IW-SSIM/FSIM/HFEN catalog; the metrics simply are not enumerated as a group there.",
+    "out_of_context_check": "Where HFEN does appear in chen2022, it is in a redundancy/correlation analysis among quantitative metrics, not in a usage-frequency characterization. Citing chen2022 for 'these are less-routinely-reported alternative IQ metrics' uses HFEN in a different context than chen2022's own."
+  },
+  "co_cite_context": null,
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

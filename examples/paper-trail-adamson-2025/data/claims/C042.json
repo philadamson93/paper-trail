@@ -1,0 +1,42 @@
+{
+  "claim_id": "C042",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T0032Z",
+  "citekey": "wang2024",
+  "handle": "pdfs/wang2024/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "In light of the recent \u201chidden noise\u201d problem,41 the bias present in conventional reconstruction IQ metrics introduced by acquisition noise in \u201cground truth\u201d data, we additionally assess how perceptual IQ metrics perform under increasing acquisition noise.",
+  "manuscript_section": "**Citekey:** `wang2024` (ref #41)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C042.a",
+      "text": "In light of the recent \u201chidden noise\u201d problem,41 the bias present in conventional reconstruction IQ metrics introduced by acquisition noise in \u201cground truth\u201d data, we additionally assess how perceptua",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF unavailable (paywalled or fetch failed); cannot ground."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": null,
+    "indirect_attribution_check": null,
+    "out_of_context_check": null
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "stub"
+}

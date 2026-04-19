@@ -1,0 +1,160 @@
+{
+  "claim_id": "C054",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T1736Z",
+  "citekey": "zhouwang2004",
+  "handle": "pdfs/zhouwang2004/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "zhouwang2004 specifies the standard SSIM hyperparameters (Gaussian window, K1=0.01, K2=0.03, dynamic range L=255) used in the manuscript's NRMSE/SSIM/PSNR computations.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C054.a",
+      "text": "zhouwang2004 specifies an 11x11 circular-symmetric Gaussian weighting window (standard deviation 1.5 samples, normalized to unit sum) for local SSIM computation.",
+      "evidence": [
+        {
+          "section": "C. Image Quality Assessment using SSIM index",
+          "line": 2,
+          "snippet": "In this paper, we use an 11 \u00d7 11 circularsymmetric Gaussian weighting function"
+        },
+        {
+          "section": "C. Image Quality Assessment using SSIM index",
+          "line": 3,
+          "snippet": "with standard deviation of 1.5 samples, normalized to unit sum ( N i=1 w i = 1). The estimates of local statistics \u00b5 x , \u03c3 x and \u03c3 xy are then modified accordingly"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source states 11x11 size, Gaussian shape, sigma=1.5 samples, and unit-sum normalization verbatim."
+    },
+    {
+      "sub_claim_id": "C054.b",
+      "text": "zhouwang2004 specifies K1 = 0.01 as a SSIM stability constant.",
+      "evidence": [
+        {
+          "section": "C. Image Quality Assessment using SSIM index",
+          "line": 4,
+          "snippet": "Throughout this paper, the SSIM measure uses the following parameter settings: K 1 = 0.01; K 2 = 0.03."
+        },
+        {
+          "section": "B. The Structural SIMilarity SSIM Index",
+          "line": 15,
+          "snippet": "where L is the dynamic range of the pixel values (255 for 8-bit grayscale images), and K 1 1 is a small constant."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null
+    },
+    {
+      "sub_claim_id": "C054.c",
+      "text": "zhouwang2004 specifies K2 = 0.03 as a SSIM stability constant.",
+      "evidence": [
+        {
+          "section": "C. Image Quality Assessment using SSIM index",
+          "line": 4,
+          "snippet": "Throughout this paper, the SSIM measure uses the following parameter settings: K 1 = 0.01; K 2 = 0.03."
+        },
+        {
+          "section": "B. The Structural SIMilarity SSIM Index",
+          "line": 19,
+          "snippet": "where C 2 = (K 2 L) 2 , and K 2 1. This definition again satisfies the three properties listed above."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null
+    },
+    {
+      "sub_claim_id": "C054.d",
+      "text": "zhouwang2004 defines L as the dynamic range of pixel values, with L=255 for 8-bit grayscale images.",
+      "evidence": [
+        {
+          "section": "B. The Structural SIMilarity SSIM Index",
+          "line": 15,
+          "snippet": "where L is the dynamic range of the pixel values (255 for 8-bit grayscale images), and K 1 1 is a small constant."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "K1 = 0.01",
+      "K2 = 0.03",
+      "Gaussian weighting window",
+      "11 x 11 window",
+      "dynamic range L = 255",
+      "SSIM parameter settings"
+    ],
+    "section_checklist": [
+      {
+        "section": "I. Introduction",
+        "read": false
+      },
+      {
+        "section": "II. Image Quality Assessment Based on Error Sensitivity",
+        "read": false
+      },
+      {
+        "section": "III. Structural Similarity Based Image Quality Assessment",
+        "read": false
+      },
+      {
+        "section": "A. New Philosophy",
+        "read": false
+      },
+      {
+        "section": "B. The Structural SIMilarity SSIM Index",
+        "read": true
+      },
+      {
+        "section": "C. Image Quality Assessment using SSIM index",
+        "read": true
+      },
+      {
+        "section": "IV. Experimental Results",
+        "read": false
+      },
+      {
+        "section": "V. Discussion",
+        "read": false
+      },
+      {
+        "section": "VI. Acknowledgement",
+        "read": false
+      }
+    ],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "Paper introduces these hyperparameters as the authors' own choices; not credited to a primary external source. The 8x8 square window in [6],[7] (UQI predecessor) is mentioned as the prior approach being replaced by the 11x11 Gaussian.",
+    "out_of_context_check": "Source presents these hyperparameters as the standard SSIM parameter settings used throughout the paper; this matches the manuscript's usage as canonical SSIM hyperparameters for image quality computation."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

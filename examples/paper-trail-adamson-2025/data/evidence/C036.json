@@ -1,0 +1,112 @@
+{
+  "claim_id": "C036",
+  "schema_version": "1.0",
+  "run_id": "run_20260418T0000Z",
+  "citekey": "deng2009",
+  "handle": "pdfs/deng2009/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+  "claim_text": "The manuscript paragraph context says \"ImageNet[36] / pre-training\" \u2014 sub-claim for ref 36 (deng2009): deng2009 is the original ImageNet paper providing the large-scale image database used for CNN pretraining.",
+  "manuscript_section": null,
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C036.a",
+      "text": "deng2009 is the original ImageNet paper, introducing ImageNet as a large-scale hierarchical image database built on the WordNet structure.",
+      "evidence": [
+        {
+          "section": "Abstract (meta.json)",
+          "line": null,
+          "snippet": "We introduce here a new database called \"ImageNet\", a largescale ontology of images built upon the backbone of the WordNet structure. ImageNet aims to populate the majority of the 80,000 synsets of WordNet with an average of 500-1000 clean and full resolution images. ... This paper offers a detailed analysis of ImageNet in its current state: 12 subtrees with 5247 synsets and 3.2 million images in total."
+        },
+        {
+          "section": "Title (meta.json)",
+          "line": null,
+          "snippet": "ImageNet: A Large-Scale Hierarchical Image Database"
+        },
+        {
+          "section": "Introduction",
+          "line": 1,
+          "snippet": "In this paper, we introduce a new image database called \"ImageNet\", a large-scale ontology of images. We believe that a large-scale ontology of images is a critical resource for developing advanced, large-scale content-based image search and image understanding algorithms, as well as for providing critical training and benchmarking data for such algorithms."
+        },
+        {
+          "section": "Introduction",
+          "line": 2,
+          "snippet": "ImageNet uses the hierarchical structure of WordNet [9]. Each meaningful concept in WordNet, possibly described by multiple words or word phrases, is called a \"synonym set\" or \"synset\". There are around 80,000 noun synsets in WordNet. ... These subtrees contain 5247 synsets and 3.2 million images."
+        },
+        {
+          "section": "Scale",
+          "line": 1,
+          "snippet": "To our knowledge this is already the largest clean image dataset available to the vision research community, in terms of the total number of images, number of images per category as well as the number of categories."
+        },
+        {
+          "section": "ImageNet Applications (Exploiting ImageNet)",
+          "line": null,
+          "snippet": "A training resource. Most of today's object recognition algorithms have focused on a small number of common objects ... ImageNet, on the other hand, contains a large number of images for nearly all object classes including rare ones. ... A benchmark dataset. ... we believe that the high quality, diversity and large scale of ImageNet will enable it to become a new and challenging benchmark dataset for future research."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "deng2009 introduces ImageNet as a large-scale hierarchical image database (3.2M images at publication, targeting tens of millions, organized via WordNet). The paper frames ImageNet as a resource for training and benchmarking object recognition; it does not itself describe CNN pretraining (that came later via Krizhevsky/AlexNet on the ILSVRC subset). The manuscript's claim that ImageNet is \"used for CNN pretraining\" is downstream usage, but deng2009 is unambiguously the canonical citation for the ImageNet database itself."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "ImageNet large-scale image database",
+      "WordNet hierarchical synsets",
+      "image database for object recognition / training resource",
+      "hierarchy of images / ontology of images",
+      "pretraining / CNN training data"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract (meta.json)",
+        "read": true
+      },
+      {
+        "section": "Introduction",
+        "read": true
+      },
+      {
+        "section": "Properties of ImageNet (Scale/Hierarchy/Accuracy/Diversity)",
+        "read": true
+      },
+      {
+        "section": "ImageNet and Related Datasets",
+        "read": true
+      },
+      {
+        "section": "Constructing ImageNet (Collecting/Cleaning Candidate Images)",
+        "read": true
+      },
+      {
+        "section": "ImageNet Applications (Non-parametric Object Recognition, Tree Based Image Classification, Automatic Object Localization)",
+        "read": true
+      },
+      {
+        "section": "Discussion and Future Work / Exploiting ImageNet",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "deng2009 is itself the primary source for the ImageNet database; it does not credit another primary for the database. WordNet (Miller [9]) is credited as the ontology backbone, but the image database ImageNet is original to this paper.",
+    "out_of_context_check": "Manuscript paragraph mentions ImageNet in the context of CNN pre-training. deng2009 itself does not describe CNN pretraining (CNN/AlexNet pretraining results came later, e.g., Krizhevsky 2012); however, deng2009 explicitly frames ImageNet as 'providing critical training and benchmarking data' and as 'a training resource' for object recognition algorithms, so citing it as the source of the database used for pretraining is consistent with its self-described role."
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}
