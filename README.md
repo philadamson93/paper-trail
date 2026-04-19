@@ -6,6 +6,8 @@
 
 Does the paper you cited actually say that? `paper-trail` is LLM-powered citation auditing for scientific papers: it reads each cited source in full, extracts evidence, and records a verdict per claim.
 
+**→ [Live demo](https://philadamson93.github.io/paper-trail/demo.html)** — audit of Adamson et al. 2025 (*Magn Reson Med*), 88 claims grounded against their cited sources. Click any claim in the sidebar to jump to its spot in the PDF.
+
 Shipped as Claude Code slash commands. Each run produces a machine-readable verdict ledger (JSON) and a standalone HTML viewer; a polished web UI is in separate development by a collaborator.
 
 ## Why
@@ -41,7 +43,9 @@ Repeat for every citation. At 50+ references per paper, this is why it usually d
 
 ## See a real run
 
-[`examples/paper-trail-adamson-2025/`](examples/paper-trail-adamson-2025/) is a full audit of Adamson et al. 2025 (*Magnetic Resonance in Medicine*) — 56 references, 88 claims, 49 grounded (39 paywalled and stubbed), six critical findings including two `MISATTRIBUTED` miscitations. The bundle contains:
+**Hosted demo:** [philadamson93.github.io/paper-trail/demo.html](https://philadamson93.github.io/paper-trail/demo.html).
+
+[`examples/paper-trail-adamson-2025/`](examples/paper-trail-adamson-2025/) is the same audit checked into the repo — Adamson et al. 2025 (*Magnetic Resonance in Medicine*), 56 references, 88 claims, 49 grounded (39 paywalled and stubbed), six critical findings including two `MISATTRIBUTED` miscitations. The bundle contains:
 
 - **`demo.html`** — open it in a browser; no server. Citation markers in the paper body are colored by verdict severity; hover any marker for the full evidence popup.
 - **`data/claims/<id>.json`** — 88 per-claim verdict files (the source of truth).
