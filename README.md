@@ -9,17 +9,17 @@
 </p>
 
 <p align="center">
-  The bracket-number citation is a pre-digital convention — a reader sees <code>[7]</code> and takes the link from claim to source on faith. It doesn't have to work that way anymore.
+  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and takes the link from claim to source on faith. It doesn't have to work that way anymore.
 </p>
 
 <p align="center">
   <a href="https://philadamson93.github.io/paper-trail/demo.html">
-    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025%20%C2%B7%2087%20claims%20grounded-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025, 87 claims grounded">
+    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025">
   </a>
 </p>
 
 <p align="center">
-  <sub>Click any claim in the sidebar to jump to its spot in the PDF. Repo copy: <a href="examples/paper-trail-adamson-2025/"><code>examples/paper-trail-adamson-2025/</code></a>.</sub>
+  <sub>This is what an online journal should look like.</sub>
 </p>
 
 ---
