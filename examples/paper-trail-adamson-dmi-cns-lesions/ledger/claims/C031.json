@@ -1,0 +1,98 @@
+{
+  "claim_id": "C031",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "kurhanewicz2011",
+  "handle": "pdfs/kurhanewicz2011/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/kurhanewicz2011.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/kurhanewicz2011.pdf#page=4"
+  ],
+  "claim_text": "In contrast, hyperpolarized 13 C (HP13C) MRSI is an emerging technology offering a dramatically enhanced signal-to-noise ratio (SNR) over conventional 13 C MRSI methods by harnessing the spin hyperpolarization enabled by dynamic nuclear polarization of liquids26,27,28.",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C031.a",
+      "text": "HP13C MRSI offers dramatically enhanced SNR over conventional 13C MRS methods through spin hyperpolarization enabled by dynamic nuclear polarization of liquids.",
+      "evidence": [
+        {
+          "section": "Abstract",
+          "line": null,
+          "snippet": "A solution is to improve sensitivity by a factor of 10,000 or more by temporarily redistributing the populations of nuclear spins in a magnetic field, a process termed hyperpolarization. Although this effect is short-lived, hyperpolarized molecules can be generated in an aqueous solution and infused in vivo where metabolism generates products that can be imaged."
+        },
+        {
+          "section": "What Is Hyperpolarization",
+          "line": 2,
+          "snippet": "On hyperpolarization, the signal from a given number of nuclear spins can be raised by a factor of 10,000 or more when compared with equilibrium conditions in clinically available MRI scanners. This staggering increase in signal has the potential to substantially overcome one of the key limitations of MR: limited sensitivity."
+        },
+        {
+          "section": "What Is Hyperpolarization",
+          "line": 4,
+          "snippet": "Two other hyperpolarization techniques have been developed for applications to MRS and MRI: parahydrogen-induced polarization (PHIP) and dynamic nuclear polarization (DNP). Both methods can be used to polarize molecules containing 13 C, an important advance because of the very large chemical shift range of 13 C in organic molecules and the opportunity for direct tracing of drugs or key metabolic intermediates."
+        },
+        {
+          "section": "Dynamic Nuclear Polarization",
+          "line": 1,
+          "snippet": "DNP methods were developed initially for applications in nuclear and particle physics research, but they became of interest for biomedical applications after the introduction of the dissolution method by Ardenkjaer-Larsen et al. in 2003. The dissolution step rapidly transforms the frozen solution into a dilute room temperature solution in which the nuclear spins of the molecules of interest remain polarized. ... Dissolution DNP yields 13 C nuclear polarization in liquids up to about 40% in selected molecules."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "10,000 or more",
+      "claim_value": "dramatically enhanced",
+      "nuance": "The review quantifies the SNR gain as \u2265~10,000-fold via DNP of liquids (dissolution DNP), precisely matching the manuscript's qualitative \"dramatically enhanced SNR\" framing."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "Optional: the manuscript could quote the widely-cited ~10,000-fold figure from Kurhanewicz 2011 to concretize \"dramatically enhanced SNR.\""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "hyperpolarized 13C offers dramatically enhanced signal-to-noise ratio over conventional 13C MRS",
+      "dynamic nuclear polarization of liquids enables ~10,000-fold MR signal enhancement for 13C",
+      "dissolution DNP overcomes the limited sensitivity of conventional 13C MRS",
+      "HP13C MRSI gains sensitivity by nuclear spin hyperpolarization in dissolution DNP"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "What Is Hyperpolarization", "read": true},
+      {"section": "Dynamic Nuclear Polarization", "read": true},
+      {"section": "Nuclei for Hyperpolarization and the Role of Relaxation", "read": true},
+      {"section": "Metabolism of Hyperpolarized Pyruvate", "read": true},
+      {"section": "Conclusions and Recommendations", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Source cites Ardenkjaer-Larsen et al. 2003 as the primary for dissolution DNP (ref [80] in Kurhanewicz), consistent with the manuscript co-citing ardenkjaerlarsen2003 alongside kurhanewicz2011. Kurhanewicz 2011 is the appropriate review-level citation for the SNR-gain claim.",
+    "out_of_context_check": "The manuscript uses Kurhanewicz 2011 as a review source for the SNR-gain framing; the review's abstract and body explicitly make this claim, so the context matches."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["ardenkjaerlarsen2003", "hurd2012"],
+    "sibling_verdicts": [
+      {
+        "citekey": "ardenkjaerlarsen2003",
+        "supports_sub_claim_ids": ["C031.a"],
+        "excerpt": "Primary source for dissolution DNP; cited by Kurhanewicz 2011 as the foundational method enabling ~10,000-fold 13C signal enhancement in liquids."
+      },
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C031.a"],
+        "excerpt": "Review of HP13C metabolic imaging via dissolution DNP; co-cite consistent with the SNR-gain framing."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

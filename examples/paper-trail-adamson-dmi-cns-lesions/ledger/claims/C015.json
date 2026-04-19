@@ -1,0 +1,101 @@
+{
+  "claim_id": "C015",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "spence2004",
+  "handle": "pdfs/spence2004/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/spence2004.pdf"
+  ],
+  "claim_text": "However, its use in studying brain tumors is somewhat limited by high gray matter FDG uptake14.",
+  "manuscript_section": "1.2 Alternative measures of glucose metabolism",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C015.a",
+      "text": "FDG-PET's utility for studying brain tumors is limited because gray matter takes up FDG at high levels, reducing tumor-to-background contrast.",
+      "evidence": [
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 1,
+          "snippet": "Both high-grade gliomas and gray-matter structures take up 18 F-FDG avidly. Thus, when tumors are in or near gray matter, it may be difficult to distinguish between the two."
+        },
+        {
+          "section": "DISCUSSION",
+          "line": 32,
+          "snippet": "This investigation aimed to show that delaying 18 F-FDG PET of gliomas beyond the standard imaging time of approximately 60 min better distinguishes tumor from gray matter."
+        },
+        {
+          "section": "CONCLUSION",
+          "line": 38,
+          "snippet": "Delineation of gliomas from both gray matter and white matter improves both visually and by SUV analysis when the interval between 18 F-FDG administration and PET data acquisition is extended."
+        },
+        {
+          "section": "Introduction/Unnamed",
+          "line": 2,
+          "snippet": "Based on these observations, we hypothesized that delineation of gliomas with 18 F-FDG PET could be improved by extending the interval between 18 F-FDG administration and PET data acquisition due to slower dephosphorylation of FDG-6-phosphate in tumor relative to gray matter."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "spence2004 directly states that avid gray-matter FDG uptake makes distinguishing tumors from adjacent gray matter difficult, and proposes delayed imaging as a mitigation. The manuscript's limitation claim is well-grounded by this source."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "—",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "FDG uptake in normal gray matter limits brain tumor FDG-PET",
+      "gliomas are hard to distinguish from gray matter on FDG-PET because gray matter takes up FDG",
+      "delayed imaging improves tumor-to-gray-matter contrast in FDG-PET of gliomas",
+      "high gray matter FDG avidity reduces tumor conspicuity"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta)", "read": true},
+      {"section": "Introduction/Unnamed", "read": true},
+      {"section": "Patients", "read": false},
+      {"section": "Radiopharmaceutical Synthesis", "read": false},
+      {"section": "PET Devices and Procedures", "read": false},
+      {"section": "Imaging Procedure", "read": false},
+      {"section": "Image Analysis", "read": true},
+      {"section": "Statistical Analysis", "read": false},
+      {"section": "RESULTS", "read": true},
+      {"section": "DISCUSSION", "read": true},
+      {"section": "CONCLUSION", "read": true}
+    ],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "spence2004 cites prior work on delayed/dual-time-point FDG PET in gray-matter/tumor differentiation but is itself a primary paper establishing the delayed-interval protocol; the limitation of gray-matter avidity is asserted directly in its introduction.",
+    "out_of_context_check": "The manuscript uses spence2004 as evidence of a known FDG-PET limitation; spence2004 frames the same fact as motivation for its methodological contribution (delayed imaging). Usage is consistent."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["corbin2017", "corbin2019"],
+    "sibling_verdicts": [
+      {
+        "citekey": "corbin2017",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested in this run (co-cite marker '5,13' on a prior sentence about tumor metabolism measurement; not the marker '14' that cites spence2004)."
+      },
+      {
+        "citekey": "corbin2019",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested in this run; attached to marker '5,13' on prior sentence, not marker '14'."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

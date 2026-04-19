@@ -1,0 +1,105 @@
+{
+  "claim_id": "C032",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "nelson2013",
+  "handle": "pdfs/nelson2013/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/nelson2013.pdf"
+  ],
+  "claim_text": "GLY), decarboxylated to acetyl-CoA (generating bicarbonate (Bic) in the process) as the first step towards OXPHOS, or transaminated to alanine29 .",
+  "manuscript_section": "Introduction \u00a71.3 (HP13C pyruvate and its three metabolic fates)",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C032.a",
+      "text": "Pyruvate can be reduced to lactate (glycolytic fate), as visualized by HP13C MRSI.",
+      "evidence": [
+        {
+          "section": "Introduction",
+          "line": 5,
+          "snippet": "Increased signal from hyperpolarized [1-13 C]lactate has been observed in preclinical models of prostate cancer relative to normal tissues, owing to both increased uptake of [1- 13 C]pyruvate via monocarboxylate transporters 1 and 4 (MCT1 and MCT4) and increased expression of LDH-A and activity of lactate dehydrogenase (LDH)."
+        },
+        {
+          "section": "1D dynamic MRSI",
+          "line": 10,
+          "snippet": "These dynamic data demonstrated reproducible delivery of hyperpolarized [1- 13 C]pyruvate to the prostate and its conversion to hyperpolarized [1-13 C]lactate."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Nelson 2013 describes and images the pyruvate\u2192lactate (LDH) fate throughout \u2014 this is in fact the paper's sole HP13C readout."
+    },
+    {
+      "sub_claim_id": "C032.b",
+      "text": "Pyruvate can be decarboxylated to acetyl-CoA (generating bicarbonate as a by-product) as the first step towards OXPHOS, as visualized by HP13C MRSI.",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "UNSUPPORTED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Nelson 2013 makes zero mention of acetyl-CoA, bicarbonate, pyruvate dehydrogenase (PDH), OXPHOS, oxidative phosphorylation, or decarboxylation anywhere in the ingested content (Abstract, Introduction, Results, Discussion, Methods). The study's HP13C spectra are explicitly characterized as containing two peaks only: [1-13C]pyruvate (173 ppm) and [1-13C]lactate (185 ppm)."
+    },
+    {
+      "sub_claim_id": "C032.c",
+      "text": "Pyruvate can be transaminated to alanine, as visualized by HP13C MRSI.",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "UNSUPPORTED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Nelson 2013 makes zero mention of alanine or transamination anywhere in the ingested content. The paper's representative spectra (Fig. 2B and throughout) are described as containing only [1-13C]pyruvate and [1-13C]lactate peaks \u2014 no alanine peak (\u223c177 ppm) is reported or discussed."
+    }
+  ],
+  "overall_verdict": "UNSUPPORTED",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RECITE",
+    "suggested_edit": "Re-cite this three-fates sentence to a reference that actually describes all three pyruvate fates (Lac via LDH, acetyl-CoA/Bic via PDH, Ala via transamination) imaged with HP13C \u2014 e.g., a Kurhanewicz/Brindle review, Golman/Ardenkj\u00e6r-Larsen 2006 (PNAS), or Schroeder/Tyler cardiac-PDH studies that explicitly show Pyr/Lac/Ala/Bic peaks. Nelson 2013 is a prostate-specific study whose spectra contain only pyruvate and lactate peaks, so it cannot anchor the alanine or bicarbonate claims. If the intent was to cite Nelson 2013 only for the Lac fate, split the citation.",
+    "remediation_category_note": "RECITE"
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "pyruvate decarboxylated to acetyl-CoA",
+      "bicarbonate as a product of pyruvate oxidation / PDH",
+      "pyruvate transaminated to alanine",
+      "alanine aminotransferase ALT HP13C",
+      "pyruvate dehydrogenase PDH OXPHOS",
+      "three metabolic fates of pyruvate HP13C MRSI",
+      "13C alanine peak prostate cancer",
+      "13C bicarbonate peak prostate cancer"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Study design", "read": true},
+      {"section": "Patient population", "read": true},
+      {"section": "Patient toxicities", "read": true},
+      {"section": "1D dynamic MRSI", "read": true},
+      {"section": "2D dynamic MRSI", "read": true},
+      {"section": "Single-time point MRSI", "read": true},
+      {"section": "Discussion", "read": true},
+      {"section": "13C MR examination protocol (Methods)", "read": true},
+      {"section": "Acquisition parameters for 13C MRSI data", "read": true},
+      {"section": "Data analysis", "read": true},
+      {"section": "Formulation", "read": true},
+      {"section": "Hyperpolarized pyruvate polarization and delivery", "read": true}
+    ],
+    "closest_adjacent": "Nelson 2013 L10 (1D dynamic MRSI): \"Representative 13 C spectra from the same patient taken from a slice including the tumor 36 s after injection demonstrated peaks corresponding to [1- 13 C]pyruvate [173 parts per million (ppm)] and [1- 13 C]lactate (185 ppm) (Fig. 2B). Spectra from the contralateral side of the prostate demonstrated only [1-13 C]pyruvate.\" \u2014 Only two peaks (Pyr, Lac) are described; no alanine or bicarbonate peak is mentioned anywhere in the paper.",
+    "indirect_attribution_check": "N/A \u2014 Nelson 2013 does not contain the fact (alanine/bicarbonate/acetyl-CoA) at all, so it cannot even indirectly credit another primary for it.",
+    "out_of_context_check": "Nelson 2013's scope is prostate cancer HP13C imaging with a pyruvate\u2192lactate readout only. The manuscript's sentence invokes a general three-fates framework (Lac / acetyl-CoA+Bic / Ala) that covers pathways Nelson 2013 never discusses or images. Using Nelson 2013 to anchor the acetyl-CoA/Bic and alanine fates is a context mismatch; using it for the Lac fate alone would be correct."
+  },
+  "co_cite_context": null,
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

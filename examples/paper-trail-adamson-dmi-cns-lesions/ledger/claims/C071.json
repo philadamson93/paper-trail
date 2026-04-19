@@ -1,0 +1,47 @@
+{
+  "claim_id": "C071",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "graaf2020",
+  "handle": "pdfs/graaf2020/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "DMI is relatively robust to these inhomogeneities due to its low Larmor frequency40 , as demonstrated most clearly in Patient C with cerebellar pilocytic astrocytoma (Figure 7 ).",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C071.a",
+      "text": "DMI is relatively robust to these inhomogeneities due to its low Larmor frequency40 , as demonstrated most clearly in Patient C with cerebellar pilocytic astrocytoma (Figure 7 ).",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

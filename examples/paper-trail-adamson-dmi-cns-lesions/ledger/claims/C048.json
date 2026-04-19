@@ -1,0 +1,93 @@
+{
+  "claim_id": "C048",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "low2023",
+  "handle": "pdfs/low2023/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/low2023.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/low2023.pdf#page=2"
+  ],
+  "claim_text": "The 2 H MRI of the metabolic products of deuterated glucose, known as deuterium metabolic imaging (DMI), is the most recently proposed in vivo glucose metabolic imaging method37. As discussed below, we believe DMI has the potential to be both the most accurate and clinically viable method for imaging GLY and OXPHOS.",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C048.a",
+      "text": "Deuterium metabolic imaging (DMI) is a recently (re-)introduced in vivo glucose metabolic imaging method based on 2H MRI of deuterated-glucose metabolism.",
+      "evidence": [
+        {
+          "section": "Abstract",
+          "line": null,
+          "snippet": "Deuterium metabolic imaging (DMI) is an emerging clinically-applicable technique for the non-invasive investigation of tissue metabolism. \u2026 Studies with deuterated substrates, including [6,6\u2032-2H2]glucose, [2H3]acetate, [2H9]choline and [2,3-2H2]fumarate have demonstrated the considerable potential of DMI for imaging tissue metabolism and cell death in vivo."
+        },
+        {
+          "section": "Introduction",
+          "line": 1,
+          "snippet": "The recent demonstration that 2 H MRI (DMI) could be used to follow the metabolism of [6,6\u2032-2H2]glucose following oral administration in healthy normal volunteers and in cancer patients [7] has led to a resurgence of interest in this metabolic imaging technique, which was first described in the 1980s (reviewed in [8])."
+        },
+        {
+          "section": "Techniques for imaging the metabolism of 2H-labeled substrates",
+          "line": 8,
+          "snippet": "The current resurgence in interest in 2 H MRSI as a metabolic imaging technique can be traced back to two papers published in 2017 and 2018, in which 2 H MR was used to monitor brain [6,6\u2032-2 H2]glucose metabolism."
+        },
+        {
+          "section": "Clinical metabolic imaging",
+          "line": 28,
+          "snippet": "Since the first clinical study in 2018, DMI has rapidly established itself as a powerful technique for metabolic imaging that has considerable clinical potential, particularly in the field of oncology\u2026"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Low 2023 is a review; it frames DMI as the most recent entrant among glucose metabolic imaging modalities (post-2017/2018 resurgence, compared against FDG-PET and hyperpolarized 13C methods). The manuscript uses low2023 as a SUPPORTING citation alongside defeyter2018 (ref 37, the 2018 primary), which is the idiomatic use for this review."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "None required. Optionally, clarify that low2023 is the review-level citation and defeyter2018 (ref 37) is the primary for the \"most recently proposed\" phrasing; the current composite citation already reads cleanly."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "DMI is a recently introduced / emerging in vivo glucose metabolic imaging method",
+      "2H MRI of deuterated-glucose metabolism (deuterium metabolic imaging, DMI) for in vivo tissue metabolism",
+      "DMI emerged (post-2017/2018) as a clinically-applicable metabolic imaging modality",
+      "resurgence of interest in 2H MRSI as a metabolic imaging technique"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "2 H as an isotope label for metabolic imaging", "read": true},
+      {"section": "Techniques for imaging the metabolism of 2 H-labeled substrates", "read": true},
+      {"section": "Imaging with 2 H-labeled glucose", "read": true},
+      {"section": "Clinical metabolic imaging", "read": true},
+      {"section": "Conclusions", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Low 2023 repeatedly credits de Feyter et al. 2018 (ref 7 in Low; defeyter2018 in this manuscript = ref 37) as the landmark that launched the current DMI era. The manuscript's pairing of low2023 with defeyter2018 is consistent.",
+    "out_of_context_check": "The manuscript uses Low 2023 as a review-level source for DMI as a glucose metabolic imaging modality. The review covers exactly this field in detail; context matches."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["defeyter2018"],
+    "sibling_verdicts": [
+      {
+        "citekey": "defeyter2018",
+        "supports_sub_claim_ids": ["C048.a"],
+        "excerpt": "Primary source for clinical DMI of [6,6\u2032-2H2]glucose in brain tumors; Low 2023 cites it as the landmark that launched the current DMI era."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

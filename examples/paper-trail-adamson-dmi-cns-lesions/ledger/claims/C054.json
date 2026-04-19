@@ -1,0 +1,94 @@
+{
+  "claim_id": "C054",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "taglang2022",
+  "handle": "pdfs/taglang2022/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/taglang2022.pdf#page=3",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/taglang2022.pdf#page=8"
+  ],
+  "claim_text": "In preclinical animal models, Kreis, et al, showed that dynamic DMI acquisitions at 9.4T could be used to acquire quantitative and spatially resolved measurements of glycolytic flux in tumors15, which can be used to assess treatment response46.",
+  "manuscript_section": "Introduction \u00a71.4",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C054.a",
+      "text": "DMI (2H-MRS of [6,6\u2032-2H2]glucose) can be used to assess treatment response in tumors.",
+      "evidence": [
+        {
+          "section": "Importance of the Study",
+          "line": 3,
+          "snippet": "Our results indicate that the ALT pathway is associated with enhanced glycolytic flux, an effect that can be non-invasively visualized using [6,6\u2032-2 H]-glucose in mice bearing orthotopic astrocytomas in vivo. Importantly, [6,6\u2032-2 H]-glucose reports on response to therapy at early timepoints that precede MRI-detectable alterations in tumor volume, suggesting that [6,6\u2032-2 H]-glucose can assess pseudoprogression in vivo."
+        },
+        {
+          "section": "Results / Lactate Production From [6,6\u2032-2H]-Glucose Is an Early Biomarker of Response to Niraparib",
+          "line": 26,
+          "snippet": "[3,3\u2032-2 H]-lactate concentration significantly increased in vehicle-treated mice at day 3 and day 5 relative to day 0 (Figure 5D). In contrast, there was a significant reduction in [3,3\u2032-2 H]-lactate concentration in niraparib-treated mice at day 3 and day 5 relative to day 0."
+        },
+        {
+          "section": "Results / BT257 model response",
+          "line": 27,
+          "snippet": "[3,3\u2032-2 H]-lactate concentration significantly dropped in niraparib-treated mice at day 5 and day 9 post-treatment, when tumor volume was unaltered on T2-weighted MRI\u2026 Collectively, these results validate lactate production from [6,6\u2032-2 H]-glucose as an early biomarker of response to niraparib\u2026"
+        },
+        {
+          "section": "Discussion",
+          "line": 28,
+          "snippet": "In this study, we used isogenic pairs of cell lines that differed only in their ALT status, including both genetically engineered and patient-derived models, to link the ALT pathway to elevated glycolytic flux via PFK1. Importantly, we leveraged this information for noninvasive 2H-MRS-based imaging of tumor burden and response to therapy in vivo (see schematic summary in Figure 6D)."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "14.1T preclinical orthotopic IDHmut astrocytoma models (NHA^ALT, BT257); 2H-MRS lactate drop by day 3\u20135 post-niraparib, preceding MRI-detectable tumor shrinkage",
+      "claim_value": "DMI can be used to assess treatment response",
+      "nuance": "Taglang 2022 demonstrates DMI-based treatment-response monitoring at 14.1T in mouse models (not 9.4T \u2014 the 9.4T claim in the same manuscript sentence is anchored to Kreis 2020 / ref 15). The manuscript's use of taglang2022 as ref 46 specifically for the \"can be used to assess treatment response\" tail end of the sentence is well-supported."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "None required. Optional: note that Taglang et al. performed DMI at 14.1T rather than 9.4T; the current phrasing already correctly isolates \"9.4T\" to Kreis 2020 (ref 15) and \"treatment response\" to Taglang 2022 (ref 46)."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "2H-MRS of [6,6\u2032-2H]glucose detects tumor response to therapy before MRI-visible volume change",
+      "DMI/2H-MRS lactate signal as a biomarker of treatment response in preclinical astrocytoma models",
+      "deuterium metabolic imaging assesses pseudoprogression and niraparib response in IDHmut astrocytomas",
+      "glycolytic flux via 2H-glucose reports on early response to PARP inhibitor therapy"
+    ],
+    "section_checklist": [
+      {"section": "Abstract / Importance of the Study", "read": true},
+      {"section": "Introduction (Neuro-Oncology, Unnamed)", "read": true},
+      {"section": "Materials and Methods (Cell Models, Patient Biopsies, MRI, H-MRS In Vivo)", "read": true},
+      {"section": "Results / The ALT Pathway Is Associated With Higher Glycolytic Flux", "read": true},
+      {"section": "Results / Glucose Flux to Lactate Is Reduced in ALT-Dependent Astrocytoma Cells Treated With the PARPi Niraparib", "read": true},
+      {"section": "Results / [6,6\u2032-2H]-Glucose Flux to Lactate Can Be Used to Monitor Tumor Burden", "read": true},
+      {"section": "Results / Lactate Production From [6,6\u2032-2H]-Glucose Is an Early Biomarker of Response to Niraparib", "read": true},
+      {"section": "Discussion", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Taglang 2022 cites earlier DMI work (refs 23, 24, 25, 35 including de Feyter 2018 and Kreis 2020) but itself is the primary for PARPi-response assessment via [6,6\u2032-2H]-glucose in IDHmut astrocytomas.",
+    "out_of_context_check": "The manuscript cites Taglang 2022 specifically for \"can be used to assess treatment response.\" Taglang explicitly demonstrates exactly this; the 9.4T field-strength detail in the manuscript sentence is anchored to Kreis 2020, not Taglang, so no OVERSTATED/OUT-OF-CONTEXT concern."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["kreis2020"],
+    "sibling_verdicts": [
+      {
+        "citekey": "kreis2020",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Kreis 2020 is the primary for the 9.4T dynamic DMI glycolytic-flux-quantification finding in tumors (distinct sub-claim, not scoped to this verdict). It is listed as sibling only; grounding is deferred (NEEDS_PDF per dispatch)."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

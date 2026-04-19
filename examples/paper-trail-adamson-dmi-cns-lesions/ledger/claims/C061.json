@@ -1,0 +1,123 @@
+{
+  "claim_id": "C061",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "defeyter2018",
+  "handle": "pdfs/defeyter2018/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+  ],
+  "claim_text": "Clinical subjects were scanned on a GE Signa 3T PET/MR scanner using a modified gradient filter (described in Section 2.1) and 2 H volume RF coil (coil A in Section 2.2) approximately 45 minutes following the oral ingestion of 60 g of deuterated glucose ([6,6'-2 H2]Glc) as in37 using the pulse sequence described in Section 2.3 and the Imaging Protocol described below.",
+  "manuscript_section": "2.6 Methods (Clinical Subjects)",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C061.a",
+      "text": "De Feyter et al. 2018 used oral ingestion of [6,6'-2H2]glucose (at doses consistent with 60 g total) as the DMI administration protocol in human subjects.",
+      "evidence": [
+        {
+          "section": "content.txt",
+          "line": 33,
+          "snippet": "Human subjects took an oral dose of [6,6′-2H2]glucose dissolved in 200 to 300 ml of water, calculated as 0.75 g/kg body weight, with a maximum of 60 g, regardless of body weight."
+        },
+        {
+          "section": "content.txt",
+          "line": 9,
+          "snippet": "We performed DMI on the brains of healthy control subjects who ingested [6,6′-2H2]glucose (0.75 g/kg body weight)."
+        },
+        {
+          "section": "content.txt",
+          "line": 10,
+          "snippet": "We also performed DMI 60 to 75 min after oral intake of [6,6′-2H2]glucose (0.60 g/kg) (Fig. 4 and fig. S6), on two patients diagnosed with GBM... The concentrations of 2H-labeled glucose and Glx in normal brain tissue were slightly lower in the patient, most likely because of the smaller oral glucose dose (0.60 g/kg versus 0.75 g/kg in healthy controls)."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "0.75 g/kg body weight, maximum 60 g (healthy); 0.60 g/kg (GBM patients)",
+      "claim_value": "60 g of deuterated glucose",
+      "nuance": "The 60 g dose in the manuscript's clinical protocol matches the maximum oral dose specified by defeyter2018 (0.75 g/kg capped at 60 g). Using a flat 60 g is a reasonable adaptation of defeyter2018's protocol, though the source paper's GBM-patient cohort received 0.60 g/kg rather than a capped 60 g."
+    },
+    {
+      "sub_claim_id": "C061.b",
+      "text": "De Feyter et al. 2018 scanned human subjects approximately 45 minutes after oral glucose ingestion (the timing the manuscript cites as 'as in 37').",
+      "evidence": [
+        {
+          "section": "content.txt",
+          "line": 10,
+          "snippet": "We also performed DMI 60 to 75 min after oral intake of [6,6′-2H2]glucose (0.60 g/kg) (Fig. 4 and fig. S6), on two patients diagnosed with GBM."
+        },
+        {
+          "section": "figures/index.json (Fig. 1E caption)",
+          "line": null,
+          "snippet": "2H NMR spectrum acquired from human brain at 4 T, 60 min after oral administration of [6,6′-2H2]glucose."
+        },
+        {
+          "section": "figures/index.json (Fig. 3A caption)",
+          "line": null,
+          "snippet": "3D MRI overlaid with 2H MR spectra from a 3D MRSI data set ... acquired between 65 and 90 min after oral [6,6′-2H2]glucose administration."
+        },
+        {
+          "section": "figures/index.json (Fig. 5G caption)",
+          "line": null,
+          "snippet": "2H NMR spectra extracted from a 3D 2H MRSI grid with 25 × 25 × 25 mm3 resolution, 60 min after oral [6,6′-2H2]glucose intake."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONTRADICTED",
+      "paper_value": "60 to 75 min (GBM patients); 60 min for first spectra (Fig. 1E); 65-90 min for human-brain DMI steady-state acquisition (Fig. 3A); 2H-labeled plasma lactate sampled at 60-75 min",
+      "claim_value": "approximately 45 minutes following the oral ingestion",
+      "nuance": "Defeyter2018 consistently reports scans beginning 60-75 minutes (and acquisitions spanning up to 90 minutes) after oral glucose intake in both healthy and GBM subjects. The manuscript's '~45 minutes' post-ingestion timing is materially earlier than anything reported in defeyter2018 and does not match 'as in 37'. This is either an independent timing choice (the manuscript's own protocol) that should not be cited as 'as in 37', or an erroneous transcription of the source timing."
+    }
+  ],
+  "overall_verdict": "CONTRADICTED",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "REWORD",
+    "suggested_edit": "Rephrase to 'approximately 45 minutes following the oral ingestion of 60 g of deuterated glucose ([6,6'-2H2]Glc), adapting the oral-dosing protocol described in De Feyter et al. 2018 (0.75 g/kg capped at 60 g).' Remove the 'as in 37' framing for the timing, since defeyter2018 scans at 60-75 min post-ingestion rather than ~45 min; or justify the earlier window with an explicit rationale (e.g., PET/MR scheduling constraints) and drop the timing-level attribution."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "oral ingestion 60 g [6,6'-2H2]glucose human DMI",
+      "45 minutes post-glucose DMI scan timing",
+      "0.75 g/kg maximum 60 g oral deuterated glucose dose",
+      "human brain DMI acquisition time post-intake",
+      "GBM patient 60 to 75 min oral glucose DMI"
+    ],
+    "section_checklist": [
+      {"section": "Abstract", "read": true},
+      {"section": "INTRODUCTION.txt", "read": true},
+      {"section": "RESULTS.txt", "read": true},
+      {"section": "DMI of steady-state glucose metabolism in human brain.txt", "read": true},
+      {"section": "DMI of steady-state glucose and acetate metabolism in rat brain.txt", "read": true},
+      {"section": "DMI of liver glycogen.txt", "read": true},
+      {"section": "DISCUSSION.txt", "read": true},
+      {"section": "Human MR system.txt", "read": true},
+      {"section": "Human subjects.txt", "read": true},
+      {"section": "Animal experiments.txt", "read": true},
+      {"section": "H-labeled glucose and acetate administration in vivo.txt", "read": true},
+      {"section": "MR signal acquisition.txt", "read": true},
+      {"section": "MR signal processing.txt", "read": true},
+      {"section": "Quantification.txt", "read": true},
+      {"section": "Analysis of 2 H label loss.txt", "read": true},
+      {"section": "In vitro experiments.txt", "read": true},
+      {"section": "MR systems Animal and high-resolution NMR systems.txt", "read": true},
+      {"section": "Specific absorption rate.txt", "read": true},
+      {"section": "Statistics.txt", "read": true},
+      {"section": "Figure captions (figures/index.json)", "read": true}
+    ],
+    "closest_adjacent": "content.txt L10: 'We also performed DMI 60 to 75 min after oral intake of [6,6′-2H2]glucose (0.60 g/kg) ... on two patients diagnosed with GBM.' This is the closest-matching passage: same substrate, same oral route, same patient population, but at 60-75 min rather than ~45 min, and at 0.60 g/kg rather than a flat 60 g.",
+    "indirect_attribution_check": "The timing and dose are primary data in defeyter2018 (Methods § Human subjects and § H-labeled glucose administration); no indirect attribution concern for the source.",
+    "out_of_context_check": "The manuscript sentence says '...as in 37...' attaching defeyter2018 to the whole protocol (dose + timing + substrate). The dose maximum (60 g) and the substrate match defeyter2018; the post-ingestion timing (~45 min) does not match (defeyter2018 uses 60-75 min and later). Partial out-of-context usage on the timing component."
+  },
+  "co_cite_context": null,
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

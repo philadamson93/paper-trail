@@ -1,0 +1,49 @@
+{
+  "claim_id": "C052",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "bier1977",
+  "handle": "pdfs/bier1977/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Furthermore, the safety of deuterated glucose in humans is well established via multiple studies of metabolism in both adults and infants41,42 .",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C052.a",
+      "text": "Furthermore, the safety of deuterated glucose in humans is well established via multiple studies of metabolism in both adults and infants41,42 .",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "macallan2009"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

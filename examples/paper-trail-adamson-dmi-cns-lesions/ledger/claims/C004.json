@@ -1,0 +1,50 @@
+{
+  "claim_id": "C004",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "mathupala2009",
+  "handle": "pdfs/mathupala2009/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Further, the Warburg effect, as part of tumor metabolic reprogramming in which GLY is favored over OXPHOS, is a hallmark of cancer and is particularly pronounced in glioma and other brain tumors2,3,4 .",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C004.a",
+      "text": "Further, the Warburg effect, as part of tumor metabolic reprogramming in which GLY is favored over OXPHOS, is a hallmark of cancer and is particularly pronounced in glioma and other brain tumors2,3,4 .",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "agnihotri2013",
+      "chesnelong2014"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

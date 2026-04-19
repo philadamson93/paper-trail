@@ -1,0 +1,104 @@
+{
+  "claim_id": "C041",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "kurhanewicz2011",
+  "handle": "pdfs/kurhanewicz2011/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/kurhanewicz2011.pdf#page=7",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/kurhanewicz2011.pdf#page=8"
+  ],
+  "claim_text": "Whereas most HP13C cancer studies have focused on Lac27,28,29,34, we hypothesized that the 13 C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS5,35,36.",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C041.a",
+      "text": "HP13C cancer studies have primarily focused on lactate (Lac) as the metabolic readout.",
+      "evidence": [
+        {
+          "section": "Metabolism of Hyperpolarized Pyruvate",
+          "line": 1,
+          "snippet": "[1-13 C]Pyruvate has been the most widely studied substrate to date, reflecting its central role in cellular metabolism, the ease with which it can be hyperpolarized, its relatively long T 1 relaxation time, and its very rapid transport across the cell membrane and subsequent metabolism. ... Pyruvate, the end product of glycolysis, can be reduced by the NADH produced in the pathway to generate lactate, in the reaction catalyzed by the enzyme LDH. ... The reactions catalyzed by LDH and ALT have been observed to be altered in cancer."
+        },
+        {
+          "section": "1-13 C pyruvate Applications to Cancer",
+          "line": 1,
+          "snippet": "In a murine lymphoma model, the LDH-catalyzed interconversion of hyperpolarized label between pyruvate and lactate was shown to decrease early after chemotherapy."
+        },
+        {
+          "section": "1-13 C pyruvate Applications to Cancer",
+          "line": 2,
+          "snippet": "Flux of hyperpolarized 13 C label between pyruvate and lactate has also been used as a marker of prostate cancer progression, with the levels of hyperpolarized lactate increasing with increasing tumor grade in the TRAMP model (Figure 2). ... Another report has demonstrated significantly higher hyperpolarized lactate production in two human glioblastoma xenograft models, where the blood-brain barrier has been disrupted, relative to normal brain."
+        },
+        {
+          "section": "1-13 C pyruvate Applications to Cancer",
+          "line": 3,
+          "snippet": "inhibition through the phosphatidylinositol 3-kinase (PI3K/Akt/mTOR) pathway was shown to correlate with a drop in hyperpolarized [1-13 C]lactate levels in breast cancer and glioblastoma cells and xenografts. ... An alternative to the lactate-pyruvate ratio, which is critically dependent on the timing of injection and subsequent data acquisition, is to measure the lactate and pyruvate signals over time and fit these to a kinetic model."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The review's dedicated cancer-applications section is organized around hyperpolarized [1-13C]pyruvate-to-lactate conversion (LDH flux, lactate levels, lactate-to-pyruvate ratios) across lymphoma, prostate (TRAMP), glioblastoma, and breast cancer models. Lactate is unambiguously the dominant cancer readout in this review."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": null
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "HP13C cancer studies focus on lactate as readout",
+      "hyperpolarized pyruvate-to-lactate flux in tumor models",
+      "lactate-to-pyruvate ratio as HP13C cancer biomarker",
+      "LDH-catalyzed lactate production in cancer with hyperpolarized [1-13C]pyruvate"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Metabolism in Cancer", "read": true},
+      {"section": "Physiology and Metabolism in Preclinical Models", "read": true},
+      {"section": "Metabolism of Hyperpolarized Pyruvate", "read": true},
+      {"section": "1-13 C pyruvate Applications to Cancer", "read": true},
+      {"section": "C-Enriched Bicarbonate", "read": true},
+      {"section": "Conclusions and Recommendations", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Kurhanewicz 2011 cites primary cancer/lactate studies (Day et al. lymphoma, Albers et al. TRAMP, Park et al. glioblastoma) as refs [123]-[126]; as a review it appropriately supports the manuscript's general claim that HP13C cancer studies focused on lactate.",
+    "out_of_context_check": "Manuscript uses the source to motivate lactate as the dominant HP13C cancer readout; the review's organization and emphasis match this usage exactly."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "nelson2013", "miloushev2018"],
+    "sibling_verdicts": [
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C041.a"],
+        "excerpt": "Dissolution-DNP HP13C review \u2014 reinforces lactate-focused cancer readout framing."
+      },
+      {
+        "citekey": "nelson2013",
+        "supports_sub_claim_ids": ["C041.a"],
+        "excerpt": "First-in-human prostate cancer study with HP [1-13C]pyruvate reporting lactate production."
+      },
+      {
+        "citekey": "miloushev2018",
+        "supports_sub_claim_ids": ["C041.a"],
+        "excerpt": "Metabolic imaging of human brain with HP 13C pyruvate demonstrating 13C lactate production in brain tumor patients."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

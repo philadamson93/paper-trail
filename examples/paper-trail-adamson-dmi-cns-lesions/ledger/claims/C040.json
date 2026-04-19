@@ -1,0 +1,54 @@
+{
+  "claim_id": "C040",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "hurd2012",
+  "handle": "pdfs/hurd2012/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Whereas most HP13C cancer studies have focused on Lac27,28,29,34 , we hypothesized that the 13 C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS5,35,36 .",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C040.a",
+      "text": "Whereas most HP13C cancer studies have focused on Lac27,28,29,34 , we hypothesized that the 13 C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS5,35,36 .",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "kurhanewicz2011",
+      "nelson2013",
+      "miloushev2018",
+      "corbin2017",
+      "datta2019",
+      "park2016"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

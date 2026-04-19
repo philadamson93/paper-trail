@@ -1,0 +1,120 @@
+{
+  "claim_id": "C008",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "le2010",
+  "handle": "pdfs/le2010/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/le2010.pdf"
+  ],
+  "claim_text": "From a therapeutic perspective, multiple studies indicate that this Warburg phenotype is critical to the cancer process, thus providing the basis for developing novel therapies in which altering the fluxes through these metabolic pathways is the goal5,6,7,8,9,10,11,12 .",
+  "manuscript_section": "1.1 Metabolic Reprogramming",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C008.a",
+      "text": "le2010 provides direct evidence that altering metabolic fluxes (specifically glycolytic flux via LDHA inhibition) is a viable therapeutic strategy against cancers exhibiting the Warburg phenotype.",
+      "evidence": [
+        {
+          "section": "Unnamed (Abstract/Introduction)",
+          "line": 1,
+          "snippet": "Here, we report that reduction of LDHA by siRNA or its inhibition by a small-molecule inhibitor (FX11...) reduced ATP levels and induced significant oxidative stress and cell death... FX11 inhibited the progression of sizable human lymphoma and pancreatic cancer xenografts... Hence, inhibition of LDHA with FX11 is an achievable and tolerable treatment for LDHA-dependent tumors. Our studies document a therapeutical approach to the Warburg effect..."
+        },
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 1,
+          "snippet": "These studies indicate that targeting cancer metabolism through small drug-like molecules is achievable, and hence paves the way for the development of unique classes of anticancer drugs."
+        },
+        {
+          "section": "Conclusions",
+          "line": 3,
+          "snippet": "Collectively, our studies demonstrate that LDHA is required for tumor progression and that targeting cancer metabolism through small drug-like molecules is achievable to control tumor growth."
+        },
+        {
+          "section": "Conclusions",
+          "line": 1,
+          "snippet": "inhibition of LDHA by FX11 inhibited tumor xenograft progression, confirming that LDHA is required for tumor maintenance."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "le2010 is an on-point therapeutic citation: it directly demonstrates that altering glycolytic flux (LDHA inhibition via siRNA and the small molecule FX11) suppresses tumor progression in lymphoma and pancreatic cancer xenografts, with synergy shown for FX11+FK866. The paper explicitly frames itself as 'a therapeutical approach to the Warburg effect'."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "-",
+    "suggested_edit": null
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Does le2010 demonstrate that inhibiting a glycolytic enzyme (LDHA) is a viable anti-cancer therapeutic strategy?",
+      "Does le2010 position the Warburg effect / altered metabolic fluxes as a therapeutic target?",
+      "Does le2010 show that a small-molecule inhibitor targeting cancer metabolism can reduce tumor growth in vivo?",
+      "Does le2010 support the general claim that novel cancer therapies can be developed by altering metabolic pathway fluxes?"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta — empty)", "read": true},
+      {"section": "Unnamed (Abstract + Introduction)", "read": true},
+      {"section": "Results and Discussion", "read": false},
+      {"section": "Experimental Procedures", "read": false},
+      {"section": "Conclusions", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "le2010 is the primary source for the FX11 LDHA-inhibitor therapeutic demonstration; it cites upstream work (refs 16, 17) for earlier LDHA-knockdown tumor-initiation studies but claims the 'achievable drug-like inhibitor / tumor progression / xenograft regression' findings as its own.",
+    "out_of_context_check": "Context match is strong. Manuscript usage ('developing novel therapies in which altering the fluxes through these metabolic pathways is the goal') maps directly onto le2010's stated thesis and conclusions."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["corbin2017", "cho2017", "smeitink2006", "seth2011", "mukherjee2004", "clark2016", "papandreou2011"],
+    "sibling_verdicts": [
+      {
+        "citekey": "seth2011",
+        "supports_sub_claim_ids": ["C008.a"],
+        "excerpt": "Directly complements le2010 — demonstrates DCA/LDH-A-inhibition as Warburg-targeting therapy and adds hyperpolarized-pyruvate imaging of on-target effects (ingested; see C009)."
+      },
+      {
+        "citekey": "cho2017",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Ingested but adjudicated CITED_OUT_OF_CONTEXT for this sentence (see C006): imaging review, not a therapy paper."
+      },
+      {
+        "citekey": "corbin2017",
+        "supports_sub_claim_ids": ["C008.a"],
+        "excerpt": "Not ingested in this run (per dispatch, corbin2017 is not-ingested)."
+      },
+      {
+        "citekey": "smeitink2006",
+        "supports_sub_claim_ids": ["C008.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      },
+      {
+        "citekey": "mukherjee2004",
+        "supports_sub_claim_ids": ["C008.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      },
+      {
+        "citekey": "clark2016",
+        "supports_sub_claim_ids": ["C008.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      },
+      {
+        "citekey": "papandreou2011",
+        "supports_sub_claim_ids": ["C008.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

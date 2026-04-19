@@ -1,0 +1,121 @@
+{
+  "claim_id": "C006",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "cho2017",
+  "handle": "pdfs/cho2017/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/cho2017.pdf"
+  ],
+  "claim_text": "From a therapeutic perspective, multiple studies indicate that this Warburg phenotype is critical to the cancer process, thus providing the basis for developing novel therapies in which altering the fluxes through these metabolic pathways is the goal5,6,7,8,9,10,11,12 .",
+  "manuscript_section": "1.1 Metabolic Reprogramming",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C006.a",
+      "text": "cho2017 supports the claim that the Warburg phenotype/altered cancer metabolism provides the basis for developing novel therapies that alter fluxes through metabolic pathways.",
+      "evidence": [
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 1,
+          "snippet": "This technology is becoming increasingly clinically relevant as a new wave of drugs that target specific metabolic pathways—as opposed to DNA synthesis or repair mechanisms, which are the target of traditional chemotherapy—are entering the Food and Drug Administration-approval pipeline (4, 5)."
+        },
+        {
+          "section": "Warburg Effect",
+          "line": 1,
+          "snippet": "Most hyperpolarized MRSI cancer research has focused on the Warburg effect, in which cancer cells exhibit elevated levels of glycolysis and lactic acid fermentation. Lactate dehydrogenase-mediated conversion of pyruvate to lactate is elevated in malignant cells as a result of the Warburg effect, and hyperpolarized 1-13C-pyruvate can be used to quantify flux through this pathway."
+        },
+        {
+          "section": "CONCLUSION",
+          "line": 1,
+          "snippet": "The first-in-human trial with hyperpolarized 1-13C-pyruvate revealed that pyruvate-to-lactate conversion can be noninvasively detected in the tumor of a patient... Meanwhile, expanding current clinical research in the setting of hyperpolarized 1-13C-pyruvate will be instrumental in determining the role this imaging modality will play in cancer care."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CITED_OUT_OF_CONTEXT",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "cho2017 is a review of hyperpolarized 13C MRI for noninvasively interrogating cancer metabolism; its own contribution is imaging/measurement of metabolic flux, not the development of metabolism-altering therapies. The paper mentions in passing that metabolism-targeting drugs are entering FDA pipelines, but does not itself describe or advance such therapies. Better positioned as an imaging/measurement citation than a therapeutic citation."
+    }
+  ],
+  "overall_verdict": "CITED_OUT_OF_CONTEXT",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RECITE",
+    "suggested_edit": "Move cho2017 to a citation about noninvasive measurement of cancer metabolism / hyperpolarized 13C imaging (a separate sentence), rather than the 'developing novel therapies that alter metabolic fluxes' sentence. A therapy-oriented citation (e.g., seth2011 or le2010, already cited) is a better fit here."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Does cho2017 describe cancer metabolic reprogramming / the Warburg phenotype as the basis for developing novel therapies that alter metabolic fluxes?",
+      "Does cho2017 develop, test, or review therapeutic interventions that target metabolic pathways?",
+      "Does cho2017 argue that the Warburg effect is a therapeutic target?",
+      "Is cho2017's contribution measurement (imaging) of metabolism rather than therapy?"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta)", "read": true},
+      {"section": "Unnamed (Introduction)", "read": true},
+      {"section": "MAGNETIC RESONANCE AND HYPERPOLARIZATION", "read": false},
+      {"section": "DATA ACQUISITION", "read": false},
+      {"section": "Fast Imaging", "read": false},
+      {"section": "Spectroscopic Imaging", "read": false},
+      {"section": "Warburg Effect", "read": true},
+      {"section": "Glutaminolysis", "read": false},
+      {"section": "IDH Mutation", "read": false},
+      {"section": "CONCLUSION", "read": true},
+      {"section": "DISCLOSURE", "read": false}
+    ],
+    "closest_adjacent": "Closest passage on therapy: 'This technology is becoming increasingly clinically relevant as a new wave of drugs that target specific metabolic pathways—as opposed to DNA synthesis or repair mechanisms, which are the target of traditional chemotherapy—are entering the Food and Drug Administration-approval pipeline.' This acknowledges that metabolism-targeting therapies exist but frames them as background context for the paper's imaging focus.",
+    "indirect_attribution_check": "cho2017 cites other primaries (refs 4, 5) when mentioning metabolism-targeted drugs — the therapeutic claim is not this paper's own.",
+    "out_of_context_check": "Yes — context mismatch. Manuscript sentence is explicitly 'from a therapeutic perspective... developing novel therapies in which altering the fluxes... is the goal'. cho2017's thesis is noninvasive interrogation/measurement, not therapy development."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["corbin2017", "smeitink2006", "le2010", "seth2011", "mukherjee2004", "clark2016", "papandreou2011"],
+    "sibling_verdicts": [
+      {
+        "citekey": "le2010",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "LDHA inhibition by FX11 'is an achievable and tolerable treatment for LDHA-dependent tumors. Our studies document a therapeutical approach to the Warburg effect...' — directly supports the therapy claim and is ingested (see C008)."
+      },
+      {
+        "citekey": "seth2011",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "Demonstrates DCA/LDH-A-inhibition as a therapy that alters metabolic fluxes and is monitored by hyperpolarized pyruvate MRS — directly supports the therapy claim and is ingested (see C009)."
+      },
+      {
+        "citekey": "corbin2017",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "Not ingested in this run (per dispatch, corbin2017 is not-ingested)."
+      },
+      {
+        "citekey": "smeitink2006",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      },
+      {
+        "citekey": "mukherjee2004",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      },
+      {
+        "citekey": "clark2016",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      },
+      {
+        "citekey": "papandreou2011",
+        "supports_sub_claim_ids": ["C006.a"],
+        "excerpt": "Not ingested in this run (paywalled per dispatch)."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

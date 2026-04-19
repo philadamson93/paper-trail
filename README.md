@@ -13,8 +13,12 @@
 </p>
 
 <p align="center">
-  <a href="https://philadamson93.github.io/paper-trail/demo.html">
-    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025">
+  <a href="https://philadamson93.github.io/paper-trail/Adamson-MRM-DFDs-2025.html">
+    <img src="https://img.shields.io/badge/Open%20demo-MR%20reconstruction%20(Adamson%202025)-2ea44f?style=for-the-badge" alt="Open demo — MR reconstruction (Adamson 2025)">
+  </a>
+  &nbsp;
+  <a href="https://philadamson93.github.io/paper-trail/Adamson-MRM-DMI-2024.html">
+    <img src="https://img.shields.io/badge/Open%20demo-Deuterium%20MRI%20(Adamson%202024)-2ea44f?style=for-the-badge" alt="Open demo — Deuterium MRI (Adamson 2024)">
   </a>
 </p>
 

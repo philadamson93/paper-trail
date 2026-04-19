@@ -1,0 +1,99 @@
+{
+  "claim_id": "C047",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "defeyter2018",
+  "handle": "pdfs/defeyter2018/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+  ],
+  "claim_text": "The 2 H MRI of the metabolic products of deuterated glucose, known as deuterium metabolic imaging (DMI), is the most recently proposed in vivo glucose metabolic imaging method37.",
+  "manuscript_section": "1.2 / 1.3 (Introduction, Deuterium Metabolic Imaging framing)",
+  "claim_type": {
+    "type": "FRAMING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C047.a",
+      "text": "De Feyter et al. 2018 is the seminal paper introducing deuterium metabolic imaging (DMI) as a new in vivo glucose metabolic imaging method based on 2H MRI of deuterated glucose and its downstream metabolites.",
+      "evidence": [
+        {
+          "section": "Abstract (meta.json)",
+          "line": null,
+          "snippet": "Deuterium metabolic imaging (DMI) is a novel, noninvasive approach that combines deuterium magnetic resonance spectroscopic imaging with oral intake or intravenous infusion of nonradioactive 2H-labeled substrates to generate three-dimensional metabolic maps. DMI can reveal glucose metabolism beyond mere uptake and can be used with other 2H-labeled substrates as well."
+        },
+        {
+          "section": "content.txt",
+          "line": 2,
+          "snippet": "Here, we present a novel approach that meets the current needs for metabolic imaging ... Here, we show how deuterium metabolic imaging (DMI), which is based on 2H MRSI, can noninvasively generate metabolic maps with high spatiotemporal resolution and display the metabolic fate of several 2H-labeled substrates. ... to the best of our knowledge, metabolic imaging based on 2H MRS in vivo has not yet been reported."
+        },
+        {
+          "section": "content.txt",
+          "line": 25,
+          "snippet": "DMI now combines the chemical specificity of 2H NMR with the spatial localization of MRI to produce noninvasively metabolic maps in human tissue. Implementing DMI on existing 3 T clinical MRI scanners only requires minimal technical modifications and the acquisition of an RF coil that operates at the 2H NMR frequency (19.6 MHz). The extensive availability of 3 T MRI scanners should facilitate DMI to become a widespread MRI modality for clinical metabolic imaging."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "De Feyter et al. 2018 (Sci Adv) explicitly coins the term 'deuterium metabolic imaging (DMI)' and presents it as a novel approach for in vivo metabolic imaging using 2H-labeled glucose and other substrates; the authors explicitly state that 'metabolic imaging based on 2H MRS in vivo has not yet been reported' (at the time), and it was published in 2018, well after established glucose-metabolic-imaging methods (FDG-PET, 13C MRS, HP 13C). Citing it as the origin of DMI and as the most recently proposed method is well-supported."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "deuterium metabolic imaging (DMI) novel / first introduction",
+      "2H MRSI / 2H MRS in vivo metabolic imaging not previously reported",
+      "DMI oral or intravenous 2H-labeled glucose for metabolic maps",
+      "most recently proposed glucose metabolic imaging method",
+      "DMI coined term / seminal DMI paper"
+    ],
+    "section_checklist": [
+      {"section": "Abstract", "read": true},
+      {"section": "INTRODUCTION.txt", "read": true},
+      {"section": "RESULTS.txt", "read": true},
+      {"section": "DMI of steady-state glucose metabolism in human brain.txt", "read": true},
+      {"section": "DMI of steady-state glucose and acetate metabolism in rat brain.txt", "read": true},
+      {"section": "DMI of liver glycogen.txt", "read": true},
+      {"section": "DISCUSSION.txt", "read": true},
+      {"section": "Animal experiments.txt", "read": true},
+      {"section": "Human subjects.txt", "read": true},
+      {"section": "Human MR system.txt", "read": true},
+      {"section": "MR systems Animal and high-resolution NMR systems.txt", "read": true},
+      {"section": "H-labeled glucose and acetate administration in vivo.txt", "read": true},
+      {"section": "MR signal acquisition.txt", "read": true},
+      {"section": "MR signal processing.txt", "read": true},
+      {"section": "Quantification.txt", "read": true},
+      {"section": "Analysis of 2 H label loss.txt", "read": true},
+      {"section": "In vitro experiments.txt", "read": true},
+      {"section": "Specific absorption rate.txt", "read": true},
+      {"section": "Statistics.txt", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "The paper credits earlier 2H work (e.g., ref 11 for the 1935 suggestion of using deuterium to study metabolism; ref 12 for prior ultrahigh-field non-localized 2H MRS in rat brain). However, defeyter2018 is unambiguously framed by its own authors as the first demonstration of 2H-based metabolic imaging (DMI) in vivo, not an indirect relay of another primary source. Citing it as the origin of DMI is a direct attribution.",
+    "out_of_context_check": "The manuscript uses defeyter2018 to frame DMI as the most recently proposed in vivo glucose metabolic imaging method, which matches the source paper's own framing of DMI as a novel, just-introduced method."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "low2023"
+    ],
+    "sibling_verdicts": [
+      {
+        "citekey": "low2023",
+        "supports_sub_claim_ids": ["C047.a"],
+        "excerpt": "low2023 abstract (meta.json): 'Deuterium metabolic imaging (DMI) is an emerging clinically-applicable technique for the non-invasive investigation of tissue metabolism... Studies with deuterated substrates... have demonstrated the considerable potential of DMI for imaging tissue metabolism and cell death in vivo.' Low 2023 is cited nearby as a review of DMI and confirms the framing that DMI is a recent metabolic-imaging technique built on 2H-labeled substrates, supporting (via its own literature survey) the 'most recently proposed' framing."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

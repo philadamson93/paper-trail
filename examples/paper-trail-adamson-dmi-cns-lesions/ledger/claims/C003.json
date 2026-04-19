@@ -1,0 +1,100 @@
+{
+  "claim_id": "C003",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "chesnelong2014",
+  "handle": "pdfs/chesnelong2014/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/chesnelong2014.pdf"
+  ],
+  "claim_text": "Further, the Warburg effect, as part of tumor metabolic reprogramming in which GLY is favored over OXPHOS, is a hallmark of cancer and is particularly pronounced in glioma and other brain tumors2,3,4 .",
+  "manuscript_section": "1.1 Metabolic Reprogramming",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C003.a",
+      "text": "The Warburg phenotype (aerobic glycolysis) is a prominent feature of gliomas / brain tumors, supporting the manuscript's assertion that the Warburg effect is 'particularly pronounced' in these cancers.",
+      "evidence": [
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 1,
+          "snippet": "IDH1/2 mutations were anticipated to directly impact cellular metabolism and promote aerobic glycolysis, the metabolic pathway favored by cancer cells to support rapid proliferation."
+        },
+        {
+          "section": "Unnamed (Introduction)",
+          "line": 2,
+          "snippet": "The subsequent downregulation of HIF1a-responsive genes by 2-HG may have unique consequences for human cancer cells, including limitation of the metabolic shift toward aerobic glycolysis, the so-called Warburg effect."
+        },
+        {
+          "section": "Discussion",
+          "line": 3,
+          "snippet": "Unlike primary glioblastomas and IDH wt astrocytic gliomas, which are fast-growing, treatment-resistant cancers, gliomas harboring IDH mutations grow slowly... PET scan studies showing that codeleted oligodendrogliomas have a low affinity for 18F-fluorodeoxyglucose, pointing to a metabolic profile that is not highly glycolytic."
+        },
+        {
+          "section": "Discussion / Conclusion",
+          "line": 26,
+          "snippet": "To our knowledge, this is the first report of LDHA downregulation in a human cancer, typically a highly glycolytic disease."
+        },
+        {
+          "section": "Discussion",
+          "line": 25,
+          "snippet": "we hypothesize that IDH1/2 mutations, by downregulating essential glycolytic genes such as LDHA, may prevent the glycolytic switch and limit the rapid growth typical of high-grade gliomas."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Chesnelong et al. explicitly frame gliomas as typically highly glycolytic/Warburg-phenotype tumors (especially primary glioblastomas, IDH-wild-type astrocytic gliomas, and high-grade gliomas) while their own novel finding is the counter-example: IDH-mutant gliomas underexpress glycolytic genes. The manuscript's framing (Warburg pronounced in gliomas/brain tumors) is supported at the level of the broader glioma population, though the cited paper's specific contribution is the IDH-mutant exception."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "-",
+    "suggested_edit": "Optional: acknowledge in-text that the Warburg phenotype is heterogeneous across glioma subtypes (pronounced in high-grade/IDH-wt; attenuated in IDH-mutant gliomas per chesnelong2014), since this paper is also a counterexample."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "Does the paper describe the Warburg effect / aerobic glycolysis as a feature of gliomas or brain tumors?",
+      "Does the paper characterize glioma / glioblastoma as a highly glycolytic cancer?",
+      "Does the paper support the idea that the Warburg phenotype is pronounced in high-grade gliomas or brain tumors specifically?",
+      "Does the paper treat altered glucose metabolism (aerobic glycolysis, LDHA overexpression, FDG avidity) as a hallmark of glioma biology?"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta)", "read": true},
+      {"section": "Unnamed (Introduction)", "read": true},
+      {"section": "Discussion", "read": true},
+      {"section": "Results subsections (LDHA silencing)", "read": false},
+      {"section": "Methods subsections", "read": false}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Paper does not attribute the glioma-Warburg framing to a single primary; it cites the broader cancer-metabolism literature (Warburg-effect reviews and IDH-mutation discovery papers) as background. The 'first-demonstration' claim here is about LDHA silencing in IDH-mutant gliomas, not about Warburg-in-gliomas generally.",
+    "out_of_context_check": "Context match is partial. Manuscript cites this paper to support 'Warburg effect pronounced in gliomas/brain tumors'; the paper accepts that framing for high-grade and IDH-wt gliomas but is primarily about an exception (IDH-mutant gliomas with silenced LDHA). Still appropriate as a supporting citation for glioma-metabolism salience."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["agnihotri2013", "mathupala2009"],
+    "sibling_verdicts": [
+      {
+        "citekey": "agnihotri2013",
+        "supports_sub_claim_ids": ["C003.a"],
+        "excerpt": "Not ingested in this run; per refs.bib, agnihotri2013 is a glioma-metabolism review expected to directly support the Warburg-pronounced-in-glioma framing."
+      },
+      {
+        "citekey": "mathupala2009",
+        "supports_sub_claim_ids": ["C003.a"],
+        "excerpt": "Not ingested in this run; per refs.bib, mathupala2009 is a brain-tumor metabolism / lactate-transport paper expected to support the same framing."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

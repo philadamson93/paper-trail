@@ -1,0 +1,103 @@
+{
+  "claim_id": "C043",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "miloushev2018",
+  "handle": "pdfs/miloushev2018/",
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [],
+  "claim_text": "Whereas most HP13C cancer studies have focused on Lac27,28,29,34 , we hypothesized that the 13 C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS5,35,36 .",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C043.a",
+      "text": "Miloushev et al. 2018 is a HP13C cancer study whose primary reported readout is 13C-lactate production (in brain-tumor patients), supporting the manuscript's claim that 'most HP13C cancer studies have focused on Lac'.",
+      "evidence": [
+        {
+          "section": "Bibtex verified title (refs.verified.bib)",
+          "line": 468,
+          "snippet": "Metabolic Imaging of the Human Brain with Hyperpolarized 13C Pyruvate Demonstrates 13C Lactate Production in Brain Tumor Patients"
+        },
+        {
+          "section": "Bibtex metadata",
+          "line": 469,
+          "snippet": "Cancer research, 2018, 78(14), 3755-3760 (DOI 10.1158/0008-5472.CAN-18-0221)"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Full-text ingest failed for miloushev2018: the downloaded PDF (handle pdfs/miloushev2018/) resolved to a JavaScript-gated landing page, so content.txt is a single line ('Enable JavaScript and cookies to continue') and no section files were extracted (ingest_mode=pdftotext_fallback; ingest_report.errors=['grobid_returned_none']). Grounding is therefore anchored to the verified title and publication metadata only. The title explicitly states the paper demonstrates '13C Lactate Production in Brain Tumor Patients' and it was published in Cancer Research - so as a title-level fact it is a HP13C cancer study whose headline finding is 13C-lactate. This is sufficient to confirm the sub-claim at the granularity of 'Lac is the primary readout', but the grounding is title-only. Flag NEEDS_PDF so a verifier can re-ground against body text once a readable PDF is available."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": {
+    "category": "ADD_EVIDENCE",
+    "suggested_edit": "Re-fetch miloushev2018 from an institutional proxy (Cancer Research DOI 10.1158/0008-5472.CAN-18-0221) and re-run ingest_pdf.py so full text is searchable; then re-ground C043 against Results and Methods to verify the Lac-focused framing beyond the title."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "hyperpolarized 13C pyruvate lactate production in brain tumor patients",
+      "HP13C cancer study primary readout 13C lactate",
+      "Miloushev 2018 Cancer Research hyperpolarized 13C brain tumor",
+      "HP13C pyruvate-to-lactate conversion as focus in oncologic imaging",
+      "13C Lac as the dominant metabolite reported in clinical HP13C cancer studies"
+    ],
+    "section_checklist": [
+      {"section": "content.txt", "read": true},
+      {"section": "figures/index.json", "read": true},
+      {"section": "meta.json", "read": true},
+      {"section": "refs.verified.bib (verified title/metadata)", "read": true}
+    ],
+    "closest_adjacent": "content.txt contains only 'Enable JavaScript and cookies to continue' - no body text to quote; no section files present. Verified-title evidence used in lieu of body grounding.",
+    "indirect_attribution_check": "N/A at title-only grounding granularity. Miloushev 2018 is a primary clinical HP13C brain-tumor study by title/venue (Cancer Research), not a review relaying another primary.",
+    "out_of_context_check": "Title explicitly reports 13C-lactate as the demonstrated metabolic readout in brain-tumor patients, matching the manuscript's claim that HP13C cancer studies focus on Lac. No context mismatch at title granularity."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "kurhanewicz2011", "nelson2013", "corbin2017", "datta2019", "park2016"],
+    "sibling_verdicts": [
+      {
+        "citekey": "nelson2013",
+        "supports_sub_claim_ids": ["C043.a"],
+        "excerpt": "First-in-human HP13C prostate cancer study reporting lactate as the primary metabolic readout; co-supports the Lac-focused framing in the same multi-cite (refs 27,28,29,34)."
+      },
+      {
+        "citekey": "kurhanewicz2011",
+        "supports_sub_claim_ids": ["C043.a"],
+        "excerpt": "Review of HP13C metabolic imaging; covers pyruvate-to-lactate conversion as the dominant reported readout in HP13C cancer applications."
+      },
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C043.a"],
+        "excerpt": "HP13C MRS review; supports the framing that most HP13C cancer studies emphasize lactate."
+      },
+      {
+        "citekey": "datta2019",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Cited for the Lac/Bic GLY/OXPHOS framing (different clause, refs 5,35,36) - see C045; does not support the Lac-focused clause that miloushev2018 anchors."
+      },
+      {
+        "citekey": "corbin2017",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Co-cited for the GLY/OXPHOS surrogate-marker clause; not for the Lac-focused clause."
+      },
+      {
+        "citekey": "park2016",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Co-cited for the GLY/OXPHOS surrogate-marker clause; not for the Lac-focused clause."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

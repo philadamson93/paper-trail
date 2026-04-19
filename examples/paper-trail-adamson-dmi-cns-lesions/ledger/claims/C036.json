@@ -1,0 +1,121 @@
+{
+  "claim_id": "C036",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "cunningham2016",
+  "handle": "pdfs/cunningham2016/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/cunningham2016.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/cunningham2016.pdf#page=2"
+  ],
+  "claim_text": "Primary HP13C applications include cancer and heart disease27,28,29,30,31,32,33 .",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C036.a",
+      "text": "Cunningham et al. 2016 is a hyperpolarized 13C (HP13C) application paper in heart disease, supporting the 'heart disease' portion of the manuscript's multi-citation on primary HP13C applications.",
+      "evidence": [
+        {
+          "section": "Title (meta.json)",
+          "line": null,
+          "snippet": "Hyperpolarized 13C Metabolic MRI of the Human Heart"
+        },
+        {
+          "section": "Abstract (meta.json)",
+          "line": null,
+          "snippet": "Understanding the role of altered intermediary metabolism in driving the transition from functional compensation to decompensated heart failure remains a promising avenue for the development of new therapies... Hyperpolarized carbon-13 (13C) magnetic resonance imaging (MRI) is promising in this regard because it can give images showing the uptake of metabolic substrates and subsequent intracellular conversion into downstream products... developments in preclinical models support the potential clinical value of 13C MRI in evaluating pathologies."
+        },
+        {
+          "section": "content.txt",
+          "line": 1,
+          "snippet": "of the human heart, including myocardial viability after acute ischemia/reperfusion injury, early- and late-onset metabolic changes in the failing heart, and diabetic cardiomyopathy... The first images of hyperpolarized 13C MRI in the human heart are presented in this pilot study in 4 healthy volunteers."
+        },
+        {
+          "section": "content.txt",
+          "line": 17,
+          "snippet": "The clinical potential for this technique remains considerable. As demonstrated by our previous work in porcine models of heart failure, as well as work by other groups, the ability to perform repeated assessments of PDC flux will provide important insights into disease pathogenesis that can potentially facilitate treatment strategies in the form of PDC modulators... Changes in PDC activity... may also serve as a therapeutic target to prevent the development of heart failure."
+        },
+        {
+          "section": "content.txt (What Is Known/What New Information)",
+          "line": 19,
+          "snippet": "Altered metabolism plays a role in heart failure progression... Hyperpolarized 13C magnetic resonance imaging holds the potential to provide a noninvasive metabolic assessment... The first hyperpolarized 13C images of the human heart."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Cunningham 2016 (Circ Res) is the first-in-human demonstration of HP13C cardiac MRI. The paper is explicitly framed around heart-failure metabolism and cardiac pathology (myocardial ischemia/reperfusion, failing heart, diabetic cardiomyopathy), making it a paradigmatic HP13C heart-disease application paper for the manuscript's 'cancer and heart disease' framing."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "hyperpolarized 13C MRI of the human heart / first-in-human cardiac HP13C",
+      "HP13C application in heart disease / heart failure / cardiac pathology",
+      "cardiac metabolism imaging with hyperpolarized [1-13C]pyruvate in humans",
+      "primary applications of HP13C include heart-disease imaging",
+      "HP13C pyruvate PDC flux in human myocardium"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Unnamed.txt (intro body)", "read": true},
+      {"section": "Methods.txt", "read": true},
+      {"section": "Results.txt", "read": true},
+      {"section": "Discussion.txt", "read": true},
+      {"section": "Conclusions.txt", "read": true},
+      {"section": "content.txt (full)", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Cunningham 2016 is itself a primary first-in-human cardiac HP13C study; it cites prior preclinical cardiac HP13C work (porcine heart failure models, ref 12) but stands as its own primary HP13C cardiac application paper.",
+    "out_of_context_check": "The manuscript cites cunningham2016 as one of the primary HP13C applications in heart disease. The source paper is explicitly titled 'HP13C Metabolic MRI of the Human Heart' and is framed around heart-failure metabolism, so the manuscript's usage matches the source framing exactly."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "kurhanewicz2011", "nelson2013", "malloy2011", "park2018", "morze2019"],
+    "sibling_verdicts": [
+      {
+        "citekey": "malloy2011",
+        "supports_sub_claim_ids": ["C036.a"],
+        "excerpt": "Co-cited HP13C cardiac metabolism review (per bibtex entry). Supports the 'heart disease' portion of the multi-cite alongside cunningham2016."
+      },
+      {
+        "citekey": "nelson2013",
+        "supports_sub_claim_ids": ["C036.a"],
+        "excerpt": "First-in-human HP13C prostate cancer study; supports the 'cancer' portion of the multi-cite rather than the heart-disease portion that cunningham2016 anchors."
+      },
+      {
+        "citekey": "kurhanewicz2011",
+        "supports_sub_claim_ids": ["C036.a"],
+        "excerpt": "Review of HP13C metabolic imaging applications spanning cancer and cardiac disease; provides review-level support for the composite 'cancer and heart disease' framing."
+      },
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C036.a"],
+        "excerpt": "Review of HP13C MRS metabolic imaging applications; provides review-level support for the composite 'primary HP13C applications' framing."
+      },
+      {
+        "citekey": "park2018",
+        "supports_sub_claim_ids": [],
+        "excerpt": "HP13C brain-tumor/brain-metabolism patient study; does not support the heart-disease portion cunningham2016 is anchoring, though it supports HP13C clinical applications broadly (see C038)."
+      },
+      {
+        "citekey": "morze2019",
+        "supports_sub_claim_ids": ["C036.a"],
+        "excerpt": "Co-cited HP13C application reference (per bibtex entry); expected to support one of the cancer-or-heart-disease portions of the multi-cite."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

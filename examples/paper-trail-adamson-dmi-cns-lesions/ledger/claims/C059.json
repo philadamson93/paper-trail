@@ -1,0 +1,108 @@
+{
+  "claim_id": "C059",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "defeyter2018",
+  "handle": "pdfs/defeyter2018/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+  ],
+  "claim_text": "The additional proton scans acquired with a conventional multi-channel head coil were aligned to the body-coil proton scan (acquired with the 2 H coil in place), and therefore the DMI dataset, via 3D rigid registration using the SimpleITK toolkit50. 2.5 Phantom Design For the purposes of SNR comparison experiments, we constructed a phantom with relaxation properties comparable to those reported in vivo in human brain tissue37.",
+  "manuscript_section": "2.4 / 2.5 Methods (Registration; Phantom Design)",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C059.a",
+      "text": "De Feyter et al. 2018 reports in vivo 2H relaxation parameters (T1, T2, T2*) of deuterated water and glucose/downstream metabolites in human brain tissue that can serve as target values for SNR-comparison phantom design.",
+      "evidence": [
+        {
+          "section": "content.txt",
+          "line": 4,
+          "snippet": "The T1 and T2 values of deuterated water and glucose were measured in water and agar phantoms and in rat and human brain in vivo. In addition, the relaxation parameters for Glx were measured in rat and human brain in vivo, whereas deuterated lactate T1, T2, and T2* values were measured in rat brain postmortem (tables S1 and S2)."
+        },
+        {
+          "section": "content.txt",
+          "line": 5,
+          "snippet": "The T1 values of [6,6′-2H2]glucose and its downstream metabolites range from 60 to 350 ms. The water signal showed pronounced biexponential T2 relaxation that likely reflects different tissue compartments, with the longer T2 component representing cerebrospinal fluid and the shorter component originating from intracellular water."
+        },
+        {
+          "section": "content.txt",
+          "line": 42,
+          "snippet": "T1, T2, and T2* measurements T1 values of water, glucose, Glx, and lactate were estimated on the basis of a threeparameter fit of the signal amplitude acquired using a nonlocalized inversion-recovery method with 12 logarithmically spaced inversion times between 10 and 2560 ms and a TR of 2560 ms."
+        },
+        {
+          "section": "content.txt",
+          "line": 45,
+          "snippet": "Signal variations caused by incomplete T1 relaxation and RF transmit B1+ magnetic field inhomogeneity were corrected using T1 relaxation time constants measured in vivo (table S1) and quantitative B1+ maps acquired on a phantom containing water, 1.5% agar, and 1% deuteriumoxide."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PARTIALLY_SUPPORTED",
+      "paper_value": "T1 of [6,6′-2H2]glucose and downstream metabolites ranges 60-350 ms; explicit per-metabolite T1/T2/T2* tabulated in Supplementary Tables S1 (in vivo human/rat brain) and S2",
+      "claim_value": "relaxation properties reported in vivo in human brain tissue",
+      "nuance": "The main-text content.txt confirms that defeyter2018 does measure T1/T2 of deuterated water and glucose (and Glx) in human brain in vivo and provides the in-vivo T1 values used for corrections, exactly the kind of numbers a phantom-design reference requires. However, the specific per-metabolite values (e.g., T1 of HDO, 2H-glucose, Glx in human brain at 4T) live in supplementary tables S1 and S2 that are referenced but not ingested in this handle. The claim is supported in spirit (defeyter2018 is a legitimate source for human-brain 2H relaxation parameters) but full quantitative confirmation requires the supplement."
+    }
+  ],
+  "overall_verdict": "PARTIALLY_SUPPORTED",
+  "overall_flag": "NEEDS_SUPPLEMENT",
+  "remediation": {
+    "category": "ADD_EVIDENCE",
+    "suggested_edit": "When citing defeyter2018 for in-vivo human-brain 2H relaxation parameters, consider also citing the source's supplementary tables S1 and S2 explicitly (e.g., 'Supplementary Tables S1-S2 of De Feyter et al. 2018') so reviewers can trace the specific T1/T2 numbers used in phantom design."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "in vivo human brain 2H relaxation parameters T1 T2",
+      "deuterium T1 T2 T2* human brain tissue",
+      "phantom design matched to DMI human-brain relaxation",
+      "HDO water 2H T1 human brain",
+      "DMI phantom SNR relaxation"
+    ],
+    "section_checklist": [
+      {"section": "Abstract", "read": true},
+      {"section": "INTRODUCTION.txt", "read": true},
+      {"section": "RESULTS.txt", "read": true},
+      {"section": "DMI of steady-state glucose metabolism in human brain.txt", "read": true},
+      {"section": "DISCUSSION.txt", "read": true},
+      {"section": "Human MR system.txt", "read": true},
+      {"section": "Human subjects.txt", "read": true},
+      {"section": "MR systems Animal and high-resolution NMR systems.txt", "read": true},
+      {"section": "MR signal acquisition.txt", "read": true},
+      {"section": "MR signal processing.txt", "read": true},
+      {"section": "Quantification.txt", "read": true},
+      {"section": "Animal experiments.txt", "read": true},
+      {"section": "H-labeled glucose and acetate administration in vivo.txt", "read": true},
+      {"section": "Analysis of 2 H label loss.txt", "read": true},
+      {"section": "In vitro experiments.txt", "read": true},
+      {"section": "DMI of liver glycogen.txt", "read": true},
+      {"section": "DMI of steady-state glucose and acetate metabolism in rat brain.txt", "read": true},
+      {"section": "Specific absorption rate.txt", "read": true},
+      {"section": "Statistics.txt", "read": true},
+      {"section": "Supplementary Tables S1, S2 (not ingested)", "read": false}
+    ],
+    "closest_adjacent": "content.txt L4: 'The T1 and T2 values of deuterated water and glucose were measured... in rat and human brain in vivo... (tables S1 and S2).' This confirms the in-vivo human-brain relaxation measurements exist in defeyter2018 but points to supplementary tables for the specific values.",
+    "indirect_attribution_check": "No indirect attribution concern for the in-vivo measurements; they are primary data reported by De Feyter et al. themselves.",
+    "out_of_context_check": "The manuscript cites defeyter2018 as a source of in-vivo human-brain relaxation properties used to guide phantom-building. Defeyter2018 indeed reports those measurements. The context is consistent."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "beare2018"
+    ],
+    "sibling_verdicts": [
+      {
+        "citekey": "beare2018",
+        "supports_sub_claim_ids": [],
+        "excerpt": "beare2018 (meta.json abstract): 'SimpleITK is a simplified interface to the insight segmentation and registration toolkit (ITK)... Using SimpleITK, development of complex combinations of image and statistical analysis procedures is feasible.' beare2018 supports the registration tooling (toolkit50) not the phantom-design reference (37); the two markers in the claim support disjoint sub-assertions."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

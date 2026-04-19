@@ -1,0 +1,121 @@
+{
+  "claim_id": "C038",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "park2018",
+  "handle": "pdfs/park2018/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/park2018.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/park2018.pdf#page=2"
+  ],
+  "claim_text": "Primary HP13C applications include cancer and heart disease27,28,29,30,31,32,33 .",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C038.a",
+      "text": "Park et al. 2018 is an HP13C application paper (brain-tumor / glioma patient studies); it supports the 'cancer' portion of the manuscript's 'cancer and heart disease' multi-cite via its brain-tumor patient cohort.",
+      "evidence": [
+        {
+          "section": "Title (meta.json)",
+          "line": null,
+          "snippet": "Development of methods and feasibility of using hyperpolarized carbon-13 imaging data for evaluating brain metabolism in patient studies"
+        },
+        {
+          "section": "Abstract (meta.json)",
+          "line": null,
+          "snippet": "The purpose of this study was to develop and implement experimental strategies for using [1-13C]pyruvate to probe in vivo metabolism for patients with brain tumors and other neurological diseases... Dynamic 13C data were acquired from 8 patients previously diagnosed with brain tumors... This study has presented the first application of hyperpolarized 13C metabolic imaging in patients with brain tumor and demonstrated the safety and feasibility of using hyperpolarized [1-13C]pyruvate to evaluate in vivo brain metabolism."
+        },
+        {
+          "section": "INTRODUCTION.txt",
+          "line": 1,
+          "snippet": "Preclinical studies that have shown promising results include the assessment of a wide range of different cancers, as well as cardiac disease, traumatic brain injury, and multiple sclerosis."
+        },
+        {
+          "section": "INTRODUCTION.txt",
+          "line": 2,
+          "snippet": "The purpose of the current study was to develop and implement hyperpolarized 13C metabolic imaging using [1-13C]pyruvate in the human brain, with the long-term goal of being able to monitor in vivo metabolism for patients with brain tumors and other neurological diseases. ... Dynamic 13C data were then obtained from patients with a prior diagnosis of glioma, which is the most common primary brain tumor in adults."
+        },
+        {
+          "section": "Patient population.txt",
+          "line": 1,
+          "snippet": "Eight patients who had a prior diagnosis of glioma were recruited from the neuro-oncology clinic at our institution."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Park 2018 is narrowly a brain-tumor (glioma) HP13C patient-feasibility study, and its own framing groups HP13C applications as 'a wide range of different cancers, as well as cardiac disease, traumatic brain injury, and multiple sclerosis' - i.e., glioma imaging counts as a cancer application. The patient cohort (8 patients with prior glioma diagnosis being followed with serial MRI) makes this a HP13C cancer application paper, which is the appropriate support for the 'cancer' portion of the manuscript's 'cancer and heart disease' multi-cite. No CITED_OUT_OF_CONTEXT concern."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "HP13C clinical application in brain tumor / glioma patients",
+      "hyperpolarized [1-13C]pyruvate brain-tumor patient feasibility study",
+      "primary HP13C application to cancer via brain tumor imaging",
+      "first HP13C metabolic imaging in patients with brain tumor",
+      "neuro-oncology glioma cohort hyperpolarized 13C pyruvate"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "INTRODUCTION.txt", "read": true},
+      {"section": "Patient population.txt", "read": true},
+      {"section": "Patient data.txt", "read": true},
+      {"section": "Imaging protocol for patient study.txt", "read": true},
+      {"section": "DISCUSSION.txt", "read": true},
+      {"section": "CONCLUSIONS.txt", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Park 2018 is itself a primary HP13C patient study; it cites earlier first-in-human HP13C (Nelson 2013 for prostate cancer) and preclinical cardiac/cancer HP13C work but stands as its own primary HP13C brain-tumor application paper.",
+    "out_of_context_check": "The manuscript cites park2018 within 'primary HP13C applications include cancer and heart disease'. Park 2018 is a HP13C brain-tumor (glioma) patient study, and the paper's own Introduction classifies HP13C applications as 'a wide range of different cancers, as well as cardiac disease...' Glioma is cancer, so the manuscript's citation is in-context for the 'cancer' portion. There is no heart-disease content in park2018; the heart-disease portion of the multi-cite is anchored by cunningham2016 and malloy2011."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "kurhanewicz2011", "nelson2013", "cunningham2016", "malloy2011", "morze2019"],
+    "sibling_verdicts": [
+      {
+        "citekey": "nelson2013",
+        "supports_sub_claim_ids": ["C038.a"],
+        "excerpt": "First-in-human HP13C prostate cancer study; co-supports the 'cancer' portion of the multi-cite alongside park2018 (brain tumor)."
+      },
+      {
+        "citekey": "cunningham2016",
+        "supports_sub_claim_ids": [],
+        "excerpt": "First-in-human HP13C cardiac study; anchors the 'heart disease' portion of the multi-cite (not the cancer portion that park2018 supports)."
+      },
+      {
+        "citekey": "malloy2011",
+        "supports_sub_claim_ids": [],
+        "excerpt": "HP13C cardiac metabolism reference; anchors the 'heart disease' portion of the multi-cite."
+      },
+      {
+        "citekey": "kurhanewicz2011",
+        "supports_sub_claim_ids": ["C038.a"],
+        "excerpt": "Review of HP13C metabolic imaging applications spanning cancer and cardiac disease; provides review-level support for the composite framing."
+      },
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C038.a"],
+        "excerpt": "Review of HP13C applications; supports the composite 'primary HP13C applications' framing."
+      },
+      {
+        "citekey": "morze2019",
+        "supports_sub_claim_ids": ["C038.a"],
+        "excerpt": "Co-cited HP13C application reference; expected to support one of the cancer-or-heart-disease portions of the multi-cite."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "claim_id": "C026",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "fan2020",
+  "handle": "pdfs/fan2020/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/fan2020.pdf"
+  ],
+  "claim_text": "MRI has been used to measure cerebral blood flow (CBF) but is not yet validated for cerebral metabolic rate of oxygen (CMRO2), a measure of OXPHOS23.",
+  "manuscript_section": "1.2 Alternative measures of glucose metabolism",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C026.a",
+      "text": "MRI can measure cerebral blood flow (CBF) but MRI-based measurement of cerebral metabolic rate of oxygen (CMRO2) is not yet validated.",
+      "evidence": [
+        {
+          "section": "Introduction",
+          "line": 2,
+          "snippet": "Positron emission tomography (PET) with [ 15 O]-radiotracers remains the quantitative standard for OEF and oxygen metabolism, but requires an on-site cyclotron and complex procedures to administer short half-life tracers. While these constraints limit its clinical application, [ 15 O]-PET has been used to identify abnormal, elevated OEF in patients with ischemic stroke..."
+        },
+        {
+          "section": "Introduction",
+          "line": 2,
+          "snippet": "Nascent, advanced MRI methods that directly measure regional brain oxygenation hold promise for stroke imaging. The quantitative blood level oxygenation dependent (BOLD) technique jointly models T2- and T2*-weighted BOLD MRI signals... Alternatively, quantitative susceptibility mapping (QSM) can be used as a non-invasive technique to measure oxygenation without contrast agent..."
+        },
+        {
+          "section": "Materials and methods / MRI acquisition",
+          "line": 7,
+          "snippet": "All patients received DSC MRI for perfusion assessment... Block-circulant singular value decomposition was used to de-convolve the tissue concentration-time curves and derive mean transit time (MTT) and cerebral blood flow (CBF) maps."
+        },
+        {
+          "section": "Discussion",
+          "line": 23,
+          "snippet": "Liu and Li acquired absolute CBF measurements with arterial spin labeling (ASL) MRI and OEF measurements with magnetic susceptibility. Similar to our study, elevated OEF and reduced CBF were observed in the affected hemisphere. Liu and Li found that in some patient groups (mild to moderate MCA stenosis), elevated OEF adequately compensated for reduced CBF to maintain a normal level of cerebral metabolic rate of oxygen (CMRO 2 )..."
+        },
+        {
+          "section": "Discussion",
+          "line": 24,
+          "snippet": "OEF underestimation by QSM (~30% absolute OEF in unaffected hemisphere compared to ~40% in healthy tissues measured by [ 15 O]-PET). ... [15O]-PET remains the gold standard."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PARTIALLY_SUPPORTED",
+      "paper_value": "fan2020 demonstrates MRI (QSM) measurement of OEF and uses DSC-MRI for CBF, but does not directly measure or validate CMRO2 from MRI; it treats [15O]-PET as the gold standard and reports that QSM underestimates OEF relative to PET.",
+      "claim_value": "MRI is used for CBF but not yet validated for CMRO2 (OXPHOS).",
+      "nuance": "fan2020 is a stroke-specific QSM MRI study of OEF (not CMRO2 directly). It confirms that MRI can give CBF (via DSC) and supports the spirit of the manuscript's claim — MRI oxygen-metabolism methods are 'nascent' and [15O]-PET remains the quantitative standard — but it does not by itself establish the general (non-stroke, tumor-context) non-validation of MRI CMRO2. The paper is a reasonable example of an MRI OEF method in development, supporting the manuscript's broader point without being a direct validation-status review."
+    }
+  ],
+  "overall_verdict": "PARTIALLY_SUPPORTED",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RECITE",
+    "suggested_edit": "Retain fan2020 as an example of MRI oxygen-metabolism (OEF via QSM) that uses PET as the gold standard, but consider pairing it with a review or validation paper that directly addresses MRI CMRO2 validation status (e.g., a TRUST, QSM-OEF, or ASL-based CMRO2 review) to ground the 'not yet validated for CMRO2' claim more firmly. Alternatively, reword to 'MRI-based OEF/CMRO2 approaches are still under development and referenced against [15O]-PET as the quantitative standard' to better match what fan2020 actually shows."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "MRI CMRO2 validation not yet established",
+      "MRI oxygen extraction fraction QSM versus PET gold standard",
+      "cerebral blood flow MRI DSC ASL",
+      "MRI oxygen metabolism brain tumor validation"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Materials and methods Patients", "read": true},
+      {"section": "MRI acquisition", "read": true},
+      {"section": "Image processing for quantification of OEF", "read": true},
+      {"section": "Clinical and perfusion measures", "read": true},
+      {"section": "Statistical analyses", "read": true},
+      {"section": "Results", "read": true},
+      {"section": "The relationship between OEF and relative CBF", "read": true},
+      {"section": "Discussion", "read": true},
+      {"section": "Conclusion", "read": true}
+    ],
+    "closest_adjacent": "Introduction (L2): '[15O]-PET remains the quantitative standard for OEF and oxygen metabolism... Nascent, advanced MRI methods that directly measure regional brain oxygenation hold promise for stroke imaging.' Discussion (L24): QSM MRI underestimates OEF (~30%) relative to [15O]-PET (~40%). These support the broader 'MRI not yet validated for CMRO2' framing but stop short of an explicit CMRO2-validation statement.",
+    "indirect_attribution_check": "fan2020 cites [15O]-PET as the quantitative standard and positions QSM OEF as a developing MRI alternative; appropriate primary-ish source for the 'MRI methods still developing' framing, though not itself a review of CMRO2 validation.",
+    "out_of_context_check": "The manuscript applies the citation to a general claim about MRI CMRO2 validation relevant to brain tumors / OXPHOS assessment; fan2020 is specifically an acute-ischemic-stroke QSM-OEF study. Context is adjacent (MRI oxygen-metabolism methods development) but not domain-matched to tumor CMRO2 validation. Hence PARTIALLY_SUPPORTED rather than CITED_OUT_OF_CONTEXT — the paper does support the method-maturity claim, just from a different disease context."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["goldenberg2019", "henning2018"],
+    "sibling_verdicts": [
+      {
+        "citekey": "goldenberg2019",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested in this run; attached to a different marker (24/25) in the sentence cluster, not marker 23."
+      },
+      {
+        "citekey": "henning2018",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested in this run; attached to a different marker (25) in the sentence cluster, not marker 23."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

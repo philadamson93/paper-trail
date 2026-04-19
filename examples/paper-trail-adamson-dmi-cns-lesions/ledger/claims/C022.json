@@ -1,0 +1,112 @@
+{
+  "claim_id": "C022",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "mintun1984",
+  "handle": "pdfs/mintun1984/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/mintun1984.pdf"
+  ],
+  "claim_text": "However clinical impact is severely limited by the short 2-min 15O half-life17,18,19.",
+  "manuscript_section": "1.2 Alternative measures of glucose metabolism",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C022.a",
+      "text": "15O PET methodology for measuring brain oxygen utilization uses the short-lived 15O isotope (half-life ~2 min / 123 sec), a property that constrains scan protocols and practical deployment.",
+      "evidence": [
+        {
+          "section": "Abstract (meta)",
+          "line": 1,
+          "snippet": "The introduction of molecular oxygen-15 (T1/2 = 123 sec) into the vascular compartment of the body results in the distribution of the labeled oxygen to the tissues, where it is converted to 0-15-labeled water of metabolism."
+        },
+        {
+          "section": "Humanstudies / instrumentation",
+          "line": 46,
+          "snippet": "The accepted counts were stored in a small laboratory computer, which processed these data including corrections for electronic dead time loss, physical decay (0-15 half-life = 123 sec), and background..."
+        },
+        {
+          "section": "Humanstudies",
+          "line": 53,
+          "snippet": "All samples were corrected for radioactive decay (T1/2 = 123 sec) back to the zero time..."
+        },
+        {
+          "section": "DISCUSSION",
+          "line": 91,
+          "snippet": "The use of short-lived oxygen-15 permits the three sequential scans, each following an administration of H2 15 O, C 15 O, or [ 15 O]oxygen..."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "123 sec (2 min 3 sec) — the canonical 15O half-life",
+      "claim_value": "short 2-min 15O half-life",
+      "nuance": "mintun1984 is the foundational methods paper for brain 15O PET and repeatedly reports the 123-sec half-life that directly motivates the manuscript's 'short 2-min' characterization. While the paper does not explicitly frame the half-life as a 'clinical-impact limitation' (its purpose is to establish the method), it documents the scan-duration and decay-correction logistics (e.g., 40-sec scans, three sequential 15O administrations, on-site cyclotron/delivery complexity) that make the half-life the practical constraint the manuscript invokes."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "—",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "15O half life 2 minutes 123 seconds",
+      "short lived oxygen-15 PET brain CMRO2 methodology",
+      "T1/2 oxygen-15 scan duration decay correction",
+      "practical constraints 15O radiotracer PET clinical"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta)", "read": true},
+      {"section": "MATERIALS AND METHODS", "read": true},
+      {"section": "Implementation. The PETT VI system a positron", "read": true},
+      {"section": "Humanstudies (instrumentation)", "read": true},
+      {"section": "Measurements", "read": true},
+      {"section": "Calculation of CMRO2 and E requires local CBF", "read": true},
+      {"section": "DISCUSSION", "read": true}
+    ],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "mintun1984 is itself the primary methodology citation for brain 15O PET (Raichle, Mintun et al., J Nucl Med 1984); the half-life figure is a physical constant, not indirect attribution.",
+    "out_of_context_check": "Manuscript cites mintun1984 alongside vlassenko2015 and baron2012 in a sentence about the short 2-min half-life limiting clinical impact. mintun1984 establishes the half-life and the scan protocols that stem from it; it is an appropriate primary methods citation for the half-life figure even though it does not itself editorialize about 'clinical impact.' Consistent with its role as a foundational methods reference."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["vlassenko2015", "baron2012", "witney2015", "beinat2018", "beinat2021"],
+    "sibling_verdicts": [
+      {
+        "citekey": "vlassenko2015",
+        "supports_sub_claim_ids": ["C022.a"],
+        "excerpt": "vlassenko2015 (ingested; see C020): 'Our PET measurements of AG and CMRO 2 are technically demanding and require 15 O inhalation and injection which are not easily available at PET centers' — adjacent support for clinical-availability limitation driven by the short half-life."
+      },
+      {
+        "citekey": "baron2012",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested in this run. Co-cite context unassessed."
+      },
+      {
+        "citekey": "witney2015",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested; attached to DASA-23 cluster (20,21,22), not the 15O cluster."
+      },
+      {
+        "citekey": "beinat2018",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested; DASA-23 cluster, not 15O cluster."
+      },
+      {
+        "citekey": "beinat2021",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested; DASA-23 cluster, not 15O cluster."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

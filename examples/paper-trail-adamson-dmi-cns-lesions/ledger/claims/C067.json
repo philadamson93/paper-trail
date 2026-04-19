@@ -1,0 +1,92 @@
+{
+  "claim_id": "C067",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "vos2021",
+  "handle": "pdfs/vos2021/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/vos2021.pdf#page=6",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/vos2021.pdf#page=14"
+  ],
+  "claim_text": "While useful for decreasing imaging times via parallel imaging techniques, at lower frequencies, coil and front-end electronics noise increasingly dominate over that from the body, resulting in poor phased-array SNR performance for low-field (\u2264 1T) scanners52,53,54.",
+  "manuscript_section": "Discussion \u00a74",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C067.a",
+      "text": "At low field strengths, coil (and front-end electronics) noise dominates over body/sample noise, limiting the SNR benefit of phased-array receivers compared to high-field use.",
+      "evidence": [
+        {
+          "section": "DESIGN OF A FOUR-CHANNEL RADIO FREQUENCY COIL ARRAY",
+          "line": 28,
+          "snippet": "In contrast, phased array receiver coils [38] are widely used on clinical MRI systems due to their improved signal-to-noise ratio (SNR) compared to larger volume coils, and for their capability of accelerating scans by under sampling k-space [39]. Although the coil-dominated loss at lower field strengths means that the intrinsic increase in SNR is much lower than at higher fields, phased array coils can still be used to reduce the imaging time and enable lossless receive bandwidth amplification via preamplifier impedance mismatch. More importantly, the design of phased arrays receivers on low field systems is more challenging than at conventional fields since coil/sample coupling is much lower, loaded Q-values are higher, and as a result inter-coil coupling is higher."
+        },
+        {
+          "section": "DISCUSSION",
+          "line": 53,
+          "snippet": "Although not common at the moment, receive arrays could be used to reduce the time required for image acquisition, if the SNR is sufficient, by utilizing parallel imaging reconstruction of under-sampled data. \u2026 Since coil loss is dominant at low frequency, and inter-coil coupling therefore much higher, the input impedance of such preamplifiers must be much lower than for commercial systems, so <<1 Ohm, which would require a custom design."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "coil-dominated loss at lower field strengths; coil loss dominant at low frequency (2.15 MHz / 50 mT Halbach system)",
+      "claim_value": "coil and front-end electronics noise increasingly dominate over that from the body, resulting in poor phased-array SNR performance for low-field (\u22641T) scanners",
+      "nuance": "Vos 2021 is a 50 mT portable-MRI system design paper. It explicitly states coil-dominated loss at low field and the consequent \"much lower\" intrinsic SNR gain from phased arrays than at higher fields \u2014 directly supporting the manuscript's claim about poor phased-array SNR performance at low field. The paper does not itself quantify a field-strength threshold of 1T; its observations are made at 50 mT. The generalization to \u22641T in the manuscript rests on the co-cited Marques 2019 (ref 54) and Hamilton 2017 (ref 52) reviews, but Vos 2021 is a valid primary example that the phenomenon holds at low field."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "None required. Optionally clarify that vos2021 is a primary example at 50 mT and that the \u22641T generalization is grounded in the co-cited reviews (marques2019, hamilton2017)."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "coil noise dominates over sample/body noise at low field strengths (low Larmor frequency)",
+      "phased-array SNR gain diminishes at low field due to coil-dominated loss",
+      "parallel imaging / phased array performance is limited at low field by coil/preamp noise",
+      "front-end electronics noise increasingly dominates at low MR frequency"
+    ],
+    "section_checklist": [
+      {"section": "INTRODUCTION (low-field MRI landscape)", "read": true},
+      {"section": "Mathematical Framework / gradient coil design", "read": true},
+      {"section": "Gradient Coil Simulation and Construction", "read": true},
+      {"section": "DESIGN OF A FOUR-CHANNEL RADIO FREQUENCY COIL ARRAY", "read": true},
+      {"section": "Radio Frequency Coil Array Construction", "read": true},
+      {"section": "DESIGN OF A BATTERY-POWERED GRADIENT AMPLIFIER", "read": true},
+      {"section": "Gradient Amplifier Performance / Radiofrequency Amplifier Performance", "read": true},
+      {"section": "Eddy Current Characterisation", "read": true},
+      {"section": "Quality Assurance Protocol and Overall System Noise Characterisation", "read": true},
+      {"section": "SYSTEM CHARACTERISATION", "read": true},
+      {"section": "DISCUSSION", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Vos 2021 makes this observation as a primary empirical finding at 50 mT; it cites prior low-field-array work (ref 15 in Vos) but frames the coil-dominated-loss statement in its own voice.",
+    "out_of_context_check": "The manuscript uses vos2021 to ground a general low-field phased-array SNR statement. Vos demonstrates this at one operating point (50 mT); the manuscript's broader \u22641T framing is carried by the sibling review refs. Context is consistent \u2014 Vos is a supporting primary example, not the sole evidence for the \u22641T generalization."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hamilton2017", "marques2019"],
+    "sibling_verdicts": [
+      {
+        "citekey": "hamilton2017",
+        "supports_sub_claim_ids": ["C067.a"],
+        "excerpt": "Review of recent advances in parallel imaging for MRI; grounds the \"decreasing imaging times via parallel imaging\" framing. (Ref 52; grounded separately.)"
+      },
+      {
+        "citekey": "marques2019",
+        "supports_sub_claim_ids": ["C067.a"],
+        "excerpt": "Low-field MRI review covering coil/sample-noise regime and SNR considerations; generalizes the \u22641T claim across systems. (Ref 54; ingested, grounded separately.)"
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

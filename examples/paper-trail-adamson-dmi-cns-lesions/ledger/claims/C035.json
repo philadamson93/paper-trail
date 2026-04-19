@@ -1,0 +1,97 @@
+{
+  "claim_id": "C035",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "nelson2013",
+  "handle": "pdfs/nelson2013/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/nelson2013.pdf"
+  ],
+  "claim_text": "Primary HP13C applications include cancer and heart disease27,28,29,30,31,32,33 .",
+  "manuscript_section": "Introduction \u00a71.3 (HP13C applications landscape)",
+  "claim_type": {
+    "type": "BACKGROUND",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C035.a",
+      "text": "Nelson 2013 supports the set membership 'HP13C is applied to cancer' (it is an HP13C cancer application).",
+      "evidence": [
+        {
+          "section": "Abstract (meta.json)",
+          "line": 0,
+          "snippet": "This first-in-man imaging study evaluated the safety and feasibility of hyperpolarized [1-13 C]pyruvate as an agent for noninvasively characterizing alterations in tumor metabolism for patients with prostate cancer."
+        },
+        {
+          "section": "Introduction",
+          "line": 6,
+          "snippet": "The primary goal of this first-in-human study was to demonstrate the safety and feasibility of hyperpolarized [1- 13 C]pyruvate injections in men with prostate cancer. ... the secondary aims were to evaluate the kinetics of delivery to the prostate and assess differences in [1- 13 C]lactate/[1- 13 C]pyruvate for regions of cancer versus other tissues."
+        },
+        {
+          "section": "Discussion",
+          "line": 17,
+          "snippet": "First-in-man metabolic imaging with hyperpolarized [1- 13 C]pyruvate was successfully applied in 31 patients with prostate cancer."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Nelson 2013 is the first-in-human HP13C pyruvate study in prostate cancer patients (n=31). It unambiguously supports the 'cancer' half of the manuscript's 'cancer and heart disease' set. Scope note: Nelson 2013 is specifically prostate cancer, not cancer broadly; the manuscript's aggregate sentence with 7 co-cites is appropriately backed by other refs for breadth. Nelson 2013 does NOT itself concern heart disease \u2014 its Discussion (L21) mentions cardiac disease only as one of several preclinical 'other disease models ... that show promise for translation' (refs 33, 35, 36), which is a forward-looking aside, not an HP13C heart-disease application in the paper."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "No edit required. Nelson 2013 is a correct cite for the cancer half of the 'cancer and heart disease' umbrella. The cardiac-applications half is carried by sibling refs in the co-cite bundle (malloy2011, morze2019, cunningham2016, etc.) and does not need Nelson 2013."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "hyperpolarized 13C pyruvate cancer application",
+      "HP13C prostate cancer first-in-human",
+      "hyperpolarized 13C heart / cardiac application in Nelson 2013",
+      "13C metabolic imaging clinical cancer trial",
+      "HP13C tumor metabolism pyruvate imaging",
+      "Nelson 2013 cardiac disease mention"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Study design", "read": true},
+      {"section": "Patient population", "read": true},
+      {"section": "Patient toxicities", "read": true},
+      {"section": "1D dynamic MRSI", "read": true},
+      {"section": "2D dynamic MRSI", "read": true},
+      {"section": "Single-time point MRSI", "read": true},
+      {"section": "Discussion", "read": true},
+      {"section": "13C MR examination protocol (Methods)", "read": true},
+      {"section": "Acquisition parameters for 13C MRSI data", "read": true},
+      {"section": "Data analysis", "read": true},
+      {"section": "Formulation", "read": true},
+      {"section": "Hyperpolarized pyruvate polarization and delivery", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Nelson 2013 is itself the primary HP13C prostate cancer trial; no indirect attribution concern for the cancer-application sub-claim.",
+    "out_of_context_check": "The manuscript sentence enumerates an umbrella of HP13C applications. Nelson 2013 cleanly slots into the 'cancer' category; it is not being asked to carry the 'heart disease' half of the umbrella (sibling refs hurd2012, malloy2011, cunningham2016, morze2019, park2018 handle that side). The cite is in-context."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "hurd2012",
+      "kurhanewicz2011",
+      "cunningham2016",
+      "malloy2011",
+      "park2018",
+      "morze2019"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

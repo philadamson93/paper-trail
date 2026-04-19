@@ -1,0 +1,145 @@
+{
+  "claim_id": "C034",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "kurhanewicz2011",
+  "handle": "pdfs/kurhanewicz2011/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/kurhanewicz2011.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/kurhanewicz2011.pdf#page=7"
+  ],
+  "claim_text": "Primary HP13C applications include cancer and heart disease27,28,29,30,31,32,33.",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C034.a",
+      "text": "Cancer is a primary application domain for HP13C MRI/MRSI.",
+      "evidence": [
+        {
+          "section": "Title / Abstract (meta.json)",
+          "line": null,
+          "snippet": "Analysis of Cancer Metabolism by Imaging Hyperpolarized Nuclei: Prospects for Translation to Clinical Research."
+        },
+        {
+          "section": "Introduction",
+          "line": 2,
+          "snippet": "Instead, we focus on tumor metabolism and the use of hyperpolarization methods to monitor dynamic metabolic processes in vivo."
+        },
+        {
+          "section": "1-13 C pyruvate Applications to Cancer",
+          "line": 2,
+          "snippet": "Flux of hyperpolarized 13 C label between pyruvate and lactate has also been used as a marker of prostate cancer progression, with the levels of hyperpolarized lactate increasing with increasing tumor grade in the TRAMP model. ... Another report has demonstrated significantly higher hyperpolarized lactate production in two human glioblastoma xenograft models ... suggesting that hyperpolarized MR metabolic imaging may be valuable for assessing prognosis and monitoring response to therapy for patients with brain tumors."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The entire review is scoped to cancer (Neoplasia, title-level)."
+    },
+    {
+      "sub_claim_id": "C034.b",
+      "text": "Heart disease is a primary application domain for HP13C MRI/MRSI.",
+      "evidence": [
+        {
+          "section": "Introduction",
+          "line": 2,
+          "snippet": "other diseases\u2014diabetes, ischemic heart disease, diffuse hepatocellular diseases, stroke, to name a few\u2014are also associated with marked metabolic abnormalities and that new methods to probe tissue biochemistry should be equally valuable."
+        },
+        {
+          "section": "1-13 C pyruvate Applications to Cancer",
+          "line": 4,
+          "snippet": "Hyperpolarized [1-13 C]pyruvate metabolism has been measured both in vivo and in the isolated perfused rat heart. Metabolites identified include [1-13 C]lactate, [1-13 C]alanine, and 13 CO 2. ... Total global ischemia in isolated perfused rat hearts resulted in the production of [1-13 C]lactate and [1-13 C]alanine but not H 13 CO 3 -or 13 CO 2. ... After ischemia, citrate and glutamate decreased and lactate increased."
+        },
+        {
+          "section": "Conclusions and Recommendations",
+          "line": 1,
+          "snippet": "As we have seen, multiple methods can induce a hyperpolarized state. ... This report generated from a wide range of researchers and imaging physicians is a reflection of a strong interest by the research community in moving this important new imaging method forward to address the cancer problem and other diseases."
+        },
+        {
+          "section": "Nuclei for Hyperpolarization and the Role of Relaxation",
+          "line": 8,
+          "snippet": "Single-slice two-dimensional spectroscopic imaging with elliptical central k-space sampling has provided both spatial and spectral information in a rapid acquisition for preclinical cardiac measurements."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PARTIALLY_SUPPORTED",
+      "paper_value": "cancer-primary review with secondary coverage of cardiac HP13C (isolated perfused rat heart, cardiac ischemia, preclinical cardiac MRSI)",
+      "claim_value": "cancer and heart disease as co-primary HP13C applications",
+      "nuance": "Kurhanewicz 2011 is scoped to cancer and frames heart disease as an \"other disease\" beyond its primary focus, but it does report concrete HP13C cardiac studies (perfused rat heart pyruvate metabolism, ischemia, preclinical cardiac spectroscopic imaging). The paper supports heart as a demonstrated HP13C application, but not with equal weight to cancer."
+    }
+  ],
+  "overall_verdict": "PARTIALLY_SUPPORTED",
+  "overall_flag": "MINOR",
+  "remediation": {
+    "category": "RECITE",
+    "suggested_edit": "For the heart-disease portion of this multi-cite, lean on the co-cites that are heart-primary (malloy2011 \"Could 13C MRI assist clinical decision-making for patients with heart disease\", cunningham2016 \"HP13C metabolic MRI of the human heart\"); Kurhanewicz 2011 best supports the cancer half of the claim."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "primary applications of hyperpolarized 13C include cancer and heart disease",
+      "HP13C imaging used in cancer and in cardiac / heart-disease contexts",
+      "review of HP13C spanning cancer and heart disease",
+      "hyperpolarized pyruvate in isolated perfused rat heart and cardiac ischemia"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Metabolism in Cancer", "read": true},
+      {"section": "Metabolism of Hyperpolarized Pyruvate", "read": true},
+      {"section": "1-13 C pyruvate Applications to Cancer", "read": true},
+      {"section": "C acetate", "read": true},
+      {"section": "Nuclei for Hyperpolarization and the Role of Relaxation", "read": true},
+      {"section": "Conclusions and Recommendations", "read": true}
+    ],
+    "closest_adjacent": "Introduction: \"other diseases\u2014diabetes, ischemic heart disease, diffuse hepatocellular diseases, stroke\u2026 are also associated with marked metabolic abnormalities and that new methods to probe tissue biochemistry should be equally valuable.\" This places heart disease as an acknowledged but non-primary application in this review.",
+    "indirect_attribution_check": "For cardiac HP13C, the review cites primary studies (isolated perfused rat heart references); cardiac-primary papers in the manuscript's multi-cite (malloy2011, cunningham2016) are the stronger sources for the heart half.",
+    "out_of_context_check": "Manuscript presents cancer and heart disease as co-primary HP13C domains; Kurhanewicz 2011's scope is cancer-primary with cardiac studies present but secondary. Slight context mismatch for the heart-disease half, hence PARTIALLY_SUPPORTED on C034.b."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "nelson2013", "cunningham2016", "malloy2011", "park2018", "morze2019"],
+    "sibling_verdicts": [
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C034.a", "C034.b"],
+        "excerpt": "General HP13C metabolic imaging review via dissolution DNP; covers methodology relevant to both domains."
+      },
+      {
+        "citekey": "nelson2013",
+        "supports_sub_claim_ids": ["C034.a"],
+        "excerpt": "Prostate cancer patient study with HP [1-13C]pyruvate \u2014 cancer-primary."
+      },
+      {
+        "citekey": "cunningham2016",
+        "supports_sub_claim_ids": ["C034.b"],
+        "excerpt": "Hyperpolarized 13C metabolic MRI of the human heart \u2014 heart-primary."
+      },
+      {
+        "citekey": "malloy2011",
+        "supports_sub_claim_ids": ["C034.b"],
+        "excerpt": "Could 13C MRI assist clinical decision-making for patients with heart disease \u2014 heart-primary."
+      },
+      {
+        "citekey": "park2018",
+        "supports_sub_claim_ids": ["C034.a"],
+        "excerpt": "HP carbon-13 imaging for brain/patient studies \u2014 cancer/CNS-primary."
+      },
+      {
+        "citekey": "morze2019",
+        "supports_sub_claim_ids": ["C034.a"],
+        "excerpt": "Targeting cancer metabolism with HP13C MRI \u2014 cancer-primary."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "claim_id": "C014",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "corbin2019",
+  "handle": "pdfs/corbin2019/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "We contend that clinical translation is presently impeded not so much by a lack of agents, but by the difficulty in measuring tumor metabolism in vivo5,13 , namely total glucose consumption and the relative fraction of glucose undergoing GLY versus OXPHOS. 1.2 Alternative measures of glucose metabolism Oftheglucosemetabolicimagingtechniques,PETisthemost widely available metabolic imaging tool, and 18 F-FDG-PET (FDG-PET) has found widespread use in cancer imaging due tothehighglucoseneedsofmanycancers.However,itsusein studyingbraintumorsissomewhatlimitedbyhighgraymatter FDG uptake14 .",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C014.a",
+      "text": "We contend that clinical translation is presently impeded not so much by a lack of agents, but by the difficulty in measuring tumor metabolism in vivo5,13 , namely total glucose consumption and the relative fraction of glucose undergoing GLY versus OXPHOS. 1.2 Alternative measures of glucose metabolism Oftheglucosemetabolicimagingtechniques,PETisthemost widely available metabolic imaging tool, and 18 F-FDG-PET (FDG-PET) has found widespread use in cancer imaging due tothehighglucoseneedsofmanycancers.However,itsusein studyingbraintumorsissomewhatlimitedbyhighgraymatter FDG uptake14 .",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "corbin2017",
+      "spence2004"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "claim_id": "C055",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "batsios2022",
+  "handle": "pdfs/batsios2022/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Batsios et. al. demonstrated DMI using [U-2 H]-pyruvate for assessing early treatment responseinapreclinicalmodelforreportingonTERTexpression via assessing the production of lactate in mice with patient-derived gliomas47 .",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C055.a",
+      "text": "Batsios et. al. demonstrated DMI using [U-2 H]-pyruvate for assessing early treatment responseinapreclinicalmodelforreportingonTERTexpression via assessing the production of lactate in mice with patient-derived gliomas47 .",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

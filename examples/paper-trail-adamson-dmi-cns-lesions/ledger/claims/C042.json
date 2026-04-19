@@ -1,0 +1,114 @@
+{
+  "claim_id": "C042",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "nelson2013",
+  "handle": "pdfs/nelson2013/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/nelson2013.pdf"
+  ],
+  "claim_text": "Whereas most HP13C cancer studies have focused on Lac27,28,29,34 , we hypothesized that the 13 C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS5,35,36 .",
+  "manuscript_section": "Introduction \u00a71.3 (HP13C prior-art motivation for Lac/Bic hypothesis)",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C042.a",
+      "text": "Nelson 2013 is an HP13C cancer study whose primary readout is the 13C-lactate signal (i.e., it focuses on Lac).",
+      "evidence": [
+        {
+          "section": "Introduction",
+          "line": 5,
+          "snippet": "Increased signal from hyperpolarized [1-13 C]lactate has been observed in preclinical models of prostate cancer relative to normal tissues ... Levels of hyperpolarized [1- 13 C]lactate and the flux of [1-13 C]pyruvate to [1- 13 C]lactate increase with cancer progression (pathologic grade) and reduce after therapy."
+        },
+        {
+          "section": "Introduction",
+          "line": 6,
+          "snippet": "the secondary aims were to evaluate the kinetics of delivery to the prostate and assess differences in [1- 13 C]lactate/[1- 13 C]pyruvate for regions of cancer versus other tissues."
+        },
+        {
+          "section": "1D dynamic MRSI",
+          "line": 10,
+          "snippet": "These dynamic data demonstrated reproducible delivery of hyperpolarized [1- 13 C]pyruvate to the prostate and its conversion to hyperpolarized [1-13 C]lactate. ... Representative 13 C spectra ... demonstrated peaks corresponding to [1- 13 C]pyruvate [173 ppm] and [1- 13 C]lactate (185 ppm)."
+        },
+        {
+          "section": "Single-time point MRSI",
+          "line": 13,
+          "snippet": "The purpose of the single-time point spatially localized data was to compare the relative levels of [1- 13 C]lactate and [1- 13 C]pyruvate in regions of tumor versus normal prostate and surrounding tissue."
+        },
+        {
+          "section": "Single-time point MRSI",
+          "line": 14,
+          "snippet": "The median [1-13 C]lactate/[1- 13 C]pyruvate ratios were 0.94 (range, 0.85 to 1.25) on the right side and 1.35 (range, 0.73 to 4.39) on the left side of the gland. The median [1-13 C]lactate/[1- 13 C]pyruvate ratio in a region of the central gland \u2014 which was not thought to include tumor \u2014 was 0.45."
+        },
+        {
+          "section": "Discussion",
+          "line": 18,
+          "snippet": "The kinetics of delivering the hyperpolarized agent and the increase in [1- 13 C]lactate signal were consistent with those observed in preclinical models."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Nelson 2013 is a paradigmatic Lac-focused HP13C cancer study: lactate (and the Lac/Pyr ratio) is the paper's sole metabolic readout, its tumor-contrast biomarker, and the quantitative endpoint throughout Results, Discussion, and Table 2. Bic/acetyl-CoA/alanine peaks are neither measured nor mentioned. This directly supports the manuscript's premise that 'most HP13C cancer studies have focused on Lac'."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "No edit required. Nelson 2013 is an exemplary, correctly-cited reference for 'most HP13C cancer studies have focused on Lac'."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "HP13C cancer study focused on lactate",
+      "lactate/pyruvate ratio prostate cancer HP13C",
+      "13C lactate as cancer biomarker",
+      "Nelson 2013 lactate-only readout",
+      "hyperpolarized 13C pyruvate-to-lactate flux tumor",
+      "13C lactate tumor metabolism imaging",
+      "Lac/Pyr ratio HP13C",
+      "bicarbonate in Nelson 2013 (absent)"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Study design", "read": true},
+      {"section": "Patient population", "read": true},
+      {"section": "Patient toxicities", "read": true},
+      {"section": "1D dynamic MRSI", "read": true},
+      {"section": "2D dynamic MRSI", "read": true},
+      {"section": "Single-time point MRSI", "read": true},
+      {"section": "Discussion", "read": true},
+      {"section": "13C MR examination protocol (Methods)", "read": true},
+      {"section": "Acquisition parameters for 13C MRSI data", "read": true},
+      {"section": "Data analysis", "read": true},
+      {"section": "Formulation", "read": true},
+      {"section": "Hyperpolarized pyruvate polarization and delivery", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Nelson 2013 is the primary first-in-human HP13C prostate cancer study; no indirect attribution concern.",
+    "out_of_context_check": "The manuscript cites Nelson 2013 inside the 'most HP13C cancer studies have focused on Lac' bundle (refs 27,28,29,34), which is exactly what Nelson 2013 exemplifies. The cite is in-context."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "hurd2012",
+      "kurhanewicz2011",
+      "miloushev2018",
+      "corbin2017",
+      "datta2019",
+      "park2016"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "claim_id": "C045",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "datta2019",
+  "handle": "pdfs/datta2019/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/datta2019.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/datta2019.pdf#page=7"
+  ],
+  "claim_text": "Whereas most HP13C cancer studies have focused on Lac27,28,29,34 , we hypothesized that the 13 C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS5,35,36 .",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C045.a",
+      "text": "Datta et al. 2019 uses the 13C Lac/Bic ratio (from hyperpolarized [1-13C]pyruvate MRSI) as a surrogate metric for the relative balance of glycolysis (Lac) versus oxidative phosphorylation (Bic) in a rat C6 glioma cancer model, directly supporting the manuscript's claim that the 13C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS.",
+      "evidence": [
+        {
+          "section": "Abstract (meta.json)",
+          "line": null,
+          "snippet": "The aim of this longitudinal study of glioblastoma in a rat model was to determine whether the ratio of lactate (surrogate marker for glycolysis) to bicarbonate (for oxidative phosphorylation), as measured via in vivo magnetic resonance imaging of hyperpolarized 13C-labeled pyruvate accurately predicts survival."
+        },
+        {
+          "section": "Abstract (meta.json)",
+          "line": null,
+          "snippet": "13C Lactate to 13C Bicarbonate ratio (Lac/Bic) at 48 hours post-treatment is highly predictive of survival (p = 0.003). These results suggest a potential role for the 13C Lac/Bic ratio serving as a valuable measure of tumor metabolism and predicting therapeutic response."
+        },
+        {
+          "section": "Introduction.txt",
+          "line": 4,
+          "snippet": "Pyruvate... occupies a key nodal point in brain glucose metabolism in which it is either converted to lactate (Lac, a surrogate for GLY) or acetyl CoA + CO2 (generating bicarbonate, Bic, in the process; reflecting OXPHOS), enabling the measurement of GLY and OXPHOS indirectly. We proposed the ratio of 13C Lac to 13C Bic (Lac/Bic) as a biomarker of tumor therapeutic response as it reflects the relative preponderance of these metabolic pathways."
+        },
+        {
+          "section": "Discussion.txt",
+          "line": 1,
+          "snippet": "Measurements of in-vivo 13C Lac and Bic labeling via hyperpolarized [1-13C]Pyr have been suggested as surrogate markers for the underlying GLY and OXPHOS metabolic pathways respectively, and the Lac/Bic ratio a metric representing the relative balance of these processes. Results from this study support this hypothesis and further demonstrate that a decrease in the Lac/Bic ratio is a robust predictor of treatment response in this animal model when treated with anti-VEGF therapy."
+        },
+        {
+          "section": "Hyperpolarized 13 C findings.txt",
+          "line": 1,
+          "snippet": "all 6 deceased animals showed an increase in tumor Lac/Bic at 48 hrs with the mean value changing from 11.077 to 17.767. In contrast, 6 of the 7 B20.4.1.1 treated rats that survived showed a decrease in tumor Lac/Bic ratio (mean decreased from 10.767 to 8.862)... Hence, Lac/Bic ratios from the healthy and tumor ROIs before and after treatment clearly show differences between the deceased and survivor rats..."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Datta 2019 is an explicit primary source for the 13C Lac/Bic-as-GLY/OXPHOS-surrogate framing: the abstract, introduction, and discussion all state the Lac/Bic ratio reflects the relative balance of glycolysis vs oxidative phosphorylation, and the paper's primary longitudinal result (Lac/Bic at 48 hours post-treatment predicts survival, p=0.003) is built on that framing - i.e., Lac/Bic is the paper's primary readout, not a secondary metric. Direct match to the manuscript's claim."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "13C Lac/Bic ratio as surrogate for GLY/OXPHOS balance",
+      "lactate surrogate for glycolysis, bicarbonate surrogate for oxidative phosphorylation in hyperpolarized 13C pyruvate",
+      "hyperpolarized [1-13C]pyruvate Lac/Bic predicts tumor response in glioma",
+      "Warburg / metabolic reprogramming measured by 13C Lac/Bic ratio",
+      "C6 glioma anti-VEGF treatment Lac/Bic longitudinal HP13C"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction.txt", "read": true},
+      {"section": "Animal model.txt", "read": false},
+      {"section": "13 C Substrate preparation.txt", "read": false},
+      {"section": "1 H and 13 C imaging.txt", "read": false},
+      {"section": "Metabolic image reconstruction and analysis.txt", "read": false},
+      {"section": "Tumor volumes.txt", "read": false},
+      {"section": "Statistical analysis.txt", "read": false},
+      {"section": "Hyperpolarized 13 C findings.txt", "read": true},
+      {"section": "Discussion.txt", "read": true},
+      {"section": "Conclusions.txt", "read": false},
+      {"section": "Ethics statement.txt", "read": false}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Datta 2019 credits its own earlier conceptual-framing work (self-cites refs [17], [19] - prior Datta/Spielman papers proposing Lac/Bic as biomarker) for first proposing the Lac/Bic-as-GLY/OXPHOS framing. Datta 2019 itself operationalizes and tests the hypothesis in a longitudinal glioma survival study, making it a legitimate primary citation for the manuscript's claim (not an indirect relay).",
+    "out_of_context_check": "The manuscript cites datta2019 as supporting '13C Lac/Bic ratio is a surrogate marker for GLY/OXPHOS'. Datta 2019's abstract, introduction and discussion all explicitly state this framing and operationalize it experimentally. Context is an exact match."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "kurhanewicz2011", "nelson2013", "miloushev2018", "corbin2017", "park2016"],
+    "sibling_verdicts": [
+      {
+        "citekey": "corbin2017",
+        "supports_sub_claim_ids": ["C045.a"],
+        "excerpt": "Co-cited (with datta2019, park2016) for the Lac/Bic-as-GLY/OXPHOS-surrogate clause in the manuscript; expected to provide complementary support for the surrogate-marker framing."
+      },
+      {
+        "citekey": "park2016",
+        "supports_sub_claim_ids": ["C045.a"],
+        "excerpt": "Co-cited for the same GLY/OXPHOS-surrogate clause; expected to support the Lac/Bic framing."
+      },
+      {
+        "citekey": "miloushev2018",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Cited for the prior clause ('most HP13C cancer studies have focused on Lac') - see C043; does not anchor the Lac/Bic-as-GLY/OXPHOS clause that datta2019 anchors."
+      },
+      {
+        "citekey": "nelson2013",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Cited for the Lac-focused-prior-work clause, not the GLY/OXPHOS-surrogate clause."
+      },
+      {
+        "citekey": "kurhanewicz2011",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Cited for the Lac-focused-prior-work clause."
+      },
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Cited for the Lac-focused-prior-work clause."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

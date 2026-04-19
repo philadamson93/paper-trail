@@ -1,0 +1,84 @@
+{
+  "claim_id": "C019",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "vaishnavi2010",
+  "handle": "pdfs/vaishnavi2010/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/vaishnavi2010.pdf"
+  ],
+  "claim_text": "FDG-PET glucose uptake measurements can be combined with 15O PET assessments of oxygen consumption (and hence OXPHOS) to infer tissue GLY and OXPHOS contributions16.",
+  "manuscript_section": "1.2 Alternative measures of glucose metabolism",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C019.a",
+      "text": "FDG-PET (CMRGlu) and 15O-PET (CMRO2) can be combined to infer regional aerobic glycolysis (GLY) versus oxidative phosphorylation (OXPHOS) contributions to glucose metabolism.",
+      "evidence": [
+        {
+          "section": "Abstract/Unnamed",
+          "line": 1,
+          "snippet": "Aerobic glycolysis is defined as glucose utilization in excess of that used for oxidative phosphorylation despite sufficient oxygen to completely metabolize glucose to carbon dioxide and water... we measured the regional distribution of aerobic glycolysis with positron emission tomography in 33 neurologically normal young adults at rest."
+        },
+        {
+          "section": "Results",
+          "line": 6,
+          "snippet": "The cerebral metabolic rate for oxygen (CMRO 2 ) and cerebral metabolic rate for glucose (CMRGlu) as well as the cerebral blood flow (CBF) were imaged with PET in 33 normal right-handed adults... Regional CMRGlu was measured using [ 18 F]-labeled fluorodeoxyglucose (FDG). Regional CMRO 2 was measured using a total of three scans involving the administration of [ 15 O]-labeled water, carbon monoxide, and oxygen."
+        },
+        {
+          "section": "Results",
+          "line": 7,
+          "snippet": "Aerobic glycolysis is traditionally assessed in terms of the molar ratio of oxygen consumption to glucose utilization [i.e., the so-called oxygen-glucose index (OGI)]. When all of the glucose metabolized is converted to carbon dioxide and water the OGI is 6. A number less than 6 indicates that aerobic glycolysis is present."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "vaishnavi2010 explicitly combines FDG-PET (CMRGlu) with 15O-PET (CMRO2 via labeled water, CO, O2) and computes aerobic-glycolysis indices (OGI and GI) — a direct match to the manuscript's claim of combining the two modalities to separate GLY from OXPHOS contributions."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "—",
+    "suggested_edit": ""
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "combine FDG-PET glucose with 15O-PET oxygen to measure aerobic glycolysis",
+      "oxygen glucose index OGI from CMRO2 and CMRGlu PET",
+      "regional aerobic glycolysis brain PET methodology",
+      "CMRGlu and CMRO2 combined PET to infer glycolysis versus oxidative phosphorylation"
+    ],
+    "section_checklist": [
+      {"section": "Abstract/Unnamed", "read": true},
+      {"section": "Methods", "read": true},
+      {"section": "Results", "read": true},
+      {"section": "Discussion", "read": true}
+    ],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "vaishnavi2010 is a primary PNAS paper introducing the Glycolytic Index (GI) measure; it builds on prior whole-brain OGI work (refs 6-8 of that paper) but implements the regional combined-PET analysis itself.",
+    "out_of_context_check": "Manuscript uses the paper as a method citation for combined FDG + 15O PET to separate GLY from OXPHOS; vaishnavi2010 applies exactly that method in healthy resting brain. Context is aligned (method citation, not tumor-specific)."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["kreis2020"],
+    "sibling_verdicts": [
+      {
+        "citekey": "kreis2020",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Not ingested in this run; attached to a different marker in the sentence cluster. No cross-check performed."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

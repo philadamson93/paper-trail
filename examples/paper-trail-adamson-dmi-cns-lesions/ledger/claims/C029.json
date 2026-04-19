@@ -1,0 +1,105 @@
+{
+  "claim_id": "C029",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "ardenkjaerlarsen2003",
+  "handle": "pdfs/ardenkjaerlarsen2003/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/ardenkjaerlarsen2003.pdf#page=1",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/ardenkjaerlarsen2003.pdf#page=6"
+  ],
+  "claim_text": "In contrast, hyperpolarized 13 C (HP13C) MRSI is an emerging technology offering a dramatically enhanced signal-to-noise ratio (SNR) over conventional 13 C MRSI methods by harnessing the spin hyperpolarization enabled by dynamic nuclear polarization of liquids26,27,28.",
+  "manuscript_section": "Introduction \u00a71.3",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C029.a",
+      "text": "HP13C MRSI offers dramatically enhanced SNR over conventional 13C MRS methods via spin hyperpolarization enabled by dynamic nuclear polarization of liquids (dissolution DNP).",
+      "evidence": [
+        {
+          "section": "Abstract / meta.json",
+          "line": null,
+          "snippet": "These polarizations correspond to an enhancement of 44,400 for 13 C and 23,500 for 15 N, respectively, compared with thermal equilibrium at 9.4 T and room temperature. The method can be used generally for signal enhancement and reduction of measurement time in liquid-state NMR and opens up for a variety of in vitro and in vivo applications of DNP-enhanced NMR."
+        },
+        {
+          "section": "Introduction (Purpose of study)",
+          "line": 4,
+          "snippet": "The purpose of this study was to develop a hyperpolarization method that would enable close-to-unity polarization of organic molecules in a liquid solution. We describe a dissolved-phase, DNP-enhanced NMR (DNP-NMR) method, in which the nuclear spins of a sample are hyperpolarized in the solid state and subsequently brought into a liquid solution after rapid dissolution."
+        },
+        {
+          "section": "Results / Liquid-state polarization",
+          "line": 18,
+          "snippet": "The SNR of the hyperpolarized spectrum was 4,592, and the SNR of the thermally polarized sample was 7."
+        },
+        {
+          "section": "Discussion / Signal-averaging equivalence",
+          "line": 27,
+          "snippet": "Still, the SNR of the enhanced spectrum is 656 times higher (ratio of the measured SNR). Thus, signal averaging for 656\u00b2 \u00d7 65 h (3,200 years) would have been required to reach the same SNR without enhancement."
+        },
+        {
+          "section": "Conclusion",
+          "line": 32,
+          "snippet": "The proposed DNP-NMR method opens up for a wide range of new NMR spectroscopy and MRI applications in vitro and in vivo because of the \u2265 10,000-fold enhancement of the nuclear polarization."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "\u226510,000-fold polarization enhancement (44,400\u00d7 for 13C at 9.4 T vs thermal equilibrium; measured liquid-state SNR gain of 656\u00d7)",
+      "claim_value": "dramatically enhanced SNR",
+      "nuance": "This is the seminal dissolution-DNP paper; it directly establishes the liquid-state 13C SNR gain via DNP that the manuscript paraphrases as \"dramatically enhanced SNR\u2026 by harnessing\u2026 dynamic nuclear polarization of liquids.\""
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "Optional: quote the widely-cited \u2265 10,000-fold figure from Ardenkjaer-Larsen 2003 to concretize \"dramatically enhanced SNR\" in \u00a71.3."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "dissolution DNP yields >10,000-fold liquid-state NMR signal enhancement for 13C",
+      "hyperpolarized 13C offers dramatically enhanced SNR over conventional 13C MRS via DNP of liquids",
+      "dynamic nuclear polarization of solids followed by rapid dissolution preserves nuclear polarization in solution",
+      "DNP-NMR enables new in vivo 13C imaging/spectroscopy applications by overcoming sensitivity limits"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction (NMR sensitivity limits, hyperpolarization methods)", "read": true},
+      {"section": "DNP Polarizer / Methods", "read": true},
+      {"section": "Sample Handling and Dissolution", "read": true},
+      {"section": "Polarization Measurement", "read": true},
+      {"section": "Solid-State Polarization / Results", "read": true},
+      {"section": "Liquid-state polarization (SNR comparison vs thermal equilibrium)", "read": true},
+      {"section": "Discussion (signal-averaging equivalence, in vivo implications)", "read": true},
+      {"section": "Conclusion (\u2265 10,000-fold enhancement)", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "This IS the primary source for dissolution DNP. The manuscript's co-citation of ardenkjaerlarsen2003 alongside review refs (hurd2012, kurhanewicz2011) correctly credits the primary.",
+    "out_of_context_check": "The manuscript uses Ardenkjaer-Larsen 2003 to ground the DNP-based SNR enhancement claim. This is precisely the paper's central finding; context matches."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hurd2012", "kurhanewicz2011"],
+    "sibling_verdicts": [
+      {
+        "citekey": "hurd2012",
+        "supports_sub_claim_ids": ["C029.a"],
+        "excerpt": "Review of HP13C metabolic imaging via dissolution DNP; co-cite consistent with the SNR-gain framing."
+      },
+      {
+        "citekey": "kurhanewicz2011",
+        "supports_sub_claim_ids": ["C029.a"],
+        "excerpt": "Review quantifies ~10,000-fold SNR gain via DNP of liquids; cites Ardenkjaer-Larsen 2003 as the foundational dissolution-DNP paper."
+      }
+    ]
+  },
+  "stage": "grounding",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

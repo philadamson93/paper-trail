@@ -1,0 +1,53 @@
+{
+  "claim_id": "C023",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "witney2015",
+  "handle": "pdfs/witney2015/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Howeverclinicalimpactisseverelylimitedbytheshort2-min 15 O half-life17,18,19 . [18 F] DASA-23 is a novel complementary PET tracer having significant potential for targeting other aspects of metabolic reprograming; this tracer binds to pyruvate kinase M2, an isoform overexpressed in some tumors, which serves to enhance biosynthesis in support of cellular proliferation20,21,22 .",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C023.a",
+      "text": "Howeverclinicalimpactisseverelylimitedbytheshort2-min 15 O half-life17,18,19 . [18 F] DASA-23 is a novel complementary PET tracer having significant potential for targeting other aspects of metabolic reprograming; this tracer binds to pyruvate kinase M2, an isoform overexpressed in some tumors, which serves to enhance biosynthesis in support of cellular proliferation20,21,22 .",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "vlassenko2015",
+      "baron2012",
+      "mintun1984",
+      "beinat2018",
+      "beinat2021"
+    ],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "claim_id": "C063",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "defeyter2018",
+  "handle": "pdfs/defeyter2018/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+  ],
+  "claim_text": "Prior human-subject DMI studies at higher field strengths have used multi-coil arrays37,44,45.",
+  "manuscript_section": "4 Discussion (coil design commentary)",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C063.a",
+      "text": "De Feyter et al. 2018 performed human-subject DMI at a field strength higher than 3 T.",
+      "evidence": [
+        {
+          "section": "content.txt",
+          "line": 29,
+          "snippet": "Human studies were performed on a 4 T Magnex magnet (Magnex Scientific Ltd.) interfaced to a Bruker Avance III HD spectrometer running on ParaVision 6 (Bruker Instruments). The system was equipped with 67cm-diameter Magnex gradients capable of switching 30 mT/m in 1.1 ms."
+        },
+        {
+          "section": "content.txt",
+          "line": 3,
+          "snippet": "The 2H spectrum acquired from the human brain at a lower magnetic field strength (4 T versus 11.7 T) has an inherently lower spectral resolution, resulting in partially overlapping peaks."
+        },
+        {
+          "section": "figures/index.json (Fig. 1E caption)",
+          "line": null,
+          "snippet": "2H NMR spectrum acquired from human brain at 4 T, 60 min after oral administration of [6,6′-2H2]glucose."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "4 T (human studies)",
+      "claim_value": "higher field strengths (relative to the manuscript's 3 T)",
+      "nuance": "Defeyter2018's human-subject DMI was conducted on a 4 T magnet, which is higher than the manuscript's 3 T clinical platform. This satisfies 'higher field strength' framing."
+    },
+    {
+      "sub_claim_id": "C063.b",
+      "text": "De Feyter et al. 2018's human-subject DMI used a multi-coil / phased-array 2H receive coil.",
+      "evidence": [
+        {
+          "section": "content.txt",
+          "line": 30,
+          "snippet": "Brain studies were conducted with a 28.5cm-diameter transverse electromagnetic (TEM) volume coil tuned to the proton frequency (170.5 MHz) for MRI and shimming. 2H RF reception at 26.2 MHz was achieved with a four-coil phased array that was driven as a single RF coil during RF transmission. The four 8 cm × 10 cm rectangular 2H array elements were positioned equidistantly on an 18 cm × 25 cm elliptical former that was positioned within the 1H TEM coil."
+        },
+        {
+          "section": "content.txt",
+          "line": 38,
+          "snippet": "For human brain studies, subjects were positioned supine within the combined 1H TEM/2H phasedarray RF coil."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "four-coil phased array (for 2H reception, human brain)",
+      "claim_value": "multi-coil array",
+      "nuance": "The 2H receive chain for human brain DMI in defeyter2018 is explicitly a four-element phased array, driven as a single RF coil on transmit. This is a canonical example of a multi-coil array, matching the manuscript's framing. Note: the array is used only on the human brain studies; the human liver study used a single-coil surface probe."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [
+      "human DMI 4 T multi-coil phased array 2H",
+      "four-coil phased array 2H reception human brain",
+      "higher field strength human deuterium MRI coil",
+      "multi-coil 2H receive array DMI",
+      "phased-array 2H RF coil human brain DMI"
+    ],
+    "section_checklist": [
+      {"section": "Abstract", "read": true},
+      {"section": "INTRODUCTION.txt", "read": true},
+      {"section": "RESULTS.txt", "read": true},
+      {"section": "DMI of steady-state glucose metabolism in human brain.txt", "read": true},
+      {"section": "DMI of steady-state glucose and acetate metabolism in rat brain.txt", "read": true},
+      {"section": "DMI of liver glycogen.txt", "read": true},
+      {"section": "DISCUSSION.txt", "read": true},
+      {"section": "Human MR system.txt", "read": true},
+      {"section": "Human subjects.txt", "read": true},
+      {"section": "MR systems Animal and high-resolution NMR systems.txt", "read": true},
+      {"section": "Animal experiments.txt", "read": true},
+      {"section": "H-labeled glucose and acetate administration in vivo.txt", "read": true},
+      {"section": "MR signal acquisition.txt", "read": true},
+      {"section": "MR signal processing.txt", "read": true},
+      {"section": "Quantification.txt", "read": true},
+      {"section": "Analysis of 2 H label loss.txt", "read": true},
+      {"section": "In vitro experiments.txt", "read": true},
+      {"section": "Specific absorption rate.txt", "read": true},
+      {"section": "Statistics.txt", "read": true},
+      {"section": "Figure captions (figures/index.json)", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "The coil design in defeyter2018 references Adriany and Gruetter (ref 39) for the animal-brain integrated 1H/2H probe, but the human-brain four-coil phased-array is described as a primary implementation by the authors; citing defeyter2018 as a multi-coil-array human DMI example is a direct attribution.",
+    "out_of_context_check": "Context matches: the manuscript refers to human-subject DMI at higher field strengths using multi-coil arrays; defeyter2018's human DMI at 4 T with a four-coil phased array is a representative instance."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [
+      "seresroig2023",
+      "ruhm2021"
+    ],
+    "sibling_verdicts": [
+      {
+        "citekey": "seresroig2023",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Sibling handle not present in pdfs/ (no meta.json ingested); cannot verify sibling evidence. Flag NEEDS_PDF for seresroig2023 sibling cross-check."
+      },
+      {
+        "citekey": "ruhm2021",
+        "supports_sub_claim_ids": [],
+        "excerpt": "Sibling handle not present in pdfs/ (no meta.json ingested); cannot verify sibling evidence. Flag NEEDS_PDF for ruhm2021 sibling cross-check."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "claim_id": "C068",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "marques2019",
+  "handle": "pdfs/marques2019/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/marques2019.pdf#page=3",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/marques2019.pdf#page=7"
+  ],
+  "claim_text": "While useful for decreasing imaging times via parallel imaging techniques, at lower frequencies, coil and front-end electronics noise increasingly dominate over that from the body, resulting in poor phasedarray SNR performance for low-field (\u2264 1T) scanners52,53,54 .",
+  "manuscript_section": "Discussion \u00a74",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C068.a",
+      "text": "At low-field MRI frequencies (\u22641T), coil (and associated electronics) noise dominates over body/sample noise, which degrades phased-array (receive-array) SNR performance relative to high-field scanners.",
+      "evidence": [
+        {
+          "section": "RF Coils",
+          "line": null,
+          "snippet": "In terms of low-field MRI, at the lower end of 0.25T the noise is dominated by the contribution of losses in the RF coil, whereas at the higher end of 1T the noise contribution from the body starts to become significant."
+        },
+        {
+          "section": "RF Coils",
+          "line": null,
+          "snippet": "Many low-field systems now incorporate receive arrays, with these elements being of relatively large size so that coil noise does not dominate ... In this way there is an SNR gain mainly in the periphery of the image, and the use of multiple receive elements also enables faster scanning times through sparse sampling of k-space and image reconstruction, so-called parallel imaging."
+        },
+        {
+          "section": "SNR",
+          "line": null,
+          "snippet": "In the RF coil, alternating electrical currents flow on the outer surfaces of its conductors due to the skin effect, and the resistance is inversely proportional to the effective cross-section of the conductor, and thus proportional to B_0^{1/2}. On the sample side, at low frequencies it has been shown that resistance has a quadratic dependence on B_0. In the range of fields addressed in this article (0.25-1T), the contributions from coil noise and sample noise could be approximately equal, and so a good assumption would be that the SNR scales with B_0^{3/2}."
+        },
+        {
+          "section": "RF Coils",
+          "line": null,
+          "snippet": "Although systems generally use the solenoid as both the transmitter and receiver, solenoid coils can also be formed into individual array elements ... One of the major advances in the past two decades in clinical systems has been the incorporation of multiple receive elements (receive arrays) both for higher SNR and also reduced imaging time using parallel imaging techniques."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "coil noise dominates at 0.25T; coil and sample noise approximately equal across 0.25-1T; body noise only starts to become significant at 1T",
+      "claim_value": "coil and front-end electronics noise increasingly dominate over body noise for \u2264 1T scanners",
+      "nuance": "Marques et al. explicitly state coil (resistance) noise dominates at the low end of the low-field range and that body/sample noise only starts to become significant at the 1T upper bound. The review discusses coil noise specifically (skin-effect RF-coil resistance); it does not separately itemize 'front-end electronics' noise, but that is the conventional engineering companion term for coil/preamp noise and is not an overreach here. The claim and the review agree on the central physics and its phased-array implication (the review notes receive arrays require 'relatively large size so that coil noise does not dominate', i.e., standard small-element phased arrays suffer at low field)."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "None needed. Optionally the manuscript could quote Marques et al.'s observation that at 0.25T coil noise dominates and at 1T body noise starts to become significant, to sharpen the claim's upper-bound framing."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "coil noise dominates over body noise at low-field MRI",
+      "phased-array SNR is poor at low field because of coil/electronics noise",
+      "body/sample noise dominance only occurs at high field, not below 1T",
+      "parallel imaging receive arrays have reduced SNR benefit at low field",
+      "skin-effect RF coil resistance determines noise floor below 1T"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction (Unnamed)", "read": true},
+      {"section": "SNR", "read": true},
+      {"section": "Quantifying the Field Dependence of SNR and CNR Efficiencies of Different Contrast Weightings", "read": false},
+      {"section": "Relaxation Parameters", "read": false},
+      {"section": "Advances in Hardware", "read": false},
+      {"section": "Magnet Materials", "read": false},
+      {"section": "Magnet Geometries", "read": false},
+      {"section": "Gradient Design", "read": false},
+      {"section": "RF Coils", "read": true},
+      {"section": "Overview of the Main Trends in the Market", "read": false},
+      {"section": "New Acquisition Strategies", "read": false},
+      {"section": "Future Avenues", "read": false}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Marques et al. is a review; it cites Hoult & Lauterbur (ref 10 in Marques) as the original Johnson-noise analysis. For a mechanism-of-noise-dominance claim this is standard; the manuscript's citation of Marques 2019 as a review is appropriate.",
+    "out_of_context_check": "Both the manuscript and the source discuss the same context: low-field MRI phased-array SNR and the physical origin of noise-dominance behavior. No context drift."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": ["hamilton2017", "vos2021"],
+    "sibling_verdicts": [
+      {
+        "citekey": "hamilton2017",
+        "supports_sub_claim_ids": ["C068.a"],
+        "excerpt": "Recent review of RF coil noise/SNR for low-field MRI; co-cited with Marques 2019 for the same phased-array-at-low-field physics."
+      },
+      {
+        "citekey": "vos2021",
+        "supports_sub_claim_ids": ["C068.a"],
+        "excerpt": "Low-field MRI system review; co-cited with Marques 2019 for low-field coil/array SNR trade-offs."
+      }
+    ]
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

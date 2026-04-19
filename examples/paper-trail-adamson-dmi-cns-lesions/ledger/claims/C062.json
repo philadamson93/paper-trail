@@ -1,0 +1,47 @@
+{
+  "claim_id": "C062",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "hamilton2017",
+  "handle": "pdfs/hamilton2017/",
+  "ingest_mode": "error",
+  "source_ref_urls": [],
+  "claim_text": "Forphantomstudies,wecomparedTRvaluesof155,200, 283, and 350 ms with Ernst angle RF excitation for natural abundancedeuterium(flipanglesof52,56,64and69degrees respectively) to our baseline of 350 ms TR, 90 degree flip angle acquisition.",
+  "manuscript_section": "Body",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "low"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C062.a",
+      "text": "Forphantomstudies,wecomparedTRvaluesof155,200, 283, and 350 ms with Ernst angle RF excitation for natural abundancedeuterium(flipanglesof52,56,64and69degrees respectively) to our baseline of 350 ms TR, 90 degree flip angle acquisition.",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "PENDING",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Source PDF not fetched during Phase 2 (paywalled or not reachable under personal-only access)."
+    }
+  ],
+  "overall_verdict": "PENDING",
+  "overall_flag": "NEEDS_PDF",
+  "remediation": null,
+  "attestation": {
+    "phrasings_tried": [],
+    "section_checklist": [],
+    "closest_adjacent": "",
+    "indirect_attribution_check": "",
+    "out_of_context_check": ""
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "pending_fetch",
+  "timing": {
+    "wall_clock_seconds": 0,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

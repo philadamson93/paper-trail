@@ -1,0 +1,95 @@
+{
+  "claim_id": "C058",
+  "schema_version": "1.0",
+  "run_id": "run_20260419T1236Z",
+  "citekey": "beare2018",
+  "handle": "pdfs/beare2018/",
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/beare2018.pdf#page=10",
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/beare2018.pdf#page=19"
+  ],
+  "claim_text": "The additional proton scans acquired with a conventional multi-channel head coil were aligned to the body-coil proton scan (acquired with the 2 H coil in place), and therefore the DMI dataset, via 3D rigid registration using the SimpleITK toolkit50 .",
+  "manuscript_section": "Methods \u00a72.4",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "high"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "C058.a",
+      "text": "SimpleITK is an appropriate toolkit for performing 3D rigid image registration of proton MRI scans.",
+      "evidence": [
+        {
+          "section": "Registration",
+          "line": null,
+          "snippet": "For intensity-based registration, SimpleITK makes many of these available via a single framework class ... Transforms: Rigid, similarity, affine, B-spline, dense deformation field, etc."
+        },
+        {
+          "section": "Intensity-based image registration",
+          "line": null,
+          "snippet": "As both images were obtained from the same patient, the transformation between them is expected to be rigid. We use a Euler angle-based parameterization of the transformation."
+        },
+        {
+          "section": "Configure the registration object and execute",
+          "line": null,
+          "snippet": "R> initial_tx <- CenteredTransformInitializer(fixed_image, moving_image, Euler3DTransform(), \"GEOMETRY\") ... Euler3DTransform (0x64136c0) RTTI typeinfo: itk::Euler3DTransform<double>"
+        },
+        {
+          "section": "Configure the registration object and execute",
+          "line": 169,
+          "snippet": "Rigid body registration, as illustrated in this example, is useful for aligning images of the same patient taken at similar times. This includes different modalities acquired during a study, such as different MR weightings, CT or PET as well as time series images, such as fMRI, where rigid body registration can be used to correct for patient movement."
+        },
+        {
+          "section": "SimpleITK",
+          "line": null,
+          "snippet": "SimpleITK was designed to support 2D and 3D images, with an optional configuration flag for 4D support."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The paper is the canonical methodology-software reference for SimpleITK in R and walks through exactly the use case the manuscript invokes: rigid 3D registration (Euler3DTransform) of same-patient multi-modal MR data to align images into a common coordinate frame."
+    }
+  ],
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "None needed. Citation is a textbook software-method attribution and fits the standard convention for crediting a toolkit used in the Methods."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "SimpleITK supports 3D rigid image registration",
+      "SimpleITK Euler3D transform for aligning multi-modal MR images",
+      "SimpleITK rigid body registration framework for same-patient scans",
+      "SimpleITK intensity-based registration with rigid transforms"
+    ],
+    "section_checklist": [
+      {"section": "Abstract (meta.json)", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "SimpleITK", "read": true},
+      {"section": "The SimpleITK R package", "read": false},
+      {"section": "Registration", "read": true},
+      {"section": "Intensity-based image registration", "read": true},
+      {"section": "Configure the registration object and execute", "read": true},
+      {"section": "Segmentation", "read": false},
+      {"section": "Case studies", "read": false},
+      {"section": "Discussion and conclusions", "read": false}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "The source is itself the primary reference for the SimpleITK R interface. For the underlying ITK registration framework Beare et al. defer to Avants et al. 2014, but the manuscript is citing SimpleITK the toolkit (not the ITK core library), so beare2018 is the correct primary.",
+    "out_of_context_check": "The manuscript uses SimpleITK for rigid 3D registration between a multi-channel head-coil proton scan and a body-coil proton scan \u2014 exactly the workflow (same-patient, multi-modal, rigid, Euler3D) demonstrated in the Registration section of Beare 2018."
+  },
+  "co_cite_context": {
+    "sibling_citekeys": [],
+    "sibling_verdicts": []
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}
