@@ -9,11 +9,7 @@
 </p>
 
 <p align="center">
-  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and takes the link from claim to source on faith. It doesn't have to work that way anymore.
-</p>
-
-<p align="center">
-  <sub>This is what an online journal should look like:</sub>
+  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and takes the link from claim to source on faith. It doesn't have to work that way anymore. This is what an online journal should look like:
 </p>
 
 <p align="center">
