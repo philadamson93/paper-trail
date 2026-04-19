@@ -1,137 +1,87 @@
 {
   "claim_id": "C027",
   "schema_version": "1.0",
-  "run_id": "run_20260418T2354Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "zhao2022",
   "handle": "pdfs/zhao2022/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "zhao2022 is a fastMRI dataset extension/companion paper providing pathology annotations for the fastMRI corpus.",
-  "manuscript_section": null,
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/zhao2022.pdf"
+  ],
+  "claim_text": "Many works assess MR reconstructions based on task-specific metrics for segmentation, classification, and detection, 24\u201326 which brings the IQ assessment closer to the true clinical utility.",
+  "manuscript_section": "Introduction",
   "claim_type": {
-    "type": "DIRECT",
+    "type": "SUPPORTING",
     "confidence": "high"
   },
   "sub_claims": [
     {
       "sub_claim_id": "C027.a",
-      "text": "zhao2022 (fastMRI+) is an extension/companion dataset paper to the fastMRI dataset, building directly on the fastMRI knee and brain MRI corpus.",
+      "text": "zhao2022 contributes to the body of work that assesses (or enables assessment of) MR reconstructions via task-specific metrics \u2014 specifically classification and/or detection of clinical pathology \u2014 moving beyond generic image-quality metrics (e.g., SSIM) toward clinically meaningful evaluation.",
       "evidence": [
         {
-          "section": "Background _ Summary.txt",
-          "line": 4,
-          "snippet": "In this paper, we present wide availability of a complementary dataset of annotations, fastMRI+, consisting of human subspecialist expert clinical bounding box labelled pathology annotations for knee and brain MRI scans from the fastMRI multi-coil dataset"
+          "section": "Abstract",
+          "line": null,
+          "snippet": "This work introduces fastMRI+, which consists of 16154 subspecialist expert bounding box annotations and 13 study-level labels for 22 different pathology categories on the fastMRI knee dataset, and 7570 subspecialist expert bounding box annotations and 643 study-level labels for 30 different pathology categories for the fastMRI brain dataset. The fastMRI+ dataset is open access and aims to support further research and advancement of medical imaging in MRI reconstruction and beyond."
         },
         {
-          "section": "MRI image dataset..txt",
-          "line": 1,
-          "snippet": "The fastMRI dataset is an open-source dataset, which contains raw and DICOM data from MRI acquisitions of knees and brains, described in detail elsewhere [9]. The images used in this study were directly obtained from the fastMRI dataset, reconstructed from fully sampled, multi-coil k-space data (both knee and brain)."
+          "section": "Background & Summary",
+          "line": null,
+          "snippet": "there is a lack of clinical pathology information to accompany the imaging data which has limited the reconstruction assessment approaches to quantitative metrics such as structural similarity index measure (SSIM), leaving important questions regarding how various pathologies are represented in ML-based reconstruction unanswered."
         },
         {
-          "section": "MRI image dataset..txt",
-          "line": 4,
-          "snippet": "All 1172 fastMRI knee MRI raw dataset studies were reconstructed and clinically annotated for fastMRI+."
+          "section": "Background & Summary",
+          "line": null,
+          "snippet": "This new dataset is open and accessible to all for educational and research purposes with the intent to catalyse new avenues of clinically relevant, ML-based reconstruction approaches and evaluation."
         },
         {
-          "section": "MRI image dataset..txt",
-          "line": 5,
-          "snippet": "A sub selection of 1001 out of 5847 fastMRI brain MRI raw dataset studies were selected randomly for annotation."
-        },
-        {
-          "section": "meta.json (title)",
-          "line": 0,
-          "snippet": "fastMRI+, Clinical pathology annotations for knee and brain fully sampled magnetic resonance imaging data"
+          "section": "Usage Notes",
+          "line": null,
+          "snippet": "The clinical labels, together with the bounding box coordinates, can also be converted to other formats (e.g., YOLO format), in order to configure a classification or object detection problem."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "The paper explicitly describes itself as a 'complementary dataset of annotations' to the fastMRI multi-coil dataset, with images 'directly obtained from the fastMRI dataset.' Title phrasing 'fastMRI+' positions it as a named extension."
-    },
-    {
-      "sub_claim_id": "C027.b",
-      "text": "zhao2022 provides clinical pathology annotations (subspecialist-radiologist bounding boxes and study-level labels) for the fastMRI knee and brain MRI corpus.",
-      "evidence": [
-        {
-          "section": "Background _ Summary.txt",
-          "line": 4,
-          "snippet": "fastMRI+, consisting of human subspecialist expert clinical bounding box labelled pathology annotations for knee and brain MRI scans from the fastMRI multi-coil dataset: specifically encompassing 16154 bounding box annotations and 13 study-level labels for 22 different pathology categories on knee MRIs, as well as 7570 bounding box annotations and 643 study-level labels for 30 different pathology categories on brain MRIs."
-        },
-        {
-          "section": "meta.json (abstract)",
-          "line": 0,
-          "snippet": "This work introduces fastMRI+, which consists of 16154 subspecialist expert bounding box annotations and 13 study-level labels for 22 different pathology categories on the fastMRI knee dataset, and 7570 subspecialist expert bounding box annotations and 643 study-level labels for 30 different pathology categories for the fastMRI brain dataset."
-        },
-        {
-          "section": "MRI image dataset..txt",
-          "line": 3,
-          "snippet": "A subspecialist board certified musculoskeletal radiologist with 6 years in practice experience performed annotation for the knee dataset and a subspecialist board certified neuroradiologist with 2 years in practice experience performed annotation for the brain dataset. Annotation was performed with bounding box annotation to include the relevant label for a given pathology on a slice-by-slice level."
-        },
-        {
-          "section": "Background _ Summary.txt",
-          "line": 2,
-          "snippet": "While the fastMRI data has enabled exploration of ML-driven accelerated MRI reconstruction [10, 11], there is a lack of clinical pathology information to accompany the imaging data which has limited the reconstruction assessment"
-        }
-      ],
-      "figures_checked": [],
-      "verdict": "CONFIRMED",
-      "paper_value": null,
-      "claim_value": null,
-      "nuance": "Annotation type and provenance are explicit: bounding boxes plus study-level labels, performed by subspecialist board-certified radiologists (musculoskeletal radiologist for knee; neuroradiologist for brain), motivated specifically by the absence of clinical pathology labels in the original fastMRI release."
+      "nuance": "zhao2022 is a pathology-annotation dataset paper (fastMRI+), not itself a benchmarking study that runs task-specific metrics; however, it explicitly frames its contribution as enabling task-specific (pathology classification and object detection) evaluation of MR reconstructions as an alternative to SSIM-only assessment. For a SUPPORTING-type group citation (24\u201326) covering 'segmentation, classification, and detection', zhao2022 squarely supports the classification and detection prongs; segmentation is not directly enabled by bounding boxes but is plausibly covered by sibling refs."
     }
   ],
   "overall_verdict": "CONFIRMED",
   "overall_flag": null,
-  "remediation": null,
+  "remediation": {
+    "category": "\u2014",
+    "suggested_edit": "No edit required. zhao2022 is appropriately cited as part of the 24\u201326 group supporting task-specific (pathology detection/classification) assessment of MR reconstructions."
+  },
   "attestation": {
     "phrasings_tried": [
-      "fastMRI+ as extension/companion dataset to fastMRI (complementary dataset of annotations; built on fastMRI knee/brain corpus)",
-      "pathology annotations on fastMRI (bounding box pathology annotations; study-level labels; subspecialist radiologist annotation of fastMRI knee and brain MRI scans)",
-      "relationship to original fastMRI dataset (images directly obtained from fastMRI; addresses lack of clinical pathology information accompanying fastMRI imaging data)",
-      "annotation methodology and scope (subspecialist board-certified musculoskeletal/neuro-radiologist; 1172 knee studies; 1001 of 5847 brain studies; 22 knee pathology categories; 30 brain pathology categories)"
+      "task-specific metric OR task-specific evaluation of MR reconstruction",
+      "segmentation / classification / detection metric for reconstruction quality",
+      "pathology detection or classification as downstream assessment of reconstruction (beyond SSIM/PSNR)",
+      "bounding box / annotation enabling object detection or classification on fastMRI reconstructed images"
     ],
     "section_checklist": [
-      {
-        "section": "Background _ Summary.txt",
-        "read": true
-      },
-      {
-        "section": "Background Summary.txt",
-        "read": true
-      },
-      {
-        "section": "MRI image dataset..txt",
-        "read": true
-      },
-      {
-        "section": "Data Records.txt",
-        "read": true
-      },
-      {
-        "section": "technical Validation.txt",
-        "read": true
-      },
-      {
-        "section": "Usage Notes.txt",
-        "read": true
-      },
-      {
-        "section": "content.txt (full)",
-        "read": true
-      },
-      {
-        "section": "meta.json",
-        "read": true
-      }
+      {"section": "Abstract", "read": true},
+      {"section": "Background & Summary", "read": true},
+      {"section": "Methods (MRI image dataset, Annotations)", "read": true},
+      {"section": "Statistical Analysis (label tables)", "read": true},
+      {"section": "Data Records", "read": true},
+      {"section": "Usage Notes", "read": true},
+      {"section": "Code Availability", "read": true},
+      {"section": "References", "read": true}
     ],
-    "closest_adjacent": "Background _ Summary L4 is a near-verbatim self-description: 'we present wide availability of a complementary dataset of annotations, fastMRI+, consisting of human subspecialist expert clinical bounding box labelled pathology annotations for knee and brain MRI scans from the fastMRI multi-coil dataset.' Title in meta.json ('fastMRI+, Clinical pathology annotations for knee and brain fully sampled magnetic resonance imaging data') and MRI image dataset L1 ('The images used in this study were directly obtained from the fastMRI dataset') jointly establish the extension/companion + pathology-annotation framing that the manuscript sub-claim asserts.",
-    "indirect_attribution_check": "zhao2022 is the primary source of the fastMRI+ pathology annotations themselves (it announces and releases them via Synapse and the microsoft/fastmri-plus GitHub repository). It cites the original fastMRI paper (ref [9]) for the underlying imaging data, but the pathology-annotation contribution is original to this paper. Direct attribution to zhao2022 for fastMRI+ pathology annotations is appropriate.",
-    "out_of_context_check": "No out-of-context concern. The paper unambiguously frames itself as a complementary annotation dataset extending the fastMRI corpus with subspecialist-radiologist pathology labels, which is exactly what the manuscript sub-claim asserts."
+    "closest_adjacent": null,
+    "indirect_attribution_check": "zhao2022 presents its own contribution (fastMRI+ annotations) and does not credit another primary for the task-specific-assessment framing. It cites Knoll et al. (its own ref 8) for the observation that reconstruction assessment has been limited to SSIM-style metrics, but the downstream classification/detection affordance is original to this paper.",
+    "out_of_context_check": "Context matches. The manuscript uses zhao2022 to support the proposition that MR-reconstruction assessment is moving toward task-specific (clinical) metrics; zhao2022's Background & Summary and Usage Notes frame its annotations for exactly that purpose (pathology classification and object detection on reconstructed images), so the citation is in-context."
   },
   "co_cite_context": {
-    "sibling_citekeys": [],
+    "sibling_citekeys": ["desai2022", "zhao2021"],
     "sibling_verdicts": []
   },
-  "stage": "adjudication"
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
 }

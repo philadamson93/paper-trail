@@ -1,13 +1,15 @@
 {
   "claim_id": "C012",
   "schema_version": "1.0",
-  "run_id": "run_20260418T0000Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "wang2003",
   "handle": "pdfs/wang2003/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "such as Multiscale SSIM (MSSIM11) and FSIM12",
-  "manuscript_section": "SSIM-family metrics list (citing wang2003 as ref #11 for MSSIM)",
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/wang2003.pdf"
+  ],
+  "claim_text": "Multiscale SSIM (MSSSIM^11) computes SSIM at various resolution levels across the image, while feature similarity index measure (FSIM^12) compares features such as texture, edges, and gradients extracted with hand-crafted filters.",
+  "manuscript_section": "Introduction",
   "claim_type": {
     "type": "DIRECT",
     "confidence": "high"
@@ -15,49 +17,44 @@
   "sub_claims": [
     {
       "sub_claim_id": "C012.a",
-      "text": "wang2003 defines/introduces Multiscale SSIM (MSSIM / MS-SSIM) as an image quality assessment method.",
+      "text": "MSSSIM (Multiscale SSIM) computes SSIM at various resolution levels across the image (i.e., it is a multi-scale extension of SSIM that evaluates structural similarity at multiple image resolutions).",
       "evidence": [
         {
-          "section": "INTRODUCTION.txt",
-          "line": 3,
+          "section": "Title",
+          "line": null,
+          "snippet": "MULTI-SCALE STRUCTURAL SIMILARITY FOR IMAGE QUALITY ASSESSMENT"
+        },
+        {
+          "section": "Abstract",
+          "line": null,
+          "snippet": "This paper proposes a multi-scale structural similarity method, which supplies more flexibility than previous single-scale methods in incorporating the variations of viewing conditions. We develop an image synthesis method to calibrate the parameters that define the relative importance of different scales."
+        },
+        {
+          "section": "1. Introduction",
+          "line": null,
           "snippet": "However, the SSIM index algorithm introduced in [5] is a single-scale approach. We consider this a drawback of the method because the right scale depends on viewing conditions (e.g., display resolution and viewing distance). In this paper, we propose a multi-scale structural similarity method and introduce a novel image synthesis-based approach to calibrate the parameters that weight the relative importance between different scales."
         },
         {
-          "section": "Multi-scale SSIM index.txt",
-          "line": 2,
-          "snippet": "Multi-scale method is a convenient way to incorporate image details at different resolutions."
+          "section": "3.1 Multi-scale SSIM index",
+          "line": null,
+          "snippet": "Multi-scale method is a convenient way to incorporate image details at different resolutions. We propose a multi-scale SSIM method for image quality assessment whose system diagram is illustrated in Fig. 1. Taking the reference and distorted image signals as the input, the system iteratively applies a low-pass filter and downsamples the filtered image by a factor of 2. We index the original image as Scale 1, and the highest scale as Scale M, which is obtained after M - 1 iterations. At the j-th scale, the contrast comparison (2) and the structure comparison (3) are calculated and denoted as c_j(x, y) and s_j(x, y), respectively. The luminance comparison (1) is computed only at Scale M and is denoted as l_M(x, y). The overall SSIM evaluation is obtained by combining the measurement at different scales..."
         },
         {
-          "section": "Multi-scale SSIM index.txt",
-          "line": 3,
-          "snippet": "We propose a multi-scale SSIM method for image quality assessment whose system diagram is illustrated in Fig. 1. Taking the reference and distorted image signals as the input, the system iteratively applies a low-pass filter and downsamples the filtered image by a factor of 2. We index the original image as Scale 1, and the highest scale as Scale M, which is obtained after M-1 iterations. At the j-th scale, the contrast comparison (2) and the structure comparison (3) are calculated and denoted as cj(x, y) and sj(x, y), respectively. The luminance comparison (1) is computed only at Scale M and is denoted as lM(x, y). The overall SSIM evaluation is obtained by combining the measurement at different scales..."
+          "section": "Figure 1 caption",
+          "line": null,
+          "snippet": "Multi-scale structural similarity measurement system. L: low-pass filtering; 2 downsampling by 2."
         },
         {
-          "section": "Multi-scale SSIM index.txt",
-          "line": 4,
-          "snippet": "Similar to (5), the exponents alpha_M, beta_j and gamma_j are used to adjust the relative importance of different components. This multiscale SSIM index definition satisfies the three conditions given in the last section. It also includes the single-scale method as a special case."
-        },
-        {
-          "section": "DISCUSSIONS.txt",
-          "line": 1,
-          "snippet": "We propose a multi-scale structural similarity approach for image quality assessment, which provides more flexibility than singlescale approach in incorporating the variations of image resolution and viewing conditions. Experiments show that with an appropriate parameter settings, the multi-scale method outperforms the best single-scale SSIM model as well as state-of-the-art image quality metrics."
-        },
-        {
-          "section": "TEST RESULTS.txt",
-          "line": 1,
-          "snippet": "Eight image quality assessment models are being compared, including PSNR, the Sarnoff model (JNDmetrix 8.0 [14]), singlescale SSIM index with M equals 1 to 5, and the proposed multiscale SSIM index approach."
-        },
-        {
-          "section": "meta.json (title + abstract)",
-          "line": 1,
-          "snippet": "Title: 'MULTI-SCALE STRUCTURAL SIMILARITY FOR IMAGE QUALITY ASSESSMENT'. Abstract: 'This paper proposes a multi-scale structural similarity method, which supplies more flexibility than previous single-scale methods in incorporating the variations of viewing conditions. We develop an image synthesis method to calibrate the parameters that define the relative importance of different scales.'"
+          "section": "5. Discussions",
+          "line": null,
+          "snippet": "We propose a multi-scale structural similarity approach for image quality assessment, which provides more flexibility than single-scale approach in incorporating the variations of image resolution and viewing conditions."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "Wang, Simoncelli, & Bovik (2003) is the canonical primary reference that introduces Multi-Scale SSIM (MS-SSIM / MSSIM). Title, abstract, Introduction, the dedicated 'Multi-scale SSIM index' section, Test Results, and Discussion all explicitly state that this paper proposes the multi-scale SSIM method, with the system diagram (Fig. 1), iterative low-pass-filter-and-downsample construction, per-scale combination formula, and image-synthesis-based calibration of cross-scale weights. Textbook DIRECT match for the manuscript's citation of wang2003 as the source for MSSIM."
+      "nuance": "The paper explicitly defines MS-SSIM as computing SSIM-style luminance/contrast/structure comparisons at multiple scales generated by iterative low-pass filtering and downsampling by 2; the manuscript's 'various resolution levels across the image' is an accurate plain-language rendering of that construction."
     }
   ],
   "overall_verdict": "CONFIRMED",
@@ -65,49 +62,37 @@
   "remediation": null,
   "attestation": {
     "phrasings_tried": [
-      "multiscale / multi-scale SSIM",
-      "MSSIM / MS-SSIM",
-      "scale (single-scale vs multi-scale; cross-scale)",
-      "propose / introduce a multi-scale structural similarity method",
-      "image quality assessment at multiple scales / resolutions"
+      "multi-scale SSIM computed at multiple resolutions / scales",
+      "iterative low-pass filtering and 2x downsampling producing SSIM measurements at each scale",
+      "SSIM evaluated across different image resolution levels and combined into an overall score",
+      "multi-scale structural similarity as an extension of single-scale SSIM"
     ],
     "section_checklist": [
-      {
-        "section": "meta.json (title + abstract)",
-        "read": true
-      },
-      {
-        "section": "INTRODUCTION.txt",
-        "read": true
-      },
-      {
-        "section": "SINGLE-SCALE STRUCTURAL SIMILARITY.txt",
-        "read": true
-      },
-      {
-        "section": "Multi-scale SSIM index.txt",
-        "read": true
-      },
-      {
-        "section": "Cross-scale calibration.txt",
-        "read": true
-      },
-      {
-        "section": "TEST RESULTS.txt",
-        "read": true
-      },
-      {
-        "section": "DISCUSSIONS.txt",
-        "read": true
-      }
+      {"section": "Title", "read": true},
+      {"section": "Abstract", "read": true},
+      {"section": "1. Introduction", "read": true},
+      {"section": "2. Single-Scale Structural Similarity", "read": true},
+      {"section": "3.1 Multi-scale SSIM index", "read": true},
+      {"section": "3.2 Cross-scale calibration", "read": true},
+      {"section": "4. Test Results", "read": true},
+      {"section": "5. Discussions", "read": true},
+      {"section": "6. References", "read": true},
+      {"section": "Figure 1 (system diagram)", "read": true},
+      {"section": "Figure 2 (cross-scale calibration images)", "read": true},
+      {"section": "Table 1 (performance comparison)", "read": true}
     ],
     "closest_adjacent": null,
-    "indirect_attribution_check": "Direct primary attribution. Wang2003 cites SSIM (single-scale) ref [5] and the universal image quality index ref [3] as predecessors, but explicitly claims novelty for the multi-scale extension itself ('In this paper, we propose a multi-scale structural similarity method' \u2014 Introduction L3; 'We propose a multi-scale SSIM method' \u2014 Multi-scale SSIM index L17). No indirect attribution issue: this paper is the originating MS-SSIM reference.",
-    "out_of_context_check": "No context mismatch. The manuscript cites wang2003 as the source of Multiscale SSIM (MSSIM) within a list of SSIM-family image quality metrics; wang2003 explicitly proposes and names the multi-scale SSIM method for image quality assessment. The usage in the manuscript matches the paper's contribution exactly."
+    "indirect_attribution_check": "Wang 2003 is the originating primary source for multi-scale SSIM; it cites single-scale SSIM [5] and the universal image quality index [3] as predecessors but explicitly claims the multi-scale extension as its own contribution ('In this paper, we propose a multi-scale structural similarity method'). No indirect-attribution concern.",
+    "out_of_context_check": "The manuscript cites wang2003 specifically for the MSSSIM portion of the sentence ('MSSSIM computes SSIM at various resolution levels across the image'). This matches the paper's stated contribution in the Abstract, Section 3.1, and Fig. 1. The FSIM clause in the same sentence cites ref 12 (linzhang2011), not wang2003, and is out of scope for this claim."
   },
   "co_cite_context": {
-    "sibling_citekeys": [],
+    "sibling_citekeys": ["linzhang2011"],
     "sibling_verdicts": []
   },
-  "stage": "adjudication"
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
 }

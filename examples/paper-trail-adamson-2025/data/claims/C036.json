@@ -1,112 +1,72 @@
 {
   "claim_id": "C036",
   "schema_version": "1.0",
-  "run_id": "run_20260419T0036Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "deng2009",
   "handle": "pdfs/deng2009/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "The manuscript paragraph context says \"ImageNet[36] / pre-training\" \u2014 sub-claim for ref 36 (deng2009): deng2009 is the original ImageNet paper providing the large-scale image database used for CNN pretraining.",
-  "manuscript_section": null,
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/deng2009.pdf"
+  ],
+  "claim_text": "We gather insights from the transfer learning literature for medical imaging, where the transfer of weights from ImageNet^35 pre-trained architectures often fails due to distributional shifts and the difference in features between natural images and downstream medical imaging datasets.",
+  "manuscript_section": "Introduction",
   "claim_type": {
-    "type": "DIRECT",
+    "type": "BACKGROUND",
     "confidence": "high"
   },
   "sub_claims": [
     {
       "sub_claim_id": "C036.a",
-      "text": "deng2009 is the original ImageNet paper, introducing ImageNet as a large-scale hierarchical image database built on the WordNet structure.",
+      "text": "deng2009 is the original ImageNet paper introducing the ImageNet image database.",
       "evidence": [
         {
-          "section": "Abstract (meta.json)",
-          "line": null,
-          "snippet": "We introduce here a new database called \"ImageNet\", a largescale ontology of images built upon the backbone of the WordNet structure. ImageNet aims to populate the majority of the 80,000 synsets of WordNet with an average of 500-1000 clean and full resolution images. ... This paper offers a detailed analysis of ImageNet in its current state: 12 subtrees with 5247 synsets and 3.2 million images in total."
-        },
-        {
-          "section": "Title (meta.json)",
-          "line": null,
+          "section": "Title",
+          "line": 1,
           "snippet": "ImageNet: A Large-Scale Hierarchical Image Database"
         },
         {
+          "section": "Abstract",
+          "line": null,
+          "snippet": "We introduce here a new database called \"ImageNet\", a large-scale ontology of images built upon the backbone of the WordNet structure. ImageNet aims to populate the majority of the 80,000 synsets of WordNet with an average of 500-1000 clean and full resolution images."
+        },
+        {
           "section": "Introduction",
-          "line": 1,
+          "line": null,
           "snippet": "In this paper, we introduce a new image database called \"ImageNet\", a large-scale ontology of images. We believe that a large-scale ontology of images is a critical resource for developing advanced, large-scale content-based image search and image understanding algorithms, as well as for providing critical training and benchmarking data for such algorithms."
         },
         {
-          "section": "Introduction",
-          "line": 2,
-          "snippet": "ImageNet uses the hierarchical structure of WordNet [9]. Each meaningful concept in WordNet, possibly described by multiple words or word phrases, is called a \"synonym set\" or \"synset\". There are around 80,000 noun synsets in WordNet. ... These subtrees contain 5247 synsets and 3.2 million images."
-        },
-        {
-          "section": "Scale",
-          "line": 1,
-          "snippet": "To our knowledge this is already the largest clean image dataset available to the vision research community, in terms of the total number of images, number of images per category as well as the number of categories."
-        },
-        {
-          "section": "ImageNet Applications (Exploiting ImageNet)",
+          "section": "Section 2 (Properties of ImageNet)",
           "line": null,
-          "snippet": "A training resource. Most of today's object recognition algorithms have focused on a small number of common objects ... ImageNet, on the other hand, contains a large number of images for nearly all object classes including rare ones. ... A benchmark dataset. ... we believe that the high quality, diversity and large scale of ImageNet will enable it to become a new and challenging benchmark dataset for future research."
+          "snippet": "ImageNet is built upon the hierarchical structure provided by WordNet. In its completion, ImageNet aims to contain in the order of 50 million cleanly labeled full resolution images (500-1000 per synset)."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "deng2009 is unambiguously the canonical citation for the ImageNet database (3.2M images at publication, organized via WordNet synsets, framed as a training/benchmarking resource for object recognition). The manuscript's contextual phrase 'used for CNN pretraining' describes downstream usage that postdates this paper (e.g., AlexNet/Krizhevsky 2012), but deng2009 itself explicitly positions ImageNet as 'providing critical training and benchmarking data,' so citing it as the source of the database used for pretraining is fully consistent with its self-described role."
+      "nuance": "The manuscript cites ref 35 solely as the ImageNet dataset source anchor within a transfer-learning sentence; the transfer-failure assertion is carried by other refs (e.g., ref 36). deng2009 is the canonical CVPR 2009 ImageNet introduction."
     }
   ],
   "overall_verdict": "CONFIRMED",
   "overall_flag": null,
-  "remediation": {
-    "category": "\u2014",
-    "suggested_edit": ""
-  },
+  "remediation": null,
   "attestation": {
     "phrasings_tried": [
-      "ImageNet large-scale image database",
-      "WordNet hierarchical synsets",
-      "image database for object recognition / training resource",
-      "hierarchy of images / ontology of images",
-      "pretraining / CNN training data"
+      "ImageNet introduction / new image database",
+      "ImageNet large-scale hierarchical image database built on WordNet synsets"
     ],
     "section_checklist": [
-      {
-        "section": "Abstract (meta.json)",
-        "read": true
-      },
-      {
-        "section": "Introduction",
-        "read": true
-      },
-      {
-        "section": "Properties of ImageNet (Scale/Hierarchy/Accuracy/Diversity)",
-        "read": true
-      },
-      {
-        "section": "ImageNet and Related Datasets",
-        "read": true
-      },
-      {
-        "section": "Constructing ImageNet (Collecting/Cleaning Candidate Images)",
-        "read": true
-      },
-      {
-        "section": "ImageNet Applications (Non-parametric Object Recognition, Tree Based Image Classification, Automatic Object Localization)",
-        "read": true
-      },
-      {
-        "section": "Discussion and Future Work / Exploiting ImageNet",
-        "read": true
-      }
+      {"section": "Title", "read": true},
+      {"section": "Abstract", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Section 2 (Properties of ImageNet)", "read": true}
     ],
     "closest_adjacent": null,
-    "indirect_attribution_check": "deng2009 is itself the primary source for the ImageNet database; it does not credit another primary for the database. WordNet (Miller [9]) is credited as the ontology backbone, but the image database ImageNet is original to this paper.",
-    "out_of_context_check": "Manuscript paragraph mentions ImageNet in the context of CNN pre-training. deng2009 itself does not describe CNN pretraining (CNN/AlexNet pretraining results came later, e.g., Krizhevsky 2012); however, deng2009 explicitly frames ImageNet as 'providing critical training and benchmarking data' and as 'a training resource' for object recognition algorithms, so citing it as the source of the database used for pretraining is consistent with its self-described role and does not warrant a CITED_OUT_OF_CONTEXT verdict."
+    "indirect_attribution_check": "deng2009 is itself the primary source for the ImageNet database; WordNet (Miller) is credited as the ontology backbone, but the image database is original to this paper.",
+    "out_of_context_check": "BACKGROUND citation anchoring \"ImageNet\" to its source paper. The manuscript's transfer-failure assertion about ImageNet-pretrained weights in medical imaging is carried by sibling refs, not by deng2009; using deng2009 as the dataset anchor is standard and in-context."
   },
   "co_cite_context": {
-    "sibling_citekeys": [
-      "lustig2007"
-    ],
+    "sibling_citekeys": [],
     "sibling_verdicts": []
   },
   "stage": "adjudication",

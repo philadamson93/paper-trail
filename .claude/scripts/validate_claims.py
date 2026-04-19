@@ -240,6 +240,27 @@ def nearby_refnums(paper_raw: str, pos: int, valid_refnums: set[int], window: in
         if n in valid_refnums and not (1900 <= n <= 2100):
             numbers_in_order.append(n)
 
+    # Pass 3: hyphen-glued citation markers, e.g. "VGG-1646" where the body text
+    # is "VGG-16" (model name) + superscript "46" (citation). pdftotext strips
+    # the superscript, leaving glued digits that Pass 2's (?<!\d) rejects.
+    # Scope tight: only letter(s)-hyphen-digits(3-5) patterns where the leading
+    # digits form a plausible model version and the trailing 1-3 digits are a
+    # valid refnum.
+    for m in re.finditer(r'(?<![a-zA-Z0-9])[a-zA-Z]+(?:-[a-zA-Z]+)*-(\d{3,5})(?!\d)', region_after_ranges):
+        digits = m.group(1)
+        for k in (3, 2, 1):
+            if len(digits) <= k:
+                continue
+            head = digits[:-k]
+            tail = digits[-k:]
+            # head must be a small model-version number (1-3 digits, <200)
+            if not (1 <= len(head) <= 3 and int(head) < 200):
+                continue
+            n = int(tail)
+            if n in valid_refnums and not (1900 <= n <= 2100):
+                numbers_in_order.append(n)
+                break
+
     # Dedupe preserving order.
     seen = set()
     out = []

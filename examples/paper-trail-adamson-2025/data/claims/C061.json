@@ -1,147 +1,88 @@
 {
   "claim_id": "C061",
   "schema_version": "1.0",
-  "run_id": "run_20260419T0036Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "simonyan2014",
   "handle": "pdfs/simonyan2014/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "simonyan2014 introduces the VGG architecture, used as the deep feature extractor in many DFD metrics (LPIPS uses VGG).",
-  "manuscript_section": "DFD-metrics framing (LPIPS family)",
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/simonyan2014.pdf"
+  ],
+  "claim_text": "LPIPS uses an L2-norm for G, VGG-16^46 trained on ImageNet for \u03c6_D, and additionally learns a linear combination of DFDs extracted from five different convolutional layers l based on perceptual judgment scores.",
+  "manuscript_section": "Methods (LPIPS description)",
   "claim_type": {
-    "type": "DIRECT",
+    "type": "BACKGROUND",
     "confidence": "high"
   },
   "sub_claims": [
     {
       "sub_claim_id": "C061.a",
-      "text": "Simonyan & Zisserman 2014 introduces the VGG convolutional network architecture (very deep ConvNets with 16-19 weight layers using 3x3 convolution filters, branded as 'VGG' Net-D / Net-E by the authors).",
+      "text": "VGG-16 is a 16-weight-layer convolutional network architecture (Configuration D) introduced by Simonyan & Zisserman (2014/2015), trained on ImageNet (ILSVRC-2012).",
       "evidence": [
         {
-          "section": "abstract (meta.json)",
-          "line": 9,
-          "snippet": "In this work we investigate the effect of the convolutional network depth on its accuracy in the large-scale image recognition setting. Our main contribution is a thorough evaluation of networks of increasing depth using an architecture with very small (3 \u00d7 3) convolution filters, which shows that a significant improvement on the prior-art configurations can be achieved by pushing the depth to 16-19 weight layers."
+          "section": "Abstract",
+          "line": 17,
+          "snippet": "a significant improvement on the prior-art configurations can be achieved by pushing the depth to 16\u201319 weight layers. These findings were the basis of our ImageNet Challenge 2014 submission"
         },
         {
-          "section": "CONFIGURATIONS.txt",
-          "line": 1,
-          "snippet": "The ConvNet configurations, evaluated in this paper, are outlined in Table 1, one per column. In the following we will refer to the nets by their names (A-E). All configurations follow the generic design presented in Sect. 2.1, and differ only in the depth: from 11 weight layers in the network A (8 conv. and 3 FC layers) to 19 weight layers in the network E (16 conv. and 3 FC layers)."
+          "section": "2.2 Configurations / Table 1",
+          "line": 137,
+          "snippet": "ConvNet Configuration ... D ... 16 weight layers"
         },
         {
-          "section": "ARCHITECTURE.txt",
-          "line": 1,
-          "snippet": "During training, the input to our ConvNets is a fixed-size 224 \u00d7 224 RGB image... The image is passed through a stack of convolutional (conv.) layers, where we use filters with a very small receptive field: 3 \u00d7 3 (which is the smallest size to capture the notion of left/right, up/down, center)."
+          "section": "Appendix A (Localisation)",
+          "line": 832,
+          "snippet": "we use the ConvNet architecture D (Table 1), which contains 16 weight layers and was found to be the best-performing in the classification task"
         },
         {
-          "section": "CLASSIFICATION EXPERIMENTS.txt",
-          "line": 2,
-          "snippet": "For the majority of experiments, we used the validation set as the test set. Certain experiments were also carried out on the test set and submitted to the official ILSVRC server as a \"VGG\" team entry to the ILSVRC-2014 competition (Russakovsky et al., 2014)."
+          "section": "4 Classification Experiments",
+          "line": 380,
+          "snippet": "We evaluated the described ConvNet architectures on the ILSVRC-2012 dataset (which was used for ILSVRC 2012\u20132014 challenges). The dataset includes images of 1000 classes"
         },
         {
-          "section": "COMPARISON WITH THE STATE OF THE ART.txt",
-          "line": 1,
-          "snippet": "In the classification task of ILSVRC-2014 challenge (Russakovsky et al., 2014), our \"VGG\" team secured the 2nd place with 7.3% test error using an ensemble of 7 models. After the submission, we decreased the error rate to 6.8% using an ensemble of 2 models."
-        },
-        {
-          "section": "CONCLUSION.txt",
-          "line": 14,
-          "snippet": "Method VOC-2012 (mean AP) ... VGG Net-D & Net-E, image-only 79.2 VGG Net-D & Net-E, image and bounding box 84.0"
+          "section": "4.1 Single Scale Evaluation",
+          "line": 404,
+          "snippet": "the classification error decreases with the increased ConvNet depth: from 11 layers in A to 19 layers in E ... the configuration D, which uses 3 \u00d7 3 conv."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "Source directly and verbatim introduces the architecture and self-brands it as 'VGG' (team name and Net-D / Net-E result rows). The 16-layer Net-D and 19-layer Net-E configurations are the canonical VGG-16 and VGG-19. The downstream half of the manuscript sentence ('used as the deep feature extractor in many DFD metrics; LPIPS uses VGG') is out of scope for this source (simonyan2014 predates LPIPS) and must be grounded against zhang2018 / the LPIPS paper rather than against simonyan2014; it does not contradict this source."
+      "nuance": "The paper does not use the literal label 'VGG-16'; it refers to the network as 'configuration D' / '16 weight layers' and team/model name 'VGG' (Net-D). 'VGG-16' is the universally adopted community shorthand for exactly this 16-weight-layer Configuration D, and the paper also confirms ImageNet (ILSVRC-2012) training."
     }
   ],
   "overall_verdict": "CONFIRMED",
   "overall_flag": null,
-  "remediation": {
-    "category": "ADD_EVIDENCE",
-    "suggested_edit": "Keep simonyan2014 as the citation for 'introduces the VGG architecture', and add a separate citation to zhang2018 (LPIPS) for the downstream claim that 'LPIPS uses VGG as a feature extractor'. Recommended phrasing: 'simonyan2014 introduces the VGG architecture, which is used as the deep feature extractor in many DFD metrics (e.g., LPIPS [zhang2018]).' This splits cite responsibility cleanly: simonyan2014 owns the architecture introduction; zhang2018 owns the LPIPS-uses-VGG claim."
-  },
+  "remediation": null,
   "attestation": {
     "phrasings_tried": [
-      "VGG / VGG team / VGG Net-D / VGG Net-E",
-      "very deep convolutional networks",
-      "16-19 weight layers / 16 weight layers / 19 weight layers",
-      "3 x 3 convolution filters / very small receptive field",
-      "ConvNet architecture / network depth"
+      "VGG-16",
+      "16 weight layers",
+      "Configuration D / ConvNet architecture D",
+      "VGG Net-D",
+      "trained on ImageNet / ILSVRC-2012"
     ],
     "section_checklist": [
-      {
-        "section": "INTRODUCTION.txt",
-        "read": true
-      },
-      {
-        "section": "CONVNET CONFIGURATIONS.txt",
-        "read": true
-      },
-      {
-        "section": "ARCHITECTURE.txt",
-        "read": true
-      },
-      {
-        "section": "CONFIGURATIONS.txt",
-        "read": true
-      },
-      {
-        "section": "DISCUSSION.txt",
-        "read": false
-      },
-      {
-        "section": "CLASSIFICATION FRAMEWORK.txt",
-        "read": false
-      },
-      {
-        "section": "TRAINING.txt",
-        "read": false
-      },
-      {
-        "section": "TESTING.txt",
-        "read": false
-      },
-      {
-        "section": "IMPLEMENTATION DETAILS.txt",
-        "read": false
-      },
-      {
-        "section": "CLASSIFICATION EXPERIMENTS.txt",
-        "read": true
-      },
-      {
-        "section": "SINGLE SCALE EVALUATION.txt",
-        "read": false
-      },
-      {
-        "section": "MULTI-CROP EVALUATION.txt",
-        "read": false
-      },
-      {
-        "section": "CONVNET FUSION.txt",
-        "read": false
-      },
-      {
-        "section": "COMPARISON WITH THE STATE OF THE ART.txt",
-        "read": true
-      },
-      {
-        "section": "CONCLUSION.txt",
-        "read": true
-      },
-      {
-        "section": "C PAPER REVISIONS.txt",
-        "read": false
-      }
+      {"section": "Abstract", "read": true},
+      {"section": "1 Introduction", "read": true},
+      {"section": "2 ConvNet Configurations (incl. Table 1)", "read": true},
+      {"section": "3 Classification Framework", "read": true},
+      {"section": "4 Classification Experiments (ILSVRC-2012)", "read": true},
+      {"section": "Appendix A Localisation", "read": true}
     ],
     "closest_adjacent": null,
-    "indirect_attribution_check": "Direct attribution. Simonyan & Zisserman 2014 is the primary VGG paper; the architecture (VGG-16 = Net-D, VGG-19 = Net-E) is introduced and named by the authors themselves in this work. No indirect chain.",
-    "out_of_context_check": "The manuscript's first half (introducing VGG) matches the source's own framing exactly. The second half (LPIPS / DFD usage of VGG as feature extractor) is downstream usage that this source does not and cannot speak to \u2014 simonyan2014 predates LPIPS and contains no mention of perceptual-distance use. That portion needs verification against the LPIPS source (zhang2018), not against simonyan2014, but it does not contradict simonyan2014; it is simply outside its scope."
+    "indirect_attribution_check": "Simonyan & Zisserman (2014/2015) is the primary source for the VGG family of ConvNets; the 16-weight-layer Configuration D is introduced in this paper and no other primary is credited for it.",
+    "out_of_context_check": "The manuscript cites simonyan2014 strictly as the origin of the VGG-16 backbone used by LPIPS as a feature extractor \u03c6_D, pretrained on ImageNet. The source paper introduces exactly that architecture and pretrains it on ILSVRC-2012 ImageNet, which is the identical usage context (ImageNet-pretrained feature backbone). No context mismatch. The downstream 'LPIPS uses ...' claim is grounded against the LPIPS paper on its own claim, not here."
   },
   "co_cite_context": {
     "sibling_citekeys": [],
     "sibling_verdicts": []
   },
-  "stage": "adjudication"
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": null,
+    "tokens_in": null,
+    "tokens_out": null
+  }
 }

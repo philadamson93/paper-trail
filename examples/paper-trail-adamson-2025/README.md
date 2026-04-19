@@ -34,16 +34,21 @@ Reference PDFs of the 31 fetched sources are not included — easily retrievable
 | References parsed from the PDF | 56 (matches CrossRef exactly) |
 | Open-access source PDFs fetched | 31 |
 | Paywalled under personal access | 25 → claim entries stubbed `PENDING / NEEDS_PDF` |
-| In-text `(sentence, citekey)` claims | 88 |
-| Grounded with real verdicts | 49 |
-| `CONFIRMED` / `CONFIRMED_WITH_MINOR` | majority of the 49 |
+| In-text `(sentence, citekey)` claims | 87 (one extraction-artifact claim was dropped by the Tier 1 validator) |
+| Grounded with real verdicts | 48 |
+| `CONFIRMED` / `CONFIRMED_WITH_MINOR` | 34 / 5 |
 | `CONTRADICTED` (critical) | 2 (see below) |
-| `MISATTRIBUTED` | 2 (see below) |
-| `CITED_OUT_OF_CONTEXT` / `UNSUPPORTED` / `INDIRECT_SOURCE` | remainder of flagged entries |
+| `MISATTRIBUTED` | 1 (see below) |
+| `INDIRECT_SOURCE` | 1 (see below) |
+| `CITED_OUT_OF_CONTEXT` | 1 |
+| `PARTIALLY_SUPPORTED` / `OVERGENERAL` | 2 / 1 |
+| `UNSUPPORTED` | 1 |
 | `AMBIGUOUS` | 0 |
 | `PENDING / NEEDS_PDF` | 39 |
 | Phase 1 bib-audit `CRITICAL` | 0 |
 | Phase 1 bib-audit `MODERATE` / `MINOR` | 4 / 6 |
+
+> **This bundle has been re-grounded once** after the Tier 1 claim-extraction validator (`.claude/scripts/validate_claims.py`) flagged 10 claims whose stored `claim_text` was a paraphrase or fabrication rather than a sentence from the manuscript. Nine were re-extracted and re-adjudicated against their source PDFs; one (`C071`, mason2020) was dropped as an extraction artifact since its text matched a sentence that doesn't cite any reference. The validator now reports 87/87 PASS.
 
 ## Headline findings
 
@@ -51,13 +56,11 @@ The most consequential verdicts, ordered by severity. Each is reproducible from 
 
 | Claim | Citekey | Verdict | Summary |
 |---|---|---|---|
-| **C055** | `miao2008` | `MISATTRIBUTED` | HFEN / LoG(15×15, σ=1.5) cited to a perceptual-difference-model paper; actual primary is Ravishankar & Bresler 2011 (already cited as ref 20). One-character fix: `13` → `20`. |
-| **C069** | `vandersluijs2023` | `CONTRADICTED` | Manuscript says the paper's loss is "L2 + perceptual + adversarial"; the paper uses **KL** (not L2). |
 | **C072** | `mason2020` | `CONTRADICTED` | Manuscript describes Mason 2020 as a study of "natural images"; the paper is actually about **MR images**. |
-| **C040** | `huang2023` | `CITED_OUT_OF_CONTEXT` | Paper's conclusion runs opposite to the manuscript's framing. |
-| **C056** | `chen2022` | `UNSUPPORTED` | Listed metrics (MSSIM / IWSSIM / FSIM / HFEN) are absent from the cited paper. |
-| **C070** | `desai2021` | `UNSUPPORTED` | Cited for SSFD-loss; paper uses L1. |
+| **C069** | `vandersluijs2023` | `CONTRADICTED` | Manuscript says the paper's loss is "L2 + perceptual + adversarial"; the paper uses **KL** (not L2). |
+| **C055** | `miao2008` | `MISATTRIBUTED` | HFEN / LoG(15×15, σ=1.5) cited to a perceptual-difference-model paper; actual primary is Ravishankar & Bresler 2011 (already cited as ref 20). One-character fix: `13` → `20`. |
 | **C045** | `knoll2020` | `INDIRECT_SOURCE` | UNet architecture attributed to the fastMRI **data-resource** paper, which itself defers to Zbontar et al. 2018 for the baseline. |
+| **C056** | `chen2022` | `UNSUPPORTED` | Listed metrics (MSSIM / IWSSIM / FSIM / HFEN) are absent from the cited paper. |
 
 ### Phase 1 bib-audit MODERATE findings
 

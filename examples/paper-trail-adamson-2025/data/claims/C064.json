@@ -1,163 +1,104 @@
 {
   "claim_id": "C064",
   "schema_version": "1.0",
-  "run_id": "run_20260418T1734Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "pathak2016",
   "handle": "pdfs/pathak2016/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "pathak2016 cited as a representative self-supervised learning method via inpainting / context-based pretext tasks; used as background for SSL pretraining of feature extractors.",
-  "manuscript_section": "",
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/pathak2016.pdf"
+  ],
+  "claim_text": "The in-domain DFD, SSFD, utilizes a self-supervised model trained on the fastMRI knee dataset described in 2.1 with a self-supervised in-painting task^48 following optimal parameters from a prior transfer learning study for knee cartilage segmentation.^49",
+  "manuscript_section": "Methods (SSFD)",
   "claim_type": {
     "type": "BACKGROUND",
-    "confidence": "medium"
+    "confidence": "high"
   },
   "sub_claims": [
     {
       "sub_claim_id": "C064.a",
-      "text": "pathak2016 introduces an inpainting / context-based pretext task (Context Encoders) for unsupervised/self-supervised visual representation learning.",
+      "text": "pathak2016 (Context Encoders) introduces/describes a self-supervised in-painting pretext task for visual representation learning.",
       "evidence": [
         {
-          "section": "Abstract (meta.json)",
-          "line": 12,
-          "snippet": "We present an unsupervised visual feature learning algorithm driven by context-based pixel prediction. By analogy with auto-encoders, we propose Context Encoders -a convolutional neural network trained to generate the contents of an arbitrary image region conditioned on its surroundings."
+          "section": "Title",
+          "line": 1,
+          "snippet": "Context Encoders: Feature Learning by Inpainting"
+        },
+        {
+          "section": "Abstract",
+          "line": 13,
+          "snippet": "We present an unsupervised visual feature learning algorithm driven by context-based pixel prediction. By analogy with auto-encoders, we propose Context Encoders - a convolutional neural network trained to generate the contents of an arbitrary image region conditioned on its surroundings."
+        },
+        {
+          "section": "Abstract",
+          "line": 28,
+          "snippet": "We quantitatively demonstrate the effectiveness of our learned features for CNN pre-training on classification, detection, and segmentation tasks. Furthermore, context encoders can be used for semantic inpainting tasks, either stand-alone or as initialization for non-parametric methods."
         },
         {
           "section": "Introduction",
-          "line": 4,
-          "snippet": "We call our model context encoder, as it consists of an encoder capturing the context of an image into a compact latent feature representation and a decoder which uses that representation to produce the missing image content."
+          "line": 44,
+          "snippet": "Given an image with a missing region (e.g., Fig. 1a), we train a convolutional neural network to regress to the missing pixel values (Fig. 1d). We call our model context encoder, as it consists of an encoder capturing the context of an image into a compact latent feature representation and a decoder which uses that representation to produce the missing image content."
         },
         {
           "section": "Introduction",
-          "line": 5,
-          "snippet": "Like autoencoders, context encoders are trained in a completely unsupervised manner."
+          "line": 75,
+          "snippet": "Like autoencoders, context encoders are trained in a completely unsupervised manner. Our results demonstrate that in order to succeed at this task, a model needs to both understand the content of an image, as well as produce a plausible hypothesis for the missing parts."
         },
         {
-          "section": "Related work",
-          "line": 4,
-          "snippet": "Most closely related to the present paper are efforts at exploiting spatial context as a source of free and plentiful supervisory signal. ... our context encoder solves a pure prediction problem (what pixel intensities should go in the hole?)."
+          "section": "Related Work (Weakly-supervised and self-supervised learning)",
+          "line": 84,
+          "snippet": "Very recently, there has been significant interest in learning meaningful representations using weakly-supervised and self-supervised learning. ... Most closely related to the present paper are efforts at exploiting spatial context as a source of free and plentiful supervisory signal."
         },
         {
-          "section": "Related work",
-          "line": 3,
-          "snippet": "Weakly-supervised and self-supervised learning Very recently, there has been significant interest in learning meaningful representations using weakly-supervised and self-supervised learning."
-        }
-      ],
-      "figures_checked": [],
-      "verdict": "CONFIRMED",
-      "paper_value": null,
-      "claim_value": null,
-      "nuance": "The paper itself uses the terms 'unsupervised' and 'self-supervised' interchangeably for this regime; inpainting (large-region pixel prediction) is the explicit pretext task."
-    },
-    {
-      "sub_claim_id": "C064.b",
-      "text": "pathak2016 uses inpainting/context prediction as SSL pretraining for downstream feature extractors (e.g. CNN pre-training for classification, detection, segmentation).",
-      "evidence": [
-        {
-          "section": "Abstract (meta.json)",
-          "line": 12,
-          "snippet": "We quantitatively demonstrate the effectiveness of our learned features for CNN pre-training on classification, detection, and segmentation tasks."
+          "section": "Section 3 (Context encoders for image generation)",
+          "line": 124,
+          "snippet": "We now introduce context encoders: CNNs that predict missing parts of a scene from their surroundings."
         },
         {
-          "section": "Introduction",
-          "line": 6,
-          "snippet": "We further validate the quality of the learned feature representation by fine-tuning the encoder for a variety of image understanding tasks, including classification, object detection, and semantic segmentation. We are competitive with the state-of-the-art unsupervised/self-supervised methods on those tasks."
-        },
-        {
-          "section": "Classification pre-training",
-          "line": 2,
+          "section": "Section 5.2 (Feature Learning)",
+          "line": 324,
           "snippet": "Context encoders are competitive with concurrent self-supervised feature learning methods [7, 39] and significantly outperform autoencoders and Agrawal et al. [1]."
+        },
+        {
+          "section": "Conclusion",
+          "line": 386,
+          "snippet": "Our context encoders trained to generate images conditioned on context advance the state of the art in semantic inpainting, at the same time learn feature representations that are competitive with other models trained with auxiliary supervision."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "The paper explicitly evaluates the encoder as a pretrained feature extractor on PASCAL VOC classification/detection/segmentation."
+      "nuance": "Pathak et al. 2016 is the seminal paper introducing image in-painting (via Context Encoders) as a self-supervised/unsupervised pretext task for visual feature learning; the manuscript's citation at ref 48 as the origin of the in-painting task is accurate."
     }
   ],
   "overall_verdict": "CONFIRMED",
   "overall_flag": null,
-  "remediation": {
-    "category": "\u2014",
-    "suggested_edit": ""
-  },
+  "remediation": null,
   "attestation": {
     "phrasings_tried": [
-      "context encoder inpainting pretext task",
-      "self-supervised feature learning by image inpainting",
-      "unsupervised visual representation learning context prediction",
-      "CNN pre-training classification detection segmentation Pathak",
-      "self-supervised pretraining feature extractor inpainting"
+      "self-supervised in-painting pretext task",
+      "context encoder / inpainting feature learning",
+      "image inpainting as self-supervised representation learning",
+      "pixel prediction / context-based pixel prediction for unsupervised feature learning",
+      "pretraining via predicting missing image regions"
     ],
     "section_checklist": [
-      {
-        "section": "Abstract (meta.json)",
-        "read": true
-      },
-      {
-        "section": "Introduction",
-        "read": true
-      },
-      {
-        "section": "Related work",
-        "read": true
-      },
-      {
-        "section": "Feature Learning",
-        "read": true
-      },
-      {
-        "section": "Classification pre-training",
-        "read": true
-      },
-      {
-        "section": "Encoder-decoder pipeline",
-        "read": false
-      },
-      {
-        "section": "Loss function",
-        "read": false
-      },
-      {
-        "section": "Region masks",
-        "read": false
-      },
-      {
-        "section": "Implementation details",
-        "read": false
-      },
-      {
-        "section": "Context encoders for image generation",
-        "read": false
-      },
-      {
-        "section": "Detection pre-training",
-        "read": false
-      },
-      {
-        "section": "Semantic Segmentation pre-training",
-        "read": false
-      },
-      {
-        "section": "Semantic Inpainting",
-        "read": false
-      },
-      {
-        "section": "Evaluation",
-        "read": false
-      },
-      {
-        "section": "Conclusion",
-        "read": false
-      }
+      {"section": "Title", "read": true},
+      {"section": "Abstract", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Related work", "read": true},
+      {"section": "Section 3 (Context encoders for image generation)", "read": true},
+      {"section": "Section 4 (Implementation details)", "read": true},
+      {"section": "Section 5 (Evaluation / Feature Learning)", "read": true},
+      {"section": "Conclusion", "read": true}
     ],
-    "closest_adjacent": "",
-    "indirect_attribution_check": "Pathak et al. 2016 is the primary source for the Context Encoders / inpainting-as-SSL pretext task; it does not credit another primary for this idea (it cites prior autoencoders and Doersch et al. context-prediction as related but distinct).",
-    "out_of_context_check": "The manuscript usage (background citation for SSL pretraining via inpainting/context pretext tasks) matches the paper's own framing as unsupervised/self-supervised feature learning via context-based pixel prediction used to pretrain CNN feature extractors."
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Pathak2016 is the primary source for image in-painting as a self-supervised pretext task; it positions itself relative to prior autoencoders, denoising autoencoders, and Doersch et al. context-prediction, and is universally recognized in the literature (including the sibling citation dominic2023) as the origin of inpainting-based SSL for images. No indirect attribution concern.",
+    "out_of_context_check": "The manuscript cites pathak2016 specifically for the concept of a self-supervised in-painting pretext task used to pretrain a feature extractor. This matches the paper's own framing (feature learning by inpainting; pretraining for downstream classification/detection/segmentation). No context mismatch."
   },
   "co_cite_context": {
-    "sibling_citekeys": [],
+    "sibling_citekeys": ["dominic2023"],
     "sibling_verdicts": []
   },
   "stage": "adjudication",

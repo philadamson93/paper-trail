@@ -1,13 +1,15 @@
 {
   "claim_id": "C054",
   "schema_version": "1.0",
-  "run_id": "run_20260418T1736Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "zhouwang2004",
   "handle": "pdfs/zhouwang2004/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "zhouwang2004 specifies the standard SSIM hyperparameters (Gaussian window, K1=0.01, K2=0.03, dynamic range L=255) used in the manuscript's NRMSE/SSIM/PSNR computations.",
-  "manuscript_section": null,
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/zhouwang2004.pdf"
+  ],
+  "claim_text": "SSIM is a combined measure of the luminance, contrast, and structure of the image given by^45 SSIM(x, x\u0302) = l(x, x\u0302) \u00b7 c(x, x\u0302) \u00b7 s(x, x\u0302), where luminance l assesses the mean pixel values across the images, contrast c measures the similarity of the standard deviations of the pixel values across the images, and structure s compares the structure.",
+  "manuscript_section": "Methods (SSIM definition)",
   "claim_type": {
     "type": "DIRECT",
     "confidence": "high"
@@ -15,79 +17,107 @@
   "sub_claims": [
     {
       "sub_claim_id": "C054.a",
-      "text": "zhouwang2004 specifies an 11x11 circular-symmetric Gaussian weighting window (standard deviation 1.5 samples, normalized to unit sum) for local SSIM computation.",
+      "text": "SSIM is a combined similarity measure formed as the product of a luminance comparison l(x,x\u0302), a contrast comparison c(x,x\u0302), and a structure comparison s(x,x\u0302).",
       "evidence": [
         {
-          "section": "C. Image Quality Assessment using SSIM index",
-          "line": 2,
-          "snippet": "In this paper, we use an 11 \u00d7 11 circularsymmetric Gaussian weighting function"
+          "section": "III.B The SSIM Index",
+          "line": 311,
+          "snippet": "The system separates the task of similarity measurement into three comparisons: luminance, contrast and structure."
         },
         {
-          "section": "C. Image Quality Assessment using SSIM index",
-          "line": 3,
-          "snippet": "with standard deviation of 1.5 samples, normalized to unit sum ( N i=1 w i = 1). The estimates of local statistics \u00b5 x , \u03c3 x and \u03c3 xy are then modified accordingly"
+          "section": "III.B The SSIM Index (Eq. 12)",
+          "line": 409,
+          "snippet": "Finally, we combine the three comparisons of (6), (9) and (10) and name the resulting similarity measure the SSIM index between signals x and y ... SSIM(x,y) = [l(x,y)]^\u03b1 \u00b7 [c(x,y)]^\u03b2 \u00b7 [s(x,y)]^\u03b3 (12) where \u03b1, \u03b2 and \u03b3 are parameters used to adjust the relative importance of the three components."
+        },
+        {
+          "section": "III.B The SSIM Index (Eq. 13)",
+          "line": 414,
+          "snippet": "In order to simplify the expression, we set \u03b1 = \u03b2 = \u03b3 = 1 and C3 = C2/2 in this paper. This results in a specific form of the SSIM index (13)."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "Source states 11x11 size, Gaussian shape, sigma=1.5 samples, and unit-sum normalization verbatim."
+      "nuance": "Eq. (12) gives SSIM(x,y) = [l(x,y)]^\u03b1 \u00b7 [c(x,y)]^\u03b2 \u00b7 [s(x,y)]^\u03b3. With \u03b1=\u03b2=\u03b3=1 (the specific form used in the paper, Eq. 13), this collapses to the exact product l\u00b7c\u00b7s stated in the manuscript."
     },
     {
       "sub_claim_id": "C054.b",
-      "text": "zhouwang2004 specifies K1 = 0.01 as a SSIM stability constant.",
+      "text": "The luminance comparison l assesses/compares the mean pixel values (mean intensities) across the two images.",
       "evidence": [
         {
-          "section": "C. Image Quality Assessment using SSIM index",
-          "line": 4,
-          "snippet": "Throughout this paper, the SSIM measure uses the following parameter settings: K 1 = 0.01; K 2 = 0.03."
+          "section": "III.B The SSIM Index (Eq. 2)",
+          "line": 313,
+          "snippet": "First, the luminance of each signal is compared. Assuming discrete signals, this is estimated as the mean intensity [Eq. (2): \u03bc_x = (1/N)\u03a3 x_i]."
         },
         {
-          "section": "B. The Structural SIMilarity SSIM Index",
-          "line": 15,
-          "snippet": "where L is the dynamic range of the pixel values (255 for 8-bit grayscale images), and K 1 1 is a small constant."
+          "section": "III.B The SSIM Index",
+          "line": 318,
+          "snippet": "The luminance comparison function l(x,y) is then a function of \u03bc_x and \u03bc_y."
+        },
+        {
+          "section": "III.B The SSIM Index (Eq. 6)",
+          "line": 320,
+          "snippet": "For luminance comparison, we define l(x,y) = (2\u03bc_x\u03bc_y + C1)/(\u03bc_x^2 + \u03bc_y^2 + C1) (6)."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
-      "claim_value": null
+      "claim_value": null,
+      "nuance": "Eq. (6) defines l(x,y) solely as a function of the mean intensities \u03bc_x and \u03bc_y, matching the manuscript's wording that luminance assesses mean pixel values."
     },
     {
       "sub_claim_id": "C054.c",
-      "text": "zhouwang2004 specifies K2 = 0.03 as a SSIM stability constant.",
+      "text": "The contrast comparison c measures the similarity of the standard deviations of the pixel values across the two images.",
       "evidence": [
         {
-          "section": "C. Image Quality Assessment using SSIM index",
-          "line": 4,
-          "snippet": "Throughout this paper, the SSIM measure uses the following parameter settings: K 1 = 0.01; K 2 = 0.03."
+          "section": "III.B The SSIM Index (Eq. 4)",
+          "line": 327,
+          "snippet": "We use the standard deviation (the square root of variance) as an estimate of the signal contrast. An unbiased estimate in discrete form is given by \u03c3_x = ((1/(N-1))\u03a3(x_i - \u03bc_x)^2)^(1/2) (4)."
         },
         {
-          "section": "B. The Structural SIMilarity SSIM Index",
-          "line": 19,
-          "snippet": "where C 2 = (K 2 L) 2 , and K 2 1. This definition again satisfies the three properties listed above."
+          "section": "III.B The SSIM Index",
+          "line": 335,
+          "snippet": "The contrast comparison c(x,y) is then the comparison of \u03c3_x and \u03c3_y."
+        },
+        {
+          "section": "III.B The SSIM Index (Eq. 9)",
+          "line": 354,
+          "snippet": "The contrast comparison function takes a similar form: c(x,y) = (2\u03c3_x\u03c3_y + C2)/(\u03c3_x^2 + \u03c3_y^2 + C2) (9)."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
-      "claim_value": null
+      "claim_value": null,
+      "nuance": "Eq. (9) defines c(x,y) solely as a function of the standard deviations \u03c3_x and \u03c3_y; the paper explicitly calls it 'the comparison of \u03c3_x and \u03c3_y,' matching the manuscript."
     },
     {
       "sub_claim_id": "C054.d",
-      "text": "zhouwang2004 defines L as the dynamic range of pixel values, with L=255 for 8-bit grayscale images.",
+      "text": "The structure comparison s compares the structure of the two images (operationalized as the correlation of the luminance-subtracted, variance-normalized signals).",
       "evidence": [
         {
-          "section": "B. The Structural SIMilarity SSIM Index",
-          "line": 15,
-          "snippet": "where L is the dynamic range of the pixel values (255 for 8-bit grayscale images), and K 1 1 is a small constant."
+          "section": "III.B The SSIM Index",
+          "line": 337,
+          "snippet": "Third, the signal is normalized (divided) by its own standard deviation, so that the two signals being compared have unit standard deviation. The structure comparison s(x,y) is conducted on these normalized signals (x-\u03bc_x)/\u03c3_x and (y-\u03bc_y)/\u03c3_y."
+        },
+        {
+          "section": "III.B The SSIM Index",
+          "line": 371,
+          "snippet": "Structure comparison is conducted after luminance subtraction and variance normalization... The correlation (inner product) between these is a simple and effective measure to quantify the structural similarity."
+        },
+        {
+          "section": "III.B The SSIM Index (Eq. 10)",
+          "line": 387,
+          "snippet": "Thus, we define the structure comparison function as follows: s(x,y) = (\u03c3_xy + C3)/(\u03c3_x\u03c3_y + C3) (10)."
         }
       ],
       "figures_checked": [],
       "verdict": "CONFIRMED",
       "paper_value": null,
-      "claim_value": null
+      "claim_value": null,
+      "nuance": "Eq. (10) defines s(x,y) as the correlation coefficient between the normalized signals \u2014 i.e., a comparison of the two images' structure, consistent with the manuscript's phrasing 'structure s compares the structure.'"
     }
   ],
   "overall_verdict": "CONFIRMED",
@@ -98,54 +128,25 @@
   },
   "attestation": {
     "phrasings_tried": [
-      "K1 = 0.01",
-      "K2 = 0.03",
-      "Gaussian weighting window",
-      "11 x 11 window",
-      "dynamic range L = 255",
-      "SSIM parameter settings"
+      "SSIM(x,y) = l(x,y) \u00b7 c(x,y) \u00b7 s(x,y) as product of three comparisons",
+      "luminance comparison function l is a function of mean intensity \u03bc",
+      "contrast comparison function c is the comparison of standard deviations \u03c3",
+      "structure comparison s on luminance-subtracted, variance-normalized signals / correlation coefficient",
+      "combine three comparisons (6), (9), (10) into SSIM index with \u03b1=\u03b2=\u03b3=1"
     ],
     "section_checklist": [
-      {
-        "section": "I. Introduction",
-        "read": false
-      },
-      {
-        "section": "II. Image Quality Assessment Based on Error Sensitivity",
-        "read": false
-      },
-      {
-        "section": "III. Structural Similarity Based Image Quality Assessment",
-        "read": false
-      },
-      {
-        "section": "A. New Philosophy",
-        "read": false
-      },
-      {
-        "section": "B. The Structural SIMilarity SSIM Index",
-        "read": true
-      },
-      {
-        "section": "C. Image Quality Assessment using SSIM index",
-        "read": true
-      },
-      {
-        "section": "IV. Experimental Results",
-        "read": false
-      },
-      {
-        "section": "V. Discussion",
-        "read": false
-      },
-      {
-        "section": "VI. Acknowledgement",
-        "read": false
-      }
+      {"section": "Abstract", "read": true},
+      {"section": "I. Introduction", "read": true},
+      {"section": "II. Image Quality Assessment Based on Error Sensitivity", "read": true},
+      {"section": "III.A New Philosophy", "read": true},
+      {"section": "III.B The SSIM Index", "read": true},
+      {"section": "III.C Image Quality Assessment Using SSIM Index", "read": true},
+      {"section": "IV. Experimental Results", "read": false},
+      {"section": "V. Discussion", "read": false}
     ],
-    "closest_adjacent": "",
-    "indirect_attribution_check": "Paper introduces these hyperparameters as the authors' own choices; not credited to a primary external source. The 8x8 square window in [6],[7] (UQI predecessor) is mentioned as the prior approach being replaced by the 11x11 Gaussian.",
-    "out_of_context_check": "Source presents these hyperparameters as the standard SSIM parameter settings used throughout the paper; this matches the manuscript's usage as canonical SSIM hyperparameters for image quality computation."
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Wang 2004 is the primary source for the SSIM definition; no earlier primary is credited for Eqs. (6), (9), (10), (12), (13). A precursor 'universal quality index' (UQI) in refs [6] and [7] is mentioned as the special case C1=C2=0 (which produces unstable results), but the full SSIM formulation cited by the manuscript originates here.",
+    "out_of_context_check": "The manuscript cites Wang 2004 to define SSIM within an MRI reconstruction evaluation; Wang develops SSIM on natural images with JPEG/JPEG2000 distortions. The formula is domain-agnostic and the manuscript uses it as a general image-similarity metric, which is standard in-context use of the definition."
   },
   "co_cite_context": {
     "sibling_citekeys": [],

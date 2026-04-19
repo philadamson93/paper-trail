@@ -1,110 +1,114 @@
 {
   "claim_id": "C070",
   "schema_version": "1.0",
-  "run_id": "run_20260418T0000Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "desai2021",
   "handle": "pdfs/desai2021/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "Adamson et al. used this approach to train a DL model for image reconstruction with a feature distance loss measured against an SSFD pre-trained model encoder.",
-  "manuscript_section": null,
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/desai2021.pdf"
+  ],
+  "claim_text": "Motion artifacts were introduced by modeling rigid motion between MR acquisition shots as random phase errors that alter odd and even lines of k-space separately, following the procedure in.^51 The motion was linearly increased between \u03b1 = [0, 0.6), where \u03b1 denotes the amplitude of the phase errors as in,^51 but using deterministic phases rather than random ones.",
+  "manuscript_section": "Methods (Motion augmentation)",
   "claim_type": {
-    "type": "DIRECT",
-    "confidence": "medium"
+    "type": "PARAPHRASED",
+    "confidence": "high"
   },
   "sub_claims": [
     {
       "sub_claim_id": "C070.a",
-      "text": "desai2021 used SSFD-encoder-based feature distance as a training loss for DL MR reconstruction.",
+      "text": "Rigid motion between MR acquisition shots was modeled as random phase errors that alter odd and even lines of k-space separately, following VORTEX's procedure.",
       "evidence": [
         {
-          "section": "Methods",
-          "line": 11,
-          "snippet": "A pixel-wise l1 supervised loss L_sup is computed for supervised examples y(s). Undersampled examples y(u) are passed through the Augmentation Pipeline (see \u00a74.1)."
+          "section": "Methods \u00a74.1.1 Motion",
+          "line": 209,
+          "snippet": "Many multi-shot MRI acquisitions sample data over multiple shots where consecutive k-space lines are acquired in separate excitations [4]. Here, motion across every shot manifests as additional phase in k-space and as translation in image space."
         },
         {
-          "section": "Methods",
-          "line": 12,
-          "snippet": "A pixel-wise l1 consistency loss L_cons is computed between the model reconstruction outputs of input undersampled examples with and without augmentation (Eq. 1)."
+          "section": "Methods \u00a74.1.1 Motion",
+          "line": 211,
+          "snippet": "Thus, one-dimensional translational motion artifacts across the phase dimension can be modeled using random phase errors that alter odd and even lines of k-space separately."
         },
         {
-          "section": "D.1 Dataset (Experimental Details)",
-          "line": 24,
-          "snippet": "All methods used a 2D U-Net network with a complex-l1 training objective for both supervised and consistency losses."
+          "section": "Methods \u00a74.1.1 Motion",
+          "line": 218,
+          "snippet": "For a given k-space readout k^th, the phase error is: \u03c6_i^k = \u03c0\u03b1 m_o if k is odd, \u03c0\u03b1 m_e if k is even."
         },
         {
-          "section": "E.1 Latent Space vs Pixel-level Consistency",
-          "line": 66,
-          "snippet": "We compare enforcing consistency at the pixel-level output image versus learned latent representations at varying U-Net resolution levels. Let R_k be k-th resolution level at which consistency is enforced, where k in {1,2,3,4} since our U-Net architecture had 4 pooling layers. For the k-th resolution level, we enforce consistency after the final convolution in the encoder, and after the transpose convolution in the decoder."
-        },
-        {
-          "section": "E.1 Latent Space vs Pixel-level Consistency",
-          "line": 67,
-          "snippet": "For in-distribution data, latent space consistency at any resolution level performed on par with pixel-level consistency. However, for OOD data, it performed considerably worse than pixel-level consistency ... we find that pixel-level consistency was a better technique for capturing the semantics of global distribution shifts such as motion for accelerated MRI reconstruction."
+          "section": "Methods \u00a74.1.1 Motion",
+          "line": 215,
+          "snippet": "We sample two random numbers from the uniform distribution m_o, m_e ~ U(-1, 1) which is chosen from a specified range R(\u03b1) = [\u03b1_LM, \u03b1_HM)."
         }
       ],
       "figures_checked": [],
-      "verdict": "UNSUPPORTED",
-      "paper_value": "pixel-wise L1 (complex-L1) supervised + pixel-wise L1 consistency loss; an ablation explores latent-space consistency at the in-model U-Net encoder/decoder resolution levels, not a separate pretrained SSFD encoder",
-      "claim_value": "feature distance loss measured against an SSFD pre-trained model encoder",
-      "nuance": "VORTEX (desai2021) uses pixel-level L1 losses and, in an ablation, consistency in the reconstruction U-Net's own latent layers (Section E.1). It does not use SSFD, nor a pretrained self-supervised feature encoder, nor a perceptual/feature-distance loss against any fixed encoder. The ablation actually finds pixel-level consistency outperforms latent-space consistency under OOD perturbations."
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "VORTEX's Methods \u00a74.1.1 states the motion model near-verbatim: rigid motion between shots is modeled as random phase errors altering odd and even k-space lines separately via two independent U(-1,1) draws m_o (odd) and m_e (even) scaled by \u03c0\u03b1. The manuscript's wording mirrors this directly."
+    },
+    {
+      "sub_claim_id": "C070.b",
+      "text": "Motion amplitude was linearly increased between \u03b1 = [0, 0.6), with \u03b1 denoting the amplitude of the phase errors (\u03b1-parameterization borrowed 'as in' VORTEX), though Adamson uses deterministic rather than random phases.",
+      "evidence": [
+        {
+          "section": "Methods \u00a74.1.1 Motion",
+          "line": 216,
+          "snippet": "R(\u03b1) = [\u03b1_LM, \u03b1_HM) where \u03b1 denotes the amplitude of the phase errors and LM (light motion) and HM (heavy motion) are chosen based on visual inspections of clinical scans by a board-certified clinical radiologist."
+        },
+        {
+          "section": "Appendix table (notation)",
+          "line": 639,
+          "snippet": "\u03b1    Motion-induced phase error amplitude"
+        },
+        {
+          "section": "Methods \u00a74.2 Augmentation Scheduling",
+          "line": 275,
+          "snippet": "...the amplitude of the phase errors for motion. Note that this is in contrast to the MRAugment scheduling strategy..."
+        },
+        {
+          "section": "Appendix (OOD evaluation)",
+          "line": 1283,
+          "snippet": "on both in-distribution data and different motion levels of \u03b1 = 0.4, 0.6, 0.8, 1.0 for Supervised, SSDU, MRAugment..."
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": "\u03b1 defined as motion phase-error amplitude; VORTEX uses half-open intervals R(\u03b1) = [\u03b1_LM, \u03b1_HM) (e.g., [0.2, 0.5], [0.5, 0.7]) and evaluates at \u03b1 = 0.4, 0.6, 0.8, 1.0",
+      "claim_value": "\u03b1 \u2208 [0, 0.6) with deterministic phases",
+      "nuance": "The \u03b1-parameterization and half-open interval notation are lifted directly from VORTEX (equation \u03c6_i^k = \u03c0\u03b1 m_{o/e}, notation table line 639, and R(\u03b1) = [\u03b1_LM, \u03b1_HM)). The specific numeric range [0, 0.6) is the manuscript's own choice (not VORTEX's default); VORTEX does evaluate OOD at \u03b1 up to 1.0, so [0, 0.6) sits within the paper's explored regime. The manuscript's explicit 'but using deterministic phases rather than random ones' correctly flags the divergence from VORTEX's U(-1,1) random draws \u2014 no misattribution of that departure."
     }
   ],
-  "overall_verdict": "UNSUPPORTED",
-  "overall_flag": "CRITICAL",
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
   "remediation": {
-    "category": "RECITE",
-    "suggested_edit": "Remove the desai2021 (VORTEX) citation from this sentence. VORTEX trains with pixel-wise L1 supervised and pixel-wise L1 consistency losses (with an ablation over U-Net latent-level consistency using the reconstruction network's own encoder), and never uses SSFD or any feature distance measured against a pretrained (SSFD) encoder. Author/paper note: the sentence attributes the work to 'Adamson et al.' but cites a Desai-first-author paper; even the SSFD paper itself (adamson2021) in the current bibliography does not train a reconstruction DL model with SSFD as a feature-distance loss \u2014 it defines SSFD as a reconstruction *quality metric* (its U-Net is trained self-supervised with l2 on an in-painting pretext task). If the manuscript intends to cite work that adopted SSFD as a reconstruction training loss, a different primary source is needed; if no such primary exists, consider rescoping the claim or removing it."
+    "category": "\u2014",
+    "suggested_edit": "No edit required. Procedure-level attribution to VORTEX is accurate: rigid-motion-as-phase-errors, odd/even k-space separation, and \u03b1 as phase-error amplitude are all near-verbatim from Desai et al. \u00a74.1.1. The manuscript also correctly flags its deterministic-phase variant as a deviation from VORTEX's random draws."
   },
   "attestation": {
     "phrasings_tried": [
-      "SSFD (self-supervised feature distance) used as training loss in desai2021",
-      "feature distance loss / perceptual loss against a pretrained encoder in VORTEX",
-      "pretrained SSFD encoder used to compute feature distance in MR reconstruction training",
-      "latent-space / feature-space consistency loss in VORTEX and whether it invokes a fixed pretrained encoder",
-      "adjudicator cross-check: does any Adamson/Desai paper in the bib (adamson2021, desai2022) use SSFD as a training loss for DL reconstruction?"
+      "rigid motion modeled as random phase errors altering odd and even k-space lines",
+      "motion augmentation procedure between MR acquisition shots / multi-shot k-space phase",
+      "\u03b1 amplitude of motion-induced phase errors and its range R(\u03b1)",
+      "k-space readout odd/even phase error equation \u03c6_i^k",
+      "motion amplitude schedule / curriculum for \u03b1",
+      "random vs deterministic phase draws in VORTEX motion augmentation"
     ],
     "section_checklist": [
-      {
-        "section": "Abstract (meta.json)",
-        "read": true
-      },
-      {
-        "section": "Introduction",
-        "read": true
-      },
-      {
-        "section": "Related Work",
-        "read": true
-      },
-      {
-        "section": "Methods (VORTEX framework, loss definitions)",
-        "read": true
-      },
-      {
-        "section": "Experiments / D.1 Dataset (training objective)",
-        "read": true
-      },
-      {
-        "section": "E.1 Latent Space vs Pixel-level Consistency",
-        "read": true
-      },
-      {
-        "section": "E.2 Augmentation Scheduling",
-        "read": true
-      },
-      {
-        "section": "Conclusion",
-        "read": true
-      },
-      {
-        "section": "B Extended Related Work (VORTEX vs MRAugment / Noise2Recon)",
-        "read": true
-      }
+      {"section": "Abstract", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Related Work (Motion correction)", "read": true},
+      {"section": "Methods \u00a74.1.1 Motion", "read": true},
+      {"section": "Methods \u00a74.1.2 Image-based Augmentations", "read": true},
+      {"section": "Methods \u00a74.1.3 Composing Augmentations", "read": true},
+      {"section": "Methods \u00a74.2 Augmentation Scheduling", "read": true},
+      {"section": "Experiments / Results", "read": true},
+      {"section": "Limitations", "read": true},
+      {"section": "Appendix notation table", "read": true},
+      {"section": "Appendix OOD motion evaluation (\u03b1 = 0.4, 0.6, 0.8, 1.0)", "read": true}
     ],
-    "closest_adjacent": "Appendix E.1 'Latent Space vs Pixel-level Consistency' (content.txt lines 66-67): VORTEX ablates enforcing the L1 consistency loss at learned latent representations inside its own U-Net (after the encoder's final conv, at the bottleneck, or after the decoder's transpose conv) rather than at the pixel output. This is the closest concept to a 'feature distance loss' in the paper, but the features come from the reconstruction model's own U-Net encoder trained end-to-end, not from a pretrained SSFD encoder, and the paper finds pixel-level consistency works better for OOD settings. No SSFD, no self-supervised pretrained encoder, and no perceptual/feature-distance term is used as a training loss anywhere in desai2021.",
-    "indirect_attribution_check": "desai2021 does not attribute an SSFD feature-distance loss to any other primary either; SSFD is simply not discussed. Adamson et al. is cited in desai2021 for Noise2Recon (consistency denoising, balanced sampling), not for an SSFD-based loss. Adjudicator also cross-checked adamson2021 (the SSFD paper) and desai2022 (SKM-TEA): adamson2021 positions SSFD as a quality metric and trains its pretext U-Net with l2; desai2022 does not mention SSFD. No bibliography paper supports the sub-claim, so MISATTRIBUTED is not warranted.",
-    "out_of_context_check": "The manuscript's claim describes adopting SSFD-based feature-distance as a training loss. The nearest passage in desai2021 (latent-space consistency ablation) is a different construct (internal U-Net feature consistency, L1, no pretrained SSFD encoder, and reported as inferior to pixel-level consistency for OOD). Citing desai2021 here is out of context relative to an SSFD-loss adoption claim."
+    "closest_adjacent": "",
+    "indirect_attribution_check": "VORTEX cites Anderson & Gore [4] as background for the multi-shot k-space acquisition model but formalizes the odd/even-line random-phase-error motion model itself; the specific \u03b1-parameterized procedure Adamson cites is original to VORTEX (Desai et al. 2021). Attribution to ref 51 is appropriate \u2014 not an indirect source.",
+    "out_of_context_check": "Context matches: VORTEX introduces the procedure as a physics-driven data augmentation for accelerated MRI reconstruction training; Adamson reuses it for the same purpose (generating motion-corrupted training/evaluation data for a reconstruction model). The deterministic-phase variant is explicitly flagged as a deviation, not a misrepresentation."
   },
   "co_cite_context": {
     "sibling_citekeys": [],

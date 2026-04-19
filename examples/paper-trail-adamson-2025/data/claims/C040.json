@@ -1,148 +1,101 @@
 {
   "claim_id": "C040",
   "schema_version": "1.0",
-  "run_id": "run_20260418T2354Z",
+  "run_id": "run_20260419T1900Z_reground",
   "citekey": "huang2023",
   "handle": "pdfs/huang2023/",
-  "ingest_mode": "grobid",
-  "source_ref_urls": [],
-  "claim_text": "[v1 placeholder] huang2023 is cited in support of supervised/ImageNet pretraining providing good features for deep-feature-distance (DFD) / medical image quality assessment models, in a section on pretraining for DFD models.",
-  "manuscript_section": "DFD pretraining (section to be confirmed against manuscript v2)",
+  "ingest_mode": "pdftotext_fallback",
+  "source_ref_urls": [
+    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/huang2023.pdf"
+  ],
+  "claim_text": "In the absence of a large domain-specific dataset, self-supervised learning (SSL) on an unlabeled but in-domain dataset has repeatedly outperformed ImageNet pretraining on a wide range of downstream medical imaging tasks.",
+  "manuscript_section": "Introduction (motivating domain-specific feature representations for DFD IQ assessment; offset ~8974 in paper.txt, refs 38,39)",
   "claim_type": {
-    "type": "DIRECT",
-    "confidence": "medium"
+    "type": "SUPPORTING",
+    "confidence": "high"
   },
   "sub_claims": [
     {
       "sub_claim_id": "C040.a",
-      "text": "Huang et al. 2023 supports the position that supervised pretraining on ImageNet (natural images) yields features useful for medical imaging tasks (specifically, image-quality / deep-feature-distance assessment in the manuscript's framing).",
+      "text": "SSL on an unlabeled in-domain dataset repeatedly outperforms ImageNet pretraining for a wide range of downstream medical imaging (classification) tasks.",
       "evidence": [
         {
-          "section": "Implementation guidelines.txt",
-          "line": 1,
+          "section": "DISCUSSION",
+          "line": 611,
+          "snippet": "While five studies reported a slight decrease in performance (0.980-4.51%), the majority of self-supervised pre-trained models led to a relative increased performances of 0.216-32.6% AUROC, 0.440-29.2% accuracy, and 0.137-14.3% F1 score over the same model architecture without SSL pre-training, including both ImageNet and random initialization (Fig. 4e)."
+        },
+        {
+          "section": "DISCUSSION",
+          "line": 624,
+          "snippet": "In the presence of relevant data, we recommend implementing self-supervised learning strategies for training medical image classification models since our literature review indicated that self-supervised pre-training generally results in better model performance, especially when annotations are limited (Table 1)."
+        },
+        {
+          "section": "Future research (Conclusion)",
+          "line": 791,
+          "snippet": "Results from this systematic review have revealed that SSL for medical image classification is a growing and promising field of research across multiple medical disciplines and imaging modalities. We found that self-supervised pre-training generally improves performance for medical imaging classification tasks over purely supervised methods."
+        },
+        {
+          "section": "Implementation guidelines",
+          "line": 629,
           "snippet": "Although self-supervised pre-training can be computationally demanding, many models pre-trained in a self-supervised manner on large-scale natural image datasets are publicly available and should be utilized. Azizi et al. have shown that SSL pre-trained models using natural images tend to outperform purely supervised pre-trained models for medical image classification, and continuing self-supervised pre-training with in-domain medical images leads to the best results."
         },
         {
-          "section": "Implementation guidelines.txt",
-          "line": 1,
-          "snippet": "More recently, Azizi et al. found that using generic and large-scale supervised pre-trained models, such as BigTransfer, can also benefit subsequent domain-specific self-supervised pre-training, and ultimately improve model performance and robustness for different medical imaging modalities."
+          "section": "Contrastive (Results)",
+          "line": 272,
+          "snippet": "Thirty-six studies compared contrastive SSL pre-training to supervised pre-training and reported an average improvement in performance of 6.35%."
         },
         {
-          "section": "DISCUSSION.txt",
-          "line": 1,
-          "snippet": "the majority of self-supervised pre-trained models led to a relative increased performances of 0.216-32.6% AUROC, 0.440-29.2% accuracy, and 0.137-14.3% F1 score over the same model architecture without SSL pre-training, including both ImageNet and random initialization (Fig. 4e)."
-        },
-        {
-          "section": "DISCUSSION.txt",
-          "line": 2,
-          "snippet": "Even though 60 out of 79 studies compared their results with purely supervised baselines, only 33 studies reported comparisons with another self-supervised learning strategy. ... only 18 out of 79 studies indicated use of natural image pretrained weights, either supervised or self-supervised, to initiate their model for subsequent in-domain self-supervised pre-training."
-        },
-        {
-          "section": "INTRODUCTION.txt",
-          "line": 2,
-          "snippet": "While deep learning provides promising solutions for improving medical image interpretation, the current success has been largely dominated by supervised learning frameworks, which typically require large-scale labeled datasets to achieve high performance. However, annotating medical imaging datasets requires domain expertize, making large-scale annotations cost-prohibitive and time-consuming, which fundamentally limits building effective medical imaging models across varying clinical use cases."
-        },
-        {
-          "section": "INTRODUCTION.txt",
-          "line": 4,
-          "snippet": "One pioneering contrastive-based method is SimCLR, which outperformed supervised models on ImageNet benchmark using 100 times fewer labels."
-        },
-        {
-          "section": "INTRODUCTION.txt",
-          "line": 3,
-          "snippet": "The inability to generalize can be largely due to the process of supervised learning, which encourages the model to mainly learn features heavily correlated with specific labels rather than general features representative of the whole data distribution."
-        },
-        {
-          "section": "Combined approaches.txt",
-          "line": 2,
+          "section": "Combined approaches (Results)",
+          "line": 598,
           "snippet": "Eight of the studies that combined different strategies compared self-supervised pre-training with purely supervised approaches, all of which reported performance improvement (0.140-8.29%)."
+        },
+        {
+          "section": "Limitations",
+          "line": 768,
+          "snippet": "For this review paper, publication bias can be a considerable limitation due to disproportionately reported positive results in the literature, which can lead to overestimation of the benefits of self-supervised learning."
         }
       ],
       "figures_checked": [],
-      "verdict": "CITED_OUT_OF_CONTEXT",
+      "verdict": "CONFIRMED",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "Huang2023 is a systematic review of SELF-SUPERVISED learning for medical image CLASSIFICATION; it never discusses deep-feature-distance / perceptual / image-quality metrics. Its dominant finding (SSL > supervised/ImageNet pretraining: 0.216-32.6% AUROC gain over supervised+random initialization baselines) runs OPPOSITE to a manuscript framing that uses Huang2023 to endorse supervised/ImageNet pretraining for DFD. The only passage friendly to ImageNet/supervised pretraining is in Implementation guidelines and (a) credits Azizi et al. as the primary source and (b) frames supervised weights as a starting point for subsequent SSL, not as a standalone recommendation. Verdict is CITED_OUT_OF_CONTEXT (classification review used in a DFD/perceptual section, with the citation's directional implication inverted); a secondary INDIRECT_SOURCE concern applies if the manuscript leans on the supervised-pretraining-is-useful framing (Azizi et al. is the primary)."
+      "nuance": "Huang 2023's aggregate systematic-review finding directly supports the manuscript proposition: SSL pre-training (including on in-domain medical data) outperforms supervised/ImageNet pretraining for medical image classification (0.216-32.6% AUROC gains over ImageNet- and random-initialized baselines), and in-domain continuation 'leads to the best results' (Implementation Guidelines). The review acknowledges publication bias as a caveat, and attributes the specific in-domain-is-best finding to Azizi et al. as the primary, but the manuscript cites Huang 2023 as a review aggregating the evidence — which is a legitimate use. Scope nuance: huang2023's evidence is drawn from medical image CLASSIFICATION; the manuscript generalizes to 'medical imaging tasks,' which is marginally broader but consistent with how review citations are typically used in an Introduction."
     }
   ],
-  "overall_verdict": "CITED_OUT_OF_CONTEXT",
-  "overall_flag": "CRITICAL",
+  "overall_verdict": "CONFIRMED",
+  "overall_flag": null,
   "remediation": {
-    "category": "RECITE",
-    "suggested_edit": "Replace the huang2023 citation in the DFD-pretraining context. Recommended order: (1) for the supervised/ImageNet-pretraining-is-useful piece, cite Azizi et al. directly as the primary (Huang2023 refs 93/95) rather than the Huang review; (2) for the deep-feature-distance / perceptual-metric piece, cite a primary that actually covers DFD with pretrained features (e.g., Zhang et al. 2018, 'The Unreasonable Effectiveness of Deep Features as a Perceptual Metric'); (3) if the manuscript still wants Huang2023 as a review touchpoint, REWORD to accurately reflect Huang's net finding (SSL outperforms supervised/ImageNet pretraining for medical image classification) and RESCOPE to classification rather than DFD/IQ \u2014 do not let Huang2023 stand as endorsement of supervised/ImageNet pretraining for perceptual or image-quality models. Otherwise, REMOVE huang2023 from this section."
+    "category": "—",
+    "suggested_edit": "No edit required. Optional: if the manuscript wants to foreground the primary source for the in-domain-SSL-is-best claim, it could add Azizi et al. alongside huang2023 (Huang 2023 attributes that specific finding to Azizi, refs 93/95 in huang2023). As-is, citing huang2023 as a systematic review that aggregates this evidence is appropriate."
   },
   "attestation": {
     "phrasings_tried": [
-      "transfer learning from ImageNet",
-      "ImageNet supervised pretraining",
-      "supervised pre-training for medical imaging",
-      "natural image pretrained weights / pretrained features",
-      "domain-specific (in-domain) pretraining vs natural image pretraining",
-      "deep feature distance / perceptual / image quality assessment (not present in source)"
+      "SSL on in-domain unlabeled data outperforms ImageNet pretraining for medical imaging",
+      "self-supervised pre-training vs supervised/ImageNet pre-training for medical image classification",
+      "domain-specific self-supervised learning medical imaging",
+      "in-domain SSL best results medical imaging",
+      "SSL performance improvement over ImageNet initialization",
+      "ImageNet transfer learning medical imaging limitations"
     ],
     "section_checklist": [
-      {
-        "section": "INTRODUCTION.txt",
-        "read": true
-      },
-      {
-        "section": "RESULTS.txt",
-        "read": true
-      },
-      {
-        "section": "Innate relationship.txt",
-        "read": false
-      },
-      {
-        "section": "Generative.txt",
-        "read": false
-      },
-      {
-        "section": "Contrastive.txt",
-        "read": false
-      },
-      {
-        "section": "Self-prediction.txt",
-        "read": false
-      },
-      {
-        "section": "Combined approaches.txt",
-        "read": true
-      },
-      {
-        "section": "DISCUSSION.txt",
-        "read": true
-      },
-      {
-        "section": "Implementation guidelines.txt",
-        "read": true
-      },
-      {
-        "section": "Future research.txt",
-        "read": false
-      },
-      {
-        "section": "Limitations.txt",
-        "read": false
-      },
-      {
-        "section": "METHODS.txt",
-        "read": false
-      },
-      {
-        "section": "Search strategy.txt",
-        "read": true
-      },
-      {
-        "section": "Study selection.txt",
-        "read": false
-      }
+      {"section": "Abstract", "read": true},
+      {"section": "Introduction", "read": true},
+      {"section": "Terminology and strategies in self-supervised learning", "read": true},
+      {"section": "Results (Innate relationship / Generative / Contrastive / Self-prediction / Combined approaches)", "read": true},
+      {"section": "Discussion", "read": true},
+      {"section": "Implementation guidelines", "read": true},
+      {"section": "Limitations", "read": true},
+      {"section": "Future research (Conclusion)", "read": true},
+      {"section": "Methods (Search strategy / Study selection / Data extraction)", "read": true}
     ],
-    "closest_adjacent": "Implementation guidelines: 'Azizi et al. have shown that SSL pre-trained models using natural images tend to outperform purely supervised pre-trained models for medical image classification, and continuing self-supervised pre-training with in-domain medical images leads to the best results. More recently, Azizi et al. found that using generic and large-scale supervised pre-trained models, such as BigTransfer, can also benefit subsequent domain-specific self-supervised pre-training, and ultimately improve model performance and robustness for different medical imaging modalities.' This is the only passage that even partially endorses supervised/ImageNet pretraining for medical imaging \u2014 and it does so as a preamble to a stronger SSL recommendation, not as standalone support for ImageNet supervised pretraining as a sufficient feature source.",
-    "indirect_attribution_check": "The favorable-to-supervised-pretraining sentence in Implementation guidelines explicitly attributes the underlying finding to Azizi et al. (refs 93, 95). If the manuscript needs the claim 'ImageNet/supervised pretraining provides good features for medical imaging,' the primary citations are Azizi et al., not Huang et al. 2023; Huang2023 is a review that aggregates this point but is not the original source.",
-    "out_of_context_check": "Huang2023 reviews SSL for medical image CLASSIFICATION. The manuscript section is about pretraining for DEEP-FEATURE-DISTANCE (DFD) / medical IMAGE-QUALITY assessment models. Huang2023 contains no discussion of perceptual / DFD / IQ metrics, no LPIPS-style references, and no evaluation of pretrained features as similarity backbones. Citing Huang2023 in a DFD-pretraining context is a context shift from classification \u2192 perceptual feature distance, even if the cited high-level point about pretraining usefulness transfers. Compounding the context shift: the manuscript's directional implication (supervised/ImageNet pretraining is good for DFD) is the OPPOSITE of Huang2023's net finding (SSL > supervised/ImageNet pretraining for medical classification)."
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Huang 2023 is a systematic review that aggregates dozens of primary studies. For the specific sub-claim that in-domain SSL beats ImageNet/supervised pretraining, the Implementation Guidelines attribute the finding primarily to Azizi et al. (huang2023 refs 93, 95). However, huang2023's own aggregated results (0.216-32.6% AUROC gains of SSL over ImageNet/random baselines across 79 included studies; 36 contrastive studies averaging 6.35% over supervised) constitute independent review-level evidence. Using huang2023 as a review citation for this well-established finding is standard and not INDIRECT_SOURCE in the problematic sense — the review synthesizes the evidence the manuscript is invoking.",
+    "out_of_context_check": "The previous run flagged CITED_OUT_OF_CONTEXT under the assumption that huang2023 was cited to support supervised/ImageNet pretraining for DFD (deep-feature-distance) IQ assessment. Re-reading the actual manuscript context at offset ~8974: the sentence is in the Introduction background and states 'self-supervised learning (SSL) on an unlabeled but in-domain dataset has repeatedly outperformed ImageNet pretraining on a wide range of downstream medical imaging tasks' — which is EXACTLY huang2023's net finding, NOT its opposite. The prior CITED_OUT_OF_CONTEXT verdict was based on a misread claim_text (it conflated with a different manuscript passage about DFD pretraining). The citation is used correctly here: the manuscript invokes huang2023 as a review-level summary that SSL beats ImageNet for medical imaging, which is the review's headline finding. Scope caveat: huang2023's corpus is strictly medical image CLASSIFICATION; the manuscript generalizes to 'medical imaging tasks' (a mild overgeneralization), but this is consistent with standard introduction-section usage of review citations and does not rise to OVERGENERAL severity. The broader paragraph that uses refs 38,39 frames this SSL finding as motivation for why in-domain feature representations might matter for DFD IQ — huang2023 is not claimed to speak about DFD itself, only about the transferability point that feeds the manuscript's hypothesis."
   },
-  "co_cite_context": null,
+  "co_cite_context": {
+    "sibling_citekeys": ["cadrinchenevert2022"],
+    "sibling_verdicts": []
+  },
   "stage": "adjudication",
   "timing": {
     "wall_clock_seconds": null,

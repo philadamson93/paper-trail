@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://philadamson93.github.io/paper-trail/demo.html">
-    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025%20%C2%B7%2088%20claims%20grounded-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025, 88 claims grounded">
+    <img src="https://img.shields.io/badge/Open%20the%20live%20demo-Adamson%202025%20%C2%B7%2087%20claims%20grounded-2ea44f?style=for-the-badge" alt="Open the live demo — Adamson 2025, 87 claims grounded">
   </a>
 </p>
 
