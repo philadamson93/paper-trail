@@ -344,17 +344,31 @@ Record low-confidence matches in `parse_report.md` so a human can spot-check; do
 
 ### Step 3.1.5 — Validate extracted claims against the manuscript
 
-Before any Phase 3 dispatch, run the claim-extraction validator:
+Before any Phase 3 dispatch, run the claim-extraction validator. Invocation differs per mode:
 
-```bash
-python3 .claude/scripts/validate_claims.py --run-dir <output-dir>
-```
+- **Reader mode:**
 
-The validator enforces three invariants per extracted claim, with no LLM cost:
+  ```bash
+  python3 .claude/scripts/validate_claims.py --run-dir <output-dir>
+  ```
 
-- **TEXT_ANCHOR_MISSING** — the claim's `claim_text` must fuzzy-match somewhere in `paper.txt`. If no 3-word content-token window (with up to 3 intervening words) appears in the manuscript, the stored claim_text is paraphrased or fabricated and should not be dispatched.
-- **FRONT_MATTER_ANCHOR** — the text anchor must fall on or after the detected body-start heading (`Abstract` / `ABSTRACT` / `Summary` / `Introduction`). Anchors above that line come from the title/author/affiliation block, where superscript affiliation digits look identical to numbered citation markers; those are phantom claims.
-- **CITEKEY_MARKER_MISMATCH** — once a text anchor is found, the citation markers within ±280 chars of that position must include the `refnum` that the claim's `citekey` resolves to. Range markers like `28–33` are expanded. A mismatch means the claim is attached to the wrong reference.
+  Auto-detects `<output-dir>/paper.txt` as the manuscript source (kind: `pdftotext`).
+
+- **Author mode:** pass the manuscript path explicitly; use the project root as `--run-dir` (that's where `ledger/claims/` lives):
+
+  ```bash
+  python3 .claude/scripts/validate_claims.py --run-dir <project-root> --manuscript-path <path/to/document.tex>
+  ```
+
+  Kind is inferred from extension (`.tex` → `latex`). If only a single `*.tex` exists at the project root, `--manuscript-path` may be omitted.
+
+The validator enforces these invariants per extracted claim, with no LLM cost:
+
+- **TEXT_ANCHOR_MISSING** — the claim's `claim_text` must fuzzy-match somewhere in the manuscript. If no 3-word content-token window (with up to 3 intervening words) appears, the stored claim_text is paraphrased or fabricated and should not be dispatched. Applies in both modes; the validator's `normalize()` strips LaTeX commands so `.tex` works uniformly.
+- **FRONT_MATTER_ANCHOR** *(reader mode only)* — the text anchor must fall on or after the detected body-start heading (`Abstract` / `ABSTRACT` / `Summary` / `Introduction`). Anchors above that line come from the title/author/affiliation block, where superscript affiliation digits look identical to numbered citation markers. Skipped in author mode because LaTeX front-matter (`\author{…}\thanks{…}`) doesn't produce ambiguous digit sequences.
+- **CITEKEY_MARKER_MISMATCH** — the citation markers within ±280 chars of the text anchor must name the claim's `citekey`:
+  - Reader mode (pdftotext): looks for numeric refnums; ranges like `28–33` are expanded.
+  - Author mode (latex): looks for `\cite{…}` / `\citep{…}` / `\citet{…}` / `\citeauthor{…}` / `\citeyear{…}` / `\citealp{…}` commands (including natbib `\cite[…][…]{…}` optional-arg forms) and splits their multi-key bodies on `,`.
 
 The validator writes `claim_extraction_report.md` and exits non-zero if any claim flags. Default behavior is **strict** — the orchestrator must pause and surface the report via `AskUserQuestion` when flags exist. Options:
 

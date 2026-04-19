@@ -60,6 +60,7 @@ class ClaimResult:
     match_position: int | None = None
     match_window: str = ""
     nearby_refnums: list[int] = field(default_factory=list)
+    nearby_citekeys: list[str] = field(default_factory=list)
     claim_text_preview: str = ""
 
 
@@ -87,12 +88,35 @@ def content_tokens(text: str) -> list[str]:
 
 # ---------- Paper loading ----------
 
-def load_paper_text(run_dir: Path) -> str:
-    """Pull manuscript text. Prefer paper.txt, then ledger content.txt, else ''."""
+def load_manuscript_text(
+    run_dir: Path, explicit_path: Path | None = None
+) -> tuple[str, str, Path | None]:
+    """Return (text, kind, path).
+
+    `kind` is one of:
+      - "pdftotext" — paper.txt / input-paper.txt (reader mode).
+      - "latex" — single .tex at run_dir (author mode) or explicit --manuscript-path.
+      - "" — nothing found.
+
+    Explicit path overrides auto-detection and infers kind from extension.
+    """
+    if explicit_path is not None:
+        if not explicit_path.exists():
+            return "", "", None
+        kind = "latex" if explicit_path.suffix.lower() == ".tex" else "pdftotext"
+        return explicit_path.read_text(errors="replace"), kind, explicit_path
+
+    # Reader-mode auto-detect.
     for candidate in [run_dir / "paper.txt", run_dir / "input-paper.txt"]:
         if candidate.exists():
-            return candidate.read_text(errors="replace")
-    return ""
+            return candidate.read_text(errors="replace"), "pdftotext", candidate
+
+    # Author-mode auto-detect: a single .tex file at run_dir.
+    tex_candidates = sorted(run_dir.glob("*.tex"))
+    if len(tex_candidates) == 1:
+        return tex_candidates[0].read_text(errors="replace"), "latex", tex_candidates[0]
+
+    return "", "", None
 
 
 # ---------- Body-start detection ----------
@@ -244,6 +268,37 @@ def build_normalized_index(paper: str) -> tuple[str, list[int]]:
     return "".join(out_chars), map_to_raw
 
 
+# ---------- LaTeX citation-marker extraction ----------
+
+# Matches `\cite`, `\citep`, `\citet`, `\citeauthor`, `\citeyear`, `\citealp`,
+# `\citealt`, `\citenum`, `\Citet`, etc., with up to two optional `[...]`
+# arguments (natbib prenote / postnote) before the `{keys}` group.
+CITE_COMMAND_RE = re.compile(
+    r"\\[Cc]ite[a-zA-Z]*\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]+)\}"
+)
+
+
+def nearby_citekeys(manuscript: str, pos: int, window: int = 280) -> list[str]:
+    """Find citekeys inside `\\cite*{…}` commands within ±window chars of `pos`.
+
+    Handles multi-cite: `\\cite{a, b, c}` yields three separate keys, trimmed
+    of whitespace. Preserves first-seen order.
+    """
+    lo = max(0, pos - window)
+    hi = min(len(manuscript), pos + window + 240)
+    region = manuscript[lo:hi]
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in CITE_COMMAND_RE.finditer(region):
+        for raw in m.group(1).split(","):
+            key = raw.strip()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(key)
+    return out
+
+
 # ---------- Check 2: citekey / refnum consistency ----------
 
 # Citation markers attach directly after punctuation/letters (e.g. "research.51",
@@ -324,8 +379,10 @@ def validate(
     paper_norm_to_raw: list[int],
     citekey_to_refnum: dict[str, int],
     body_start_offset: int,
+    manuscript_kind: str,
 ) -> list[ClaimResult]:
     valid_refnums = set(citekey_to_refnum.values())
+    is_latex = manuscript_kind == "latex"
     results: list[ClaimResult] = []
 
     for c in claims:
@@ -349,7 +406,7 @@ def validate(
         is_pending = overall == "PENDING"
 
         if not paper_raw:
-            res.flags.append("NO_PAPER_TEXT — cannot validate (paper.txt missing)")
+            res.flags.append("NO_MANUSCRIPT_TEXT — cannot validate (no paper.txt or .tex found)")
             res.status = "FLAG"
             results.append(res)
             continue
@@ -360,15 +417,20 @@ def validate(
         res.match_window = window
         if pos is None:
             res.flags.append(
-                "TEXT_ANCHOR_MISSING — no 3-5 word window of claim_text appears in paper.txt (paraphrase or fabrication)"
+                "TEXT_ANCHOR_MISSING — no 3-5 word window of claim_text appears in the manuscript (paraphrase or fabrication)"
             )
             res.status = "FLAG"
 
-        # Check 2: front-matter anchor. If we detected a body-start heading
-        # and this claim's anchor lives above it, the extractor pulled from
-        # the title/author/affiliation block where superscript affiliation
-        # digits look exactly like numbered citation markers.
-        if pos is not None and body_start_offset > 0 and pos < body_start_offset:
+        # Check 2: front-matter anchor. Reader-mode / pdftotext only — in LaTeX
+        # the author/affiliation block lives inside \author{...}\thanks{...}
+        # structures that don't produce ambiguous bare digits, and the body
+        # starts wherever the author placed \begin{document}.
+        if (
+            not is_latex
+            and pos is not None
+            and body_start_offset > 0
+            and pos < body_start_offset
+        ):
             res.flags.append(
                 f"FRONT_MATTER_ANCHOR — claim text anchors at offset {pos}, above the detected body-start "
                 f"(Abstract / Introduction) at offset {body_start_offset}; author-affiliation superscripts "
@@ -376,16 +438,27 @@ def validate(
             )
             res.status = "FLAG"
 
-        # Check 3: citekey/refnum consistency (only runnable if we have both a
-        # position AND the bib carries refnum fields)
-        if pos is not None and rn is not None and valid_refnums and not is_pending:
-            nearby = nearby_refnums(paper_raw, pos, valid_refnums)
-            res.nearby_refnums = nearby
-            if nearby and rn not in nearby:
-                res.flags.append(
-                    f"CITEKEY_MARKER_MISMATCH — claim cites {ck} (ref {rn}), but nearby markers are {nearby}"
-                )
-                res.status = "FLAG"
+        # Check 3: citekey proximity. Two variants depending on manuscript kind:
+        #   - pdftotext: look for numeric refnums near the anchor.
+        #   - latex:     look for \cite*{...} near the anchor and compare keys.
+        if pos is not None and not is_pending:
+            if is_latex:
+                nearby_keys = nearby_citekeys(paper_raw, pos)
+                res.nearby_citekeys = nearby_keys
+                if nearby_keys and ck and ck not in nearby_keys:
+                    res.flags.append(
+                        f"CITEKEY_MARKER_MISMATCH — claim cites `{ck}`, but the \\cite{{…}} commands "
+                        f"within ±280 chars of the anchor are {nearby_keys}"
+                    )
+                    res.status = "FLAG"
+            elif rn is not None and valid_refnums:
+                nearby = nearby_refnums(paper_raw, pos, valid_refnums)
+                res.nearby_refnums = nearby
+                if nearby and rn not in nearby:
+                    res.flags.append(
+                        f"CITEKEY_MARKER_MISMATCH — claim cites {ck} (ref {rn}), but nearby markers are {nearby}"
+                    )
+                    res.status = "FLAG"
 
         results.append(res)
 
@@ -395,7 +468,12 @@ def validate(
 # ---------- Reporting ----------
 
 def render_report(
-    run_dir: Path, results: list[ClaimResult], counts: dict, body_start_offset: int
+    run_dir: Path,
+    results: list[ClaimResult],
+    counts: dict,
+    body_start_offset: int,
+    manuscript_kind: str,
+    manuscript_path: Path | None,
 ) -> str:
     flagged = [r for r in results if r.status == "FLAG"]
     passed = [r for r in results if r.status == "PASS"]
@@ -408,7 +486,21 @@ def render_report(
     lines: list[str] = []
     lines.append(f"# Claim extraction validation — `{run_dir.name}`\n")
     lines.append(f"**{len(results)} claims total · {len(passed)} PASS · {len(flagged)} FLAG**\n")
-    if body_start_offset > 0:
+    if manuscript_path is not None:
+        kind_label = {"latex": "LaTeX (author mode)", "pdftotext": "pdftotext (reader mode)"}.get(
+            manuscript_kind, manuscript_kind or "unknown"
+        )
+        try:
+            rel = manuscript_path.relative_to(run_dir)
+        except ValueError:
+            rel = manuscript_path
+        lines.append(f"Manuscript source: `{rel}` — {kind_label}.\n")
+    if manuscript_kind == "latex":
+        lines.append(
+            "FRONT_MATTER_ANCHOR check skipped — LaTeX author/affiliation blocks "
+            "don't produce ambiguous digit sequences.\n"
+        )
+    elif body_start_offset > 0:
         lines.append(
             f"Body-start heading detected at offset {body_start_offset} "
             f"(everything above is title/author/affiliation block and is excluded from claim extraction).\n"
@@ -439,7 +531,9 @@ def render_report(
             if r.match_position is not None:
                 lines.append(f"- Matched window `{r.match_window}` at offset {r.match_position}")
             if r.nearby_refnums:
-                lines.append(f"- Nearby markers: {r.nearby_refnums}")
+                lines.append(f"- Nearby refnums: {r.nearby_refnums}")
+            if r.nearby_citekeys:
+                lines.append(f"- Nearby \\cite{{…}} keys: {r.nearby_citekeys}")
             lines.append("")
 
     lines.append("## Passed claims (for reference)\n")
@@ -456,13 +550,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-dir", required=True, type=Path)
     ap.add_argument("--claims-dir", default="", help="override; default auto-detects ledger/claims or data/claims")
+    ap.add_argument(
+        "--manuscript-path",
+        type=Path,
+        default=None,
+        help="explicit path to the manuscript (.tex for author mode, paper.txt for reader mode). "
+             "If omitted, auto-detects paper.txt / input-paper.txt, then a single *.tex at --run-dir.",
+    )
     ap.add_argument("--bib", default="refs.bib")
     ap.add_argument("--output", default="claim_extraction_report.md")
     ap.add_argument("--allow-flagged", action="store_true", help="exit 0 even if claims are flagged")
     args = ap.parse_args()
 
     run = args.run_dir.resolve()
-    paper_raw = load_paper_text(run)
+    explicit = args.manuscript_path.resolve() if args.manuscript_path else None
+    paper_raw, manuscript_kind, manuscript_path = load_manuscript_text(run, explicit)
     paper_norm, paper_norm_to_raw = build_normalized_index(paper_raw) if paper_raw else ("", [])
     body_start_offset = find_body_start_offset(paper_raw) if paper_raw else 0
 
@@ -479,7 +581,13 @@ def main():
         return 1
 
     results = validate(
-        claims, paper_raw, paper_norm, paper_norm_to_raw, citekey_to_refnum, body_start_offset
+        claims,
+        paper_raw,
+        paper_norm,
+        paper_norm_to_raw,
+        citekey_to_refnum,
+        body_start_offset,
+        manuscript_kind,
     )
     counts = {
         "total": len(results),
@@ -487,7 +595,9 @@ def main():
         "flag": sum(1 for r in results if r.status == "FLAG"),
     }
 
-    report = render_report(run, results, counts, body_start_offset)
+    report = render_report(
+        run, results, counts, body_start_offset, manuscript_kind, manuscript_path
+    )
     (run / args.output).write_text(report)
 
     # Console summary

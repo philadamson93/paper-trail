@@ -2,6 +2,8 @@
 
 **87 claims total · 87 PASS · 0 FLAG**
 
+Manuscript source: `paper.txt` — pdftotext (reader mode).
+
 Body-start heading detected at offset 736 (everything above is title/author/affiliation block and is excluded from claim extraction).
 
 ## Passed claims (for reference)
