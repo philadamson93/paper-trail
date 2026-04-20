@@ -24,7 +24,7 @@
 
 Scientific papers routinely cite 50–100 references, and verifying every one by hand rarely happens. LLM-assisted writing makes plausibly-phrased misattributions easier to produce and harder to spot.
 
-`paper-trail` serves three audiences:
+`paper-trail` can help authors, reviewers and the public alike:
 
 - **Authors:** proofread your own citations before submission; establish the rigor of your grounding work in the record.
 - **Reviewers:** skip the manual slog of opening every cited paper; triage from a ledger of flagged entries.
