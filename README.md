@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  I audited two of my own peer-reviewed publications with <code>paper-trail</code>:
+  I ran retrospective audits on two of my own published papers with <code>paper-trail</code>:
 </p>
 
 <p align="center">
