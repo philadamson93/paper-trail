@@ -1,0 +1,9 @@
+{
+  "claim_id": "C002",
+  "schema_version": "1.0",
+  "citekey": "sandino2020compressed",
+  "claim_text": "Compressed sensing and Deep Learning (DL) techniques offer significant potential to accelerate MR acquisitions and remain an active area of research \\cite{lustig2007sparse, sandino2020compressed, hammernik2021systematic, hammernik2018learning}.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

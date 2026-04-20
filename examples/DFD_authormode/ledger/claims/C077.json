@@ -1,0 +1,9 @@
+{
+  "claim_id": "C077",
+  "schema_version": "1.0",
+  "citekey": "li2020magnetic",
+  "claim_text": "Settings where spatial registration is needed to align image pairs, such as CT-to-MR modality translation \\cite{li2020magnetic, jin2019deep}, may not require perfect registration for diagnostic utility.",
+  "manuscript_section": "Metrics under Perturbations",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C068",
+  "schema_version": "1.0",
+  "citekey": "van2023diagnostically",
+  "claim_text": "Med-VAE is a convolutional VAE trained with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence \\cite{van2023diagnostically}.",
+  "manuscript_section": "Domain-Adjacent DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

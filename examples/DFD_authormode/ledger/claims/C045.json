@@ -1,0 +1,9 @@
+{
+  "claim_id": "C045",
+  "schema_version": "1.0",
+  "citekey": "sandino2020compressed",
+  "claim_text": "Supervised DL reconstruction models were trained to reconstruct accelerated scans of 2x, 4x, and 6x using a UNet model and an unrolled network \\cite{sandino2020compressed}.",
+  "manuscript_section": "MR Image Reconstructions",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C008",
+  "schema_version": "1.0",
+  "citekey": "chaudhari2020utility",
+  "claim_text": "Although a handful of studies use radiologist reader scores directly to assess reconstruction methods \\cite{chaudhari2018super, chaudhari2020utility, mardani2018deep}, conducting such time- and resource-intensive reviews for all methods is expensive, slows benchmarking, and is generally impractical.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

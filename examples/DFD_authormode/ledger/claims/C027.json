@@ -1,0 +1,9 @@
+{
+  "claim_id": "C027",
+  "schema_version": "1.0",
+  "citekey": "zhao2022fastmri+",
+  "claim_text": "Many works assess MR reconstructions based on task-specific metrics for segmentation, classification, and detection \\cite{desai2022skm, zhao2021end, zhao2022fastmri+}, which brings the IQ assessment closer to the true clinical utility.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

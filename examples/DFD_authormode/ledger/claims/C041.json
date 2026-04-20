@@ -1,0 +1,9 @@
+{
+  "claim_id": "C041",
+  "schema_version": "1.0",
+  "citekey": "cadrin2022moving",
+  "claim_text": "In the absence of a large domain-specific dataset, self-supervised learning (SSL) on an unlabeled but in-domain dataset has repeatedly outperformed ImageNet pre-training on a wide range of downstream medical imaging tasks \\cite{huang2023self, cadrin2022moving}.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

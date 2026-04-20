@@ -1,0 +1,9 @@
+{
+  "claim_id": "C062",
+  "schema_version": "1.0",
+  "citekey": "simonyan2014very",
+  "claim_text": "LPIPS uses an L2-norm for $G$, VGG-16 \\cite{simonyan2014very} trained on ImageNet for $\\phi_{D}$, and additionally learns a linear combination of DFDs extracted from five different convolutional layers $l$ based on perceptual judgment scores.",
+  "manuscript_section": "Out-of-Domain DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

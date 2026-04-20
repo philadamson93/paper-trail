@@ -1,0 +1,9 @@
+{
+  "claim_id": "C091",
+  "schema_version": "1.0",
+  "citekey": "desai2023noise2recon",
+  "claim_text": "\\section{DFD Implementation Details} All DFDs were implemented in meddlr \\cite{desai2023noise2recon}.",
+  "manuscript_section": "DFD Implementation Details",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

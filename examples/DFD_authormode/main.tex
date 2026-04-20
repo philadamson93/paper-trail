@@ -1,0 +1,481 @@
+\documentclass[AMA,STIX2COL,Linenumberson]{MRM}
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{graphicx} % Required for \rotatebox
+\usepackage{makecell} % For line breaks within cells
+\usepackage{booktabs}
+\articletype{Article Type}%
+
+\usepackage[colorinlistoftodos,prependcaption,textsize=small]{todonotes}
+
+
+\makeatletter 
+% \let\@fnsymbol\@fnsymbol@latex \@booleanfalse\altaffilletter@sw 
+
+\def\doauthor#1#2#3{%
+  \ignorespaces#1\unskip\@listcomma
+  \begingroup
+   #3%
+  \@if@empty{#2}{\endgroup{}{}}{\endgroup{\comma@space}{}*}%
+  \space \@listand 
+}%
+\makeatother
+
+\topskip=0pt
+
+\raggedbottom
+
+\begin{document}
+
+\title{Using Deep Feature Distances for Evaluating the Perceptual Quality of MR Image Reconstructions}
+
+\author[1]{Philip M. Adamson}{\orcid{0000-0002-5028-0683}}
+
+\author[1]{Arjun Desai}{}
+
+\author[1]{Jeffrey Dominic}{}
+
+\author[3]{Maya Varma}{}
+
+\author[2]{Christian Bluethgen}{}
+
+\author[4]{Jeff P. Wood}{}
+
+\author[2]{Ali B. Syed}{}
+
+\author[2]{Robert D. Boutin}{\orcid{0000-0001-7887-9658}}
+
+\author[2]{Kathryn J. Stevens}{}
+
+\author[2]{Shreyas Vasanawala}{}
+
+\author[1]{John M. Pauly}{}
+
+\author[1]{Beliz Gunel$^*$}{}
+
+\author[2,5]{Akshay S. Chaudhari$^*$}{\orcid{0000-0002-3667-6796}}
+
+\authormark{AUTHOR ONE \textsc{et al}}
+
+
+\address[1]{\orgdiv{Department of Electrical Engineering}, \orgname{Stanford University}, \orgaddress{\state{CA}, \country{USA}}}
+
+\address[2]{\orgdiv{Department of Radiology}, \orgname{Stanford University}, \orgaddress{\state{CA}, \country{USA}}}
+
+\address[3]{\orgdiv{Department of Computer Science}, \orgname{Stanford University}, \orgaddress{\state{CA}, \country{USA}}}
+
+\address[4]{\orgname{Austin Radiological Association}, \orgaddress{\state{Texas}, \country{USA}}}
+
+\address[5]{\orgdiv{Department of Biomedical Data Science}, \orgname{Stanford University}, \orgaddress{\state{CA}, \country{USA}}}
+
+\corres{Philip M. Adamson, Department of Electrical Engineering, Stanford University, Stanford, CA, USA.
+\email{padamson@stanford.edu}}
+
+\finfo{This work was supported by NIH R01 AR077604, R01EB002524, R01 AR079431. It was also supported by the Stanford University Radiological Sciences Laboratory Seed Grant and the NSF Graduate Research Fellowship under Grant No. DGE-2146755.}
+
+\abstract[Summary]{
+\section{Purpose} Commonly used MR image quality (IQ) metrics have poor concordance with radiologist-perceived diagnostic IQ. Here, we develop and explore deep feature distances (DFDs) - distances computed in a lower-dimensional feature space encoded by a convolutional neural network (CNN) - as improved perceptual IQ metrics for MR image reconstruction. We further explore the impact of distribution shifts between images in the DFD CNN encoder training data and the IQ metric evaluation.
+
+\section{Methods} We compare commonly used IQ metrics (PSNR and SSIM) to two "out-of-domain" DFDs with encoders trained on natural images, an "in-domain" DFD trained on MR images alone, and two domain-adjacent DFDs trained on large medical imaging datasets. We additionally compare these to several state-of-the-art but less commonly reported IQ metrics, visual information fidelity (VIF),  noise quality metric (NQM), and the high-frequency error norm (HFEN). IQ metric performance is assessed via correlations with five expert radiologist reader scores of perceived diagnostic IQ of various accelerated MR image reconstructions.  We characterize the behavior of these IQ metrics under common distortions expected during image acquisition, including their sensitivity to acquisition noise.
+
+\section{Results} All DFDs and HFEN correlate more strongly with radiologist-perceived diagnostic IQ than SSIM, PSNR and other state-of-the-art metrics, with correlations being comparable to radiologist inter-reader variability. Surprisingly, out-of-domain DFDs perform comparably to in-domain and domain-adjacent DFDs.
+
+\section{Conclusion} A suite of IQ metrics, including DFDs and HFEN, should be used alongside commonly-reported IQ metrics for a more holistic evaluation of MR image reconstruction perceptual quality. We also observe that general vision encoders are capable of assessing visual IQ even for MR images.}
+
+\keywords{image reconstruction, deep learning, perceptual image quality metrics, deep feature distance}
+
+\maketitle
+\section{Introduction}\label{intro}
+
+Compressed sensing and Deep Learning (DL) techniques offer significant potential to accelerate MR acquisitions and remain an active area of research \cite{lustig2007sparse, sandino2020compressed, hammernik2021systematic, hammernik2018learning}. Metrics such as normalized root mean square error (NRMSE), peak signal-to-noise ratio (PSNR), and structural similarity index measure (SSIM) are routinely used to assess the image quality (IQ) of MR image reconstructions and benchmark research methods \cite{chen2022ai}, but are used out of convention rather than because they are particularly well suited metrics for assessing perceptual IQ. In a reader study of 1000 MR images evaluated by 5 radiologists across various degradation types, Mason et al. demonstrated that NRMSE, SSIM and PSNR have weaker concordance with radiologist-perceived diagnostic IQ \cite{mason2019comparison} than several less commonly-reported IQ metrics. Although a handful of studies use radiologist reader scores directly to assess reconstruction methods \cite{chaudhari2018super, chaudhari2020utility, mardani2018deep}, conducting such time- and resource-intensive reviews for all methods is expensive, slows benchmarking, and is generally impractical. Thus, there is a pressing need to continue developing perceptual IQ metrics that better correlate with radiologist-perceived diagnostic IQ and move closer towards diagnostically relevant assessment.
+
+Several prior works have aimed to improve upon these routinely reported MR IQ metrics. Information-weighted SSIM (IWSSIM \cite{wang2010information}) weights SSIM by assigning higher importance to regions of the image based on their information content. Multiscale SSIM (MSSSIM \cite{wang2003multiscale}) computes SSIM at various resolution levels across the image, while feature similarity index measure (FSIM \cite{zhang2011fsim}) compares features such as texture, edges, and gradients extracted with hand-crafted filters. Perceptual difference models are a class of psycho-physical models that aim to mimic how humans perceive image quality by modeling the human visual processing system \cite{miao2008quantitative, mantiuk2011hdr, miao2013new, salem2002validation, daly1992visible}. Visual Information Fidelity (VIF \cite{sheikh2006image}) uses natural image scene statistics to compute the mutual information between image pairs. The Noise Quality Metric (NQM \cite{damera2000image}) computes the SNR of a model-restored image via a restoration algorithm that accounts for the impact of spatial frequencies, distance, and contrast masking on contrast sensitivities. As the aforementioned metrics were rigorously assessed in the Mason study \cite{mason2019comparison}, we include only the best overall performing metric (VIF) and best-performing metric for assessing under-sampling artifacts due to scan acceleration (NQM). We additionally include a third less commonly reported but promising IQ metric in our investigation, the high-frequency error norm (HFEN). HFEN aims to capture finer-grained features in MR image reconstructions using a Laplacian of Gaussian filter, though it is limited to assessing only high-frequency content \cite{ravishankar2010mr}.
+
+Several other common IQ metrics fall outside the scope of the perceptual IQ metrics studied in this work. The Fourier radial error spectrum expands upon HFEN by plotting errors in MR image reconstructions as a function of spatial frequencies, sacrificing the simplicity of a scalar IQ metric for a more nuanced view of reconstruction errors \cite{kim2018fourier}. Other metrics focus on evaluating traditional MR parameters such as noise, spatial resolution, and point-spread functions \cite{chan2021local, kleineisel2023assessment}, though relating these parameters to clinical diagnostic utility is less direct. Many works assess MR reconstructions based on task-specific metrics for segmentation, classification, and detection \cite{desai2022skm, zhao2021end, zhao2022fastmri+}, which brings the IQ assessment closer to the true clinical utility. However, such evaluations either rely on auxiliary DL models with their own intrinsic biases or require additional time-intensive reader studies to quantify the true diagnostic accuracy.
+
+Recently, Zhang et al. showed that the Learned Perceptual Image Patch Similarity (LPIPS) \cite{zhang2018unreasonable}, a type of Deep Feature Distance (DFD) whereby distances between image pairs are computed in a lower-dimensional feature space encoded by a CNN, correlates strongly with human perceived IQ. Although LPIPS and other DFDs \cite{ding2020image, cong2022image, cheon2021perceptual, lao2022attentions, conde2022conformer, keshari2022multi} outperform commonly used IQ metrics in terms of correlation with human perceptual judgments in large-scale computer vision studies \cite{gu2022ntire}, these studies evaluate DFDs on natural images belonging to the same domain as the images used for encoder training. To what extent these DFD IQ metrics generalize to out-of-domain data (e.g., MR images) remains an open question. We gather insights from the transfer learning literature for medical imaging, where the transfer of weights from ImageNet \cite{deng2009imagenet} pre-trained architectures often fails due to distributional shifts and the difference in features between natural images and downstream medical imaging datasets \cite{raghu2019transfusion}. Pretraining instead on large medical imaging datasets, such as RadImageNet, leads to better performance on a wide range of downstream medical image classification tasks \cite{mei2022radimagenet, cadrin2022moving}. In the absence of a large domain-specific dataset, self-supervised learning (SSL) on an unlabeled but in-domain dataset has repeatedly outperformed ImageNet pre-training on a wide range of downstream medical imaging tasks \cite{huang2023self, cadrin2022moving}. These findings have led to the widespread understanding that domain-specific feature representations are better than out-of-domain ones, raising the question of whether domain-specific feature representations are of similar value in computing DFDs for MR IQ assessment. 
+
+In this work, we systematically explore DFDs as perceptual IQ metrics for evaluating MR reconstructions and assess how they may fit into the landscape of existing MR IQ metrics, making several novel contributions. First, we compare DFDs to the commonly used MR IQ metrics of PSNR and SSIM, as well several other state-of-the-art but less commonly-reported metrics of VIF, NQM, and HFEN via correlations to radiologist reader scores of clinically feasible MR reconstruction magnitude images. We have made these MR images and corresponding radiologist reader scores publicly available. Second, we propose several domain-specific DFDs to test the hypothesis that encoders trained on in-domain data (MR images) yield better DFDs for evaluating MR IQ than encoders trained on out-of-domain (natural image) data.  Only one study has shown that LPIPS out-performs commonly used IQ metrics in an MR image-based reader study, but it neither explores whether natural image DFDs are optimal for MR images nor does it evaluate MR images with clinically-feasible corruptions of accelerated MR image reconstructions \cite{kastryulin2023image}. Finally, as IQ metrics should be sensitive to imperfections that are expected of reconstructions in a clinical setting, we interrogate the behavior of these metrics under acquisition errors (e.g., poor SNR or motion artifacts), sparse sampling reconstruction errors (aliasing artifacts), and errors resulting from imperfect reconstruction methods. In light of the recent "hidden noise" problem \cite{wang2024hidden}, the bias present in conventional reconstruction IQ metrics introduced by acquisition noise in "ground truth" data, we additionally assess how perceptual IQ metrics perform under increasing acquisition noise. All data and code necessary to reproduce the results in this study have been made publicly available.
+
+
+\section{Methods}
+
+\subsection{MR Image Reconstructions}
+\label{sub:Recons}
+We used the fastMRI multi-coil knee dataset with sparse and fully acquired k-space data for DL-based accelerated MR image reconstructions \cite{Knoll2020tp}. Supervised DL reconstruction models were trained to reconstruct accelerated scans of 2x, 4x, and 6x using a UNet model and an unrolled network \cite{sandino2020compressed}. The UNet models followed the architecture in the fastMRI challenge \cite{Knoll2020tp}, while the unrolled models followed the fast iterative shrinkage-thresholding algorithm (FISTA) unrolled architecture \cite{xin2023fista} implemented in \cite{sandino2020compressed}.  Reference images were computed from the fully sampled k-space data with the eSPIRIT method to integrate coil sensitivities \cite{uecker2014espirit}. The magnitude of the complex image data was taken for both the evaluation by radiologists and the computation of IQ metrics. We split the dataset into training, validation, and testing splits with 27,774 slices (778 3D scans), 6,968 slices (195 scans), and 7,135 slices (199 scans), respectively. Additional architecture and training details are provided in Appendix \ref{App:Models}.
+
+\subsection{Reader Study Criteria}\label{Methods:RS}
+Five radiologists rated the diagnostic quality of the center slice of 366 accelerated MR reconstruction magnitude images from 61 patients, each reconstructed with the six models described above. The reader study was blinded so that the readers did not have access to the image IDs or reconstruction methods, nor the scores provided by other readers. The radiologists provided two scores for the image reconstructions, one for aliasing artifacts and another for the diagnostic quality of the cartilage and meniscus (the most commonly evaluated tissues on knee MRI) on the following 1-9 scale: 1- completely nondiagnostic, 3- severe corruptions, 5- diagnostically acceptable, 7- good quality, 9- perfect quality. The mean radiologist IQ score was compared with various IQ metrics from which the Spearman Rank Order Correlation Coefficient (SROCC) was computed, following precedent from large-scale computer vision IQ metric studies \cite{gu2022ntire}. SROCC measures the strength of the monotonic (but not necessarily linear) relationship between reader scores and IQ metrics. We computed the inter-reader variability in our reader study via the SROCC of each reader score against the mean score of the other four readers. The inter-reader variability is then the mean of each of these five SROCC values.
+
+
+\subsection{Commonly used Image Quality Metrics}
+
+The most commonly used IQ metrics to evaluate the IQ of MR reconstruction magnitude images are normalized root mean square error (NRMSE), peak signal-to-noise ratio (PSNR), and structural similarity index measure (SSIM) \cite{chen2022ai}. The MSE between a fully sampled ground truth image $x \in \mathbb{R}^{HxW}$ and a reconstructed image $\hat{x}$ is given by
+
+\begin{equation}
+  MSE(x,\hat{x}) = {\frac{1}{NM}\sum_{i}^{N}\sum_{j}^{M}|x(i,j)-\hat{x}(i,j)|^2}
+  \label{eq:MSE}
+\end{equation}
+
+which is then normalized in the NRMSE by 
+
+\begin{equation}
+    NRMSE(x,\hat{x}) = \sqrt{\frac{MSE(x,\hat{x})}{\sum_{i=1}^{N}\sum_{j=1}^{M} x(i,j)^2}}
+  \label{eq:NRMSE}
+\end{equation}
+
+
+PSNR compares the MSE to the maximum ground truth image intensity by
+\begin{equation}
+PSNR(x,\hat{x}) = 10 \log_{10}\left(\frac{\max(|x|^2)}{MSE(x,\hat{x})}\right)
+  \label{eq:PSNR}
+\end{equation}
+
+SSIM is a combined measure of the luminance, contrast, and structure of the image given by\cite{wang2004image}
+
+\begin{equation}
+\text{SSIM}(x, \hat{x}) = l(x, \hat{x})\cdot c(x, \hat{x}) \cdot s(x, \hat{x})
+\label{eq:SSIM}
+\end{equation}
+
+where luminance $l$ assesses the mean pixel values across the images, contrast $c$ measures the similarity of the standard deviations of the pixel values across the images, and structure $s$ compares the similarity in the spatial distribution of the pixel intensities by measuring covariances across the images \cite{wang2004image}. 
+
+\subsection{Other State-of-the-Art IQ Metrics}
+
+Although less routinely reported than the preceding IQ metrics \cite{chen2022ai}, VIF, NQM, and HFEN have shown promise in prior work. VIF quantifies the mutual information between the ground truth and reconstructed images, considering both the degradation of the signal and the inherent information content of the ground truth image \cite{sheikh2006image}. NQM evaluates the reconstructed image by considering spatial frequency response, luminance adaptation, and contrast masking effects. We implement VIF and NQM in Python following the procedures described in \cite{sheikh2006image} and \cite{damera2000image}, respectively.
+
+The high-frequency error norm (HFEN) assesses differences in the high-frequency content of images and is given by
+
+\begin{equation}
+\text{HFEN}(x, \hat{x}) = \| \text{LoG}(x) - \text{LoG}(\hat{x}) \|_2
+\label{eq:HFEN}
+\end{equation}
+
+where LoG is a rotationally symmetric Laplacian of Gaussian filter with a kernel size of 15x15 pixels and a standard deviation of 1.5 pixels \cite{miao2008quantitative}. 
+
+\subsection{Deep Feature Distances (DFDs)}
+In general, we define a DFD ($\delta$) between the fully sampled ground truth image $x \in \mathbb{R}^{CxHxW}$ and the reconstructed image $\hat{x}$ as 
+
+\begin{equation}
+\delta_l(x,\hat{x}) = G(\phi_D^{(l)}(x), \phi_D^{(l)}(\hat{x}))
+\end{equation}
+
+where $G$ is a distance measure and $\phi_D^{(l)}$ maps from the image space $\mathbb{R}^{CxHxW}$ to feature space $\mathbb{R}^{C_lxH_lxW_l}$ using a CNN encoder trained on a dataset $D$ with features extracted from convolutional layer $l$. The DFD calculation is shown schematically in Figure \ref{fig:DFD_Methods}. 
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=1.0\linewidth]{Fig_1.pdf}
+    \caption{Schematic demonstrating the calculation of a Deep Feature Distance (DFD) between a fully-sampled ground truth MR image (blue) and a reconstructed MR image (orange). The images are passed through a CNN encoder $\phi$ trained on a dataset $D$, from which their respective feature representations $\phi_D^{(l)}(x)$ are extracted from layer $l$. A DFD is the distance $G$ between these feature representations. The encoder training schemes for example out-of-domain (LPIPS, trained on natural images), domain-adjacent (RINFD, trained on a variety of medical images) and in-domain (SSFD, trained on MR images alone) DFDs are shown here.
+ \label{fig:DFD_Methods}}
+\end{figure*}
+
+\subsubsection{Out-of-Domain DFDs}
+
+We evaluated several state-of-the-art DFDs used in natural domain IQ assessment \cite{gu2022ntire} to serve as benchmarks for the domain-specific DFDs proposed in this study. We refer to these DFDs as "out-of-domain" in the sense that natural images belong to a different image domain than the MR images on which the DFDs are computed and evaluated in the radiologist reader study. 
+
+ We used two DFDs based on natural images, LPIPS and the Deep Image Structure and Texture Similarity index (DISTS) \cite{ding2020image}, which have been used as benchmark IQ metrics in large-scale computer vision IQ metric studies \cite{gu2022ntire}. LPIPS uses an L2-norm for $G$, VGG-16 \cite{simonyan2014very} trained on ImageNet for $\phi_{D}$, and additionally learns a linear combination of DFDs extracted from five different convolutional layers $l$ based on perceptual judgment scores. DISTS uses the same $\phi_D^{(l)}$ as LPIPS, but with a distance function $G$ inspired by the form of SSIM that assesses texture and structure similarity of the feature maps. Like LPIPS, DISTS combines DFDs from various layers $l$ as a learned weighted sum. Additional implementation details are provided in the Appendix \ref{App:DFD_Out}. 
+
+\subsubsection{In-Domain DFD}
+
+To test the hypothesis that in-domain DFDs have more utility as a DFD IQ metric than out-of-domain DFDs, we propose a self-supervised feature distance (SSFD \cite{adamson2021ssfd}) using an encoder $\phi_D^{(l)}$ trained in a self-supervised fashion on the same MR dataset $D$ used to train the reader study DL reconstruction models (described in Section \ref{sub:Recons}). 
+
+The in-domain DFD, SSFD, utilizes a self-supervised model trained on the fastMRI knee dataset described in \ref{sub:Recons} with a self-supervised in-painting task \cite{pathak2016context} following optimal parameters from a prior transfer learning study for knee cartilage segmentation \cite{dominic2023improving}. Image corruptions for the in-painting task were generated dynamically during training by placing zero filled image patches of 16x16 pixels on 25\% of the image area via Poisson variable density sampling (to ensure nonoverlapping patches), as shown in Figure \ref{fig:DFD_Methods} (C). A self-supervised UNet model with 2 convolutions per level and 5 levels was trained to in-paint the zero-filled patches and restore the original image subject to an MSE loss. SSFD is then the DFD using the SSL encoder as $\phi_D^{(l)}$ with layer $l=7$ and MSE for $G$.  Additional details of the SSFD implementation are provided in the Appendix \ref{App:DFD_In}. SSFD design choices such as the impact of patch size and coverage in the SSL in-painting pretext task, and the impact of the DFD encoder layer $l$ and distance function $G$, are explored in Appendix \ref{App:ssfdChoices}
+
+To assess how SSFD IQ performance scales with its SSL training dataset size, we trained additional SSFD models with 5\% 10\%, 25\%, and 50\% of the original 27,774 MR slice training dataset. We hypothesize that SSFD should improve as an IQ metric with larger dataset sizes, but the primary purpose of this experiment was to inform the potential benefit SSFD may achieve by expanding its dataset size beyond just the fastMRI dataset, since we compare to natural image DFD baselines trained on the much larger ImageNet dataset.
+
+To further interrogate the importance of domain-specific DFD training, we explored a distributional shift within the fastMRI knee dataset itself, the presence of fat-suppression in the knee MR acquisitions. To this end, we trained two SSFD models on fat-suppressed (390 volumes, 13,918 slices) and non-fat-suppressed MR images (388 volumes, 13,856 slices) alone, and evaluated their correlation with radiologist reader scores on the fat-suppressed (n=168) and non-fat-suppressed (n=198) data separately. 
+
+
+
+\subsubsection{Domain-Adjacent DFDs}
+
+We propose two additional DFDs in this study that leverage pre-existing DL models trained on large medical imaging datasets. We refer to these as "domain-adjacent" DFDs since the medical imaging datasets $D$ are not limited to the fastMRI dataset used in the reader study reconstructions and contain medical images from modalities beyond MR due to the lack of a large and labeled MR-only dataset. These domain-adjacent DFDs additionally differ from SSFD in that they are trained in a supervised manner and on dataset sizes closer to that of the ImageNet dataset used for natural image DFD encoder training.
+
+We used the RadImageNet model \cite{mei2022radimagenet}, a ResNet50 pre-trained on 1.4 million labeled medical images (including 670,000 MRI images) trained in a supervised manner, to compute a RadImageNet Feature Distance (RINFD). To disentangle the model architecture $\phi$ from the training data $D$, we also compared RINFD to both a ResNet50 trained with ImageNet, and a ResNet50 with randomly initialized, untrained weights. Additional details of the RINFD implementation are provided in the Appendix \ref{App:DomainAdjacent}.
+
+We propose a second domain-adjacent DFD that leverages the Medical Variational Autoencoder (Med-VAE), a VAE designed for neural compression trained on dataset $D$ with 1 million radiograph and mammography images \cite{van2023diagnostically}. Med-VAE is a convolutional VAE trained with a combination of a perceptual loss, a patch-based adversarial objective, and a penalty based on the Kullback-Leibler (KL) divergence \cite{van2023diagnostically}. We use the VAE bottleneck latent embeddings (their compressed representations) for $\phi_D^{(l)}$. Additional details of the implementation of Med-VAEFD are provided in Appendix \ref{App:DomainAdjacent}.
+
+
+\subsection{IQ Metric Sensitivity to Acquisition Noise}
+In light of recent work elucidating the bias of conventional IQ metrics due to "hidden noise" \cite{wang2024hidden}, the susceptibility of IQ metrics to biases due to acquisition noise in "ground truth" reconstruction data is of great interest. We aim to assess how the performance of the IQ metric, again assessed by correlations to radiologist perceived diagnostic quality, may be impacted by this acquisition noise present in the reference images. To this end, we add complex Gaussian noise to the raw coil k-space data by scaling the original inter-channel covariance matrix of each scan to two, three, and four times the original noise level, and reconstruct new "ground truth" images using these simulated noisier k-space datasets. We then compute correlation to reader scores of the accelerated MR reconstructions using these noisier reference images to assess how sensitive the metric's assessment of perceptual IQ may be to the acquisition noise itself.
+
+\subsection{IQ Metrics under Perturbations}
+
+To understand the sensitivity of IQ metrics to other distortions and imperfections that may be expected of reconstructions in clinical settings, we explored the impact of additive Gaussian noise, blurring, translational shifts, and motion artifacts on the IQ metrics investigated in the reader study. Each perturbation was applied to each of 199 scans in the test set after normalizing to zero mean, unit variance. The maximum extent of each image perturbation was chosen so that the average SSIM between the ground truth and the corrupted images reached 0.6. The additive Gaussian noise standard deviation increased linearly from 0 to 0.1. Blurring was performed by low-pass filtering k-space with increasing cut-off frequencies. Pixel shifts were applied by rolling pixels in the left-right direction with tricubic interpolation from 0 to 0.55 mm (1.25 pixels). Motion artifacts were introduced by modeling rigid motion between MR acquisition shots as random phase errors that alter odd and even lines of k-space separately, following the procedure in \cite{desai2021vortex}. The motion was linearly increased between $\alpha = [0, 0.6)$, where $\alpha$ denotes the amplitude of the phase errors as in \cite{desai2021vortex}, but using deterministic phases rather than random ones.  
+
+\subsection{Code and Data Availability}
+All experiments were carried out in meddlr, an open source config-based Python library for machine learning-based medical image reconstruction \cite{desai2023noise2recon}. All code, data and DFD encoder models to reproduce results in this study have been provided at https://stanfordmimi.github.io/deep-feature-mr-recon/. All DFD IQ metrics described in this study are also available as modular standalone IQ metrics that can be used in any MR image reconstruction evaluation or model training task in meddlr. We hope that the release of the accelerated MR radiologist reader score dataset helps the MR image reconstruction community to continue to build better IQ metrics.
+
+\section{Results}
+
+\subsection{IQ metrics versus Radiologist Review}
+
+The mean reader score across five radiologists for the 366 reconstructions in the reader study are plotted against exemplary commonly used (SSIM and PSNR) and state-of-the-art  IQ metrics (VIF), as well as one example DFD from each category - out-of-domain DFD (LPIPS), in-domain DFD (SSFD), and domain-adjacent DFD (RINFD) in Figure \ref{fig:IQM_vs_RS_plots}. Corresponding plots for the remaining IQ metrics assessed in this study are shown in Appendix \ref{App:AllMetrics}. Example images of each reconstruction type are shown in Appendix \ref{App:ExampleRecons}. Correlations in terms of SROCC of mean reader scores versus commonly used IQ metrics (PSNR, SSIM and NRMSE), less routinel reported state-of-the-art IQ metrics (VIF, NQM, HFEN), out-of-domain DFDs (VGG-16 with ImageNet weights, LPIPS and DISTS with VGG-16 backbones and ImageNet weights, and ResNet50 with ImageNet weights), the in-domain DFD (SSFD), and domain-adjacent DFDs (RINFD and Med-VAEFD) are shown in Figure \ref{fig:IQM_vs_RS}. We observe that all DFDs along with HFEN substantially outperform VIF and NQM, which in turn outperform PSNR, SSIM and NRMSE as in \cite{mason2019comparison}. The DFDs and HFEN even approach or exceed inter-reader variability (SROCC of 0.85, more details in Appendix \ref{App:IOV}. Interestingly, we observe that out-of-domain DFDs perform comparably to in-domain and domain-adjacent DFDs. In the fixed-encoder architecture case, for example, training the ResNet50 encoder with the out-of-domain ImageNet dataset (Aliasing SROCC 0.88, Cartilage/Meniscus SROCC 0.87) performs comparably to training with the domain-adjacent RadImageNet dataset (Aliasing SROCC 0.87, Cartilage/Meniscus SROCC 0.85). This is a surprising finding considering the importance of domain-specific pre-training in comparable transfer learning studies \cite{mei2022radimagenet, cadrin2022moving}. The in-domain SSFD likewise does not out-perform any of the out-of-domain DFDs, though is on par with inter-reader variability.
+
+ \begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=0.9\linewidth]{Fig_2.pdf}
+    \caption{Example commonly used (SSIM, PSNR), state-of-the-art (VIF), out-of-domain DFD (LPIPS), in-domain DFD (SSFD) and domain-adjacent DFD (RINFD) IQ metric values versus mean reader scores for aliasing (top) and cartilage/mensiscus assessment (bottom). Each point corresponds to a single image taken from the center slice from 61 MR image reconstruction images, each with 2x (blue), 4x (black) and 6x (orange) accelerations with a UNet (circle) and unrolled (X’s) networks. Higher reader score values correspond to better radiologist-perceived IQ.
+ \label{fig:IQM_vs_RS_plots}}
+\end{figure*}
+
+\begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=0.9\linewidth]{Fig_3.pdf}
+    \caption{Mean reader score correlations to commonly used (PSNR, SSIM and NRMSE), less commonly used state-of-the-art (VIF, NQM, HFEN), and DFD IQ metrics based on encoder training data domain $D$. Aliasing reader score SROCC values are shown on left with cartilage and meniscus reader score SROCCs on the right. DFDs and HFEN out-perform VIF and NQM, which in turn out-perform SSIM and PSNR. The DFDs and HFEN correlations are comparable to the inter-reader variability between the 5 readers (shown in black $\pm$ 1 standard deviation), but out-of-domain DFDs perform comparably as an MR image reconstruction IQ metric to in-domain and domain-adjacent DFDs.
+ \label{fig:IQM_vs_RS}}
+\end{figure*}
+
+To explore whether these findings hold across different subsets of the MR image reconstruction dataset, the correlations are shown separately for different slices of data from the reader study by acceleration (2x, 4x, 6x) and model architecture (UNet vs. Unrolled) in Figure \ref{fig:corr_slices}. Generally, DFDs and HFEN outperform all other IQ metrics across these different subsets of data, while out-of-domain DFDs still perform comparably to in-domain and domain-adjacent DFDs. One exception to this trend is that RINFD underperforms other DFDs and HFEN at 6x acceleration, indicating that some IQ metrics may be better suited under different accelerated reconstruction evaluation settings. Also note that the higher SROCC in the 4x accelerations is due to the increased dynamic range of radiologist image quality scores in the 4x acceleration set compared to the 2x and 6x accelerations.
+
+Training image acquisition-specific SSFD models (fat-suppressed vs. non-fat-suppressed) did not substantially improve SROCC on the respective slices of data, despite the two acquisition techniques substantially different qualitative appearance and image intensity statistics. This further corroborates the observation that in-distribution SSL training does not outperform out-of-distribution SSL training for DFD IQ metrics.
+
+\begin{table}
+\centering
+\begin{tabular}{c|cc|cc}
+ & \multicolumn{2}{c|}{\begin{tabular}[c]{@{}c@{}}Fat Suppressed\\ SROCC\end{tabular}} & \multicolumn{2}{c}{\begin{tabular}[c]{@{}c@{}}non-Fat Suppressed\\ SROCC\end{tabular}} \\
+\cline{2-5}
+\begin{tabular}[c]{@{}l@{}}SSFD SSL\\ data type\end{tabular} & Aliasing & \begin{tabular}[c]{@{}c@{}}Cartilage/\\ Meniscus\end{tabular} & Aliasing & \begin{tabular}[c]{@{}c@{}}Cartilage/\\ Meniscus\end{tabular} \\
+\hline
+FS & 0.84 & 0.86 & 0.85 & 0.85 \\ 
+Non-FS & 0.82 & 0.83 & 0.85 & 0.85 \\ 
+Both & 0.83 & 0.84 & 0.85 & 0.84 \\ 
+\end{tabular}
+\caption{Reader score correlation to SSFD with the SSL encoder trained with fat suppressed (FS) only MR images (390 volumes, 13,918 slices), non- fat suppressed (non-FS) only MR images (388 volumes, 13,856 slices), and both. Reader score correlations are shown with (n=168) and without (n=198) fat suppression in the evaluation set separately. MR contrast-specific SSL training provides no obvious benefit.}
+\label{tab:fs_slices}
+\end{table}
+
+As a function of the size of the training dataset, SSFD achieves comparable performance when trained with half of the dataset, but decreases slightly when only 25\% of the dataset is used. This suggests that curating even larger in-domain datasets for the SSFD encoder SSL training could yield a marginal improvement.
+
+\begin{table}
+\centering
+\begin{tabular}{>{\centering\arraybackslash}m{2cm} c c}
+\makecell{SSFD \% SSL \\ training data} & \makecell{Aliasing \\ SROCC} & \makecell{Cartilage/Meniscus \\ SROCC} \\
+\addlinespace[0.5em]
+\hline
+\addlinespace[0.5em]
+5\% & 0.77 & 0.77 \\
+10\% & 0.79 & 0.78 \\
+25\% & 0.78 & 0.78 \\
+50\% & 0.83 & 0.81 \\
+100\% & 0.84 & 0.83 \\
+\end{tabular}
+\caption{SSFD correlation with reader scores as a function of the percent of SSL training data used. SSFD performance as an IQ metric begins to drop at 25\% of the original SSFD training dataset size (27,774 2D slices).}
+\label{tab:SSFD_Data_percent}
+\end{table}
+
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=0.9\linewidth]{Fig_4.pdf}
+    \caption{Aliasing (left) and cartilage/meniscus (right) reader score correlations to IQ metrics across different slices of data in the reader study, filtering by acceleration factor (2x, 4x, 6x) on top, and model architecture (UNet vs. Unrolled) on the bottom. Inter-reader variability between the 5 readers shown in black (+- 1 standard deviation). Generally, out-of-domain DFDs perform comparably to domain-adjacent and in-domain DFDs across different extents of reconstruction errors and different DL reconstruction methods. commonly used IQ metrics under-perform inter-reader variability across all subsets of data, while DFDs and HFEN perform comparably to inter-reader variability (shown in black $\pm$ 1 standard deviation). Some IQ metrics may be better suited in different reconstruction settings, for example LPIPS at 6x acceleration.
+ \label{fig:corr_slices}}
+\end{figure*}
+
+ \subsection{IQ Metric Sensitivity to Acquisition Noise}
+
+The SROCC of IQ metrics to reader scores under increasing levels of acquisition noise present in the original reference scans is shown in Figure \ref{fig:IQM_vs_RS_AcqNoise}. The correlation of SSIM and NRMSE decreases substantially under increasing acquisition noise, decreasing by 0.17-0.19 and 0.11-0.12 respectively when k-space coil noise quadruples, corroborating the potential bias of SSIM and NRMSE under acquisition noise demonstrated in prior work \cite{wang2024hidden}. We observe that DFDs and HFEN continue to outperform other IQ metrics in terms of SROCC to reader scores as acquisition noise increases. We also observe that LPIPS, RINFD and HFEN still match IRV even when using reference scans with four times the original k-space coil noise, each decreasing by 0.03 or less in SROCC (orange, pink, and light green in Figure \ref{fig:IQM_vs_RS_AcqNoise}). We note that while acquisition noise changes the absolute IQ metric values, it preserves monotonicity to radiologist perceived diagnostic quality, the ultimate goal of this work. For example, the mean RINFD (pink in Figure \ref{fig:IQM_vs_RS_AcqNoise}) values increase by 12\% across the dataset under four times the acquisition noise, but SROCC decreases by only 0.01-0.02. In contrast to other DFDs, SSFD decreases by 0.09-0.10 in SROCC under four times the acquisition noise, suggesting that in-domain DFDs may not generalize well to data with noise levels not present in the training data.
+
+
+ \begin{figure*}[htbp]
+    \centering
+    \includegraphics[width=0.9\linewidth]{Fig_5.pdf}
+    \caption{Mean reader score correlations as a function of acquisition noise in the reference data to commonly used (SSIM, PSNR, NRMSE), less commonly used state-of-the-art (VIF, NQM, HFEN), and DFD IQ metrics based on encoder training data domain $D$. Complex Gaussian noise is added to the original k-space data by scaling the inter-channel covariance matrix ($\sigma_0$). Aliasing reader score SROCC values are shown on top with cartilage and meniscus reader score SROCCs on the bottom. DFDs and HFEN outperform other IQ metrics as acquisition noise increases, while LPIPS, RINFD and HFEN still match inter-reader variability (shown in black $\pm$ 1 standard deviation) even when using reference scans with four-times the original acquisition noise.
+ \label{fig:IQM_vs_RS_AcqNoise}}
+\end{figure*}
+
+
+\subsection{Metrics under Perturbations}
+ The impact of noise, blurring, translational shifts and motion artifacts on commonly used (SSIM, PSNR) and example state-of-the-art (HFEN), in-domain DFD (SSFD), domain-adjacent DFD (RINFD) and out-of-domain DFD (LPIPS) IQ metrics  are explored in Figure \ref{fig:IQMs_vs_Corruptions}. Ideally, MR IQ metrics should increase monotonically as noise, blurring, and motion artifacts increase as these artifacts tend to diminish the diagnostic quality of the image, while sensitivity to translation depends on the context of the study. As we only test the perceived diagnostic quality explicitly under clinically realistic acceleration errors, the purpose of this section is to test whether these metrics are sensitive to other sources of image quality degradation as well. Sensitivity to perturbations is measured based on the IQ metric change per unit perturbation, where the unit perturbation is normalized against SSIM such that SSIM reaches 0.6 for each unit perturbation type.
+ 
+ We find that the DFDs increase monotonically with increasing levels of noise, blurring, and motion, indicating that these DFD metrics behave desirably to clinically realistic image imperfections. Per unit perturbation, the DFD IQ metrics of SSFD, LPIPS, and RINFD are relatively insensitive to translational pixel shifts. Under one unit perturbation for example, HFEN (yellow in Figure \ref{fig:IQMs_vs_Corruptions}) was more sensitive to translation ($0.84 \pm 0.07)$ than noise ($0.54 \pm 0.17$) and motion ($0.69 \pm 0.10$), while increasing to 80\% of its value under unit blur ($0.94 \pm 0.05$). RINFD (yellow in Figure \ref{fig:IQMs_vs_Corruptions}) on the other hand increased to just $0.10 \pm 0.04$ under unit translation, only $6\%$ of the RINFD increase under any other unit perturbations - noise ($1.61 \pm 0.93$), blur ($4.08 \pm 0.62$) or motion ($2.76 \pm 0.60$). This indicates that DFDs capture more global IQ features that are less sensitive to exact pixel-level correspondence than other IQ metrics. This finding confirms our hypothesis that the convolutional nature of CNNs make them translationally invariant and therefore less sensitive to translational shifts. DFDs may then be used as an alternative IQ metric to IQ in contexts where exact pixel-level correspondence is not necessarily required for clinical purposes. Settings where spatial registration is needed to align image pairs, such as CT-to-MR modality translation \cite{li2020magnetic, jin2019deep}, may not require perfect registration for diagnostic utility. 
+
+ \begin{figure*}
+    \centering
+    \includegraphics[width=0.8\linewidth]{Fig_6.pdf}
+    \caption{ IQ metrics vs. perturbation extent, chosen to achieve comparable changes in SSIM, for increasing Gaussian noise, blurring, translation, and motion artifacts (bottom). Example images demonstrating each perturbation type at the extent indicated by the arrow, where the roll image is the difference between the perturbed and original scan (top). All IQ metrics are sensitive to clinically realistic image corruptions, while DFDs are relatively insensitive to pixel shifts (e.g., HFEN, yellow versus RINFD, green).
+ \label{fig:IQMs_vs_Corruptions}}
+\end{figure*}
+
+
+
+\section{Discussion}
+    
+In this study, we explored using DFDs as IQ metrics for MR image reconstruction evaluation, and compared to both commonly used and other state-of-the-art but less commonly reported IQ metrics. In particular, we evaluated the extent to which distributional shifts between the encoder training dataset and the evaluation data impact the performance of these DFDs. To this end, we compared benchmark out-of-domain DFDs from the natural image domain (LPIPS, DISTS) to two domain-adjacent DFDs trained on medical imaging data (RINFD, Med-VAEFD), and finally an in-domain DFD trained on data from the same distribution as the evaluation task (SSFD). We conducted a reader study to find that HFEN and DFD had an improved correlation with radiologist-perceived diagnostic IQ compared to commonly used and other state-of-the-art IQ metrics in the literature. We also find that most DFDs appear to be robust to varying levels of acquisition noise compared to commonly used metrics such as NRMSE and SSIM. We have made the images and radiologist reader scores in this study publicly available so that the MR reconstruction community can move toward building evaluation metrics that move closer towards diagnostically relevant assessment. We further assessed the behavior of DFDs under clinically realistic image perturbations such as poor SNR and motion artifacts.
+
+We observed that all DFDs and HFEN outperform commonly used and other state-of-the-art IQ metrics for MR image reconstruction in terms of correlation with radiologist-perceived diagnostic IQ. Remarkably, we observe that HFEN and DFDs perform as well or better than radiologist inter-observer variability, suggesting that these IQ metrics perform as well as radiologists in determining perceived diagnostic quality of MR reconstructed images. Although HFEN correlates remarkably strongly with DFDs and perceived diagnostic quality in this study of accelerated MR reconstructions, it explicitly captures high-frequency information and therefore may struggle in other MR IQ settings with more low-frequency content such as MR contrast synthesis \cite{dar2019image}. Future work should examine the behavior of these IQ metrics in settings beyond accelerated MR reconstruction.
+
+However, we do not observe that domain-specific training of the DFD encoder improves their performance as an IQ metric for MR image reconstruction. This result is surprising considering the importance of distribution shifts in learned feature representations in the transfer learning literature \cite{mei2022radimagenet, cadrin2022moving}. While we surmise that any learned convolutional filters, independent of the training data domain, may be used as high-dimensional feature extractors for estimating image quality, further theoretical work is required to understand these empirical findings. One limitation of this finding is the differing dataset sizes between the data domains and the need for self-supervised learning for the in-domain DFD setting. However, limited medical imaging data compared to natural image data is a practical limitation in many real-world settings.
+
+There are several limitations to the reader study conducted here. First, it relies on radiologist perceived diagnostic image quality as the gold standard and a proxy of diagnostic value. Although there is a precedent for this in other radiologist reader studies \cite{mason2019comparison, kastryulin2023image}, radiologist perceptions of image quality may not be directly correlated with true diagnostic accuracy. Future work could address this limitation by conducting a clinical study to assess the true diagnostic accuracy of radiologists in different diagnostic tasks on MR images under different reconstruction methods. Another limitation of this work is that the reader study was limited to assessing magnitude images in the fastMRI multi-coil knee dataset. Future work should investigate whether these results hold across different anatomies and MRI acquisition techniques, as well as MR reconstruction evaluation settings that extend beyond single-slice magnitude-only evaluations such as complex or multichannel reconstructions. 
+
+One limitation of the perturbation experiment is that it approximates only some of the many potential artifacts and challenges present with MR images. Future work should assess, for example, the impact of blurring due to off-resonance effects and the impact of MR field inhomogeneities. We also did not conduct an additional reader study to correlate radiologist reviews with these metrics across various perturbations.  
+
+A limitation of the acquisition noise experiment is that we do not ever explicitly evaluate against a noise-free image (which does not exist). Previous work aimed to mimic having access to "noise-free" reference data by denoising the reference image using a Stein's Unbiased Risk Estimator (SURE) based method \cite{luisier2008sure}, however the authors point out that such denoising techniques likely cause the image to lose some real image features as well, which may introduce IQ metric biases of its own. Simulating increasing noise levels at least gives insight into how the IQ metric correlations to reader scores may be impacted by varying levels of acquisition noise. The robustness of the correlations of HFEN, LPIPS and RINFD to radiologist perceived diagnostic quality even in the presence of four-times the acquisition noise levels should give researchers confidence that these metrics hold their utility in assessing perceptual IQ in spite of the "hidden noise" problem \cite{wang2024hidden}. 
+
+Although SSFD does not appear to generalize as well to higher levels of acquisition noise, we note that if used "in-domain" on the original fastMRI knee dataset as intended, its correlation to radiologist perceived diagnostic quality remains comparable to other DFDs. It is notable that SSFD performance decreases when used under a different noise distribution, while LPIPS and RINFD still perform well on out-of-domain and domain-adjacent data. SSFD differs from these DFD encoder models in that it was trained only on original fastMRI image reconstructions with its narrow distribution of acquisition noise. The out-of-domain and domain-adjacent DFDs, on the other hand, may be able to generalize better precisely because of the larger and heterogeneous datasets on which they were trained, allowing them to better generalize to various noise distributions.
+
+Based on our findings, we recommend that MR reconstruction researchers report a suite of IQ metrics including DFDs and HFEN in future work, so that these methods may be benchmarked by metrics with a stronger concordance to radiologist perceived diagnostic quality. A suite of IQ metrics also has the benefit of capturing different aspects of perceived diagnostic image quality, as demonstrated in \cite{mason2019comparison}. Overall, our findings demonstrate that DFDs could help align the benchmarking of research methods in MR reconstruction with diagnostically relevant assessment, accelerating the path from research innovation to clinical translation.
+
+
+\bibliography{SSFD}%
+\vfill\pagebreak
+
+\clearpage
+
+
+% Redefine the section title for Supplementary Material
+\renewcommand{\thesection}{\Alph{section}}
+\setcounter{section}{0} % Reset section numbering
+\setcounter{figure}{0} % Reset figure numbering
+\setcounter{table}{0} % Reset table numbering
+\renewcommand{\thefigure}{S\arabic{figure}} % Prefix figures with 'S'
+\renewcommand{\thetable}{S\arabic{table}}   % Prefix tables with 'S'
+
+\section*{Supplementary Material}
+
+\renewcommand{\thefigure}{S\arabic{figure} }    
+\renewcommand{\thetable}{S\arabic{table} }    
+\setcounter{figure}{0}    
+\setcounter{table}{0}
+
+\section{DL Reconstruction Models}\label{App:Models}
+All DL MR image reconstruction models were trained in meddlr, a PyTorch based ML framework for medical image reconstruction problems \cite{desai2023noise2recon}. The DL reconstruction models for the reader study were trained with a 54 image subset of the fastMRI training dataset described in Section \ref{sub:Recons}. This was done to reduce computation costs of training reconstruction models, as the aim of the reader study was to generate a range of realistic image qualities, rather than achieve the best possible reconstructions in each setting.
+
+\subsection{UNet}
+The UNet models were trained with complex inputs and outputs, 2 convolutions per layer and 4 levels with 32-256 quadratically increasing filters as per the fastMRI paper implementation \cite{Knoll2020tp}. Each model was trained for 129,000 iterations using the Adam optimizer with a learning rate of 1e-4, weight decay of 1e-4, and a complex L1 image loss function.
+
+\subsection{Unrolled}
+The unrolled models follow the fast iterative shrinkage-thresholding algorithm (FISTA) unrolled architecture \cite{xin2023fista} implemented in \cite{sandino2020compressed}. The network was unrolled for 8 steps, and a ResNet with two residual blocks (2 convolutional layers and 128 filters each) was used to model the proximal update operation at each step. Each model was trained for 129,000 iterations using the Adam optimizer with a learning rate of 1e-4, weight decay of 1e-4, and a complex L1 k-space loss function.
+
+\section{DFD Implementation Details}
+All DFDs were implemented in meddlr \cite{desai2023noise2recon}.
+
+\subsection{Out-of-Domain DFDs}\label{App:DFD_Out}
+LPIPS and DISTS were both implemented in meddlr using their respective Python packages. For both LPIPS and DISTS pre-processing, the magnitude of the complex MR image reconstruction was taken, followed by replicating the image 3x channel wise to create a pseudo-rgb image. The images were then preprocessed to values between -1 and 1 for LPIPS and between 0 and 1 for DISTS, per their respective Github documentations \cite{zhang2018unreasonable, ding2020image}. Three configurations of LPIPS were tested - one with a VGG-16 backbone, one with the AlexNet backbone, and third with the VGG-16 backbone but without the linear layer fine-tuned on reader scores from the LPIPS study. 
+
+\subsection{In-Domain DFD}\label{App:DFD_In}
+ The self-supervised model was trained using the full training dataset described in Section \ref{sub:Recons}  with a self-supervised in-painting task. Image corruptions for the in-painting task were generated dynamically during training by placing zero-filled image patches of size 16x16 pixels over 50\% of the image area via Poisson variable density sampling (to ensure non-overlapping patches).  A self-supervised UNet model (with 2 convolutions per level and 5 levels with 20-320 quadratically increasing filters) was trained to in-paint the zero-filled patches and restore the original image subject to an L2 loss. Parameters were initialized based on a prior transfer learning study for knee cartilage segmentation \cite{dominic2023improving} and modified empirically to maximize SROCC. We use SSFD with the 7th convolutional layer for $l$ and the MSE distance function for $G$, determined empirically.
+
+
+\subsection{Domain-Adjacent DFDs}\label{App:DomainAdjacent}
+RINFD uses a ResNet50 pretrained on the RIN dataset $\phi_D^{(l)}$, convolutional layer $l=23$ (chosen empirically), and the MSE distance function for $G$. The DFDs using ResNet50 models trained on ImageNet and with randomly initialized, untrained weights use the same $l$ and $G$ as RINFD. Note that these parameter choices maximized SROCC for all 3 choices of $D$. Images were preprocessed by first taking the magnitude of the complex MR image reconstruction, followed by replicating the image 3x channel wise to create a pseudo-rgb image, followed by normalization between 0 and 1 per the RadImageNet Github documentation \cite{mei2022radimagenet}.
+
+Med-VAEFD specifically uses the neural compressor with an in-plane compression factor of 8, and 4 latent channels. Images were pre-processed by first taking the magnitude of the complex MR image reconstruction, followed by replicating the image 3x channel wise to create a pseudo-rgb image. Images were then normalized to 0.5 mean, 0.5 variance.
+
+\section{Example Reader Study Reconstructions}\label{App:ExampleRecons}
+Example images of each reconstruction type used in the reader study for a single MR slice along with their corresponding IQ metrics are shown in \ref{fig:ExampleReconsReaderStudy}.
+
+ \begin{figure*}[htbp]
+    % Include LPIPS in this figure as well.
+    \centering
+    \includegraphics[width=0.8\linewidth]{Fig_S1.pdf}
+    \caption{Example of the six reconstruction techniques (left), and plots of their IQ metrics versus mean radiologist IQ score (right). commonly used IQ metrics SSIM and PSNR are shown along with one example DFD from each category out-of-domain DFD (LPIPS), in-domain DFD (SSFD), and domain-adjacent DFD (RINFD). In this example, PSNR demonstrates a limitation compared to the DFDs for the 4x unrolled reconstruction, where PSNR lower than those of the 4x and 6x UNet reconstructions, despite a better reader score.
+ \label{fig:ExampleReconsReaderStudy}}
+\end{figure*}
+
+\section{All IQ metric vs. Reader Score Correlations}\label{App:AllMetrics}
+These results are an extension of the results presented in Figures \ref{fig:IQM_vs_RS_plots} and \ref{fig:IQM_vs_RS} with several additional IQ metrics. The additional metrics include NRMSE (commonly used), HFEN and NQM (state-of-the-art), LPIPS with an AlexNet \cite{krizhevsky2012imagenet} backbone (out-of-domain), and a ResNet50 with randomly initialized, untrained weights (domain-adjacent). Like SSIM and PSNR, NRMSE under-performs all DFD metrics. LPIPS with an AlexNet backbone performs comparably to LPIPS with the VGG-16 backbone and other in-domain DFD IQ metrics. The ResNet50 DFD with randomly initialized, untrained weights performs comparably to the commonly used IQ metrics, highlighting how CNN encoders are intrinsically suited for computing IQ metrics.
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=0.8\linewidth]{Fig_S2.pdf}
+    \caption{Mean reader score correlations to all IQ metrics in this study based on IQ metric type and encoder training data domain $D$. Aliasing reader score SROCC values are shown on the left with cartilage and meniscus reader score SROCCs on the right. Same as Figure \ref{fig:IQM_vs_RS} with several additional metrics. 
+ \label{fig:AllMetricsApp}}
+\end{figure*}
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=0.4\linewidth]{Fig_S3.pdf}
+    \caption{Additional commonly used (NRMSE), state-of-the-art (HFEN, NQM), out-of-domain DFD (VGG-16, DISTS, LPIPS with AlexNet backbone, ResNet50 with ImageNet backbone), and a ResNet50 with random untrained weights DFD IQ metric values versus mean reader scores for aliasing (top) and cartilage/mensiscus assessment (bottom). Each point corresponds to a single image taken from the center slice from 61 MR image reconstruction images, each with 2x (blue), 4x (black) and 6x (orange) accelerations with a UNet (circle) and unrolled (X’s) networks. Higher reader score values correspond to better radiologist-perceived IQ.
+ \label{fig:AllMetricsAppCorr}}
+\end{figure*}
+
+\section{Reader Study inter-observer variability}\label{App:IOV}
+
+Per-reader inter-observer correlations are shown in Figure \ref{Fig:AppendixIOV}. The reader score of each reader is plotted against the mean reader score of the other four readers for each image in the reader study. The inter-obersver variability is then the mean of each of these five SROCC values.
+
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=0.8\linewidth]{Fig_S4.pdf}
+    \caption{Per-reader inter-observer correlations. The reader score of each reader is plotted against the mean reader score of the other four readers for each image in the reader study.
+ \label{Fig:AppendixIOV}}
+\end{figure*}
+
+\section{SSFD Design Choices}\label{App:ssfdChoices}
+
+We faced several design choices for our SSFD implementation, including (i) the configuration of our SSL in-painting task for training the encoder, (ii) which layer(s) $l$ to extract features from, and (iii) which distance function $G$ to compare the feature representations $\phi_D^{(l)}$. All design choices were explored based on their impact on the SROCC with respect to the radiologist reader scores. 
+
+\subsection{In-Painting Pretext Task}\label{sec:SSFD_DC}
+
+For design choice (i), Dominic et al. conducted a systematic evaluation of in-painting SSL tasks for knee MRI scans \cite{dominic2023improving}, finding that a zero-filled patch size of 16x16 pixels covering 25\% of the total image area was optimal in a transfer learning setting for segmentation. We hypothesize that a similar choice of hyperparameters should be optimal for a DFD IQ metric as well, and therefore used their configuration as a starting point for SSFD. We conducted a small search of parameters around this optimum, varying the zero-filled patch size between 1x1 pixel and 64x64 pixels, and the percent of the image covered by patches between 10\% and 75\%.
+
+The impact of the SSL in-painting task for the SSFD encoder are shown in Table \ref{tab:SSFD_HP}. Overall we find that the SSFD training method found to be optimal in the MR knee segmentation transfer learning study \cite{dominic2023improving} is nearly optimal in this DFD IQ metric study as well. The size of the zero-filled patches of 16x16 seems to be optimal for SSFD correlations as it was in transfer learning study, while the percent of the image covered does not seem to have a large impact on the IQ metric correlation.
+
+\begin{table}
+\centering
+\begin{tabular}{cclc}
+& \multirow{2}{*}{\begin{tabular}[c]{@{}c@{}}SSFD SSL\\ hyperparameter\end{tabular}} & \multicolumn{1}{c}{Aliasing} & \multicolumn{1}{c}{Cartilage/Meniscus} \\
+& & SROCC & SROCC \\
+\addlinespace[0.5em]
+\hline
+\addlinespace[0.5em]
+\rotatebox[origin=c]{90}{\makecell{Baseline}} & \makecell{16x16 patches, \\ 25\% coverage} & 0.84 & 0.83 \\
+\addlinespace[0.5em]
+\hline
+\addlinespace[0.5em]
+\multirow{4}{*}{\rotatebox[origin=c]{90}{\makecell{Patch \\ Size}}} 
+& 64x64 patches & 0.80 & 0.78 \\
+& 8x8 patches & 0.74 & 0.73 \\
+& 4x4 patches & 0.78 & 0.77 \\
+& 1x1 patches & 0.79 & 0.79 \\
+\addlinespace[0.5em]
+\hline
+\addlinespace[0.5em]
+\multirow{3}{*}{\rotatebox[origin=c]{90}{\makecell{Patch \\ Coverage}}} 
+& 10\% coverage & 0.84 & 0.83 \\
+& 50\% coverage & 0.85 & 0.85 \\
+& 75\% coverage & 0.84 & 0.83 \\
+\addlinespace[0.5em]
+\end{tabular}
+\caption{SSFD correlation with reader scores as a function of SSL in-painting pre-text task hyperparameters: the size of each zero-filled patch, and the percent of the image zero-filled.}
+\label{tab:SSFD_HP}
+\end{table}
+
+\subsection{Impact of SSFD encoder layer}\label{App:layer}
+The impact of layer $l$ from which SSFD is computed was explored. Previous work on natural image DFDs has determined these layers empirically and are then used out of convention \cite{zhang2018unreasonable}, though most often the layer chosen is after the ReLu activation in the final CNN block of a given intermediate depth in the encoder. Following this empirical convention, we explcre layers $l = $ 1, 3, 5, 7 and 9, i.e. the 2nd convolutional block in each depth of the encoder. Truncating the SSFD UNet at the 7th layer encoder was found to be optimal for this task, though layer 5 was comparable. 
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=0.8\linewidth]{Fig_S5.pdf}
+    \caption{SSFD versus reader score as a function of SSFD encoder layer. The 7th layer of the UNet encoder was found to be optimal for this task.
+ \label{Fig:AppendixSSFDvsEncoder}}
+\end{figure*}
+
+
+\subsection{Impact of SSFD distance function}\label{App:distance}
+
+The impact of the distance function with which to compare feature spaces on the performance of SSFD as an MR image reconstruction IQ metric was explored. The default implementation of mean square error (MSE) was compared against mean absolute error (MAE), a projected distribution loss (PDL) which aggregates 1D-Wasserstein distances and has been shown to improve the perceptual quality of images when used for image enhancement \cite{delbracio2021projected}, and a DISTS-inspired distance which uses the distance function utilized in DISTS based on feature space means, variances and covarianves. \cite{ding2020image}. No other distance function out-performed MSE.
+
+\begin{table*}[]
+\centering
+\begin{tabular}{ccc}
+SSFD Distance Metric & \begin{tabular}[c]{@{}c@{}}Aliasing \\ SROCC\end{tabular} & \begin{tabular}[c]{@{}c@{}}Cartilage/Meniscus \\ SROCC\end{tabular} \\ 
+\addlinespace[0.5em]
+\hline
+\addlinespace[0.5em]
+ MSE                                                & 0.85                                                      & 0.85                     \\
+ MAE                                                & 0.80                                                      & 0.81                     \\
+PDL {\cite{delbracio2021projected}}                                      & 0.78                                                      & 0.79                     \\
+DISTS distance {\cite{ding2020image}}                                      & 0.82                                                      & 0.82                     \\
+             
+\end{tabular}
+\end{table*}
+
+%     \item  SSFD (and other feature distances?) layer vs. RIQs
+
+% \end{itemize}
+
+
+\end{document}

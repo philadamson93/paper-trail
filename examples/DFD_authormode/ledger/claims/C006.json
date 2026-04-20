@@ -1,0 +1,9 @@
+{
+  "claim_id": "C006",
+  "schema_version": "1.0",
+  "citekey": "mason2019comparison",
+  "claim_text": "demonstrated that NRMSE, SSIM and PSNR have weaker concordance with radiologist-perceived diagnostic IQ \\cite{mason2019comparison} than several less commonly-reported IQ metrics.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

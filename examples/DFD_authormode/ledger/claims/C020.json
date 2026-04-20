@@ -1,0 +1,9 @@
+{
+  "claim_id": "C020",
+  "schema_version": "1.0",
+  "citekey": "mason2019comparison",
+  "claim_text": "As the aforementioned metrics were rigorously assessed in the Mason study \\cite{mason2019comparison}, we include only the best overall performing metric (VIF) and best-performing metric for assessing under-sampling artifacts due to scan acceleration (NQM).",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

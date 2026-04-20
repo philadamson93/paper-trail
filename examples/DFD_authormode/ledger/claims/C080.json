@@ -1,0 +1,9 @@
+{
+  "claim_id": "C080",
+  "schema_version": "1.0",
+  "citekey": "mei2022radimagenet",
+  "claim_text": "This result is surprising considering the importance of distribution shifts in learned feature representations in the transfer learning literature \\cite{mei2022radimagenet, cadrin2022moving}.",
+  "manuscript_section": "Discussion",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

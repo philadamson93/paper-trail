@@ -1,0 +1,9 @@
+{
+  "claim_id": "C048",
+  "schema_version": "1.0",
+  "citekey": "sandino2020compressed",
+  "claim_text": "The UNet models followed the architecture in the fastMRI challenge \\cite{Knoll2020tp}, while the unrolled models followed the fast iterative shrinkage-thresholding algorithm (FISTA) unrolled architecture \\cite{xin2023fista} implemented in \\cite{sandino2020compressed}.",
+  "manuscript_section": "MR Image Reconstructions",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

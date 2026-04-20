@@ -1,0 +1,9 @@
+{
+  "claim_id": "C018",
+  "schema_version": "1.0",
+  "citekey": "sheikh2006image",
+  "claim_text": "Visual Information Fidelity (VIF \\cite{sheikh2006image}) uses natural image scene statistics to compute the mutual information between image pairs.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

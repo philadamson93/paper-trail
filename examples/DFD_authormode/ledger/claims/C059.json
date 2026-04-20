@@ -1,0 +1,9 @@
+{
+  "claim_id": "C059",
+  "schema_version": "1.0",
+  "citekey": "gu2022ntire",
+  "claim_text": "We evaluated several state-of-the-art DFDs used in natural domain IQ assessment \\cite{gu2022ntire} to serve as benchmarks for the domain-specific DFDs proposed in this study.",
+  "manuscript_section": "Out-of-Domain DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

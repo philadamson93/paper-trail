@@ -1,0 +1,9 @@
+{
+  "claim_id": "C085",
+  "schema_version": "1.0",
+  "citekey": "wang2024hidden",
+  "claim_text": "The robustness of the correlations of HFEN, LPIPS and RINFD to radiologist perceived diagnostic quality even in the presence of four-times the acquisition noise levels should give researchers confidence that these metrics hold their utility in assessing perceptual IQ in spite of the \"hidden noise\" problem \\cite{wang2024hidden}.",
+  "manuscript_section": "Discussion",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

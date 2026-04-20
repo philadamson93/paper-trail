@@ -1,0 +1,9 @@
+{
+  "claim_id": "C095",
+  "schema_version": "1.0",
+  "citekey": "mei2022radimagenet",
+  "claim_text": "Images were preprocessed by first taking the magnitude of the complex MR image reconstruction, followed by replicating the image 3x channel wise to create a pseudo-rgb image, followed by normalization between 0 and 1 per the RadImageNet Github documentation \\cite{mei2022radimagenet}.",
+  "manuscript_section": "Domain-Adjacent DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

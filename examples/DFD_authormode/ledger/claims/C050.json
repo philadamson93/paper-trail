@@ -1,0 +1,9 @@
+{
+  "claim_id": "C050",
+  "schema_version": "1.0",
+  "citekey": "gu2022ntire",
+  "claim_text": "The mean radiologist IQ score was compared with various IQ metrics from which the Spearman Rank Order Correlation Coefficient (SROCC) was computed, following precedent from large-scale computer vision IQ metric studies \\cite{gu2022ntire}.",
+  "manuscript_section": "Reader Study Criteria",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

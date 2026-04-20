@@ -1,0 +1,9 @@
+{
+  "claim_id": "C093",
+  "schema_version": "1.0",
+  "citekey": "ding2020image",
+  "claim_text": "The images were then preprocessed to values between -1 and 1 for LPIPS and between 0 and 1 for DISTS, per their respective Github documentations \\cite{zhang2018unreasonable, ding2020image}.",
+  "manuscript_section": "Out-of-Domain DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

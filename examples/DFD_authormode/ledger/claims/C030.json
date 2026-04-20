@@ -1,0 +1,9 @@
+{
+  "claim_id": "C030",
+  "schema_version": "1.0",
+  "citekey": "cong2022image",
+  "claim_text": "Although LPIPS and other DFDs \\cite{ding2020image, cong2022image, cheon2021perceptual, lao2022attentions, conde2022conformer, keshari2022multi} outperform commonly used IQ metrics in terms of correlation with human perceptual judgments in large-scale computer vision studies \\cite{gu2022ntire}, these studies evaluate DFDs on natural images belonging to the same domain as the images used for encoder training.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

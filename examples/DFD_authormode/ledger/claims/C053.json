@@ -1,0 +1,9 @@
+{
+  "claim_id": "C053",
+  "schema_version": "1.0",
+  "citekey": "wang2004image",
+  "claim_text": "where luminance $l$ assesses the mean pixel values across the images, contrast $c$ measures the similarity of the standard deviations of the pixel values across the images, and structure $s$ compares the similarity in the spatial distribution of the pixel intensities by measuring covariances across the images \\cite{wang2004image}.",
+  "manuscript_section": "Commonly used Image Quality Metrics",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

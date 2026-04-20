@@ -1,0 +1,9 @@
+{
+  "claim_id": "C072",
+  "schema_version": "1.0",
+  "citekey": "desai2023noise2recon",
+  "claim_text": "\\subsection{Code and Data Availability} All experiments were carried out in meddlr, an open source config-based Python library for machine learning-based medical image reconstruction \\cite{desai2023noise2recon}.",
+  "manuscript_section": "Code and Data Availability",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

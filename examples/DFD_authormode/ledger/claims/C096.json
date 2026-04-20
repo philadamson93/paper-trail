@@ -1,0 +1,9 @@
+{
+  "claim_id": "C096",
+  "schema_version": "1.0",
+  "citekey": "krizhevsky2012imagenet",
+  "claim_text": "The additional metrics include NRMSE (commonly used), HFEN and NQM (state-of-the-art), LPIPS with an AlexNet \\cite{krizhevsky2012imagenet} backbone (out-of-domain), and a ResNet50 with randomly initialized, untrained weights (domain-adjacent).",
+  "manuscript_section": "All IQ metric vs. Reader Score Correlations",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

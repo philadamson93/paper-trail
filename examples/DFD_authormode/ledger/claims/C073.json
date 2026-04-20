@@ -1,0 +1,9 @@
+{
+  "claim_id": "C073",
+  "schema_version": "1.0",
+  "citekey": "mason2019comparison",
+  "claim_text": "We observe that all DFDs along with HFEN substantially outperform VIF and NQM, which in turn outperform PSNR, SSIM and NRMSE as in \\cite{mason2019comparison}.",
+  "manuscript_section": "IQ metrics versus Radiologist Review",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

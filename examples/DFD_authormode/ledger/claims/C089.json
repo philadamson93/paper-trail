@@ -1,0 +1,9 @@
+{
+  "claim_id": "C089",
+  "schema_version": "1.0",
+  "citekey": "xin2023fista",
+  "claim_text": "\\subsection{Unrolled} The unrolled models follow the fast iterative shrinkage-thresholding algorithm (FISTA) unrolled architecture \\cite{xin2023fista} implemented in \\cite{sandino2020compressed}.",
+  "manuscript_section": "Unrolled",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

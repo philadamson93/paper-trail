@@ -1,0 +1,9 @@
+{
+  "claim_id": "C069",
+  "schema_version": "1.0",
+  "citekey": "wang2024hidden",
+  "claim_text": "\\subsection{IQ Metric Sensitivity to Acquisition Noise} In light of recent work elucidating the bias of conventional IQ metrics due to \"hidden noise\" \\cite{wang2024hidden}, the susceptibility of IQ metrics to biases due to acquisition noise in \"ground truth\" reconstruction data is of great interest.",
+  "manuscript_section": "IQ Metric Sensitivity to Acquisition Noise",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

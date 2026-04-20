@@ -1,0 +1,9 @@
+{
+  "claim_id": "C097",
+  "schema_version": "1.0",
+  "citekey": "dominic2023improving",
+  "claim_text": "conducted a systematic evaluation of in-painting SSL tasks for knee MRI scans \\cite{dominic2023improving}, finding that a zero-filled patch size of 16x16 pixels covering 25\\% of the total image area was optimal in a transfer learning setting for segmentation.",
+  "manuscript_section": "In-Painting Pretext Task",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C074",
+  "schema_version": "1.0",
+  "citekey": "mei2022radimagenet",
+  "claim_text": "This is a surprising finding considering the importance of domain-specific pre-training in comparable transfer learning studies \\cite{mei2022radimagenet, cadrin2022moving}.",
+  "manuscript_section": "IQ metrics versus Radiologist Review",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

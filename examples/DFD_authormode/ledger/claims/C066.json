@@ -1,0 +1,9 @@
+{
+  "claim_id": "C066",
+  "schema_version": "1.0",
+  "citekey": "mei2022radimagenet",
+  "claim_text": "We used the RadImageNet model \\cite{mei2022radimagenet}, a ResNet50 pre-trained on 1.",
+  "manuscript_section": "Domain-Adjacent DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

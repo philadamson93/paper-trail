@@ -1,0 +1,9 @@
+{
+  "claim_id": "C087",
+  "schema_version": "1.0",
+  "citekey": "desai2023noise2recon",
+  "claim_text": "\\section{DL Reconstruction Models}\\label{App:Models} All DL MR image reconstruction models were trained in meddlr, a PyTorch based ML framework for medical image reconstruction problems \\cite{desai2023noise2recon}.",
+  "manuscript_section": "DL Reconstruction Models",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C100",
+  "schema_version": "1.0",
+  "citekey": "delbracio2021projected",
+  "claim_text": "The default implementation of mean square error (MSE) was compared against mean absolute error (MAE), a projected distribution loss (PDL) which aggregates 1D-Wasserstein distances and has been shown to improve the perceptual quality of images when used for image enhancement \\cite{delbracio2021projected}, and a DISTS-inspired distance which uses the distance function utilized in DISTS based on feature space means, variances and covarianves.",
+  "manuscript_section": "Impact of SSFD distance function",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C094",
+  "schema_version": "1.0",
+  "citekey": "dominic2023improving",
+  "claim_text": "Parameters were initialized based on a prior transfer learning study for knee cartilage segmentation \\cite{dominic2023improving} and modified empirically to maximize SROCC.",
+  "manuscript_section": "In-Domain DFD",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

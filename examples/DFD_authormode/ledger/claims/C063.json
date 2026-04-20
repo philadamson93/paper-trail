@@ -1,0 +1,9 @@
+{
+  "claim_id": "C063",
+  "schema_version": "1.0",
+  "citekey": "adamson2021ssfd",
+  "claim_text": "To test the hypothesis that in-domain DFDs have more utility as a DFD IQ metric than out-of-domain DFDs, we propose a self-supervised feature distance (SSFD \\cite{adamson2021ssfd}) using an encoder $\\phi_D^{(l)}$ trained in a self-supervised fashion on the same MR dataset $D$ used to train the reader study DL reconstruction models (described in Section \\ref{sub:Recons}).",
+  "manuscript_section": "In-Domain DFD",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

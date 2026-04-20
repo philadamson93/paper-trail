@@ -1,0 +1,9 @@
+{
+  "claim_id": "C061",
+  "schema_version": "1.0",
+  "citekey": "gu2022ntire",
+  "claim_text": "We used two DFDs based on natural images, LPIPS and the Deep Image Structure and Texture Similarity index (DISTS) \\cite{ding2020image}, which have been used as benchmark IQ metrics in large-scale computer vision IQ metric studies \\cite{gu2022ntire}.",
+  "manuscript_section": "Out-of-Domain DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

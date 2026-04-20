@@ -1,0 +1,9 @@
+{
+  "claim_id": "C044",
+  "schema_version": "1.0",
+  "citekey": "Knoll2020tp",
+  "claim_text": "\\subsection{MR Image Reconstructions} \\label{sub:Recons} We used the fastMRI multi-coil knee dataset with sparse and fully acquired k-space data for DL-based accelerated MR image reconstructions \\cite{Knoll2020tp}.",
+  "manuscript_section": "MR Image Reconstructions",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

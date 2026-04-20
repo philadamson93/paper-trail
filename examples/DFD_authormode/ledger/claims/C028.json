@@ -1,0 +1,9 @@
+{
+  "claim_id": "C028",
+  "schema_version": "1.0",
+  "citekey": "zhang2018unreasonable",
+  "claim_text": "showed that the Learned Perceptual Image Patch Similarity (LPIPS) \\cite{zhang2018unreasonable}, a type of Deep Feature Distance (DFD) whereby distances between image pairs are computed in a lower-dimensional feature space encoded by a CNN, correlates strongly with human perceived IQ.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C043",
+  "schema_version": "1.0",
+  "citekey": "wang2024hidden",
+  "claim_text": "In light of the recent \"hidden noise\" problem \\cite{wang2024hidden}, the bias present in conventional reconstruction IQ metrics introduced by acquisition noise in \"ground truth\" data, we additionally assess how perceptual IQ metrics perform under increasing acquisition noise.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C056",
+  "schema_version": "1.0",
+  "citekey": "sheikh2006image",
+  "claim_text": "We implement VIF and NQM in Python following the procedures described in \\cite{sheikh2006image} and \\cite{damera2000image}, respectively.",
+  "manuscript_section": "Other State-of-the-Art IQ Metrics",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

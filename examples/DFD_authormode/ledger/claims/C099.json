@@ -1,0 +1,9 @@
+{
+  "claim_id": "C099",
+  "schema_version": "1.0",
+  "citekey": "zhang2018unreasonable",
+  "claim_text": "Previous work on natural image DFDs has determined these layers empirically and are then used out of convention \\cite{zhang2018unreasonable}, though most often the layer chosen is after the ReLu activation in the final CNN block of a given intermediate depth in the encoder.",
+  "manuscript_section": "Impact of SSFD encoder layer",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C088",
+  "schema_version": "1.0",
+  "citekey": "Knoll2020tp",
+  "claim_text": "\\subsection{UNet} The UNet models were trained with complex inputs and outputs, 2 convolutions per layer and 4 levels with 32-256 quadratically increasing filters as per the fastMRI paper implementation \\cite{Knoll2020tp}.",
+  "manuscript_section": "UNet",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C015",
+  "schema_version": "1.0",
+  "citekey": "miao2013new",
+  "claim_text": "Perceptual difference models are a class of psycho-physical models that aim to mimic how humans perceive image quality by modeling the human visual processing system \\cite{miao2008quantitative, mantiuk2011hdr, miao2013new, salem2002validation, daly1992visible}.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

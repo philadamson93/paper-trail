@@ -1,0 +1,9 @@
+{
+  "claim_id": "C070",
+  "schema_version": "1.0",
+  "citekey": "desai2021vortex",
+  "claim_text": "Motion artifacts were introduced by modeling rigid motion between MR acquisition shots as random phase errors that alter odd and even lines of k-space separately, following the procedure in \\cite{desai2021vortex}.",
+  "manuscript_section": "IQ Metrics under Perturbations",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

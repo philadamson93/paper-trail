@@ -1,0 +1,9 @@
+{
+  "claim_id": "C064",
+  "schema_version": "1.0",
+  "citekey": "pathak2016context",
+  "claim_text": "The in-domain DFD, SSFD, utilizes a self-supervised model trained on the fastMRI knee dataset described in \\ref{sub:Recons} with a self-supervised in-painting task \\cite{pathak2016context} following optimal parameters from a prior transfer learning study for knee cartilage segmentation \\cite{dominic2023improving}.",
+  "manuscript_section": "In-Domain DFD",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

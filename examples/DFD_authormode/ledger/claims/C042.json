@@ -1,0 +1,9 @@
+{
+  "claim_id": "C042",
+  "schema_version": "1.0",
+  "citekey": "kastryulin2023image",
+  "claim_text": "Only one study has shown that LPIPS out-performs commonly used IQ metrics in an MR image-based reader study, but it neither explores whether natural image DFDs are optimal for MR images nor does it evaluate MR images with clinically-feasible corruptions of accelerated MR image reconstructions \\cite{kastryulin2023image}.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

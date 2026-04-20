@@ -1,0 +1,9 @@
+{
+  "claim_id": "C021",
+  "schema_version": "1.0",
+  "citekey": "ravishankar2010mr",
+  "claim_text": "HFEN aims to capture finer-grained features in MR image reconstructions using a Laplacian of Gaussian filter, though it is limited to assessing only high-frequency content \\cite{ravishankar2010mr}.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

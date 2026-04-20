@@ -1,0 +1,9 @@
+{
+  "claim_id": "C024",
+  "schema_version": "1.0",
+  "citekey": "kleineisel2023assessment",
+  "claim_text": "Other metrics focus on evaluating traditional MR parameters such as noise, spatial resolution, and point-spread functions \\cite{chan2021local, kleineisel2023assessment}, though relating these parameters to clinical diagnostic utility is less direct.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

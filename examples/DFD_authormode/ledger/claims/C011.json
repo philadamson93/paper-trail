@@ -1,0 +1,9 @@
+{
+  "claim_id": "C011",
+  "schema_version": "1.0",
+  "citekey": "wang2003multiscale",
+  "claim_text": "Multiscale SSIM (MSSSIM \\cite{wang2003multiscale}) computes SSIM at various resolution levels across the image, while feature similarity index measure (FSIM \\cite{zhang2011fsim}) compares features such as texture, edges, and gradients extracted with hand-crafted filters.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C052",
+  "schema_version": "1.0",
+  "citekey": "wang2004image",
+  "claim_text": "SSIM is a combined measure of the luminance, contrast, and structure of the image given by\\cite{wang2004image}",
+  "manuscript_section": "Commonly used Image Quality Metrics",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

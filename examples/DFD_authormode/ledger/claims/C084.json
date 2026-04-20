@@ -1,0 +1,9 @@
+{
+  "claim_id": "C084",
+  "schema_version": "1.0",
+  "citekey": "luisier2008sure",
+  "claim_text": "Previous work aimed to mimic having access to \"noise-free\" reference data by denoising the reference image using a Stein's Unbiased Risk Estimator (SURE) based method \\cite{luisier2008sure}, however the authors point out that such denoising techniques likely cause the image to lose some real image features as well, which may introduce IQ metric biases of its own.",
+  "manuscript_section": "Discussion",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C019",
+  "schema_version": "1.0",
+  "citekey": "damera2000image",
+  "claim_text": "The Noise Quality Metric (NQM \\cite{damera2000image}) computes the SNR of a model-restored image via a restoration algorithm that accounts for the impact of spatial frequencies, distance, and contrast masking on contrast sensitivities.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

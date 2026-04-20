@@ -1,0 +1,9 @@
+{
+  "claim_id": "C049",
+  "schema_version": "1.0",
+  "citekey": "uecker2014espirit",
+  "claim_text": "Reference images were computed from the fully sampled k-space data with the eSPIRIT method to integrate coil sensitivities \\cite{uecker2014espirit}.",
+  "manuscript_section": "MR Image Reconstructions",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

@@ -1,0 +1,9 @@
+{
+  "claim_id": "C051",
+  "schema_version": "1.0",
+  "citekey": "chen2022ai",
+  "claim_text": "The most commonly used IQ metrics to evaluate the IQ of MR reconstruction magnitude images are normalized root mean square error (NRMSE), peak signal-to-noise ratio (PSNR), and structural similarity index measure (SSIM) \\cite{chen2022ai}.",
+  "manuscript_section": "Commonly used Image Quality Metrics",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

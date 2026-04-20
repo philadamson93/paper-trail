@@ -1,0 +1,9 @@
+{
+  "claim_id": "C037",
+  "schema_version": "1.0",
+  "citekey": "raghu2019transfusion",
+  "claim_text": "We gather insights from the transfer learning literature for medical imaging, where the transfer of weights from ImageNet \\cite{deng2009imagenet} pre-trained architectures often fails due to distributional shifts and the difference in features between natural images and downstream medical imaging datasets \\cite{raghu2019transfusion}.",
+  "manuscript_section": "Introduction",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

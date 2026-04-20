@@ -1,0 +1,9 @@
+{
+  "claim_id": "C076",
+  "schema_version": "1.0",
+  "citekey": "wang2024hidden",
+  "claim_text": "12 respectively when k-space coil noise quadruples, corroborating the potential bias of SSIM and NRMSE under acquisition noise demonstrated in prior work \\cite{wang2024hidden}.",
+  "manuscript_section": "IQ Metric Sensitivity to Acquisition Noise",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

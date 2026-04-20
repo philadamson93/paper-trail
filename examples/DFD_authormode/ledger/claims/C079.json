@@ -1,0 +1,9 @@
+{
+  "claim_id": "C079",
+  "schema_version": "1.0",
+  "citekey": "dar2019image",
+  "claim_text": "Although HFEN correlates remarkably strongly with DFDs and perceived diagnostic quality in this study of accelerated MR reconstructions, it explicitly captures high-frequency information and therefore may struggle in other MR IQ settings with more low-frequency content such as MR contrast synthesis \\cite{dar2019image}.",
+  "manuscript_section": "Discussion",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

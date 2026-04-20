@@ -1,0 +1,9 @@
+{
+  "claim_id": "C083",
+  "schema_version": "1.0",
+  "citekey": "kastryulin2023image",
+  "claim_text": "Although there is a precedent for this in other radiologist reader studies \\cite{mason2019comparison, kastryulin2023image}, radiologist perceptions of image quality may not be directly correlated with true diagnostic accuracy.",
+  "manuscript_section": "Discussion",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

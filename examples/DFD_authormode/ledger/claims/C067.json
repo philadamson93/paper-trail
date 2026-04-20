@@ -1,0 +1,9 @@
+{
+  "claim_id": "C067",
+  "schema_version": "1.0",
+  "citekey": "van2023diagnostically",
+  "claim_text": "We propose a second domain-adjacent DFD that leverages the Medical Variational Autoencoder (Med-VAE), a VAE designed for neural compression trained on dataset $D$ with 1 million radiograph and mammography images \\cite{van2023diagnostically}.",
+  "manuscript_section": "Domain-Adjacent DFDs",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

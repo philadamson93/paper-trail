@@ -1,0 +1,9 @@
+{
+  "claim_id": "C055",
+  "schema_version": "1.0",
+  "citekey": "sheikh2006image",
+  "claim_text": "VIF quantifies the mutual information between the ground truth and reconstructed images, considering both the degradation of the signal and the inherent information content of the ground truth image \\cite{sheikh2006image}.",
+  "manuscript_section": "Other State-of-the-Art IQ Metrics",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

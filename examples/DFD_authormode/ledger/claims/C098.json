@@ -1,0 +1,9 @@
+{
+  "claim_id": "C098",
+  "schema_version": "1.0",
+  "citekey": "dominic2023improving",
+  "claim_text": "Overall we find that the SSFD training method found to be optimal in the MR knee segmentation transfer learning study \\cite{dominic2023improving} is nearly optimal in this DFD IQ metric study as well.",
+  "manuscript_section": "In-Painting Pretext Task",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}

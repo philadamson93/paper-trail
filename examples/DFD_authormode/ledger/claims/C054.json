@@ -1,0 +1,9 @@
+{
+  "claim_id": "C054",
+  "schema_version": "1.0",
+  "citekey": "chen2022ai",
+  "claim_text": "Although less routinely reported than the preceding IQ metrics \\cite{chen2022ai}, VIF, NQM, and HFEN have shown promise in prior work.",
+  "manuscript_section": "Other State-of-the-Art IQ Metrics",
+  "overall_verdict": "",
+  "stage": "extracted_stub"
+}
