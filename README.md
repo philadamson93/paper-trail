@@ -5,7 +5,7 @@
 <h1 align="center">paper-trail</h1>
 
 <p align="center">
-  Academic papers follow an outdated citation convention: <code>[7]</code> sends readers to an entire paper without saying where the claim is supported or whether the author represented it faithfully. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs the corresponding claim. See <code>paper-trail</code> in action:
+  Academic papers follow an outdated citation convention: <code>[7]</code> sends readers to an entire paper without saying where the claim is supported or whether the author represented it faithfully. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs the corresponding claim. I ran <code>paper-trail</code> on two of my own peer-reviewed publications:
 </p>
 
 <p align="center">
