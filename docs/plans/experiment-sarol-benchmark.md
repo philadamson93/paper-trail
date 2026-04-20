@@ -233,6 +233,14 @@ Label distributions are nearly identical (76–80% ACCURATE both), but with clas
 6. **Cost for Variant C.** Hundreds of unique citing PDFs × full paper-trail audits = material spend. Estimate on a 5-paper subset before committing to the full test split.
 7. **License for redistribution.** MIT on Sarol's data means we can publish predictions; confirm the annotations.zip redistribution terms on the linked paper before releasing.
 
+## Compute and cost tracking
+
+All experiment runs use **Claude Opus 4.7** by default (upper-bound; most capable). Cheaper-model ablations (Sonnet 4.6, Haiku 4.5) are a named sweep axis — not the default.
+
+Per-stage usage is captured after each subagent call via `experiments/sarol-2024/scripts/record_usage.py` and written to `ledger/usage/<claim_id>.jsonl`. `parse_verdict.py` aggregates into each prediction record under a `usage` field with `cost_usd_total` + per-stage breakdown. Pricing table is in `parse_verdict.py` top-of-file; update when Anthropic pricing changes.
+
+**Observed pilot cost (Opus 4.7, 1 claim, no caching):** $0.66. Scaling estimate for the full run (~2,141 train + 606 test on-demand, no caching, no batch): ~$1,800 raw; with Batch API 50% + prompt-cache reuse of the rubric/prompt (~30% input reduction) probably ~$700.
+
 ## Deliverable checklist
 
 - [ ] Confirm `.claude/specs/verdict_schema.md` can be swapped for a Sarol-rubric variant without forking agents.

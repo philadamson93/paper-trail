@@ -6,7 +6,13 @@ Companion docs: `docs/plans/experiment-sarol-benchmark.md` (experiment strategy)
 
 ## What this runbook does
 
-Run paper-trail's real extractor → Sarol-variant adjudicator → verifier pipeline against 5 stratified training claims from Sarol 2024. Emit predictions in the Sarol 9-class rubric and compare to gold labels. Sanity-check end-to-end plumbing before scaling up.
+Run paper-trail's real extractor → Sarol-variant adjudicator → verifier pipeline against 5 stratified training claims from Sarol 2024. Emit predictions in the Sarol 9-class rubric and compare to gold labels. Log per-stage token usage and cost into the ledger. Sanity-check end-to-end plumbing before scaling up.
+
+## Model selection
+
+All subagent calls use **Claude Opus 4.7** (upper-bound cost; most capable). In each Agent tool invocation below, pass `model: "opus"` explicitly. Cheaper ablations (Sonnet 4.6, Haiku 4.5) are a separate sweep axis — not part of the smoketest.
+
+Observed cost from the pilot claim (claim 417, Opus 4.7, no caching): ~$0.66 per claim end-to-end (extractor $0.31 + adjudicator $0.21 + verifier $0.14). Budget accordingly.
 
 ## Preconditions
 
@@ -53,7 +59,7 @@ This creates a working directory with `claims_ledger.md`, `refs.bib`, and a pre-
 
 ### 2. Dispatch the **evidence extractor** subagent
 
-Use the real extractor dispatch prompt at `.claude/prompts/extractor-dispatch.md`. Substitute slots as follows:
+Use the real extractor dispatch prompt at `.claude/prompts/extractor-dispatch.md`. Invoke via the `Agent` tool with `model: "opus"` and `subagent_type: "general-purpose"`. Substitute slots as follows:
 
 | Slot | Value |
 | --- | --- |
@@ -71,6 +77,17 @@ Use the real extractor dispatch prompt at `.claude/prompts/extractor-dispatch.md
 
 Dispatch the filled prompt as a subagent (same mechanism `/ground-claim` uses). The extractor writes `<staging_dir>/ledger/evidence/C001.json`.
 
+**Capture usage.** The Agent tool returns a `<usage>` block with `total_tokens`, `tool_uses`, `duration_ms`. Immediately after the call, record:
+
+```bash
+python3 experiments/sarol-2024/scripts/record_usage.py \
+  --staging <staging_dir> --claim-id C001 --stage extractor \
+  --model claude-opus-4-7 \
+  --total-tokens <TOKENS> --tool-uses <N> --duration-ms <MS>
+```
+
+Appends one line to `<staging_dir>/ledger/usage/C001.jsonl`.
+
 ### 3. Dispatch the **Sarol-variant adjudicator** subagent
 
 **Critical difference from the default `/ground-claim`.** Use the variant dispatch prompt at `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` — **not** the default `.claude/prompts/adjudicator-dispatch.md`. The variant enforces the Sarol 9-class rubric.
@@ -86,7 +103,7 @@ Slot fills:
 | `{{multi_cit_context}}` | `manifest.multi_cit_context` (`"single"` for all smoketest claims) |
 | `{{run_output_dir}}` | same as step 2 |
 
-The adjudicator reads `<staging_dir>/ledger/evidence/C001.json` + `experiments/sarol-2024/specs/verdict_schema_sarol.md` and writes `<staging_dir>/ledger/claims/C001.json`.
+The adjudicator reads `<staging_dir>/ledger/evidence/C001.json` + `experiments/sarol-2024/specs/verdict_schema_sarol.md` and writes `<staging_dir>/ledger/claims/C001.json`. Dispatch via `Agent` tool with `model: "opus"`.
 
 **Validate on exit:**
 
@@ -96,13 +113,17 @@ The adjudicator reads `<staging_dir>/ledger/evidence/C001.json` + `experiments/s
 
 If validation fails: **stop and debug the adjudicator prompt or the Sarol rubric spec**. Do not fall back to the native rubric.
 
+**Capture usage** the same way as step 2, with `--stage adjudicator`.
+
 ### 4. Dispatch the **verifier** subagent
 
-Unchanged from paper-trail native. Use `.claude/prompts/verifier-dispatch.md`. The verifier just spot-checks the extractor's evidence against `content.txt`; it does not care about the rubric variant.
+Unchanged from paper-trail native. Use `.claude/prompts/verifier-dispatch.md`. Dispatch via `Agent` tool with `model: "opus"`. The verifier just spot-checks the extractor's evidence against `content.txt`; it does not care about the rubric variant.
 
 Sample one evidence entry from the adjudicated claim, fill slots, dispatch. The verifier writes `<staging_dir>/ledger/verifications/C001__C001.a.json`.
 
 On `verdict_impact == "bounce_to_re_ground"`: re-run steps 2–3 for that claim (one bounce max in the smoketest; if it bounces again, flag and move on).
+
+**Capture usage** the same way as step 2, with `--stage verifier`.
 
 ### 5. Parse the verdict into a prediction record
 
@@ -112,19 +133,25 @@ python3 experiments/sarol-2024/scripts/parse_verdict.py \
   --out experiments/sarol-2024/predictions/smoketest.jsonl
 ```
 
-Appends one JSONL line with `{pred_label, gold_label, pred_3way, gold_3way, …}` to `predictions/smoketest.jsonl`.
+Appends one JSONL line with `{pred_label, gold_label, pred_3way, gold_3way, usage: {…}, …}` to `predictions/smoketest.jsonl`. The `usage` block folds in per-stage token counts and estimated USD cost (input-token split is inferred at 85/15 when the runtime only gives total tokens).
 
 ## After all 5 claims run
 
-Quick sanity-check script (inline):
+Quick sanity-check script (inline) — accuracy + cost:
 
 ```bash
 python3 -c "
 import json
+total = 0; hits = 0; cost = 0.0
 for line in open('experiments/sarol-2024/predictions/smoketest.jsonl'):
-    r = json.loads(line)
-    hit = '✓' if r['pred_label'] == r['gold_label'] else '✗'
-    print(f\"{hit} claim_id={r['claim_row_id']:>5} gold={r['gold_label']:<18} pred={r['pred_label']:<18}\")
+    r = json.loads(line); total += 1
+    ok = r['pred_label'] == r['gold_label']
+    hits += ok
+    c = (r.get('usage') or {}).get('cost_usd_total') or 0.0
+    cost += c
+    mark = '✓' if ok else '✗'
+    print(f\"{mark} claim_id={r['claim_row_id']:>5} gold={r['gold_label']:<18} pred={r['pred_label']:<18} cost=\${c:.3f}\")
+print(f'---\\n{hits}/{total} correct; total cost \${cost:.2f}')
 "
 ```
 

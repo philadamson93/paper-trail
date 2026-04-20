@@ -174,7 +174,22 @@ Proves the subagent did the work.
 ### Bookkeeping
 
 - **`stage`** — enum: `"grounding" | "adjudication" | "verification"`. Which pass produced this file.
-- **`timing`** — object, optional. `{wall_clock_seconds, tokens_in, tokens_out}`. `tokens_*` may be null if the agent runtime doesn't expose them.
+- **`timing`** — object, optional. `{wall_clock_seconds, tokens_in, tokens_out, per_stage}`. Legacy `tokens_in` / `tokens_out` at the top of this object are the *aggregate* across all stages for this claim; they may be null if the runtime doesn't expose splits. `per_stage` (optional) breaks it down:
+  ```json
+  "per_stage": {
+    "extractor": {
+      "model": "claude-opus-4-7",
+      "total_tokens": 38929,
+      "tokens_in": null,
+      "tokens_out": null,
+      "tool_uses": 15,
+      "wall_clock_seconds": 74
+    },
+    "adjudicator": { "...": "..." },
+    "verifier": { "...": "..." }
+  }
+  ```
+  Many agent runtimes expose only `total_tokens` per subagent call (not an input/output split); `tokens_in` / `tokens_out` stay null in that case, and downstream cost estimation uses a ratio heuristic (typical ~85% input / ~15% output for RAG-shaped agents). Populated by the **orchestrator** after each subagent call returns; subagents themselves do not write these fields.
 
 ## Validation rules (orchestrator-enforced)
 
