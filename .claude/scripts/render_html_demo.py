@@ -823,20 +823,32 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   /* Help popup */
   .help-btn {{
-    background: transparent;
-    color: #f8fafc;
-    border: 1px solid #64748b;
-    border-radius: 50%;
-    width: 26px;
-    height: 26px;
-    font-size: 0.9rem;
+    background: #f8fafc;
+    color: var(--accent);
+    border: 1px solid #f8fafc;
+    border-radius: 999px;
+    padding: 0.22rem 0.7rem;
+    font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
-    padding: 0;
     line-height: 1;
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
   }}
-  .help-btn:hover {{ background: rgba(255,255,255,0.12); border-color: #f8fafc; }}
+  .help-btn:hover {{ background: #e2e8f0; }}
+  .help-btn .help-icon {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #f8fafc;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }}
 
   #help-popup {{
     background: white;
@@ -901,7 +913,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <h1>{title}</h1>
   <div class="doi">{doi_link}</div>
   <div class="counts" id="counts"></div>
-  <button class="help-btn" id="help-btn" title="How to use this viewer" aria-label="help">?</button>
+  <button class="help-btn" id="help-btn" title="How to use this viewer" aria-label="help"><span class="help-icon">?</span>Help</button>
 </header>
 
 <main class="viewer">
@@ -1722,13 +1734,17 @@ document.getElementById('help-close').addEventListener('click', hideHelp);
 helpBackdrop.addEventListener('click', (e) => {{ if (e.target === helpBackdrop) hideHelp(); }});
 
 // Auto-show on first visit; subsequent visits stay out of the way until the user opens it.
-try {{
-  const KEY = 'paper-trail-help-seen-v1';
-  if (!localStorage.getItem(KEY)) {{
+// If localStorage is blocked (e.g. Chrome on file://), fall back to always showing — better
+// to re-show every load than to silently swallow the popup.
+(function autoShowHelp() {{
+  const KEY = 'paper-trail-help-seen-v2';
+  let seen = false;
+  try {{ seen = !!localStorage.getItem(KEY); }} catch (_) {{ seen = false; }}
+  if (!seen) {{
     setTimeout(showHelp, 350);
-    localStorage.setItem(KEY, '1');
+    try {{ localStorage.setItem(KEY, '1'); }} catch (_) {{ /* ignore */ }}
   }}
-}} catch (_) {{ /* localStorage blocked — skip first-run popup */ }}
+}})();
 
 // ------- Boot --------
 renderSidebar();
