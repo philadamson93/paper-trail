@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # Downloads the Sarol et al. 2024 citation-integrity benchmark from its public GitHub repo.
-# Idempotent — re-running skips files that already exist with a non-zero size.
+# Fetches INTO $PAPER_TRAIL_BENCHMARKS_DIR/sarol-2024/ (default: $HOME/.paper-trail/benchmarks/sarol-2024/).
+#
+# Rationale: benchmark raw data is deliberately stored OUTSIDE the repo tree so that
+# experiment orchestrator agents whose working directory is the repo do not encounter
+# gold labels via filesystem exploration. See docs/plans/experiment-sarol-leakage-hardening.md.
+#
 # Source: https://github.com/ScienceNLP-Lab/Citation-Integrity (MIT license)
 
 set -euo pipefail
+
 BASE_URL="https://raw.githubusercontent.com/ScienceNLP-Lab/Citation-Integrity/main/Data"
-cd "$(dirname "$0")"
+BENCH_ROOT="${PAPER_TRAIL_BENCHMARKS_DIR:-$HOME/.paper-trail/benchmarks}"
+DEST="$BENCH_ROOT/sarol-2024"
+
+mkdir -p "$DEST"
+cd "$DEST"
 
 fetch() {
   local rel="$1"
@@ -30,5 +40,9 @@ if [[ -s annotations.zip && ! -d annotations ]]; then
   rm -rf __MACOSX
 fi
 
-echo "Done. Files in $(pwd):"
-ls -la | grep -v '^total\|^d.*\.\.\?$'
+echo
+echo "Done. Files in $DEST:"
+ls -la "$DEST" | grep -v '^total\|^d.*\.\.\?$'
+echo
+echo "Stage/parse scripts will find this automatically via the default path."
+echo "Override with:  export PAPER_TRAIL_BENCHMARKS_DIR=<your/path>"

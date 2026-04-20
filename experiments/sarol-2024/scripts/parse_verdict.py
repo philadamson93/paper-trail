@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
 Read a paper-trail adjudicated claim JSON produced under the Sarol 9-class
-rubric variant, combine it with the staging manifest, and emit one prediction
-record for the experiment's predictions.jsonl.
+rubric variant, look up gold (from outside the repo) by opaque citekey, and
+emit one prediction record.
+
+Design invariants for leakage prevention:
+- Gold lives at $PAPER_TRAIL_GOLD_DIR/sarol-2024/<split>/<citekey>.json
+  (default: $HOME/.paper-trail/gold/sarol-2024/…) — OUTSIDE the repo tree.
+- This script is the ONLY code that touches gold. Call it only AFTER all
+  adjudications for a run are complete. Do not invoke it inside the run loop.
 
 Usage:
-    parse_verdict.py --staging experiments/sarol-2024/staging/train/0_10 \\
-                      --out experiments/sarol-2024/predictions/train.jsonl
+    parse_verdict.py --staging <dir> --out <predictions.jsonl>
 """
 
 import argparse
 import json
+import os
 import pathlib
 import sys
 from typing import Any
@@ -30,17 +36,33 @@ SAROL_9 = {
 NOT_ACCURATE_3WAY = {"OVERSIMPLIFY", "NOT_SUBSTANTIATE", "CONTRADICT", "MISQUOTE", "INDIRECT"}
 IRRELEVANT_3WAY = {"ETIQUETTE", "INDIRECT_NOT_REVIEW", "IRRELEVANT"}
 
-# Anthropic API pricing as of April 2026 (USD per million tokens), on-demand tier.
-# Update when pricing changes; see https://platform.claude.com/docs/en/about-claude/pricing.
 PRICING = {
     "claude-opus-4-7": {"in": 5.0, "out": 25.0},
     "claude-opus-4-6": {"in": 5.0, "out": 25.0},
     "claude-sonnet-4-6": {"in": 3.0, "out": 15.0},
     "claude-haiku-4-5": {"in": 1.0, "out": 5.0},
 }
-# If the runtime only gives total_tokens without a split, assume this input fraction.
-# Typical for RAG-shaped agents is ~85% input / ~15% output.
 DEFAULT_INPUT_FRACTION = 0.85
+
+
+def _gold_root() -> pathlib.Path:
+    override = os.environ.get("PAPER_TRAIL_GOLD_DIR")
+    if override:
+        return pathlib.Path(override).expanduser()
+    return pathlib.Path.home() / ".paper-trail" / "gold"
+
+
+def find_gold_file(citekey: str) -> pathlib.Path:
+    root = _gold_root() / "sarol-2024"
+    matches = list(root.glob(f"*/{citekey}.json"))
+    if not matches:
+        raise FileNotFoundError(
+            f"No gold file for citekey {citekey} under {root}. "
+            f"Re-run stage_claim.py to regenerate, or set PAPER_TRAIL_GOLD_DIR if you moved the gold tree."
+        )
+    if len(matches) > 1:
+        raise RuntimeError(f"Ambiguous gold for {citekey}: multiple matches {matches}")
+    return matches[0]
 
 
 def to_3way(label: str) -> str:
@@ -54,7 +76,6 @@ def to_3way(label: str) -> str:
 
 
 def gold_paper_label(evidence_for_bucket: dict[str, list[dict[str, Any]]]) -> str:
-    """Worst-wins rollup across all annotations for this (claim, cited paper)."""
     strictness = [
         "CONTRADICT",
         "NOT_SUBSTANTIATE",
@@ -73,7 +94,7 @@ def gold_paper_label(evidence_for_bucket: dict[str, list[dict[str, Any]]]) -> st
     for label in strictness:
         if label in observed:
             return label
-    return "ACCURATE"  # fallback; no evidence -> treat as ACCURATE stub
+    return "ACCURATE"
 
 
 def load_usage(staging_dir: pathlib.Path, claim_id: str) -> list[dict[str, Any]]:
@@ -125,12 +146,14 @@ def estimate_cost_usd(usage_records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def parse(staging_dir: pathlib.Path, gold_file: pathlib.Path) -> dict[str, Any]:
-    # Gold lives OUTSIDE staging by design — subagents must never see gold labels
-    # before adjudication. See docs/plans/experiment-sarol-runbook.md §Leakage.
-    manifest = json.loads(gold_file.read_text())
+def parse(staging_dir: pathlib.Path) -> dict[str, Any]:
+    staging_info = json.loads((staging_dir / "staging_info.json").read_text())
+    citekey = staging_info["citekey"]
+
+    gold_file = find_gold_file(citekey)
+    gold = json.loads(gold_file.read_text())
+
     claims_dir = staging_dir / "ledger" / "claims"
-    # Single-claim staging: expect exactly one file.
     claim_files = sorted(claims_dir.glob("*.json"))
     if not claim_files:
         raise FileNotFoundError(f"no adjudicated claim JSON under {claims_dir}")
@@ -150,30 +173,27 @@ def parse(staging_dir: pathlib.Path, gold_file: pathlib.Path) -> dict[str, Any]:
 
     pred = verdict.get("overall_verdict")
     if pred not in SAROL_9:
-        print(
-            f"[warn] adjudicated label {pred!r} not in Sarol 9-class enum",
-            file=sys.stderr,
-        )
+        print(f"[warn] adjudicated label {pred!r} not in Sarol 9-class enum", file=sys.stderr)
 
-    gold = gold_paper_label(manifest["gold_evidence"])
+    gold_label = gold_paper_label(gold["gold_evidence"])
 
     claim_id = verdict.get("claim_id", "C???")
     usage_records = load_usage(staging_dir, claim_id)
     usage_summary = estimate_cost_usd(usage_records) if usage_records else None
 
     return {
-        "split": manifest["split"],
-        "claim_row_id": manifest["claim_row_id"],
-        "cited_paper_bucket": manifest["cited_paper_bucket"],
-        "citekey": manifest["citekey"],
-        "source_mode": manifest["source_mode"],
-        "multi_cit_context": manifest["multi_cit_context"],
+        "split": gold["split"],
+        "claim_row_id": gold["claim_row_id"],
+        "cited_paper_bucket": gold["cited_paper_bucket"],
+        "citekey": citekey,
+        "source_mode": gold["source_mode"],
+        "multi_cit_context": gold["multi_cit_context"],
         "pred_label": pred,
         "pred_3way": to_3way(pred) if pred in SAROL_9 else "UNKNOWN",
-        "gold_label": gold,
-        "gold_3way": to_3way(gold),
+        "gold_label": gold_label,
+        "gold_3way": to_3way(gold_label),
         "sub_claim_verdicts": [s.get("verdict") for s in verdict.get("sub_claims", [])],
-        "claim_text": manifest["claim_text_original"],
+        "claim_text": gold["claim_text_original"],
         "overall_flag": verdict.get("overall_flag"),
         "remediation_category": (verdict.get("remediation") or {}).get("category"),
         "timing_seconds": (verdict.get("timing") or {}).get("wall_clock_seconds"),
@@ -185,12 +205,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--staging", required=True, type=pathlib.Path)
     ap.add_argument(
-        "--gold",
-        required=True,
-        type=pathlib.Path,
-        help="path to gold file under experiments/sarol-2024/gold/<split>/claim_<N>_<B>.json",
-    )
-    ap.add_argument(
         "--out",
         required=True,
         type=pathlib.Path,
@@ -198,7 +212,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    record = parse(args.staging, args.gold)
+    record = parse(args.staging)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("a") as f:
         f.write(json.dumps(record) + "\n")
