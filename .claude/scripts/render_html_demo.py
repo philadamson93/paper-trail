@@ -984,6 +984,12 @@ const pageSpanIndexByNum = new Map();
 let activeClaimId = null;
 const hiddenVerdicts = new Set(); // verdicts the user toggled off
 
+// First "Abstract" heading location across the rendered PDF. Numeric superscripts
+// that appear before it are author-affiliation markers, not real citations — we
+// use this to suppress false positives on the title/author block.
+let firstAbstractPage = null;
+let firstAbstractCharStart = -1;
+
 // ------- Header counts --------
 (function renderCounts() {{
   const counts = DATA.verdictCounts;
@@ -1331,8 +1337,18 @@ async function renderPage(pageNum, wrap) {{
     concat += " ";
     spanIndex.push({{ span, charStart: start, charEnd: end }});
   }}
-  pageTextByNum.set(pageNum, concat.toLowerCase());
+  const pageLower = concat.toLowerCase();
+  pageTextByNum.set(pageNum, pageLower);
   pageSpanIndexByNum.set(pageNum, spanIndex);
+
+  // Locate the first "Abstract" heading we see; its position bounds the author block.
+  if (firstAbstractPage === null) {{
+    const m = pageLower.match(/\babstract\b/);
+    if (m && m.index != null) {{
+      firstAbstractPage = pageNum;
+      firstAbstractCharStart = m.index;
+    }}
+  }}
 
   // Collect body-text stats for superscript detection. Use bounding-rect heights:
   // citation superscripts render at ~60-75% of body-text height.
@@ -1364,6 +1380,10 @@ async function renderPage(pageNum, wrap) {{
     if (!nums.length) continue;
     const valid = nums.filter(n => refnumToClaimIds[String(n)] && refnumToClaimIds[String(n)].length);
     if (!valid.length) continue;
+
+    // Author-affiliation filter: numeric superscripts ahead of the "Abstract"
+    // heading on the page that contains it are affiliation markers, not citations.
+    if (firstAbstractPage === pageNum && charStart < firstAbstractCharStart) continue;
 
     const r = span.getBoundingClientRect();
     // Margin exclusion — page numbers in headers / footers are outside body area.
@@ -1647,6 +1667,8 @@ async function setZoom(newScale) {{
   pageTextByNum.clear();
   pageSpanIndexByNum.clear();
   claimPageIndex.clear();
+  firstAbstractPage = null;
+  firstAbstractCharStart = -1;
   for (let n = 1; n <= pdfDoc.numPages; n++) {{
     const wrap = document.createElement('div');
     wrap.className = 'page-wrap';
