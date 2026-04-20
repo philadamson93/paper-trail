@@ -40,22 +40,28 @@ For each of the 5 pre-selected claims in the runbook's table (rows 417, 42, 975,
 7. Record usage.
 8. Parse: `parse_verdict.py --staging <dir> --gold experiments/sarol-2024/gold/train/claim_<ID>_<BUCKET_3DIGIT>.json --out experiments/sarol-2024/predictions/smoketest.jsonl`.
 
-**At the end, report:**
+**During the run** (before scoring), report only:
 
-- Per-claim: `pred_label` vs `gold_label`, per-stage token/cost.
+- Per-claim: `pred_label` (Sarol class), per-stage tokens and cost, verifier result.
+- Structural checks: `rubric_variant` is `sarol_2024_9class` on all 5; every verdict is one of the 9 classes.
+
+**After `parse_verdict.py` runs for all 5** (gold is revealed here, not before):
+
+- Per-claim: `pred_label` vs `gold_label`.
 - Aggregate: accuracy (hits/5), total cost USD, any verifier bounces, any validation failures.
 - Any surprises or anomalies worth flagging before we scale to N=50.
 
-**Budget expectation:** ~$0.40–0.80 per claim (pilot claim 417 came in at $0.66). Total smoketest ~$2–4. If any single claim runs dramatically over $1, flag and pause before continuing.
+**Budget expectation:** ~$0.40–0.80 per claim (prior pilot run landed at $0.66). Total smoketest ~$2–4. If any single claim runs dramatically over $1, flag and pause before continuing.
 
 **Do NOT:**
 
 - Read `data/benchmarks/sarol-2024/claims-*.jsonl` contents or `experiments/sarol-2024/gold/` during orchestration. Only `parse_verdict.py` touches gold, only after adjudication.
+- Record gold-label information in any task tracker, internal scratchpad, or subagent prompt before adjudication completes. The 5 claims are blinded by design; gold is revealed only by the scoring script.
 - Use `/ground-claim` for these claims (it uses the default adjudicator = wrong rubric).
 - Edit anything under `.claude/prompts/` or `.claude/specs/` — the Sarol variants live under `experiments/sarol-2024/`.
 - Iterate prompts based on results. This is a validation run; prompt iteration happens in a later phase.
 
-Claim 417 was already validated in the prior session (ACCURATE ↔ gold ACCURATE, $0.66, verifier PASS) — you'll re-run it cleanly. The interesting signal is on the 4 not-ACCURATE claims; if 2+ of them land wrong, flag before scaling.
+One of the five claims was validated in a prior session (pipeline mechanics work end-to-end, cost $0.66, verifier PASS). The remaining four are the real discrimination test. Treat all five as blinded — do not look up which one was the prior pilot.
 
 ---
 

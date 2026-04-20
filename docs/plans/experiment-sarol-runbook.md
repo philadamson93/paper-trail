@@ -40,17 +40,19 @@ If a subagent violates this (even curiously), flag the verdict and discard. Note
 
 ## The 5 claims
 
-Pre-selected, stratified, all single-cit to simplify the smoketest (multi-cit handling is a separate sweep axis):
+Pre-selected, stratified across five major Sarol label classes, all single-cit to simplify the smoketest (multi-cit handling is a separate sweep axis). **Gold labels are blinded** — you (the orchestrator) must not see them until `parse_verdict.py` surfaces them at scoring time.
 
-| Gold label | claim_id | paper_bucket | Citing claim (truncated) |
-| --- | --- | --- | --- |
-| ACCURATE | 417 | 81 | "The ubiquitinylated mitofusin proteins would next be targeted to proteosomal degradation [CIT]" |
-| OVERSIMPLIFY | 42 | 52 | "The direct target for metformin is not clearly defined, however it is believed to act via inhibition of Complex I of the..." |
-| NOT_SUBSTANTIATE | 975 | 93 | "Inflammation plays important roles in the progression of obesity and diabetes..." |
-| CONTRADICT | 1395 | 43 | "prolactin can enhance SVZ neurogenesis in pregnant mice (Shingo et al., OTHER), while increased levels of glucoc..." |
-| INDIRECT | 850 | 45 | "Diabetes in older adults is also linked to reduced functional status, increased risk of institutionalization..." |
+| Internal ref | claim_id | paper_bucket |
+| --- | ---: | ---: |
+| smoketest-1 | 417 | 81 |
+| smoketest-2 | 42 | 52 |
+| smoketest-3 | 975 | 93 |
+| smoketest-4 | 1395 | 43 |
+| smoketest-5 | 850 | 45 |
 
-Claim IDs are row IDs in `data/benchmarks/sarol-2024/claims-train.jsonl`. Paper buckets are `doc_id // 1000` for the cited paper.
+Claim IDs are row IDs in `data/benchmarks/sarol-2024/claims-train.jsonl`. Paper buckets are `doc_id // 1000` for the cited paper. Do NOT `cat` that file to look up claim text or any other field — the claim text is staged for you by `stage_claim.py` into the extractor-visible handle. Reading the raw benchmark file is a leakage path (claim text is the lookup key for gold).
+
+Each of the five represents a different major Sarol class; collectively they cover ACCURATE plus four distinct error classes. Which internal ref maps to which class is not disclosed here.
 
 ## Steps (per claim — repeat 5 times)
 
@@ -174,11 +176,18 @@ print(f'---\\n{hits}/{total} correct; total cost \${cost:.2f}')
 
 ## Success criteria for the smoketest
 
-- All 5 claims produce a valid Sarol-9-class verdict JSON (structural success).
-- ≥3 of 5 match the gold label (basic capability signal; 100% would be surprising given class imbalance favors ACCURATE).
-- Verifier produces PASS on the extractor's evidence for ≥4 of 5 (attestation isn't broken).
+Structural (check these during the run, no gold exposure needed):
 
-If all three pass: proceed to the 50-claim pilot (see the experiment plan, Protocol §2) with the same pipeline. If any fail: debug before scaling.
+- All 5 claims produce a valid Sarol-9-class verdict JSON (`rubric_variant == "sarol_2024_9class"`, `overall_verdict` is one of the 9 classes).
+- Verifier produces PASS (or a documented PARTIAL) on every spot-check; no unresolved bounces after one retry.
+- Per-claim cost within budget (~$0.40–0.80; flag any claim >$1.50).
+
+Accuracy (revealed by `parse_verdict.py` at scoring time, not before):
+
+- ≥3 of 5 match gold (basic capability signal).
+- At least one of the four non-ACCURATE-class claims matches gold — shows the tool can discriminate error classes, not just default to ACCURATE on everything.
+
+If structural criteria pass and accuracy is reasonable: proceed to the 50-claim pilot (see the experiment plan, Protocol §2) with the same pipeline. If any structural criterion fails: debug before scaling. If structural passes but accuracy is <3/5: escalate rubric/prompt issue before running more claims.
 
 ## What *not* to do
 
