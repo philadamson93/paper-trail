@@ -5,7 +5,7 @@
 <h1 align="center">paper-trail</h1>
 
 <p align="center">
-  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and trusts that the cited source supports the claim. <code>paper-trail</code>, a Claude Code–native workflow, turns each citation into a verdict backed by evidence. This is what an online journal could look like instead:
+  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and trusts that the cited source supports the claim. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs its claim. This is what an online journal could look like instead:
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@ Scientific papers routinely cite 50–100 references, and verifying every one by
 
 - **Authors:** proofread your own citations before submission; establish the rigor of your grounding work in the record.
 - **Reviewers:** skip the manual slog of opening every cited paper; triage from a ledger of flagged entries.
-- **Readers and the public:** follow a transparent trail from each claim to its source and decide what to trust.
+- **Readers and the public:** follow a transparent trail from each claim to its source and see the evidence for yourself.
 
 ## Getting Started
 
