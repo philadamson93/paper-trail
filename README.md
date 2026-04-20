@@ -105,7 +105,7 @@ Repeat for every citation. At 50+ references per paper, this is why it usually d
 
 - **LLMs can make mistakes.** Despite attestation and the verifier, the agent can misread tables, misclassify a claim, or get a verdict wrong. Every flagged entry (`UNSUPPORTED`, `CONTRADICTED`, `AMBIGUOUS`, `UNVERIFIED_ATTESTATION`, `CITED_OUT_OF_CONTEXT`, `INDIRECT_SOURCE`, `MISATTRIBUTED`) should be **manually verified** against the cited source before you act on it. Treat the ledger as a triage queue, not a verdict.
 - **Editing assistance, not scholarly judgment.** A finding on someone else's published paper is a hypothesis surfaced by an LLM that read the cited source; it is not a ground-truth accounting of prior published work. Use findings as leads to investigate, not as conclusions to publish.
-- **Paywalled sources can't be auto-fetched.** `paper-trail` only grabs open-access PDFs. Paywalled references are stubbed and marked `PENDING`; drop PDFs in by hand (institutional access, ILL, authors' websites) and re-run to ground them. Nothing bypasses paywalls.
+- **Paywalled sources can't be auto-fetched.** `paper-trail` only grabs open-access PDFs. Paywalled references are stubbed and marked `PENDING`; drop PDFs in by hand by manually downloading with institutional access and re-run to ground them.
 
 ## Learn more
 
