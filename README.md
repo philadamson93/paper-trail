@@ -22,7 +22,7 @@
 
 ## Why paper-trail
 
-Scientific papers routinely cite 50–100 references, each backing a claim in the text. Even careful authors make mistakes, from subtle overgeneralizations to outright unsupported claims. Reviewers rarely verify every citation by hand, and mistakes that slip through peer review may propagate through the literature.
+Scientific papers routinely cite 50–100 references, each backing a claim in the text. Even careful authors can make mistakes, from subtle overgeneralizations to outright unsupported claims. Reviewers rarely verify every citation by hand, and mistakes that slip through peer review may propagate through the literature.
 
 `paper-trail` can help authors, reviewers and the public alike:
 
