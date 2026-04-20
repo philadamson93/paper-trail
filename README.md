@@ -5,7 +5,7 @@
 <h1 align="center">paper-trail</h1>
 
 <p align="center">
-  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and trusts that the cited source supports the claim. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs its claim. This is what an online journal could look like with <code>paper-trail</code>:
+  The bracket-number citation is an outdated convention: a reader sees <code>[7]</code> and trusts that the cited source supports the claim. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs its claim. This is what an online journal could look like with <code>paper-trail</code>:
 </p>
 
 <p align="center">
