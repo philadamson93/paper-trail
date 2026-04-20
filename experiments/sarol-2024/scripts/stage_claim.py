@@ -221,11 +221,15 @@ def stage(
         "_Populated by the experiment adjudicator._\n"
     )
 
-    # Agent-visible staging info: opaque citekey + source mode + multi-cit flag only.
-    # No split, no claim_row_id, no paper bucket — everything that could be used to
-    # back out the gold label lives outside the repo.
+    # Agent-visible staging info: opaque citekey, claim text (normalized, markers
+    # replaced with [CIT]/[OTHER_CIT]), source mode, multi-cit flag, source description.
+    # Claim text is needed by the orchestrator to fill dispatch prompts; it is not a
+    # gold-label vector (subagents get it via slot-fill anyway). Everything that could
+    # be used to back out the gold label — split, claim_row_id, paper bucket, raw
+    # benchmark pointer — lives outside the repo.
     staging_info = {
         "citekey": citekey,
+        "claim_text_normalized": claim_text,
         "source_mode": source_mode,
         "multi_cit_context": multi_cit_context,
         "source_description": source_desc,

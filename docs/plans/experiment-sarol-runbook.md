@@ -105,7 +105,7 @@ Use the real extractor dispatch prompt at `.claude/prompts/extractor-dispatch.md
 | `{{claim_id}}` | `C001` for s1, `C002` for s2, etc. |
 | `{{run_id}}` | `run_sarol_smoketest_<TIMESTAMP>` |
 | `{{citekey}}` | opaque ref from staging (e.g., `ref_02d728`) |
-| `{{claim_text}}` | read from `<staging_dir>/pdfs/<citekey>/meta.json` or infer — actually, the claim text is NOT in staging_info.json for leakage reasons; read it from the claim argument your orchestrator was given. Specifically: the `--claim-id` value let `stage_claim.py` populate the handle, but you need the normalized claim text too. See "How to get the claim text" note below. |
+| `{{claim_text}}` | `staging_info.claim_text_normalized` (normalized form with `[CIT]` / `[OTHER_CIT]` markers) |
 | `{{manuscript_section}}` | `Sarol benchmark (synthetic)` |
 | `{{claim_type_hint.type}}` | `PARAPHRASED` |
 | `{{claim_type_hint.confidence}}` | `medium` |
@@ -114,7 +114,7 @@ Use the real extractor dispatch prompt at `.claude/prompts/extractor-dispatch.md
 | `{{co_citekeys}}` | `[]` (single-cit) |
 | `{{run_output_dir}}` | `<staging_dir>` |
 
-**How to get the claim text:** `stage_claim.py` prints a `staging_info` object to stdout on completion; that block does NOT include the claim text (by design). The claim text is available in the external gold file (`$PAPER_TRAIL_GOLD_DIR/sarol-2024/<split>/<citekey>.json`) but **you should not read that file during Phase A** — it contains gold. Instead, have `stage_claim.py` optionally print the normalized claim text to a sidecar file when needed. TODO: add a `--emit-claim-text <path>` flag so the orchestrator can get just the text without seeing gold. In the interim, use `python3 -c "import json; print(json.loads(open('<staging_dir>/pdfs/<citekey>/meta.json').read())['title'])"` plus any text you saved at stage time — OR pass the claim text through an internal variable your orchestrator session constructed from the `row['claim']` it got when it invoked stage_claim.py. (Yes, this is awkward. The hardening plan acknowledges it as known friction.)
+Claim text is in `staging_info.claim_text_normalized` — read that file at the top of each claim's dispatch sequence. It carries no gold information; leakage concern was about benchmark grep, which is closed by the benchmark being outside the repo.
 
 Dispatch the filled prompt as a subagent (same mechanism `/ground-claim` uses). **Append the filesystem-restriction paragraph from the "Leakage hygiene" section to every dispatch.** The extractor writes `<staging_dir>/ledger/evidence/C001.json`.
 
