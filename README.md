@@ -22,7 +22,7 @@
 
 ## Why paper-trail
 
-Scientific papers routinely cite 50–100 references, and verifying every one by hand rarely happens. LLM-assisted writing makes plausibly-phrased misattributions easier to produce and harder to spot.
+Scientific papers routinely cite 50–100 references, each backing a claim in the text. Even careful authors make mistakes, from subtle overgeneralizations to unsupported claims. Reviewers rarely verify every citation by hand, and mistakes that evade peer review may propagate through the downstream literature.
 
 `paper-trail` can help authors, reviewers and the public alike:
 
