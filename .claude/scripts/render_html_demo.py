@@ -1370,7 +1370,8 @@ async function renderPage(pageNum, wrap) {{
   //   4. span's rendered height is clearly smaller than body text (superscript) OR
   //      it's a comma-separated list of numbers (common typesetting — these stay body-height)
   const markers = [];
-  for (const entry of spanIndex) {{
+  for (let ei = 0; ei < spanIndex.length; ei++) {{
+    const entry = spanIndex[ei];
     const {{ span, charStart }} = entry;
     const txt = (span.textContent || "").trim();
     if (!txt || txt.length > 20) continue;
@@ -1394,6 +1395,28 @@ async function renderPage(pageNum, wrap) {{
     const isMultiList = nums.length > 1;
     const isSuperscript = bodyHeight > 0 && r.height > 0 && r.height < bodyHeight * 0.88;
     if (!isSuperscript && !isMultiList) continue;
+
+    // Chemistry-isotope filter: a numeric superscript sitting directly against
+    // an alphabetic character (e.g. 2H, 13C, 18F, 99mTc) is an isotope label,
+    // not a citation. Telltale signal: the *next* span starts with a letter
+    // and has near-zero horizontal gap on the same line. Citation superscripts
+    // are always followed by word-space or punctuation.
+    if (isSuperscript && !isMultiList) {{
+      let adjacentLetter = false;
+      for (let nj = ei + 1; nj < spanIndex.length && nj <= ei + 3; nj++) {{
+        const nextSpan = spanIndex[nj].span;
+        const nextTxt = (nextSpan.textContent || "");
+        if (!nextTxt.trim()) continue; // skip empty / whitespace-only spans
+        if (!/^[A-Za-z]/.test(nextTxt.trim())) break; // punctuation / digit → not isotope
+        const nextRect = nextSpan.getBoundingClientRect();
+        const gap = nextRect.left - r.right;
+        const sameLine = Math.abs(r.top - nextRect.top) < bodyHeight * 1.5;
+        const gapThreshold = Math.max(3, bodyHeight * 0.2);
+        if (sameLine && gap < gapThreshold) adjacentLetter = true;
+        break;
+      }}
+      if (adjacentLetter) continue;
+    }}
 
     span.classList.add('cite-marker');
     span.dataset.refnum = String(valid[0]);
