@@ -5,7 +5,7 @@
 <h1 align="center">paper-trail</h1>
 
 <p align="center">
-  The bracket-number citation is an outdated convention: a reader sees <code>[7]</code> and trusts that the cited source supports the claim. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs the corresponding claim. This is what an online journal could look like with <code>paper-trail</code>:
+  Academic papers follow an outdated citation convention: <code>[7]</code> sends readers to an entire paper without saying where the claim is supported or whether the author represented it faithfully. Readers are left trusting the author got it right. <code>paper-trail</code>, a Claude Code–native workflow, checks that every cited source actually backs the corresponding claim. This is what an online journal could look like with <code>paper-trail</code>:
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 Scientific papers routinely cite 50–100 references, each backing a claim in the text. Even careful authors can make mistakes, from subtle overgeneralizations to outright unsupported claims. Reviewers rarely verify every citation by hand, and mistakes that slip through peer review may propagate through the literature.
 
-`paper-trail` can help authors, reviewers and the public alike:
+`paper-trail` brings citation provenance to authors, reviewers, and the public alike:
 
 - **Authors:** proofread your own citations before submission; establish the rigor of your grounding work in the record.
 - **Reviewers:** skip the manual slog of opening every cited paper; triage from a ledger of flagged entries.
