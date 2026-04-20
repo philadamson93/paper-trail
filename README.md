@@ -32,7 +32,7 @@ Scientific papers routinely cite 50–100 references, each backing a claim in th
 
 - **Authors:** proofread your own citations before submission; establish the rigor of your grounding work in the record.
 - **Reviewers:** skip the manual slog of opening every cited paper; triage from a ledger of flagged entries.
-- **Readers and the public:** follow a transparent trail from each claim to its source and see the evidence for yourself.
+- **Readers and the public:** establishes trust by following a transparent trail from each claim to its source.
 
 ## Getting Started
 
