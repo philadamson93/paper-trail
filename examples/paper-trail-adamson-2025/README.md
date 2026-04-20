@@ -132,7 +132,7 @@ The twelve verdicts in the enum, ordered roughly worst → best:
 
 ## For UI builders
 
-`demo.html` is a reference viewer — clear data rendering over a fixed set of claim + evidence fields, not a finished product. A polished web UI is under separate development by a collaborator. If you're building on top of the JSON, treat `data/claims/<id>.json` as the source of truth (schema in `verdict_schema.md`) and `demo.html` as one possible rendering. Directions the reference viewer leaves on the table:
+`demo.html` is the bundled viewer — a PDF.js-based reader that puts each claim's verdict alongside the cited sentence in the source paper. If you're building a different UI on top of the run, treat `data/claims/<id>.json` as the source of truth (schema in `verdict_schema.md`) and `demo.html` as one possible rendering. Directions the current viewer leaves on the table:
 
 - **Side-by-side source reading** — show the cited paper's PDF in a second panel when a claim is focused (the bundle doesn't ship reference PDFs; would need a fetch step).
 - **Drift visualization** — highlight `paper_value` vs `claim_value` mismatches inline (numbers that drifted).

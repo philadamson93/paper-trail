@@ -22,9 +22,14 @@
   </a>
 </p>
 
+**Get started**
+
+1. **One-time install** — clone this repo and run `/paper-trail-init` (see [Install](#install)).
+2. **Launch Claude Code** in the repo, type `/paper-trail`, answer a few setup questions.
+
 ---
 
-Shipped as Claude Code slash commands. Each run produces a machine-readable verdict ledger (JSON) and a standalone HTML viewer; a polished web UI is in separate development by a collaborator.
+A Claude Code–native workflow. Each run produces a machine-readable verdict ledger (JSON) and a standalone HTML viewer.
 
 ## Why
 
