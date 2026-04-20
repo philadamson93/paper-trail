@@ -125,8 +125,10 @@ def estimate_cost_usd(usage_records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def parse(staging_dir: pathlib.Path) -> dict[str, Any]:
-    manifest = json.loads((staging_dir / "sarol_manifest.json").read_text())
+def parse(staging_dir: pathlib.Path, gold_file: pathlib.Path) -> dict[str, Any]:
+    # Gold lives OUTSIDE staging by design — subagents must never see gold labels
+    # before adjudication. See docs/plans/experiment-sarol-runbook.md §Leakage.
+    manifest = json.loads(gold_file.read_text())
     claims_dir = staging_dir / "ledger" / "claims"
     # Single-claim staging: expect exactly one file.
     claim_files = sorted(claims_dir.glob("*.json"))
@@ -183,6 +185,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--staging", required=True, type=pathlib.Path)
     ap.add_argument(
+        "--gold",
+        required=True,
+        type=pathlib.Path,
+        help="path to gold file under experiments/sarol-2024/gold/<split>/claim_<N>_<B>.json",
+    )
+    ap.add_argument(
         "--out",
         required=True,
         type=pathlib.Path,
@@ -190,7 +198,7 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    record = parse(args.staging)
+    record = parse(args.staging, args.gold)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("a") as f:
         f.write(json.dumps(record) + "\n")

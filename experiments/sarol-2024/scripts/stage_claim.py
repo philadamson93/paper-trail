@@ -37,6 +37,7 @@ from typing import Any
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data" / "benchmarks" / "sarol-2024"
+GOLD_DIR = REPO_ROOT / "experiments" / "sarol-2024" / "gold"
 
 
 def load_claims(split: str) -> list[dict[str, Any]]:
@@ -212,8 +213,23 @@ def stage(
         "_Populated by the experiment adjudicator._\n"
     )
 
-    # Manifest summarizing what was staged, for the adapter to consume downstream.
-    manifest = {
+    # === Leakage-safe split of manifest info ===
+    # agent-visible: only what the dispatch prompts need (claim text normalized,
+    # citekey, source_mode, multi_cit_context). NO gold labels, NO claim_row_id,
+    # NO split, NO raw claim text (which could be grep'd against the benchmark).
+    staging_info = {
+        "citekey": citekey,
+        "source_mode": source_mode,
+        "multi_cit_context": multi_cit_context,
+        "source_description": source_desc,
+    }
+    (out_dir / "staging_info.json").write_text(json.dumps(staging_info, indent=2))
+
+    # agent-invisible: gold labels + full provenance, written to a sibling dir
+    # outside the staging tree. parse_verdict.py loads this at scoring time.
+    gold_file = GOLD_DIR / split / f"claim_{claim_row_id}_{cited_paper_bucket:03d}.json"
+    gold_file.parent.mkdir(parents=True, exist_ok=True)
+    gold_payload = {
         "split": split,
         "claim_row_id": claim_row_id,
         "cited_paper_bucket": cited_paper_bucket,
@@ -225,8 +241,13 @@ def stage(
         "gold_evidence": evidence_for_bucket,
         "staging_dir": str(out_dir),
     }
-    (out_dir / "sarol_manifest.json").write_text(json.dumps(manifest, indent=2))
-    return manifest
+    gold_file.write_text(json.dumps(gold_payload, indent=2))
+
+    return {
+        "staging_info": staging_info,
+        "gold_file": str(gold_file),
+        "staging_dir": str(out_dir),
+    }
 
 
 def main() -> int:

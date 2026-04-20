@@ -24,6 +24,9 @@
 !/data/benchmarks/*/download.sh
 !/data/benchmarks/*/README.md
 
-# Adapter-generated predictions and staged handles (large, regeneratable).
+# Adapter-generated predictions, staged handles, and gold files (regeneratable).
+# Gold is especially important to exclude — it must never end up in reproducible
+# artifacts under source control without review.
 /experiments/*/predictions/
 /experiments/*/staging/
+/experiments/*/gold/

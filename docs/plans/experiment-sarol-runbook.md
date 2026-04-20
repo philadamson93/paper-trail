@@ -14,6 +14,18 @@ All subagent calls use **Claude Opus 4.7** (upper-bound cost; most capable). In 
 
 Observed cost from the pilot claim (claim 417, Opus 4.7, no caching): ~$0.66 per claim end-to-end (extractor $0.31 + adjudicator $0.21 + verifier $0.14). Budget accordingly.
 
+## Leakage hygiene — READ BEFORE RUNNING
+
+Every adjudication must happen **without any subagent seeing the gold label first**. Two layers:
+
+1. **Gold files live outside the staging tree.** `stage_claim.py` writes `staging_info.json` (agent-safe: citekey, source_mode, multi_cit_context only) into the staging dir, and writes gold labels to `experiments/sarol-2024/gold/<split>/claim_<row_id>_<bucket>.json`. Subagents are given only the staging path; they must not reach into `experiments/sarol-2024/gold/` or into `data/benchmarks/sarol-2024/` (the raw benchmark, which also contains gold).
+
+2. **Every subagent dispatch must include a sandbox restriction.** When filling the extractor / adjudicator / verifier dispatch prompts, append this paragraph to each prompt before sending (the orchestrator is responsible — subagents will follow it):
+
+    > **Filesystem restriction.** You may read only files at the paths explicitly listed in the *Inputs* section above, plus files under the `source handle` / `evidence file` directories as needed. You must NOT invoke `ls`, `cat`, `rg`, or any other command against the benchmark directory `data/benchmarks/sarol-2024/`, against any `experiments/sarol-2024/gold/` directory, against `experiments/sarol-2024/staging/*/staging_info.json` or sibling manifests, or against any parent-directory / sibling paths of the paths given to you. If you need a file not listed in *Inputs*, stop and report back to the orchestrator instead of reading it.
+
+If a subagent violates this (even curiously), flag the verdict and discard. Note the violation in the error-analysis writeup; do not silently correct.
+
 ## Preconditions
 
 - Running inside Claude Code (the agent IS the orchestrator; `/ground-claim`-style dispatch happens inline).
@@ -55,7 +67,9 @@ python3 experiments/sarol-2024/scripts/stage_claim.py \
   --out experiments/sarol-2024/staging/smoketest/claim_<CLAIM_ID>
 ```
 
-This creates a working directory with `claims_ledger.md`, `refs.bib`, and a pre-ingested handle at `pdfs/sarol_train_<PAPER_BUCKET>/` containing `content.txt`, `meta.json`, `ingest_report.json`. Also writes `sarol_manifest.json` summarizing what was staged and the gold evidence labels.
+This creates a paper-trail-compatible working directory with `claims_ledger.md`, `refs.bib`, a pre-ingested handle at `pdfs/sarol_train_<PAPER_BUCKET>/`, and a leakage-safe `staging_info.json` (citekey, source_mode, multi_cit_context only — **no gold, no claim_row_id, no raw benchmark pointer**).
+
+Gold labels for this claim are written to `experiments/sarol-2024/gold/train/claim_<CLAIM_ID>_<BUCKET_3DIGIT>.json` (outside the staging tree). Remember this path for step 5.
 
 ### 2. Dispatch the **evidence extractor** subagent
 
@@ -75,7 +89,7 @@ Use the real extractor dispatch prompt at `.claude/prompts/extractor-dispatch.md
 | `{{co_citekeys}}` | `[]` (for single-cit smoketest) |
 | `{{run_output_dir}}` | `<staging_dir>` |
 
-Dispatch the filled prompt as a subagent (same mechanism `/ground-claim` uses). The extractor writes `<staging_dir>/ledger/evidence/C001.json`.
+Dispatch the filled prompt as a subagent (same mechanism `/ground-claim` uses). **Append the filesystem-restriction paragraph from the "Leakage hygiene" section to every dispatch.** The extractor writes `<staging_dir>/ledger/evidence/C001.json`.
 
 **Capture usage.** The Agent tool returns a `<usage>` block with `total_tokens`, `tool_uses`, `duration_ms`. Immediately after the call, record:
 
@@ -103,7 +117,7 @@ Slot fills:
 | `{{multi_cit_context}}` | `manifest.multi_cit_context` (`"single"` for all smoketest claims) |
 | `{{run_output_dir}}` | same as step 2 |
 
-The adjudicator reads `<staging_dir>/ledger/evidence/C001.json` + `experiments/sarol-2024/specs/verdict_schema_sarol.md` and writes `<staging_dir>/ledger/claims/C001.json`. Dispatch via `Agent` tool with `model: "opus"`.
+The adjudicator reads `<staging_dir>/ledger/evidence/C001.json` + `experiments/sarol-2024/specs/verdict_schema_sarol.md` and writes `<staging_dir>/ledger/claims/C001.json`. Dispatch via `Agent` tool with `model: "opus"`, and **append the filesystem-restriction paragraph** to the dispatch prompt.
 
 **Validate on exit:**
 
@@ -119,7 +133,7 @@ If validation fails: **stop and debug the adjudicator prompt or the Sarol rubric
 
 Unchanged from paper-trail native. Use `.claude/prompts/verifier-dispatch.md`. Dispatch via `Agent` tool with `model: "opus"`. The verifier just spot-checks the extractor's evidence against `content.txt`; it does not care about the rubric variant.
 
-Sample one evidence entry from the adjudicated claim, fill slots, dispatch. The verifier writes `<staging_dir>/ledger/verifications/C001__C001.a.json`.
+Sample one evidence entry from the adjudicated claim, fill slots, dispatch with `model: "opus"` and the filesystem-restriction paragraph appended. The verifier writes `<staging_dir>/ledger/verifications/C001__C001.a.json`.
 
 On `verdict_impact == "bounce_to_re_ground"`: re-run steps 2–3 for that claim (one bounce max in the smoketest; if it bounces again, flag and move on).
 
@@ -130,8 +144,11 @@ On `verdict_impact == "bounce_to_re_ground"`: re-run steps 2–3 for that claim 
 ```bash
 python3 experiments/sarol-2024/scripts/parse_verdict.py \
   --staging experiments/sarol-2024/staging/smoketest/claim_<CLAIM_ID> \
+  --gold experiments/sarol-2024/gold/train/claim_<CLAIM_ID>_<BUCKET_3DIGIT>.json \
   --out experiments/sarol-2024/predictions/smoketest.jsonl
 ```
+
+The `--gold` path is required and deliberately lives outside staging so the pre-adjudication subagents never had access. If the gold file is missing, re-run `stage_claim.py` to regenerate it.
 
 Appends one JSONL line with `{pred_label, gold_label, pred_3way, gold_3way, usage: {…}, …}` to `predictions/smoketest.jsonl`. The `usage` block folds in per-stage token counts and estimated USD cost (input-token split is inferred at 85/15 when the runtime only gives total tokens).
 
@@ -167,9 +184,10 @@ If all three pass: proceed to the 50-claim pilot (see the experiment plan, Proto
 
 - Do not edit `.claude/specs/verdict_schema.md` or `.claude/prompts/adjudicator-dispatch.md`. The Sarol-variant rubric and dispatch are siblings under `experiments/sarol-2024/`.
 - Do not run `/ground-claim` for these claims. It uses the default adjudicator (native rubric) and will produce paper-trail-native labels that our parser won't accept.
-- Do not pre-view the gold label before the adjudicator emits a verdict. The adjudicator must never see the gold.
+- **Do not pre-view the gold label before the adjudicator emits a verdict.** Do not `cat` any file under `experiments/sarol-2024/gold/`, `data/benchmarks/sarol-2024/`, or the benchmark raw data as part of orchestration — only `parse_verdict.py` touches gold, and only after adjudication has completed.
+- Do not add any slot fill that contains gold label text to a dispatch prompt. If you see `ACCURATE`, `OVERSIMPLIFY`, etc. ending up in a subagent's input, stop and audit.
 - Do not iterate prompts based on test outcomes. Only train is fair game for iteration.
-- Do not commit `staging/` or `predictions/` bulk artifacts — they're gitignored.
+- Do not commit `staging/`, `predictions/`, or `gold/` bulk artifacts — they're gitignored.
 
 ## If something goes sideways
 
