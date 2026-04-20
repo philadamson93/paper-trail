@@ -5,7 +5,7 @@
 <h1 align="center">paper-trail</h1>
 
 <p align="center">
-  Does the paper you cited actually say that? <code>paper-trail</code> reads each cited source in full, extracts evidence, and records a verdict per claim.
+  <code>paper-trail</code> is a Claude Code–native workflow.
 </p>
 
 <p align="center">
@@ -22,16 +22,9 @@
   </a>
 </p>
 
-**Get started**
-
-1. **One-time install** — clone this repo and run `/paper-trail-init` (see [Install](#install)).
-2. **Launch Claude Code** in the repo, type `/paper-trail`, answer a few setup questions.
-
 ---
 
-A Claude Code–native workflow. Each run produces a machine-readable verdict ledger (JSON) and a standalone HTML viewer.
-
-## Why
+## Why paper-trail
 
 Scientific papers routinely cite 50–100 references, and verifying every one by hand rarely happens — LLM-assisted writing makes plausibly-phrased misattributions easier to produce and harder to spot.
 
@@ -40,6 +33,25 @@ Scientific papers routinely cite 50–100 references, and verifying every one by
 - **Authors** — proofread your own citations before submission; establish the rigor of your grounding work in the record.
 - **Reviewers** — skip the manual slog of opening every cited paper; triage from a ledger of flagged entries.
 - **Readers and the public** — follow a transparent trail from each claim to its source and decide what to trust.
+
+## Getting Started
+
+Clone this repo and launch Claude Code in it:
+
+```bash
+git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
+cd ~/src/paper-trail
+```
+
+1. **One-time install** — run `/paper-trail-init` to bootstrap system prerequisites (GROBID, poppler, optional MCPs). Details: [docs/prerequisites.md](docs/prerequisites.md).
+2. **Audit a paper** — run `/paper-trail` and answer a few setup questions.
+
+For author mode against your own manuscript, vendor-copy `.claude/` and `templates/` into your writing project and invoke `/paper-trail --author` there:
+
+```bash
+cp -r ~/src/paper-trail/.claude .
+cp -r ~/src/paper-trail/templates .
+```
 
 ## How it works
 
@@ -65,33 +77,6 @@ Say a paper includes *"following the method in Smith et al. 2022, we pretrained 
 7. **Records** everything — verdict, sub-claim breakdown, evidence quotes, page numbers, suggested fix — in a per-claim JSON. A `ledger.md` and a self-contained `demo.html` viewer are rendered from those JSONs.
 
 Repeat for every citation. At 50+ references per paper, this is why it usually doesn't get done by hand in review.
-
-## Install
-
-```bash
-git clone https://github.com/philadamson93/paper-trail.git ~/src/paper-trail
-cd ~/src/paper-trail
-```
-
-On a fresh machine, bootstrap system prerequisites (GROBID, poppler, optional MCPs) with:
-
-```
-/paper-trail-init
-```
-
-It probes each dependency, reports what's missing, and offers per-step installs. `/paper-trail` also auto-runs the blocking checks at preflight, so you can usually jump straight to `/paper-trail <pdf>`. Details: [docs/prerequisites.md](docs/prerequisites.md).
-
-Two ways to run:
-
-- **From the repo.** The orchestrator reads dispatch prompts, JSON schemas, and helper scripts from `.claude/` at cwd. `cd ~/src/paper-trail` and invoke `/paper-trail` there; reader-mode output lands in `./paper-trail-<pdf-stem>/`.
-- **Vendor-copy into your project.** For author mode against your own manuscript:
-
-  ```bash
-  cp -r ~/src/paper-trail/.claude .
-  cp -r ~/src/paper-trail/templates .
-  ```
-
-  Then invoke `/paper-trail --author` from the project root.
 
 ## Run it
 
