@@ -15,3 +15,15 @@
 .claude/skills/
 .claude/scripts/__pycache__/
 *.pyc
+
+# External benchmark datasets (fetched on demand; see data/benchmarks/*/download.sh).
+# Bulk data is not committed; download scripts and READMEs are.
+# NOTE: `/dir/*/` ignores the directory entirely and prevents re-include via `!`.
+# Ignore contents-not-dir so re-includes work.
+/data/benchmarks/*/*
+!/data/benchmarks/*/download.sh
+!/data/benchmarks/*/README.md
+
+# Adapter-generated predictions and staged handles (large, regeneratable).
+/experiments/*/predictions/
+/experiments/*/staging/
