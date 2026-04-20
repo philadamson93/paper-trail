@@ -38,14 +38,14 @@ Author mode:
 
 ## Initial questions
 
-Use `AskUserQuestion` for any value not provided via args or reliably inferrable from the working directory. Skip a question when the answer is unambiguous from context.
+Use `AskUserQuestion` for any value not provided via args or reliably inferrable from the working directory. Skip a question when the answer is unambiguous from context. **Exception:** the manuscript path in author mode is never inferrable — always ask (see Q2 below).
 
 1. **Workflow** — `reader` (default) or `author`. Skip this question if the invocation already specifies: presence of `--author` or a `.tex` path implies author mode; a PDF path argument implies reader mode.
 2. **Input** — what paper are we auditing?
    - **Reader mode:** the input PDF. Offer two ways to provide it:
      - **Paste a path** (absolute or relative).
      - **Search by name** — ask for the paper's filename or title fragment (e.g., "deuterium metabolic imaging" or "DMI Adamson 2023"). Run a filesystem search (`Glob` + lightweight `find`) against likely locations (`~/Documents`, `~/Downloads`, `~/Desktop`, and cwd). If multiple candidates match, let the user pick via `AskUserQuestion`; if zero match, iterate on the search fragment. Never silently pick a PDF — always confirm.
-   - **Author mode:** path to the manuscript `.tex` file (or confirm auto-detected one in cwd). If no `claims_ledger.md` exists at the project root, offer to run `/init-writing-tools` first.
+   - **Author mode:** if the invocation included a `.tex` path argument, accept it without a question. Otherwise, **always prompt via `AskUserQuestion` for the manuscript path** — do not probe cwd and proceed silently, even if cwd contains a `.tex` + `.bib` + `claims_ledger.md`. The author-mode project root is load-bearing: every write lands there, and "cwd happens to look right" is not confirmation. Cwd auto-detection may appear as one option alongside "paste a path" / "search by name", but it is never the default action. If no `claims_ledger.md` exists at the chosen project root, offer to run `/init-writing-tools` first.
 3. **Output location**
    - **Reader mode:** output directory, default `./paper-trail-<pdf-stem>/`, confirmable or overridable.
    - **Author mode:** uses the existing project `claims_ledger.md`; no separate output dir.
