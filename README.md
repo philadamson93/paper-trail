@@ -30,7 +30,7 @@ Scientific papers routinely cite 50–100 references, each backing a claim in th
 
 `paper-trail` brings citation provenance to authors, reviewers, and the public alike:
 
-- **Authors:** proofread your own citations before submission; establish the rigor of your grounding work in the record.
+- **Authors:** proofread your own citations before submission and properly scope claims.
 - **Reviewers:** skip the manual slog of opening every cited paper; triage from a ledger of flagged entries.
 - **Readers and the public:** establishes trust by following a transparent trail from each claim to its source.
 
