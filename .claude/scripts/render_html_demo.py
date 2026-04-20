@@ -820,6 +820,80 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     main.viewer {{ flex-direction: column; }}
     aside.sidebar {{ width: 100%; max-height: 45vh; border-left: none; border-top: 1px solid var(--border); }}
   }}
+
+  /* Help popup */
+  .help-btn {{
+    background: transparent;
+    color: #f8fafc;
+    border: 1px solid #64748b;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+  }}
+  .help-btn:hover {{ background: rgba(255,255,255,0.12); border-color: #f8fafc; }}
+
+  #help-popup {{
+    background: white;
+    border-radius: 8px;
+    max-width: 560px;
+    width: calc(100% - 2rem);
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+  }}
+  .help-head {{
+    padding: 0.85rem 1.05rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }}
+  .help-head h2 {{ margin: 0; font-size: 1rem; font-weight: 600; flex: 1; }}
+  .help-body {{
+    overflow-y: auto;
+    padding: 0.85rem 1.05rem 1.05rem 1.05rem;
+    font-size: 0.85rem;
+    color: #334155;
+  }}
+  .help-body h3 {{
+    font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin: 0.9rem 0 0.35rem 0;
+  }}
+  .help-body h3:first-child {{ margin-top: 0; }}
+  .help-body ul {{ margin: 0.25rem 0; padding-left: 1.15rem; }}
+  .help-body li {{ margin: 0.3rem 0; line-height: 1.45; }}
+  .help-body code {{
+    background: #f1f5f9; padding: 1px 4px; border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8em;
+  }}
+  .help-body .kbd {{
+    display: inline-block; padding: 0 0.3rem;
+    border: 1px solid var(--border-strong); border-bottom-width: 2px;
+    border-radius: 3px; background: #f8fafc;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+  }}
+  .verdict-guide {{
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.4rem 0.6rem;
+    align-items: start;
+  }}
+  .verdict-guide .vg-desc {{
+    font-size: 0.8rem;
+    color: #475569;
+    line-height: 1.4;
+  }}
 </style>
 </head>
 <body>
@@ -827,6 +901,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   <h1>{title}</h1>
   <div class="doi">{doi_link}</div>
   <div class="counts" id="counts"></div>
+  <button class="help-btn" id="help-btn" title="How to use this viewer" aria-label="help">?</button>
 </header>
 
 <main class="viewer">
@@ -857,6 +932,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 <div class="popup-backdrop" id="popup-backdrop">
   <div id="popup" role="dialog" aria-modal="true"></div>
+</div>
+
+<div class="popup-backdrop" id="help-backdrop">
+  <div id="help-popup" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-head">
+      <h2 id="help-title">How to use this viewer</h2>
+      <button class="popup-close" id="help-close" aria-label="close">×</button>
+    </div>
+    <div class="help-body" id="help-body"></div>
+  </div>
 </div>
 
 <script src="{pdfjs_base}/pdf.min.js"></script>
@@ -1008,7 +1093,7 @@ function showPopup(claimId) {{
 }}
 function hidePopup() {{ backdrop.classList.remove('open'); }}
 backdrop.addEventListener('click', (e) => {{ if (e.target === backdrop) hidePopup(); }});
-document.addEventListener('keydown', (e) => {{ if (e.key === 'Escape') hidePopup(); }});
+document.addEventListener('keydown', (e) => {{ if (e.key === 'Escape') {{ hidePopup(); hideHelp(); }} }});
 
 function renderPopupContent(claim, ref, refnum, summary) {{
   const v = claim.overall_verdict || 'PENDING';
@@ -1575,6 +1660,75 @@ function dataUrlToBytes(dataUrl) {{
   for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
   return bytes;
 }}
+
+// ------- Help popup --------
+const VERDICT_DESC = {{
+  CONFIRMED: "Source fully supports the claim.",
+  CONFIRMED_WITH_MINOR: "Supported, with minor deviations (rounding, rewording).",
+  OVERSTATED_MILD: "Claim is slightly stronger than the source supports.",
+  OVERSTATED: "Claim is clearly stronger than the source supports.",
+  OVERGENERAL: "Claim is broader than the specific source finding.",
+  PARTIALLY_SUPPORTED: "Some sub-claims supported, others not.",
+  CITED_OUT_OF_CONTEXT: "Source says it, but in a different sense or scope.",
+  INDIRECT_SOURCE: "Cited work is itself citing the real source.",
+  MISATTRIBUTED: "Attributed to the wrong paper.",
+  UNSUPPORTED: "No evidence for the claim in the cited source.",
+  CONTRADICTED: "Source actively contradicts the claim.",
+  AMBIGUOUS: "Evidence unclear or conflicting.",
+  PENDING: "Source PDF unavailable — not yet adjudicated.",
+}};
+
+const helpBackdrop = document.getElementById('help-backdrop');
+const helpBody = document.getElementById('help-body');
+
+function renderHelpBody() {{
+  const counts = DATA.verdictCounts || {{}};
+  const present = Object.keys(counts)
+    .filter(v => counts[v])
+    .sort((a, b) => ((summaries.find(s => s.verdict === a) || {{}}).severity ?? 99)
+                  - ((summaries.find(s => s.verdict === b) || {{}}).severity ?? 99));
+  const verdictRows = present.map(v => `
+    <span class="verdict-pill" style="background:${{COLORS[v]||'#9ca3af'}}">${{escapeHtml(LABELS[v]||v)}}</span>
+    <span class="vg-desc">${{escapeHtml(VERDICT_DESC[v] || '')}}</span>
+  `).join("");
+  helpBody.innerHTML = `
+    <h3>Navigating the audit</h3>
+    <ul>
+      <li><strong>Click a claim row</strong> in the sidebar — the PDF jumps to that sentence and highlights it in yellow.</li>
+      <li><strong>Click a numbered citation</strong> in the PDF (the colored underlines) — the sidebar scrolls to the matching claim.</li>
+      <li><strong>Click the <span class="kbd">ⓘ</span> button</strong> on a row — opens full details: sub-claims, source evidence, and suggested edits.</li>
+      <li><strong>Filter by verdict</strong> — click the colored chips at the top of the sidebar to hide a category; click again to re-show.</li>
+      <li><strong>Search</strong> — the input above the list filters by claim text, citekey, or claim id.</li>
+      <li><strong>Close popups</strong> with <span class="kbd">Esc</span> or by clicking the dimmed backdrop.</li>
+    </ul>
+    <h3>Verdicts in this audit</h3>
+    <div class="verdict-guide">${{verdictRows || '<span class="vg-desc">(no claims recorded)</span>'}}</div>
+    <h3>Color coding in the PDF</h3>
+    <ul>
+      <li>Each citation number is <strong>underlined in the color of its worst verdict</strong> on that reference — a red underline means at least one unsupported or contradicted claim.</li>
+      <li>The sentence that made the active claim is highlighted in <span style="background:rgba(252,211,77,0.55);padding:0 3px;border-radius:2px">yellow</span>.</li>
+    </ul>
+  `;
+}}
+
+function showHelp() {{
+  renderHelpBody();
+  helpBackdrop.classList.add('open');
+}}
+function hideHelp() {{ helpBackdrop.classList.remove('open'); }}
+
+document.getElementById('help-btn').addEventListener('click', showHelp);
+document.getElementById('help-close').addEventListener('click', hideHelp);
+helpBackdrop.addEventListener('click', (e) => {{ if (e.target === helpBackdrop) hideHelp(); }});
+
+// Auto-show on first visit; subsequent visits stay out of the way until the user opens it.
+try {{
+  const KEY = 'paper-trail-help-seen-v1';
+  if (!localStorage.getItem(KEY)) {{
+    setTimeout(showHelp, 350);
+    localStorage.setItem(KEY, '1');
+  }}
+}} catch (_) {{ /* localStorage blocked — skip first-run popup */ }}
 
 // ------- Boot --------
 renderSidebar();
