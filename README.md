@@ -5,11 +5,7 @@
 <h1 align="center">paper-trail</h1>
 
 <p align="center">
-  <code>paper-trail</code> is a Claude Code–native workflow.
-</p>
-
-<p align="center">
-  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and takes the link from claim to source on faith. It doesn't have to work that way anymore. This is what an online journal should look like:
+  The bracket-number citation is a pre-digital convention: a reader sees <code>[7]</code> and takes the link from claim to source on faith. <code>paper-trail</code> — a Claude Code–native workflow — turns each citation into a verdict backed by evidence. This is what an online journal could look like instead:
 </p>
 
 <p align="center">
