@@ -8,11 +8,19 @@ Companion docs: `docs/plans/experiment-sarol-benchmark.md` (experiment strategy)
 
 Run paper-trail's real extractor → Sarol-variant adjudicator → verifier pipeline against 5 stratified training claims from Sarol 2024. Emit predictions in the Sarol 9-class rubric and compare to gold labels. Log per-stage token usage and cost into the ledger. Sanity-check end-to-end plumbing before scaling up.
 
-## Model selection
+## Model selection and version pinning
 
-All subagent calls use **Claude Opus 4.7** (upper-bound cost; most capable). In each Agent tool invocation below, pass `model: "opus"` explicitly. Cheaper ablations (Sonnet 4.6, Haiku 4.5) are a separate sweep axis — not part of the smoketest.
+**Orchestrator.** Claude Code session runs against **Claude Opus 4.7**. When invoking headlessly for eval, specify on the command line: `claude --model opus --print /sarol-eval …`. The `opus` alias resolves to the current Opus generation (Opus 4.7 as of 2026-04-21).
 
-Observed cost from the pilot claim (claim 417, Opus 4.7, no caching): ~$0.66 per claim end-to-end (extractor $0.31 + adjudicator $0.21 + verifier $0.14). Budget accordingly.
+**Subagents (extractor, adjudicator, verifier).** Every Agent tool dispatch passes `model: "opus"` explicitly. Same alias, same resolution.
+
+**Known limitation (paper-level).** Claude Code's Agent tool accepts only the aliases `opus` / `sonnet` / `haiku` — not full version hashes. We cannot pin `claude-opus-4-7` specifically; we pin via alias. If Anthropic promotes a new Opus version behind the `opus` alias mid-experiment, that is a silent change to the system under evaluation. Mitigation: keep the whole experiment inside a tight calendar window (target: complete all train + dev + test runs within ~2 weeks of 2026-04-21) so alias-drift exposure is minimized. Paper methodology section discloses this honestly.
+
+**Cheaper-model ablations** (Sonnet 4.6, Haiku 4.5) are a separate sweep axis. Not part of the baseline curve.
+
+**Inference seed.** Not lockable through the Agent tool (no seed parameter exposed to subagent dispatches). Opus 4.7 is therefore effectively non-deterministic across our runs. Mitigation: multi-seed calibration on `paper-trail-v1` to measure noise amplitude; multi-seed (n=3+) at locked-candidate and test for confidence intervals.
+
+**Observed cost from the pilot claim** (claim 417, Opus 4.7, no caching): ~$0.66 per claim end-to-end (extractor $0.31 + adjudicator $0.21 + verifier $0.14). Budget accordingly.
 
 ## Leakage hygiene — READ BEFORE RUNNING
 
