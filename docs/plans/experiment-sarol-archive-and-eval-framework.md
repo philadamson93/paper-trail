@@ -172,7 +172,16 @@ Smoketest (N=5) is a plumbing gate, not a framework datapoint.
 
 Three-tier classification of what gets fixed, logged, or varied per run. Invariant violations invalidate the run and its archived results.
 
-### Tier 1 — Invariants (under our control, must be fixed, validated at every run)
+### Tier 1 — Invariants (declared-then-locked-per-run, validated at every run)
+
+**Semantics (clarified 2026-04-21):** Tier-1 invariance is about **integrity between declaration and execution**, not about freezing values across runs. Before any eval run, an `expected_invariants.json` is declared (per-run, committed alongside the subset manifest or derived from the tag being evaluated). At run time, the validator checks that actual values match declared values. Mismatch invalidates the run.
+
+Two flavors share the same validator machinery:
+
+- **Constant across all runs** — things that never vary: model alias (`opus`), rubric variant (`sarol_2024_9class`), benchmark / gold data hashes, environment variables, memory-blind status.
+- **Varies across runs but locked per-run** — things that change intentionally per revision: paper-trail version tag (we're evaluating v2 in one run, v3 in the next — but within a given run, the checked-out commit must equal the declared v<N>), eval-subset manifest hash (different subsets per gate), expected prompt-file hashes (derived from the declared paper-trail tag).
+
+Both shapes validate by comparing actual-at-run-time to expected-for-this-run. **The invariant is that what you ran equals what you said you'd run.**
 
 | Invariant | How pinned | Validator check |
 | --- | --- | --- |

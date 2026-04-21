@@ -74,12 +74,18 @@ See `docs/plans/experiment-sarol-archive-and-eval-framework.md` for the full fra
 ### 5. Build the eval arm
 
 Once tasks 1–4 are closed:
+
 - `experiments/sarol-2024/eval-harness/` scaffolding
 - Move `stage_claim.py`, `parse_verdict.py`, `record_usage.py` into it
-- Author `/sarol-eval` slash command definition
+- `sample_subset.py` — seeded random draw from `claims-train.jsonl` or `claims-dev.jsonl`; outputs `eval-harness/subsets/eval-{split}-{N}.json` with committed claim-ID list and seed
+- `validate_run.py` — implements the three-tier invariant framework from `experiment-sarol-archive-and-eval-framework.md` §"Measurement invariants and validation." Checks Tier 1 pre-run, per-dispatch, and post-run; writes full run-invariants block into `summary.json`
+- `/sarol-eval` slash command definition — headless eval runner per Q9b; invokes paper-trail's Sarol-variant pipeline per claim; aggregates to `archive/paper-trail-v<N>/eval-{split}-{N}/`
 - Pre-commit hook enforcing eval-harness immutability on non-eval branches
+- Commit any per-experiment `.claude/settings.json` / MCP config to the repo (captured by the paper-trail version tag — do NOT let these live in user-global settings)
 - Move orchestrator-runtime decisions (verifier sampling, retry, bounce, schema validation) into eval-harness Python
-- Test on paper-trail-v1 + eval-train-10 (~$7 smoketest of the new plumbing)
+- Test on paper-trail-v1 + eval-train-10 (~$7 smoketest of the new plumbing; validates that invariant-check machinery fires correctly)
+
+Short specs per script live alongside the script as `<name>.md` siblings, written at build time. No separate feature-requirements docs authored in advance — the archive-framework doc is the specification; individual scripts get short implementation notes only.
 
 ### 6. First curve points
 
