@@ -138,6 +138,40 @@ b) **Policy-gated main-session test blindness.** The main planning session — t
 
 ---
 
+## Human-value retrospective — raw material for the paper's reflective section
+
+Running catalog of collaboration-pattern moments captured in `docs/journal/2026-04-21-*.md` entries. The paper's reflective section (candidate contribution: "what value does the human bring in human-plus-agent research collaboration?") can quote and analyze these. Not every entry here will survive to publication; the point is to have a dataset.
+
+### Observed patterns so far
+
+**Pattern 1 — Agent surfaces operational distinctions that Human's intuition initially collapsed.**
+Example (D14): Human leaned "train and val are functionally the same in this framework." Agent countered with the per-claim-discipline argument (on train we inspect per-claim failures; on val we look only at aggregate F1 and never at per-claim cases). Human explicitly credited the insight: "Note that that was your insight."
+
+**Pattern 2 — Human surfaces structural / strategic arguments that Agent's initial lean underweighted.**
+Examples:
+- D9 (monolithic version tagging): Agent's argument was figure-simplicity. Human's argument was structural flexibility — "the final solution may not have three prompts, may not be adjudicator/extractor/verifier." Stronger; subsumed Agent's.
+- D11 (headless Claude Code vs direct SDK): Agent argued external reproducibility. Human argued deployment parity and the ambient-Claude-Code future. Stronger; Agent conceded.
+- D4 (random vs stratified sampling for eval-train-50): Agent leaned stratified with oversampling of tail classes. Human pushed random on defensibility grounds (oversampling is fairness optimization, not overall-performance optimization). Stronger.
+
+**Pattern 3 — Defer risks sliding into oblivion unless pinned by milestone.**
+Example (D20): Agent recommended deferring standalone feature docs. Human's response "just make sure you document [the caveat]" pinned what MUST NOT be deferred (expected_invariants schema, /sarol-eval contract) as non-deferrable Task 5 deliverables. Without the pin, "defer" collapses to "never happens."
+
+**Pattern 4 — Agent enumerates specific instances of a Human-articulated principle.**
+Example (D19): Human articulated the invariants-vs-free-variables dividing line philosophically. Agent populated the Tier 1 / Tier 2 / Tier 3 lists with specific items, including candidates Human hadn't named (tool permissions, MCP servers, schema versions, slot-fill determinism). Human then refined by moving tools + MCP off Tier 1 into the system-design-surface.
+
+### Hypothesis to test as the experiment continues
+
+**Claim to defend or falsify in the paper:** human+agent research collaboration on methodology-heavy problems shows a complementary pattern — the agent has depth on known instances of a concept (naming specific items in a category, checking consistency across a literature) and the human has strategic-context judgment (when a framing is philosophically load-bearing, when a deferral needs a milestone pin, when operational discipline beats elegant theory). Neither party's contribution is subset of the other's; removing either degrades the output measurably.
+
+Each journal entry through the remaining experiment should continue to tag contributions by origin so we can test this hypothesis retrospectively. If the pattern does NOT hold — if either party's contributions dominate, or if we can't cleanly distinguish them — that is also a paper finding, worth reporting honestly.
+
+## Cost-reduction paths to evaluate after initial results
+
+- **Prompt caching for the rubric + dispatch-prompt prefix.** Anthropic's prompt caching could amortize the fixed-prefix tokens across repeated subagent calls. Estimated 30%+ input-token reduction on the adjudicator's rubric-prefix alone.
+- **Batch API (50% cost at 24h latency).** For the full-train eval at N=2,141 this saves ~$780.
+- **Paperclip (MCP-cached paper content).** User's Stanford collaboration. Reading the cited paper is structurally expensive because every subagent call re-ingests the content; an MCP-backed cache of pre-parsed biomedical papers would slash per-claim cost. Deferred per `project_paperclip_primary.md` memory — Paperclip is a deferred optional accelerator, not primary. Revisit after initial results justify additional compute spend.
+- **Smaller model ablation (Sonnet 4.6, Haiku 4.5).** Named sweep axis in the experiment plan. Potentially large cost reduction if quality holds.
+
 ## Open paper-level decisions (logged, not decided)
 
 - Venue: which CS conference? Needs a decision before deadline constraints shape the writeup. Possible: ACL / EMNLP / NAACL (NLP); NeurIPS / ICML (ML with agentic angle); CHI / IUI (HCI, if practitioner framing dominates); a medical-informatics venue (Bioinformatics, JAMIA) given biomedical use case.
