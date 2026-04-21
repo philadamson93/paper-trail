@@ -109,6 +109,7 @@ See `experiment-sarol-archive-and-eval-framework.md` §"Open questions." Current
 - **Eval arm changes force re-baselining.** Once `experiments/sarol-2024/eval-harness/` is created and first used, any commit modifying it without rerunning v1 invalidates the curve.
 - **Model pinning.** Every subagent dispatch uses `model: "opus"`. Orchestrator invoked with `claude --model opus --print ...`. Each archived `summary.json` records the Claude Code version at run time as proxy for alias-drift detection. Mixed-model runs (opus/sonnet/haiku mix) are reserved for a named ablation branch, never the main curve.
 - **Calendar discipline for model-drift mitigation.** Target completion of all train + dev + test runs within ~2 weeks of 2026-04-21. Beyond that window, the risk of a silent `opus` alias drift grows; we either compress the schedule, re-baseline if we cross a version boundary, or accept the limitation explicitly.
+- **Measurement invariants are validated at every run.** Three-tier classification (invariants / logged / free) is defined in `experiment-sarol-archive-and-eval-framework.md` §"Measurement invariants and validation." Invariant violations invalidate the run. Tier 1 includes: prompt file hashes, eval-arm hashes, model aliases, subset manifest hash, benchmark + gold data hashes, tool permissions, MCP servers connected, env vars, memory-blind status, rubric variant. Validator (`validate_run.py`) is built as part of Task 5 (eval arm build).
 
 ## Paper contributions pursued (short list — full discussion in paper-writeup-items.md)
 

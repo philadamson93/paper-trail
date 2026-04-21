@@ -166,6 +166,81 @@ Smoketest (N=5) is a plumbing gate, not a framework datapoint.
 - Orchestrator invoked with `claude --model opus --print …`.
 - Each `archive/paper-trail-v<N>/*/summary.json` records the Claude Code version (from `claude --version`) and the current date (as a rough proxy for "what 'opus' meant at this point"). Enables post-hoc detection of alias drift.
 
+## Measurement invariants and validation
+
+**Human framing 2026-04-21:** "we cannot allow the model invocation to go off course, because that is something we are fixing. Same with seed, etc. There are these things that we keep fixed for measurement purposes, and then there are the things that we let the models or agents go off track, because that's what happens. You need good prompts to keep them on track. So yeah, draw that line in the sand."
+
+Three-tier classification of what gets fixed, logged, or varied per run. Invariant violations invalidate the run and its archived results.
+
+### Tier 1 — Invariants (under our control, must be fixed, validated at every run)
+
+| Invariant | How pinned | Validator check |
+| --- | --- | --- |
+| paper-trail version (the model under test) | git tag `paper-trail-v<N>`, checked out at eval time | Record commit SHA at run start; verify matches tag |
+| Eval-harness version | git tag `eval-v<M>` | Record commit SHA; verify |
+| Orchestrator model alias | `claude --model opus --print …` CLI flag | Record from invocation; compare to expected |
+| Subagent model alias | `model: "opus"` on every Agent dispatch | Log each dispatch's model; reject run if any deviates |
+| Eval subset composition | committed JSON manifest (list of claim row IDs) | SHA-256 of manifest at run time; compare to committed hash |
+| Prompt file contents | at `paper-trail-v<N>` git tag | SHA-256 per file under `experiments/sarol-2024/prompts/`, `experiments/sarol-2024/specs/`, and any `.claude/prompts/*.md` paper-trail references; record; reject on mismatch |
+| Eval-arm code | at eval-harness git tag | SHA-256 per file under `experiments/sarol-2024/eval-harness/` |
+| Benchmark + gold data | at `$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR` | SHA-256 of `claims-train.jsonl`, `claims-dev.jsonl`, `corpus.jsonl`, `annotations/{Train,Dev}` |
+| Memory-blind invocation | mechanism per Task 2 (fresh working dir or clean profile) | Probe at run start — ask orchestrator a memory-specific question; if answered with memory-content, abort |
+| Rubric variant per verdict | every verdict declares `rubric_variant: "sarol_2024_9class"` | Already validated by `parse_verdict.py` |
+| Environment variables affecting eval | `PAPER_TRAIL_BENCHMARKS_DIR`, `PAPER_TRAIL_GOLD_DIR` | Record at run start; verify matches expected |
+| Tool permissions available to subagents | committed permission spec in the eval arm | Record subagent permission config; reject on deviation |
+| MCP servers connected | eval profile has zero MCP servers connected (unless an ablation explicitly adds one) | Enumerate at run start; reject if any active |
+
+### Tier 2 — Logged conditions (outside our control, recorded for drift detection)
+
+| Condition | Why logged | What to watch for |
+| --- | --- | --- |
+| Claude Code version (from `claude --version`) | Proxy for what the `opus` alias resolves to at run time | Version bumps mid-experiment ⇒ re-baseline flag |
+| Anthropic backend changes | Invisible model promotions, routing, caching behavior | Anomalous per-claim cost / latency vs v1 baseline |
+| Timestamp (UTC) per claim call | Chronological ordering, concurrent-load variance | Peak-vs-off-peak cost spread |
+| Wall-clock + token counts per stage | System efficiency, not a control | Unexpected spikes flag investigation |
+| User-level `~/.claude/CLAUDE.md` content hash | Could inject context into Claude Code sessions | Pending Task 2 verification: if it does propagate to subagents, promote to Tier 1 |
+| Temperature / top-p / sampling knobs | Not exposed to the Agent tool as arguments, but defaults may exist | Record whatever Anthropic returns in usage metadata; promote to Tier 1 if we gain control |
+| Extended-thinking / reasoning-mode flags | Opus 4.7 may have a reasoning budget setting | Record; promote to Tier 1 if control surfaces |
+
+### Tier 3 — Free variables (system behavior, expected to vary per prompt — these are the system under test)
+
+Do NOT attempt to fix these. The prompts ARE the control surface.
+
+- Sub-claim decomposition (extractor)
+- Phrasings tried per sub-claim (extractor)
+- Evidence passages selected, ordering (extractor)
+- Verdict labels assigned per sub-claim (adjudicator)
+- Rollup overall_verdict (adjudicator, though constrained by the worst-wins rule in the rubric spec)
+- Rationale text (adjudicator)
+- Remediation category + suggested_edit (adjudicator)
+- Flag assignments REVIEW / CRITICAL / AMBIGUOUS (adjudicator)
+- Verifier's narrative observation (verifier)
+
+### Validator structure
+
+`experiments/sarol-2024/eval-harness/validate_run.py` (to be written as part of Task 5 — eval arm build). Responsibilities:
+
+1. **Pre-run:** compute Tier-1 invariants at run start, compare to a committed `expected_invariants.json` sibling of the subset manifest. Any mismatch aborts the run before compute is spent.
+2. **Per-dispatch:** after each Agent tool call, verify dispatch-level invariants (model alias, permissions). Failure aborts that claim's run without discarding prior claims.
+3. **Post-run:** write all Tier-1 + Tier-2 values into `archive/paper-trail-v<N>/.../summary.json` under a `run_invariants` key.
+4. **Cross-run drift report** (periodic, optional): diff invariants across archived runs, flag anomalies in Tier-2 conditions even without Tier-1 violations.
+
+### Candidate additional invariants — raised 2026-04-21 by Agent for Human review
+
+Agent surfaced for Human discussion (not yet in Tier 1; waiting for call):
+
+- **Tool permissions** — already added to Tier 1 above. Default: subagents get `Bash`, `Read`, `Glob`, `Grep`, `Write` scoped to their handle; nothing else. Commit a spec.
+- **MCP servers connected** — added to Tier 1 above. Default: zero.
+- **Environment variables affecting eval** — added to Tier 1 above.
+- **Max tokens per subagent call** — if Agent tool truncates, partial verdicts result. Currently unspecified; default behavior unknown. Proposal: log actual tokens emitted per stage (already in usage); if we ever hit a ceiling, flag.
+- **Claim-subset manifest schema version** — if we change the manifest format, older runs may not be re-runnable. Version the manifest schema itself.
+- **Prompt-slot-fill values that aren't truly free.** The run_id, timestamp, claim_id assignment (C001/C002/…) — these should follow a deterministic rule per the eval-harness code, not ad-hoc orchestrator choice.
+
+Remaining Agent uncertainty (needs Human + spike):
+
+- **Does user-level `~/.claude/CLAUDE.md` content propagate to subagent contexts?** Currently Tier 2 (logged). If Task 2's spike shows it does propagate, promote to Tier 1 (fix CLAUDE.md content per eval run, or isolate entirely).
+- **Does temperature/top-p behave differently between `claude --print` and an interactive Claude Code session?** Unknown. Log everything the API metadata exposes.
+
 ## Memory isolation
 
 ### What actually needs to be memory-blind

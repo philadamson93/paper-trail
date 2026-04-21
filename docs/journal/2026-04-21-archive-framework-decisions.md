@@ -138,6 +138,17 @@ See `docs/plans/NEXT.md` for the living task list. As of end-of-day 2026-04-21, 
 
 **This is the first case in our journal where Human explicitly asked Agent's contribution to be credited as a data point.** Worth preserving for the paper's retrospective on human-agent collaboration value. Emerging pattern to test: Agent sometimes surfaces operational distinctions that Human's intuition initially collapsed; Human's role is often to surface strategic arguments that Agent's initial lean underweighted (e.g., monolithic tagging's structural-flexibility reason, random sampling's defensibility reason, headless-Claude-Code's ambient-future reason). Complementary, not hierarchical.
 
+### D19 — Three-tier measurement-invariant framework
+
+**Human framing 2026-04-21:** "we cannot allow the model invocation to go off course, because that is something we are fixing. Same with seed, etc. There are these things that we keep fixed for measurement purposes, and then there are the things that we let the models or agents go off track... You need good prompts to keep them on track and good structure. So yeah, draw that line in the sand. And raise any other lines that we may need to draw along the same philosophy."
+**Agent response:** formalized a three-tier classification — Tier 1 invariants (fixed + validated, violation invalidates the run), Tier 2 logged conditions (can't control, record for drift detection), Tier 3 free variables (prompt-driven, part of the system under test, must NOT be fixed). Enumerated specific Tier 1 invariants: paper-trail + eval-harness git tags, model aliases per role, eval subset manifest hash, prompt file hashes, eval-arm code hashes, benchmark + gold data hashes, memory-blind status, rubric variant declaration, environment variables, tool permissions, MCP servers connected.
+
+**Agent also surfaced candidate invariants Human had not yet named:** tool permissions available to subagents, connected MCP servers, max tokens per subagent call, claim-subset manifest schema version, orchestrator-assigned slot-fill values (run_id / claim_id naming). Added to Tier 1 where mechanism is clear. Extended-thinking / temperature / top-p parameters and user-level global CLAUDE.md propagation flagged as Tier 2 pending Task 2 spike.
+
+**Decision:** `validate_run.py` in the eval arm checks Tier 1 pre-run, per-dispatch, and post-run; any Tier 1 violation invalidates the run before (or during) compute is spent. Full write-up in `experiment-sarol-archive-and-eval-framework.md` §"Measurement invariants and validation."
+
+This exchange is a clean example of the collaboration pattern recorded in D14: Human articulated a methodological principle (invariants vs. free variables as a philosophical dividing line); Agent enumerated the specific instances and surfaced additional candidates Human hadn't named. Complementary; both contributions are load-bearing for the paper's methodology argument.
+
 ### D18 — Model pinning: alias-only, calendar-compressed; full-hash pinning deferred
 
 **Human raised 2026-04-21:** "we need to version control the model... If Claude releases 4.8, we still use 4.7... paper-trail is deploying sub-agents, and there is a choice in what sub-agents it deploys. I think we want to try to freeze that choice."
