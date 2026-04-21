@@ -187,8 +187,16 @@ Three-tier classification of what gets fixed, logged, or varied per run. Invaria
 | Memory-blind invocation | mechanism per Task 2 (fresh working dir or clean profile) | Probe at run start — ask orchestrator a memory-specific question; if answered with memory-content, abort |
 | Rubric variant per verdict | every verdict declares `rubric_variant: "sarol_2024_9class"` | Already validated by `parse_verdict.py` |
 | Environment variables affecting eval | `PAPER_TRAIL_BENCHMARKS_DIR`, `PAPER_TRAIL_GOLD_DIR` | Record at run start; verify matches expected |
-| Tool permissions available to subagents | committed permission spec in the eval arm | Record subagent permission config; reject on deviation |
-| MCP servers connected | eval profile has zero MCP servers connected (unless an ablation explicitly adds one) | Enumerate at run start; reject if any active |
+
+### What Tier 1 deliberately does NOT include (Human call 2026-04-21)
+
+**Tool permissions available to subagents** and **MCP servers connected** are NOT Tier 1 meta-invariants. They are part of the agentic system's design — a future paper-trail version might legitimately grant different subagent permissions or connect a different MCP (e.g., Paperclip for cached paper reads). Those are system-level design decisions that change across paper-trail versions.
+
+The meta-invariant is that the system's configuration — tool permissions, MCP server list, and any other agent-environment specification — is **captured by the git tag `paper-trail-v<N>`** via files committed to the repo (`.claude/settings.json`, any MCP config, permission specs). The "prompt file contents" hash in Tier 1 above should extend to include these config files.
+
+**Human framing 2026-04-21:** "tools and MCP servers are inside the environment that the agentic system may choose to build. Keep inside (not invariant)." Their status: free to differ across versions, but fixed within a version via committed repo state.
+
+**Operational implication:** commit any per-experiment `.claude/settings.json` / MCP config to the repo explicitly. Do NOT let tool permissions or MCP servers live in user-global settings, because those leak out of the version tag's snapshot.
 
 ### Tier 2 — Logged conditions (outside our control, recorded for drift detection)
 
@@ -225,21 +233,18 @@ Do NOT attempt to fix these. The prompts ARE the control surface.
 3. **Post-run:** write all Tier-1 + Tier-2 values into `archive/paper-trail-v<N>/.../summary.json` under a `run_invariants` key.
 4. **Cross-run drift report** (periodic, optional): diff invariants across archived runs, flag anomalies in Tier-2 conditions even without Tier-1 violations.
 
-### Candidate additional invariants — raised 2026-04-21 by Agent for Human review
+### Candidate additional invariants — Human decisions 2026-04-21
 
-Agent surfaced for Human discussion (not yet in Tier 1; waiting for call):
+Agent-raised candidates and Human calls:
 
-- **Tool permissions** — already added to Tier 1 above. Default: subagents get `Bash`, `Read`, `Glob`, `Grep`, `Write` scoped to their handle; nothing else. Commit a spec.
-- **MCP servers connected** — added to Tier 1 above. Default: zero.
-- **Environment variables affecting eval** — added to Tier 1 above.
-- **Max tokens per subagent call** — if Agent tool truncates, partial verdicts result. Currently unspecified; default behavior unknown. Proposal: log actual tokens emitted per stage (already in usage); if we ever hit a ceiling, flag.
-- **Claim-subset manifest schema version** — if we change the manifest format, older runs may not be re-runnable. Version the manifest schema itself.
-- **Prompt-slot-fill values that aren't truly free.** The run_id, timestamp, claim_id assignment (C001/C002/…) — these should follow a deterministic rule per the eval-harness code, not ad-hoc orchestrator choice.
-
-Remaining Agent uncertainty (needs Human + spike):
-
-- **Does user-level `~/.claude/CLAUDE.md` content propagate to subagent contexts?** Currently Tier 2 (logged). If Task 2's spike shows it does propagate, promote to Tier 1 (fix CLAUDE.md content per eval run, or isolate entirely).
-- **Does temperature/top-p behave differently between `claude --print` and an interactive Claude Code session?** Unknown. Log everything the API metadata exposes.
+- **Tool permissions** — NOT an invariant. Part of the agentic system's design; captured by the git tag.
+- **MCP servers connected** — NOT an invariant. Same reasoning as tools. A future version may legitimately connect Paperclip or another MCP; that is a system-level design change.
+- **Environment variables affecting eval** — Tier 1 invariant (kept).
+- **Max tokens per subagent call** — deferred; tracked in token counts already logged in Tier 2.
+- **Claim-subset manifest schema version** — deferred as implementation detail of the eval arm build.
+- **Orchestrator slot-fill determinism (run_id, timestamp, claim_id C001/C002/…)** — Tier 1 invariant. Rule lives in eval-arm Python; not ad-hoc orchestrator choice.
+- **User-level `~/.claude/CLAUDE.md` propagation** — deferred pending Task 2 spike. If it propagates, promote to Tier 1 (isolate or pin). Otherwise remains Tier 2.
+- **Temperature / top-p / sampling knobs** — fix if we can; fix path is further research (direct SDK access). Until then, Tier 2 (log whatever API metadata exposes).
 
 ## Memory isolation
 
