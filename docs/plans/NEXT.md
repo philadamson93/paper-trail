@@ -87,6 +87,13 @@ Once tasks 1–4 are closed:
 
 Short specs per script live alongside the script as `<name>.md` siblings, written at build time. No separate feature-requirements docs authored in advance — the archive-framework doc is the specification; individual scripts get short implementation notes only.
 
+**Two specs that MUST be written at build time (not deferred indefinitely — external reproducers need them):**
+
+1. **`expected_invariants.json` schema.** JSON schema spec. Defines what a valid expected-invariants manifest looks like (field names, types, which fields are required, which are optional). Matters because future reproducers — someone re-running `paper-trail-v6` two years from now — need to know the manifest format. ~50 lines. Author when `validate_run.py` lands; location: `experiments/sarol-2024/eval-harness/expected_invariants.schema.md` or alongside `validate_run.py` as a docstring-referenced file.
+2. **`/sarol-eval` I/O contract.** What command-line arguments it accepts, what exit codes it returns, what files it writes and where, what it does on invariant-violation (abort + error format). ~30 lines. Required for anyone running headless evals externally. Author when the slash command lands; location: as a docstring in the slash command definition or as `experiments/sarol-2024/eval-harness/sarol-eval.contract.md`.
+
+Both are implementation-close specs, not speculative feature docs. They exist to make the eval arm externally reproducible — someone cloning the repo a year later should be able to read these and run `paper-trail-v<N>` without having to reverse-engineer our conventions. Do NOT defer past Task 5 completion.
+
 ### 6. First curve points
 
 Run /sarol-eval on paper-trail-v1 at N=10 (and N=50 if N=10 looks clean). Apply INDIRECT-detection fix → tag paper-trail-v2 → rerun. Two points on the curve.

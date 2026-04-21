@@ -138,6 +138,18 @@ See `docs/plans/NEXT.md` for the living task list. As of end-of-day 2026-04-21, 
 
 **This is the first case in our journal where Human explicitly asked Agent's contribution to be credited as a data point.** Worth preserving for the paper's retrospective on human-agent collaboration value. Emerging pattern to test: Agent sometimes surfaces operational distinctions that Human's intuition initially collapsed; Human's role is often to surface strategic arguments that Agent's initial lean underweighted (e.g., monolithic tagging's structural-flexibility reason, random sampling's defensibility reason, headless-Claude-Code's ambient-future reason). Complementary, not hierarchical.
 
+### D20 — Two build-time specs committed as non-deferrable
+
+**Human 2026-04-21:** "just make sure you document [the caveat]."
+**Agent had proposed defer-most, with a caveat that two specs should ship with the eval arm:**
+
+1. **`expected_invariants.json` schema** — the format of the per-run declaration manifest. External reproducers need this to understand what was evaluated.
+2. **`/sarol-eval` I/O contract** — args, exit codes, output files, invariant-violation behavior. External reproducers need this to run paper-trail-v\<N\> retrospectively.
+
+**Decision:** both specs are non-deferrable. They must land with Task 5 (eval arm build), not later. Written alongside the code (docstring-referenced `.md` siblings), not as standalone plan docs. Captured in `docs/plans/NEXT.md` Task 5 so a fresh agent building the eval arm sees the requirement inline.
+
+**Meta-point on this exchange:** Agent's defer-most-feature-docs recommendation could have slid into defer-indefinitely if not explicitly pinned. Human's "just make sure you document" is the pinning move. Pattern worth recording: when Agent recommends deferral, Agent must simultaneously name what MUST-NOT be deferred past a specific milestone, and commit that in the plan doc. Otherwise deferral becomes oblivion.
+
 ### D19 — Three-tier measurement-invariant framework
 
 **Human framing 2026-04-21:** "we cannot allow the model invocation to go off course, because that is something we are fixing. Same with seed, etc. There are these things that we keep fixed for measurement purposes, and then there are the things that we let the models or agents go off track... You need good prompts to keep them on track and good structure. So yeah, draw that line in the sand. And raise any other lines that we may need to draw along the same philosophy."
