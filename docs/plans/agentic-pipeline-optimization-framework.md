@@ -428,6 +428,18 @@ Four-bucket structure for the paper's related-work section. Each bucket has repr
 
 Full decision log and required-citation list: journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D41.
 
+### Substrate choice — library-layer vs platform-layer (decision 2026-04-22)
+
+Python-native agent frameworks (Pydantic AI, LangGraph, CrewAI, AutoGen / Microsoft Agent Framework) occupy the **library layer** — typed-LLM-call primitives, some multi-agent delegation patterns, provider-agnosticism. To build paper-trail on a library-layer substrate, the developer assembles 3-4 community packages (e.g., `pydantic-deepagents`, `subagents-pydantic-ai`, `pydantic-ai-filesystem-sandbox`, `pydantic-ai-harness`) to approximate capability parity with Claude Code's platform primitives.
+
+Claude Code occupies the **platform layer** — subagent sandboxing, MCP integration, filesystem-scoped access control (`--add-dir`), hook ecosystem, slash-command packaging, headless invocation all ship as first-party defaults. Crucially, Claude Code is also **model+harness co-designed**: Claude has been post-trained on Claude Code usage patterns, accumulated from real-world usage traces feeding post-training cycles. Model-substrate alignment at the orchestrator-level tool-dispatch layer is a property that doesn't transfer when the same model is wrapped in a different substrate (though the underlying tool-call format post-training does transfer within a single vendor).
+
+**Key empirical finding from 2026-04-22 lit-check:** zero of 13 surveyed 2025-2026 agent-as-optimizer papers use Pydantic AI as target substrate. Field default is custom Python, SWE-agent-family scaffolds, or provider-native harnesses (Claude Code, Codex CLI, Gemini CLI). Pydantic AI in this space is tooling-layer (GEPA tutorials, MLflow integration), not research-layer. Full findings: journal `docs/journal/2026-04-22-substrate-claude-code-vs-pydantic-ai.md`.
+
+**Our substrate rationale:** we instantiate on Claude Code because (a) platform primitives as first-party defaults save 2-4 weeks of harness-level engineering, (b) model+harness co-design delivers orchestrator-level dispatch competence that alternative substrates don't match by construction, (c) inherited platform improvements as Anthropic continues investing, (d) velocity (paper-trail is already built here). Methodology contributions (tiered leakage, structural defenses, agent-only optimization loop, declarative heterogeneous controllability) are substrate-portable — clean ports to Pydantic AI / LangGraph / Microsoft Agent Framework are future-work. Honest tradeoff: vendor-lock-in to Anthropic; mitigated by per-run version logging + calendar compression. Not a novelty argument; a case-study-instantiation choice.
+
+**Framework survives substrate choice:** the tiered-leakage framework, OS-level structural enforcement, and declarative-controllability-as-optimization-surface contributions are articulated substrate-independently and port to any platform-layer substrate that supports equivalent primitives. Claim #8 is softened (D49) from "declarative per-subagent controllability uniquely first-class on Claude Code" to a case-study-instantiation rationale; the underlying methodological point (declarative per-subagent config enables topology as an optimization surface) stands. See journal D49 for the softening decision log.
+
 ---
 
 ## 9. Non-goals and explicit deferrals
