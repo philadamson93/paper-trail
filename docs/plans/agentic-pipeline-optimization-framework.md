@@ -210,6 +210,41 @@ Human articulation 2026-04-22: *"code can be written on the fly if needed. You c
 
 **Decision status.** D34 in journal entry `docs/journal/2026-04-22-topology-freedom-and-optimizer-affordances.md` commits the content above; §7 open problem #10 still tracks the full machine-checkable schema that folds into the `paper-trail-v<N>.json` archive artifact.
 
+**Seeded discipline — direct lifts from Karpathy's `autoresearch` (Mar 2026).**
+
+The optimizer's initial instruction document (our `program.md`-equivalent) adopts the following disciplines verbatim-in-spirit from Karpathy's `autoresearch` repo (https://github.com/karpathy/autoresearch), with attribution. These are general agentic-loop disciplines that transfer to our setting regardless of the target-domain specifics. Decision log: journal entry `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D42.
+
+- **NEVER STOP.** Once the experiment loop has begun, the optimizer does not pause to ask the human whether to continue. Autonomous loop runs until externally terminated. If it runs out of ideas, it thinks harder, re-reads in-scope files for new angles, consults prior revision history, tries combined or more radical changes — it does not check in.
+- **Simplicity criterion.** All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Removing something and getting equal-or-better results is a great outcome. When weighing a change, weight the complexity cost against the improvement magnitude honestly.
+- **CAN / CANNOT declarative block.** The instruction document has two explicit lists. Our mod surface: `experiments/sarol-2024/prompts/` (subagent dispatch prompts + rubric), `experiments/sarol-2024/specs/`, subagent config files under `.claude/agents/`, dispatcher CLI argument contracts, topology (number/roles/hand-offs of subagents). Our no-go zones: `experiments/sarol-2024/eval-harness/` (pre-commit hook enforces), `$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR`, sealed test at `$HOME/.paper-trail-sealed/sarol-2024-test/`, eval-arm git-tag contents.
+- **Output-flood prevention.** Eval runs redirect to log files (`claude --bare --print ... > run.log 2>&1`); the optimizer greps results from the log, never inhales raw output into its context.
+- **Crash-handling discipline.** Typo-vs-fundamentally-broken split: if grep-for-results is empty, `tail -n 50 run.log` to read traceback. Small fixes (typos, imports) → fix and retry. Fundamentally broken idea → log "crash" status, move on. No rabbit-hole debugging.
+- **Anti-rabbit-hole rule.** If you can't get something working after more than a few attempts, give up on that specific change. Do not spin infinitely on a broken approach.
+- **Setup phase with human checkpoint.** Before the NEVER STOP loop kicks in, a deterministic setup step: verify data, initialize results table, tag `paper-trail-v1`, confirm with human once. After that, autonomous until external termination.
+
+**Stronger-where-we-differ statements** (explicit improvements over autoresearch for our setting):
+- Immutability is **structural** (pre-commit hook + OS filesystem permissions + out-of-tree gold/benchmark), not instructional. Autoresearch's `prepare.py` is read-only by convention only and runs with `--dangerously-skip-permissions`; we don't.
+- Full revision history is **committed** (per-revision archive at `experiments/sarol-2024/archive/paper-trail-v<N>/` alongside the git tag), not gitignored. Failure modes are evidence for the paper and for retrospective eval.
+- Multi-subagent target (not single-file `train.py`).
+- Three-tier leakage discipline with Tier 2 scalar-only val (autoresearch has no val/test distinction).
+
+### Architectural note — depth-2 cap and subprocess boundaries
+
+Claude Code's subagent primitive structurally caps depth at 2 (main orchestrator + one subagent layer). Subagents cannot spawn further subagents — the Agent tool is not available inside a subagent dispatch. Source: Claude Code subagents documentation.
+
+**This does NOT bite our architecture**, because the dispatcher is a deterministic Python script (§3 Components) that uses `subprocess.run(["claude", "--bare", "--print", "/sarol-eval-item", ...])` to launch each per-item evaluation. Each subprocess is a **fresh Claude Code process** — a new depth-0 main session with its own Agent tool, able to spawn paper-trail's internal subagents (extractor / adjudicator / verifier) normally. The depth counter resets at the process boundary.
+
+Chain during one Sarol claim evaluation:
+- Optimizer agent (main, session A) — has Agent tool.
+- Bash-tool invocation of Python dispatcher `run_train_eval.py`.
+- Python dispatcher: `subprocess.run("claude --bare --print /sarol-eval-item --item <opaque_id> ...")` per item.
+- Fresh Claude Code process (main, session B) — has Agent tool.
+- Session B Agent-dispatches extractor / adjudicator / verifier subagents (session B, depth-1). Those subagents call tools, not subagents.
+
+The depth-2 cap is a design boundary the optimizer operates under *within a single eval invocation* — paper-trail-v<N> cannot require depth-3 spawning within one `/sarol-eval-item` run. Workarounds if ever needed: (a) depth-1 subagent shells out via Bash to another `claude --bare --print` subprocess, which launches its own fresh main; (b) flatten topology, fan out at depth-1 with more parallel subagents. For current paper-trail topology the constraint is non-binding.
+
+**Testable assumption — pre-Task-5 canary:** `claude --help` documents `--bare` as skipping auto-memory / CLAUDE.md auto-discovery / hooks / LSP / plugin-sync / keychain / background prefetches; it does NOT state that the Agent tool is disabled in bare mode. Inference: Agent tool is available. Canary test is §7 open problem #11. Run alongside Q9c memory-blind canary before Task 5 eval-arm build.
+
 ---
 
 ## 4. Structural defenses
@@ -345,10 +380,44 @@ Honest list of what's not yet solved.
 8. **Cost accounting.** The framework adds overhead (multiple dispatchers, uniform headless invocation, optimizer respawns). Need to quantify vs a naive iteration loop. Logging already planned in archive framework.
 9. **Attribution on failure modes.** Per-stage sub-scores (DSPy trace-aware metric pattern, deferred clarification) let us attribute macro-F1 deltas to extractor vs adjudicator vs verifier. Specification pending.
 10. **What counts as "the optimizer agent"?** Its system prompt, its tools, its `--add-dir` scope, its initial context — all of these are Tier 1 invariants for reproducibility. Needs a schema (folds into the `paper-trail-v<N>.json` archive artifact). **Partial spec committed 2026-04-22** — see §3 "Optimizer agent initial configuration" (affordance catalog, performance-not-cost philosophy, fight-Python-default guidance). Full machine-checkable schema still owed.
+11. **`--bare` + Agent-tool compatibility canary.** Our dispatcher architecture (§3 "Architectural note") assumes `claude --bare --print` preserves Agent-tool availability so paper-trail can spawn its internal subagents inside a fresh subprocess-launched main. Testable via a trivial canary slash command. **Gate before Task 5 eval-arm build**, parallel to the Q9c memory-blind canary. See journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D44.
+12. **Round-trip sanity canary** — per-run eval-arm check that processes a known-good canonical claim and confirms the expected verdict is returned. Defends against silent metric bugs in the Karpathy autoresearch issue #384 shape (BPB metric inflated by UTF-8 replacement chars for weeks). See journal D46.
 
 ---
 
-## 8. Non-goals and explicit deferrals
+## 8. Related work and positioning
+
+Four-bucket structure for the paper's related-work section. Each bucket has representative citations and an explicit differentiation statement. Full competitor-map table in journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md`.
+
+**Bucket 1 — Hand-crafted fixed-topology prompt optimization.** Algorithmic proposers over a fixed set of named modules; topology committed by the researcher. Representatives: DSPy (Khattab et al. 2023), MIPROv2 (Opsahl-Ong et al. 2024), PromptBreeder (Fernando et al. 2023), BetterTogether (Soylu et al. 2024), GEPA (DSPy ICLR 2026 Oral). Differentiation: we treat topology as a free variable, not a researcher commitment.
+
+**Bucket 2 — Hand-crafted topology search procedures.** Search over topology as an explicit design surface with a named procedure. Representatives: MASS (Zhou et al. 2025), ADAS (Hu/Lu/Clune ICLR 2025), AFlow (Zhang et al. ICLR 2025). Differentiation: we do not prescribe a search procedure; the optimizer agent restructures if and as it judges useful, guided only by verifiable reward.
+
+**Bucket 3 — Agent-as-optimizer over agentic systems** (the 2025-2026 wave, the corner we live in). Representatives:
+- **Karpathy autoresearch (Mar 2026)** — monolithic LM-training target; instruction-only immutability.
+- **Meta-Harness (Stanford IRIS, arxiv 2603.28052, Feb-Mar 2026)** — Claude Code as optimizer with `--disable-slash-commands`; single-file Python harness target.
+- **VeRO (Scale Labs, arxiv 2602.22480, Feb 2026)** — Claude Sonnet/Opus 4.5 as optimizer; uv-Python-package target with fixed GPT-4.1-mini target model; three-tier splits with API-mediated DatasetViewer access control; empirical negative finding on optimizer prompt-edit bias.
+- **AlphaEvolve (DeepMind, arxiv 2506.13131, Jun 2025)** — scripted GA + LLM-mutation; fixed topology; cascaded evaluation.
+- **AI Co-Scientist (DeepMind, arxiv 2502.18864, Feb 2025)** — fixed multi-agent roster with Supervisor; LLM-judge tournament reward.
+- **Live-SWE-agent / Darwin Gödel Machine / Huxley Gödel Machine** — monolithic self-modifying agents with two-tool setups and reported reward-hacking.
+- **Sakana AI Scientist v1/v2** — fixed-stage research pipelines; LLM-judge rewards.
+
+**Bucket 4 — Our corner (integrated claim).** Agent-only optimizer + multi-subagent pipeline + **declarative per-subagent heterogeneous controllability surface** (model, tools, MCPs, memory, permissionMode, skills, isolation — via `.claude/agents/*.md` YAML) as an optimization surface + topology-as-search-space + **tiered leakage discipline** (Train fully open / Val scalar-only / Test physically sealed) + **OS-level structural enforcement** (filesystem permissions + out-of-tree gold/benchmark + locked dispatcher schemas, extending Karpathy's instruction-only and VeRO's API-mediated) + labeled domain verifiable reward (Sarol biomedical citation-integrity).
+
+**Specific differentiation vs each Bucket-3 entry:**
+- vs Karpathy autoresearch: multi-subagent target (not LM-training script); structural enforcement (not instruction-only); tiered leakage (not none).
+- vs Meta-Harness: slash-command-enabled (not `--disable-slash-commands`); multi-subagent (not single-file Python); heterogeneous per-subagent config (they are monolithic).
+- vs VeRO: declarative YAML per-subagent config as optimization surface (vs imperative Python fixed-model-target); OS-level sealing (vs API-mediated); Tier 2 scalar-only val (they leave val access ambiguous); domain-specialized benchmark (vs general reasoning/tool-use benchmarks).
+- vs AlphaEvolve: agent-as-optimizer-proper (theirs is scripted GA with LLM-as-mutation); multi-subagent target.
+- vs ADAS / AFlow: multi-subagent with heterogeneous per-subagent controllability (theirs are single `forward()` functions or homogeneous-node flat graphs); tiered structural enforcement.
+
+**Gift-for-motivation from VeRO** (directly quotable): *"current optimizers default to prompt modifications, exhibiting limited diversity and impact in the changes they can produce."* Our substrate choice — Claude Code slash-command + `.claude/agents/*.md` YAML where per-subagent config edits and subagent-add/drop are first-class operations — directly answers the gap VeRO empirically identified.
+
+Full decision log and required-citation list: journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D41.
+
+---
+
+## 9. Non-goals and explicit deferrals
 
 Per memory `feedback_defer_with_milestone_pin.md`. Each item has a milestone pin.
 

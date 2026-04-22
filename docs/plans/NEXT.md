@@ -103,6 +103,15 @@ Once tasks 1–4 are closed:
 - **`paper-trail-v<N>.json` archive artifact** — emitted per tagged revision alongside the git tag. Contains {prompt hashes, signature specs, rubric examples, eval-arm tag, dispatcher versions, model aliases, settings.json hash, MCP config hash, handoff-doc schema version}.
 - Test on paper-trail-v1 + eval-train-10 (~$7 smoketest of the new plumbing; validates that invariant-check machinery fires correctly)
 
+**New deliverables from 2026-04-22 lit-review-2 (autoresearch + VeRO borrow-lists):**
+
+- **Per-claim budget as Tier 1 invariant** (D45): fixed per-claim wall-clock OR fixed per-claim model-call count so the optimizer cannot "win" by growing per-claim compute. Probably model-call-count as primary (deterministic), wall-clock as secondary. Default `1.5 × paper-trail-v1's per-claim call count` for headroom without encouraging bloat. Specific bound set at Task-5 build time. `validate_run.py` enforces.
+- **Round-trip sanity canary per run** (D46): eval-arm processes a known-good canonical claim at the start of each run, confirms the pipeline returns the expected verdict. Defends against silent metric bugs in the Karpathy autoresearch issue #384 shape (BPB metric inflated by UTF-8 replacement chars for weeks). Option A (pinned synthetic canary claim) for v1; Option B (pinned Sarol-train claim with robust expected verdict) considered if A feels too artificial.
+- **Train dispatcher per-claim adjudicator reasoning + verifier narrative in rich-schema output** (D47, train-tier-only): expose failure-mode detail to the optimizer in the train tier, not just macro-F1 / per-class F1. Val dispatcher stays scalar-only regardless. Motivation: Karpathy autoresearch issue #353 (ottogin's fork showed ~60% improvement by exposing richer diagnostics to the optimizer).
+- **`program.md`-equivalent optimizer instruction document** (from autoresearch borrow-list): author `experiments/sarol-2024/optimizer/program.md` at Task 5 build time. Structure mirrors Karpathy's: Setup / Experiment loop / NEVER STOP / Simplicity criterion / CAN-CANNOT block / Output-flood prevention / Crash handling. Attribute Karpathy `program.md` 2026 throughout. Full framework doc §3 "Optimizer agent initial configuration" is the spec for what this file must contain.
+- **5-column `results.tsv`-equivalent per-revision table** (from autoresearch): commit a structured table per `paper-trail-v<N>` revision with columns `commit / macro_f1 / per_class_summary / status / description`. **Commit ours** (autoresearch gitignores theirs; we need full provenance for paper reproducibility).
+- **Analysis-notebook-equivalent for progress.png / train-val curve generation** (from autoresearch `analysis.ipynb`): `experiments/sarol-2024/eval-harness/progress.ipynb` or `.py` that regenerates the train+val curve figure from committed archive data. Reference implementation to study: autoresearch's `analysis.ipynb`.
+
 Short specs per script live alongside the script as `<name>.md` siblings, written at build time. No separate feature-requirements docs authored in advance — the archive-framework doc is the specification; individual scripts get short implementation notes only.
 
 **Two specs that MUST be written at build time (not deferred indefinitely — external reproducers need them):**
@@ -131,9 +140,10 @@ Both are implementation-close specs, not speculative feature docs. They exist to
 
 - **Zero-shot single-prompt baseline on Variant A** (mandatory paper baseline row; cf. TextGrad Table 3). Cost: $5-30. **Pin:** before paper submission, not before Task 5. Purpose: apples-to-apples comparison row, not a strategic pivot trigger.
 - **Variant D (raw source papers + independent claim extraction).** Start from 100 citing papers' raw text, run paper-trail claim-extraction independently, match to Sarol annotations, report coverage + conditional F1. Uses Sarol as a *proxy measurement* of full-system behavior on raw inputs. **Pin:** consider after Variant C primary results land; possibly a follow-up experiment or second-paper.
-- **Clarifications list** (Agent owes Human). Fixed-topology-by-design, DSPy trace-aware metric, MA-SAPO App H / MAPRO App D, ProTeGi gradient template, PromptBreeder mutation-operator menu, subagent revision order, bandit candidate selection. **Pin:** next working session.
+- ~~**Clarifications list** (Agent owes Human)~~. **COMPLETED 2026-04-22.** Items #1–#5 walked through (fixed-topology → reframed to topology-freedom D32; DSPy trace-aware metric D36; MA-SAPO App H / MAPRO App D D37; ProTeGi template seeded; PromptBreeder catalog declined D38). Items #6 and #7 (subagent revision order; ProTeGi UCB) declined under D38's decision rule.
 - **Agent-only N=10 de-risk smoketest design.** Does the optimizer agent move macro-F1 in the right direction autonomously? **Pin:** after Task 5 eval-arm scaffold is in place.
-- **Memory-blind canary sanity-check (Q9c).** Still ON HOLD. **Pin:** before Task 5 eval-arm build begins.
+- **Memory-blind canary sanity-check (Q9c).** Still ON HOLD. **Pin:** before Task 5 eval-arm build begins. Run in same session as D44 canary below.
+- **`--bare` + Agent-tool compatibility canary (D44 2026-04-22).** Our dispatcher architecture depends on `claude --bare --print` preserving Agent-tool availability so paper-trail can spawn its internal subagents inside a fresh subprocess-launched main. Testable via a trivial canary slash command that dispatches one subagent; invoke with `claude --bare --print /canary-agent-test`; verify subagent ran. **Pin:** before Task 5 eval-arm build begins; run in same session as Q9c. ~15 min combined. See framework doc §7 open problem #11 and journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D44.
 - **Open problems from the framework doc §7.** Optimizer self-respawn protocol (handoff-doc schema, respawn criterion, budget), stopping rule, per-revision rationale capture, dispatcher-bug mitigation testing, optimizer initial-configuration schema (partial spec landed 2026-04-22 — affordance catalog, performance-not-cost philosophy, fight-Python-default guidance all in framework §3 "Optimizer agent initial configuration"; machine-checkable schema for the `paper-trail-v<N>.json` archive still owed). **Pin:** resolved during Task 5 implementation; spec'd before implementation. See `docs/journal/2026-04-22-topology-freedom-and-optimizer-affordances.md` for the partial-spec decision log.
 
 ## Open decisions (framework-level)
@@ -180,6 +190,48 @@ Revised 2026-04-21 after lit-review pass **and** the agent-only reframe. Framewo
 **Dropped / moved after reframe:**
 - **"Multi-subagent pipeline iteration formalized" as standalone.** DSPy + MIPROv2 + BetterTogether + MAPRO + MASS scooped this. Cite as prior art.
 - **Human-in-the-loop framing + "human-value-in-agentic-collaboration retrospective" as a current-paper arm.** Moved to a future separate paper. Planning-phase material still collected in `paper-writeup-items.md` §"Human-value retrospective" for that future paper.
+
+## Implementation-time reference reads (do not read now — read at Task 5 build time)
+
+Concrete external artifacts to pull up when implementing specific Task 5 deliverables. Not decisions-to-make-now; references-to-consult-when-coding. Flagged here so a fresh agent starting Task 5 knows what to read before writing code.
+
+**For the optimizer instruction document (`experiments/sarol-2024/optimizer/program.md`):**
+- Karpathy's `program.md`: https://github.com/karpathy/autoresearch/blob/master/program.md — read in full. Structure to mirror: Setup / Experimentation / Output format / Logging results / The experiment loop. Lift NEVER STOP rule, simplicity criterion, CAN/CANNOT block, output-flood prevention, crash-handling discipline verbatim with attribution.
+- Karpathy's `README.md` at the same repo — context on design-choices framing.
+
+**For the immutable-harness mechanism (pre-commit hook + filesystem enforcement):**
+- Karpathy's `prepare.py`: https://github.com/karpathy/autoresearch/blob/master/prepare.py — reference for the *pattern* (constants + evaluation function in a canonically-read-only file). Note autoresearch's enforcement is instruction-only; ours is structural (pre-commit hook + OS filesystem permissions + out-of-tree gold/benchmark). Extend, don't copy.
+- Autoresearch issue #384 (BPB silent bug): https://github.com/karpathy/autoresearch/issues/384 — motivation for our round-trip sanity canary (D46).
+
+**For the per-revision results table / archive format:**
+- Karpathy's `results.tsv` specification (described in `program.md` §"Output format"). 5 columns: `commit / val_bpb / memory_gb / status / description`. Our analog: `commit / macro_f1 / per_class_summary / status / description`. **Commit ours** (Karpathy gitignores his; we need archival).
+
+**For the train+val curve figure generation:**
+- Karpathy's `analysis.ipynb`: https://github.com/karpathy/autoresearch/blob/master/analysis.ipynb — reference implementation for generating `progress.png` from a committed results table. Adapt for our train+val curve over `paper-trail-v<N>`.
+
+**For the dispatcher architecture and split access control:**
+- VeRO paper (arxiv 2602.22480) §3.3 "Fair Comparison Across Optimizers" and Algorithm 1 — study the `DatasetViewer` / `ExperimentViewer` / `FileTools` / `ExperimentRunner` / `GitControl` abstraction. Consider aligning our dispatcher naming for reviewer legibility. If VeRO has a public GitHub repo at Task 5 time, pull their `DatasetViewer` and `Filesystem` access-control code as a reference implementation for our glob-pattern defenses on the non-sealed tiers. Our OS-level sealing is strictly harder, so adopt complementarily, not as a replacement.
+- VeRO §3.3 on uv-package reproducibility — cite the framing; map our analog (committed `.claude/commands/*.md` + `.claude/agents/*.md` + `.claude/settings.json` + MCP config at the `paper-trail-v<N>` git tag).
+
+**For the optimizer's affordance catalog and initial prompt:**
+- Framework doc `agentic-pipeline-optimization-framework.md` §3 "Optimizer agent initial configuration" — authoritative spec for content (seeded patterns, philosophy, anti-pattern-to-fight, direct-lifts from autoresearch).
+- Anthropic Claude Code subagents documentation: https://docs.anthropic.com/en/docs/claude-code/sub-agents — reference for the full controllability surface (`model`, `tools`, `disallowedTools`, `mcpServers`, `permissionMode`, `memory`, `skills`, `isolation`) that is our optimization space per claim 8.
+
+**For the `--bare` + Agent-tool compatibility check (D44 canary):**
+- Claude Code headless mode docs: https://code.claude.com/docs/en/headless — verify `--bare` / `--print` / `--allowedTools` flag semantics. If canary fails, compose with `--allowedTools Agent` per docs.
+
+**For the related-work section of the paper:**
+- Meta-Harness (arxiv 2603.28052) — read to confirm exact `--disable-slash-commands` language and the `claude_wrapper.py` architecture. Cite for the substrate-choice contrast.
+- AlphaEvolve (arxiv 2506.13131) — §6 discussion for the future-work quote; §2.4 for the evaluation cascade pattern.
+- Ellenberg et al. (arxiv 2503.11061) §3.1 — exact contamination-warning quote.
+- ADAS (arxiv 2408.08435) §2 — "code search space" argument quote.
+- AFlow (arxiv 2410.10762) Figure 5 — closest figure-type precedent.
+- Anthropic Claude Code Agent Skills announcement (Oct 2025) — for the "agents editing their own skills" future-work framing we're effectively instantiating.
+
+**Flag for paper-submission-time re-check** (not Task 5, but before submission):
+- VeRO's GitHub repo (if released) — pull latest impl for citation-tightness.
+- 2026-04-22-and-later arxiv listings on "agent-as-optimizer" / "agentic experimentation" / "self-evolving agent" — this field is moving fast; re-sweep ~2 weeks before submission.
+- Anthropic engineering blog and research page — new posts in this space are likely between now and submission.
 
 ## Reading path for a fresh agent
 
