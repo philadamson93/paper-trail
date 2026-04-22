@@ -134,17 +134,145 @@ Both are implementation-close specs, not speculative feature docs. They exist to
 - Once Variant A at v1 looks clean, run Variant C at v1 as the first landmark.
 - Apply INDIRECT-detection fix → tag paper-trail-v2 → rerun Variant A (cheap). Variant C at v2 optional depending on delta size.
 
-### 7. Backlog (non-blocking, explicit pins)
+### 7. Complete outstanding-items status (doc sweep 2026-04-22)
 
-**2026-04-21 additions — not starting now, not forgotten:**
+**Comprehensive prioritized status across all plan docs and journal entries.** Produced via targeted sweep after lit-review-2. Each item cites its source doc. Tier 0 is blockers; Tier 5 is future-paper / not-this-paper; Tier 6 is non-Sarol threads flagged for awareness but off the critical path.
 
-- **Zero-shot single-prompt baseline on Variant A** (mandatory paper baseline row; cf. TextGrad Table 3). Cost: $5-30. **Pin:** before paper submission, not before Task 5. Purpose: apples-to-apples comparison row, not a strategic pivot trigger.
-- **Variant D (raw source papers + independent claim extraction).** Start from 100 citing papers' raw text, run paper-trail claim-extraction independently, match to Sarol annotations, report coverage + conditional F1. Uses Sarol as a *proxy measurement* of full-system behavior on raw inputs. **Pin:** consider after Variant C primary results land; possibly a follow-up experiment or second-paper.
-- ~~**Clarifications list** (Agent owes Human)~~. **COMPLETED 2026-04-22.** Items #1–#5 walked through (fixed-topology → reframed to topology-freedom D32; DSPy trace-aware metric D36; MA-SAPO App H / MAPRO App D D37; ProTeGi template seeded; PromptBreeder catalog declined D38). Items #6 and #7 (subagent revision order; ProTeGi UCB) declined under D38's decision rule.
-- **Agent-only N=10 de-risk smoketest design.** Does the optimizer agent move macro-F1 in the right direction autonomously? **Pin:** after Task 5 eval-arm scaffold is in place.
-- **Memory-blind canary sanity-check (Q9c).** Still ON HOLD. **Pin:** before Task 5 eval-arm build begins. Run in same session as D44 canary below.
-- **`--bare` + Agent-tool compatibility canary (D44 2026-04-22).** Our dispatcher architecture depends on `claude --bare --print` preserving Agent-tool availability so paper-trail can spawn its internal subagents inside a fresh subprocess-launched main. Testable via a trivial canary slash command that dispatches one subagent; invoke with `claude --bare --print /canary-agent-test`; verify subagent ran. **Pin:** before Task 5 eval-arm build begins; run in same session as Q9c. ~15 min combined. See framework doc §7 open problem #11 and journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D44.
-- **Open problems from the framework doc §7.** Optimizer self-respawn protocol (handoff-doc schema, respawn criterion, budget), stopping rule, per-revision rationale capture, dispatcher-bug mitigation testing, optimizer initial-configuration schema (partial spec landed 2026-04-22 — affordance catalog, performance-not-cost philosophy, fight-Python-default guidance all in framework §3 "Optimizer agent initial configuration"; machine-checkable schema for the `paper-trail-v<N>.json` archive still owed). **Pin:** resolved during Task 5 implementation; spec'd before implementation. See `docs/journal/2026-04-22-topology-freedom-and-optimizer-affordances.md` for the partial-spec decision log.
+#### TIER 0 — Immediate gates (block Task 5 eval-arm build)
+
+1. **Q9c memory-blind canary.** Plant distinctive memory, invoke `claude --bare --print` on a probe question, confirm memory does not leak. If `--bare` suppresses → mark Q9c RESOLVED → unblock Task 5. If it leaks → document failure mode, move to fallback options in archive-framework §Q9c. Source: `experiment-sarol-archive-and-eval-framework.md` §Q9c; journal `2026-04-21-lit-review-prompt-optimization.md`. Est: 15 min. Status: **ON HOLD since 2026-04-21.**
+2. **D44 `--bare` + Agent-tool compatibility canary.** Dispatch a trivial slash command that spawns a subagent; invoke via `claude --bare --print`; verify Agent tool is preserved in bare mode. If yes → dispatcher architecture validated. If no → compose with `--allowedTools Agent` and re-test. Source: framework doc §7 #11; journal `2026-04-22-lit-review-2-competitor-landscape.md` D44. Est: 15 min. Status: **pending; run in same session as Q9c.**
+
+#### TIER 1 — Task 5 eval-arm build (the core deliverable)
+
+Full list lives in §5 above. Summary of deliverables (all required before any curve runs):
+
+- Eval-harness scaffolding + move `stage_claim.py` / `parse_verdict.py` / `record_usage.py` into it
+- `sample_subset.py` (seeded random draws, committed manifests, nested subsets at N=10/25/50/100/200)
+- `validate_run.py` with Tier 1 invariant framework + round-trip sanity canary (D46)
+- Three dispatcher scripts: `run_train_eval.py` (full traces + aggregates), `run_val_eval.py` (scalar-only), `run_test_eval.py` (with `--confirm-unseal` tripwire)
+- Filesystem-permission boundary tests
+- Schema validator module
+- `/sarol-eval-item` slash command (non-interactive, locked arg set)
+- Pre-commit hook enforcing eval-harness immutability on non-eval branches
+- Per-experiment `.claude/settings.json` / MCP config committed to the repo
+- Move orchestrator-runtime decisions into eval-arm Python
+- 3-seed minimum at v1 landmark (non-negotiable per lit-review)
+- Train dispatcher emits raw per-subagent traces + macro-F1 + per-class F1 (topology-agnostic; no pre-computed sub-scores — those are the optimizer's job)
+- Per-claim adjudicator reasoning + verifier narrative in train-tier rich-schema output (D47, train-tier-only — val stays scalar)
+- Per-claim budget as Tier 1 invariant (D45, model-call count as primary, wall-clock as secondary)
+- Round-trip sanity canary per run (D46; guards against silent metric bugs in autoresearch issue #384 shape)
+- `paper-trail-v<N>.json` archive artifact schema
+- `program.md`-equivalent optimizer instruction document (mirroring Karpathy structure, with framework §3 content)
+- 5-column `results.tsv`-equivalent per-revision table (committed)
+- Analysis-notebook-equivalent for train+val curve regeneration from committed archive (reference: autoresearch `analysis.ipynb`)
+- **Two non-deferrable specs** (already committed to ship with eval arm, not later): `expected_invariants.json` schema + `/sarol-eval` I/O contract.
+- Smoketest on paper-trail-v1 + eval-train-10 (~$7; validates invariant-check machinery)
+
+#### TIER 2 — Framework-spec items (resolve during Task 5 implementation)
+
+From framework doc §7 open problems, all spec'd before their implementation touches:
+
+- **§7 #1 Optimizer self-respawn protocol** — handoff-doc schema, respawn criterion, respawn budget. 1M-context default (2026-04-22 update to §5) reduces frequency but doesn't eliminate.
+- **§7 #2 Stopping rule for the optimizer** — val F1 patience window vs budget exhaustion vs optimizer self-declared plateau. Textbook train-vs-val gap monitoring as default; pick a specific criterion.
+- **§7 #3 Dispatcher-bug risk mitigation testing.**
+- **§7 #4 Initial seed knowledge** — paper-trail-v1 prompts + journal-captured failure-mode history (committed 2026-04-21 D29: start from where we are).
+- **§7 #5 Per-revision rationale capture** — schema for "what the optimizer did at each revision." Feeds the archive artifact.
+- **§7 #6 Empirical validation (agent-only N=10 de-risk smoketest).** Does the optimizer agent move macro-F1 in the right direction autonomously? **Pin:** after Task 5 eval-arm scaffold is in place.
+- **§7 #7 Generalization beyond paper-trail** — one-case-study caveat; address by second case study in future paper.
+- **§7 #8 Cost accounting.** Cost-per-revision instrumentation already planned in archive framework.
+- **§7 #9 Attribution on failure modes.** Per-stage sub-scores via trace-aware metric (D36); schema lives in optimizer workspace.
+- **§7 #10 Optimizer agent initial-configuration schema.** Partial spec landed 2026-04-22 (D34: affordance catalog, performance-not-cost philosophy, fight-Python-default, autoresearch direct-lifts, ProTeGi seeded pattern, declined-PromptBreeder). Machine-checkable schema for the `paper-trail-v<N>.json` archive artifact still owed.
+- **§7 #11 `--bare` + Agent-tool canary** (listed Tier 0).
+- **§7 #12 Round-trip sanity canary** (listed Tier 1 — part of `validate_run.py`).
+- **Agent-stall structural defenses** (from framework §5 post-2026-04-22 update): heartbeat + watchdog OR log-line-rate monitor OR stall-as-Tier-1-invariant. Pick mechanism and implement as part of outer harness.
+
+#### TIER 3 — Pre-paper-submission experimental items
+
+- **Task 3: pick `paper-trail-v1` commit SHA.** Find commit on `experiment-plan` immediately before first smoketest-findings-informed prompt edit; verify adjudicator-dispatch-sarol.md has no INDIRECT clauses at that commit; tag. Source: NEXT §3. Blocks the graduated N curve.
+- **Task 4: lock eval-train manifests.** Seeded draws at N∈{10,25,50,100,200}, nested. Source: NEXT §4. Blocks first curve points.
+- **First curve runs** (Task 6): Variant A at v1 N=10 smoketest → Variant A+C at v1 landmark → apply INDIRECT fix → v2 → rerun.
+- **Zero-shot single-prompt baseline on Variant A.** Mandatory paper baseline row (cf. TextGrad Table 3). Cost $5-30. **Pin:** before paper submission, not before Task 5.
+- **Variant B 5-paper spot-check gate.** Empirical validation of LLM-judge alignment rate before committing to Variant B as a landmark evaluator. **Pin:** after Task 5 eval-arm lands, before any landmark run. Source: `experiment-sarol-benchmark.md` §"Variant B" (added 2026-04-22).
+- **Variant C end-to-end scoring resolution.** Four options documented (subset-score / pre-registered-references / manual-E2E / composite-metric); tentative lean Option B. **Pin:** resolve after Variant B alignment-rate spot-check yields empirical data. Source: `experiment-sarol-benchmark.md` §"Variant C end-to-end scoring" + `paper-writeup-items.md` §"Other paper-level threads."
+- **Multi-seed calibration at v1 landmark.** Triple-seed once on v1 to measure noise amplitude (Q4 decision). Source: archive-framework §Q4.
+- **Model-drift calendar compression.** Target full train + dev + test inside ~2 weeks of 2026-04-21 to minimize `opus` alias drift. Absolute deadline implicit in the alias pinning limitation.
+- **INDIRECT-detection fix → v2 tag.** Draft clauses exist, not applied. Paused until archive framework lands.
+
+#### TIER 4 — Paper-writing content threads (not experiments)
+
+From `paper-writeup-items.md` §"Core contributions" + §"Other paper-level threads" + §"Things to be honest about" + §"Hygiene principles to formalize":
+
+- Related-work section four-bucket structure + specific-competitor comparisons (framework doc §8)
+- INDIRECT-detection failure mode narrative + figure
+- Severity-under-commitment pattern writeup (pending N=50+ data from Tier 3 curve)
+- Cost-per-claim practitioner numbers finalization
+- Qualitative comparison to SemanticCite
+- Error taxonomy across labels (which classes are easy/hard for LLM adjudicator)
+- False-ACCURATE bias as a general LLM-adjudicator finding (if pattern generalizes)
+- Cost / wall-clock tradeoff table (Opus/Sonnet/Haiku)
+- Variant C coverage metric (`coverage = annotated-citations-with-verdict / annotated-citations`)
+- Orchestrator tool-space vs subagent tool-space asymmetry (D35 paper observation)
+- Python-default reflex as substrate anti-pattern (D42 paper observation)
+- Agent-stall as operational failure mode (new 2026-04-22 paper thread)
+- Variant B thread (new 2026-04-22 paper thread)
+- Variant C end-to-end brainstorm options (new 2026-04-22 paper thread, may resolve to Option B)
+- Hygiene principles to formalize in methods section (subagent sandboxing + Tier 3 sealing)
+- Things to be honest about (N=5 not-a-result, Sarol-tests-3-of-7-arms, Variant-A-not-C, pretraining contamination, no weight-level RL, one-shot test commitment, alias-not-hash model pinning, inference-seed not lockable, backend changes invisible)
+
+#### TIER 5 — Open paper-level decisions (logged, not decided)
+
+- **Venue.** ACL/EMNLP/NAACL (NLP); NeurIPS/ICML (ML agentic); CHI/IUI (HCI practitioner); Bioinformatics/JAMIA (biomedical). Source: `paper-writeup-items.md` §"Open paper-level decisions." Deadline-driven once chosen.
+- **Companion blog post scope.** Tighter narrative (INDIRECT finding + hygiene) vs full paper repro. Likely former.
+- **/paper-trail branding in paper prose.** Probably not; blog can.
+- **Paper title.** Workshopped later; current draft directions include something around "Scientific Principles for Agentic Ecosystems with Verifiable Rewards" for framework framing, `paper-trail: Agentic citation auditing for scholarly manuscripts` for case study framing — but now consolidated to one paper (D39), so title needs to reflect both case study and framework. Workshop at draft time.
+
+#### TIER 6 — Deferred with milestone pins (not-this-paper)
+
+Per `feedback_defer_with_milestone_pin.md`. Each has explicit pin.
+
+- **Variant D (raw source papers + independent claim extraction).** **Pin:** consider after Variant C primary results land; possibly follow-up or second paper.
+- **Backbone portability (Opus↔Sonnet↔Haiku).** **Pin:** Task 6+ if compute budget allows.
+- **Multi-benchmark validation** beyond Sarol. **Pin:** after paper lands.
+- **Cost-performance tradeoff curve.** **Pin:** future separate paper.
+- **From-scratch bootstrap** (no seed knowledge). **Pin:** separate arm post-v_final.
+- **Human-in-the-loop comparison arm.** **Pin:** future separate paper on human-agent research collaboration.
+- **Human-agent collaboration retrospective.** **Pin:** future separate paper; data continues to accrue in journal entries.
+- **Bandit candidate selection (ProTeGi UCB).** **Pin:** only if we parallelize candidate sweeps; not baseline.
+- **LLM-as-loss secondary judge (TextGrad §3.4).** **Pin:** skipped entirely; macro-F1 + per-class F1 sufficient.
+- **Hand-crafted topology search procedure (MASS-style).** **Pin:** not implementing; topology-as-optimizer-affordance is allowed.
+- **Human A/B blind preference study (Self-Refine App C).** **Pin:** blog-post-only if at all.
+- **Full per-N-landmark three-way ablation.** **Pin:** run only at v_final.
+- **2025 multi-agent prompt optimization papers (MAPRO, MA-SAPO, MASS)** — one-pass read before final draft. **Pin:** before paper submission.
+
+#### TIER 7 — Non-Sarol plan docs (other threads, off critical path)
+
+Flagged for visibility; not on the current Sarol-experiment critical path. May be relevant for paper-trail-the-product but not the paper.
+
+- **`author-mode-parity.md`** — author-mode LaTeX / orchestrator wiring plan. Parallel product thread.
+- **`add-paper-trail-orchestrator.md`** — orchestrator architecture refinement. Parallel product thread.
+- **`blindspot-mitigations.md`** — extractor/verifier blindspot mitigation plans. May inform paper-trail-v2+ revisions indirectly but optimizer-driven.
+- **`paper-tool-validation.md`** — paper-trail validation plan (synthetic injection, opt-in cohort). Relevant to "pretraining contamination mitigation" paragraph; otherwise parallel.
+- **`experiment-sarol-methods-research.md`** — method menu (multi-cit prompting, decomposition, few-shot, rubric phrasing) for future sweeps. **Pin:** post-baseline-iteration.
+- **`experiment-sarol-optimization-escalation.md`** — escalation ladder if manual iteration stalls. Trigger-based, not proactively scheduled.
+
+#### TIER 8 — Historical / milestone docs (read-only, don't edit)
+
+- `experiment-sarol-leakage-hardening.md` — original analysis (superseded by optimization-loop-hygiene)
+- `experiment-sarol-hardening-implementation.md` — status of landed defenses
+- `experiment-sarol-smoketest-handoff.md` — original N=5 handoff prompt
+- `experiment-april-20-findings.md` — N=5 findings (milestone, not updated)
+
+## Recommended next-session sequence
+
+Shortest path to unblocking Task 5:
+
+1. **Run Tier 0 canaries in one ~30-min session.** Q9c memory-blind + D44 `--bare`+Agent-tool. If both pass → Task 5 unblocked; update archive-framework §Q9c + framework §7 #11 to RESOLVED. If either fails → document failure, fallback, retest.
+2. **Scope Task 5 build.** Split the big deliverable list (Tier 1) into a sequenced build order with per-deliverable acceptance criteria. Cross-reference the "Implementation-time reference reads" section of NEXT for concrete external artifacts to consult per deliverable.
+3. **Execute Task 5 build.** Ship to the smoketest-on-v1 gate (Tier 1 last item).
+4. **Run Task 3 (pick v1 commit SHA) + Task 4 (lock manifests at graduated N)** in parallel with or immediately before the v1 smoketest.
+5. **First curve points** (Task 6): Variant A at v1 N=10 → v1 landmark → INDIRECT fix → v2.
+6. **Variant B spot-check** (Tier 3) in parallel once eval arm can run phase 1 in isolation.
 
 ## Open decisions (framework-level)
 
