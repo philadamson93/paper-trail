@@ -145,10 +145,47 @@ Both are implementation-close specs, not speculative feature docs. They exist to
 
 **Comprehensive prioritized status across all plan docs and journal entries.** Produced via targeted sweep after lit-review-2. Each item cites its source doc. Tier 0 is blockers; Tier 5 is future-paper / not-this-paper; Tier 6 is non-Sarol threads flagged for awareness but off the critical path.
 
-#### TIER 0 — Immediate gates (block Task 5 eval-arm build)
+#### TIER 0 — Immediate gates (block Task 5 eval-arm build; all three run in parallel)
 
-1. **Q9c memory-blind canary.** Plant distinctive memory, invoke `claude --bare --print` on a probe question, confirm memory does not leak. If `--bare` suppresses → mark Q9c RESOLVED → unblock Task 5. If it leaks → document failure mode, move to fallback options in archive-framework §Q9c. Source: `experiment-sarol-archive-and-eval-framework.md` §Q9c; journal `2026-04-21-lit-review-prompt-optimization.md`. Est: 15 min. Status: **ON HOLD since 2026-04-21.**
-2. **D44 `--bare` + Agent-tool compatibility canary.** Dispatch a trivial slash command that spawns a subagent; invoke via `claude --bare --print`; verify Agent tool is preserved in bare mode. If yes → dispatcher architecture validated. If no → compose with `--allowedTools Agent` and re-test. Source: framework doc §7 #11; journal `2026-04-22-lit-review-2-competitor-landscape.md` D44. Est: 15 min. Status: **pending; run in same session as Q9c.**
+All three gates independently block the big eval-arm engineering build (Task 5 the eval-arm build deliverable). Each has a clean pass/fail outcome. Run them in any order or all at once.
+
+**Dependency note:** Gate 1 (dataset-extension feasibility) blocks the E3 dispatcher spec; Gates 2 & 3 (the two substrate canaries) block the `claude --bare --print` invocation architecture. If any of the three fails, re-scope the downstream plan before continuing.
+
+##### Gate 1 — E3 dataset-extension feasibility spike (the new top-priority task, 2026-04-22 D51)
+
+**Why this matters:** E3 (the headline experiment; fetch-through-verdict with citing-PDF + reference-token + claim input) requires per-claim records of shape `(citing_sentence, claim_text, reference_token, citing_paper_PDF_path)`. Sarol's existing annotations give us (citing_sentence, pre-staged cited chunks, gold verdict) keyed implicitly by citing paper. We need to derive the extended records before the E3 dispatcher can be built or the curve runs can start. If the derivation turns out to be harder than estimated, E3 scope may need to shrink (e.g., drop phase 2 bib resolution and pre-resolve references to canonical IDs, making it an E3-lite of phases 3-5 instead of 2-5) or we swap primary experiment back to E1 (the verdict-only experiment) and treat E3 as landmark-only.
+
+**Concrete steps (fresh-session-executable):**
+
+1. **Read the canonical setup:** `docs/plans/experiment-sarol-benchmark.md` §"Experiment design (E1-E4, canonical 2026-04-22)" and its subsection "E3 dataset-extension work" for the target shape. Also read `docs/journal/2026-04-22-experiment-design-e1-e4.md` D50/D51 for the decision rationale.
+2. **Inventory what Sarol provides on disk:** check `$PAPER_TRAIL_BENCHMARKS_DIR/sarol-2024/` and the `annotations/` subdirectory. Confirm: (a) flat JSONL claim records exist with citing sentence + cited chunks; (b) `annotations/{Train,Dev,Test}/references/` directories with cited-paper full texts (filename pattern `NNN_PMC<ID>.txt` indicating PMC IDs are derivable); (c) paragraph-level structure in `references_paragraph.json`. Check for the **citing-paper-identity link** — which citing paper each claim came from. This is the first critical unknown.
+3. **Pick one representative claim from Sarol-train.** Walk the full extension pipeline manually for this one claim:
+   - Identify its citing paper (where did this claim come from? Does Sarol have this link in the annotation schema, or do we have to reverse-engineer it from the pre-staged chunks?)
+   - Find the reference token — the `\cite{key}` or `[N]` citation marker within the citing paper that points to the cited paper. This requires the citing paper's text or PDF.
+   - Locate or fetch the citing paper's PDF. Sarol's 100 citing papers should be listed somewhere; if not, we may have to fetch them from PMC / DOI resolvers one at a time.
+   - Package as `(citing_sentence, claim_text, reference_token, citing_paper_PDF_path)` — verify the shape holds.
+4. **If step 3 works cleanly for one claim:** try ~5 more claims from different citing papers to check for edge cases (missing citing-paper link, ambiguous reference token, paywalled citing paper, reference-list format variants).
+5. **Estimate total effort to extend for all ~3K Sarol claims** based on what you learned in steps 3-4. Expected outcomes:
+   - **Green:** 1 day of scripting + some manual spot-checks. Proceed with E3 as planned; add dataset-extension to Task 5 deliverables.
+   - **Yellow:** 2-3 days with edge cases. Proceed but flag the engineering cost in the paper methods section as non-trivial.
+   - **Red:** > 1 week OR hard unresolved ambiguities (e.g., Sarol annotations don't reliably encode citing-paper-identity). Descope E3 to E3-lite (phases 3-5 with pre-resolved PMC IDs instead of reference tokens, skipping phase 2 bib resolution). If even E3-lite is blocked, swap headline back to E1 (phase 5 only) and treat fetch-through-verdict work as future-paper.
+6. **Produce a short report** to land in a new journal entry `docs/journal/YYYY-MM-DD-e3-dataset-extension-feasibility.md`: which annotation fields link claims to citing papers, how references are keyed in the citing-paper text, list of edge cases, effort estimate, recommended disposition (green/yellow/red).
+
+**Est: 1-2 hours hands-on + 30 min report.** Blocks the E3 dispatcher spec in Task 5 (the eval-arm build).
+
+##### Gate 2 — Q9c memory-blind canary (the test that confirms `--bare` suppresses memory)
+
+Plant a distinctive memory entry in the project's memory directory, invoke `claude --bare --print` on a probe question designed to elicit the canary memory, confirm memory doesn't leak. If `--bare` suppresses → mark Q9c (the memory-blind mechanism question) RESOLVED → unblock Task 5 (the eval-arm build). If it leaks → document failure mode, move to fallback options in `experiment-sarol-archive-and-eval-framework.md` §Q9c.
+
+**Source:** `experiment-sarol-archive-and-eval-framework.md` §Q9c (test design is written end-to-end there); `docs/journal/2026-04-21-lit-review-prompt-optimization.md` for context. Est: 15 min. Status: **ON HOLD since 2026-04-21.**
+
+##### Gate 3 — D44 `--bare` + Agent-tool compatibility canary (the test that confirms subprocess-launched Claude can spawn subagents)
+
+Dispatch a trivial slash command that spawns one subagent; invoke via `claude --bare --print`; verify the subagent ran (i.e., Agent tool is preserved in `--bare` mode). If yes → dispatcher architecture (Python subprocess launching fresh Claude process with paper-trail subagents) is validated. If no → compose with `--allowedTools Agent` and re-test; if still blocked, re-examine the depth-2 cap implications.
+
+**Source:** `agentic-pipeline-optimization-framework.md` §7 open problem #11; `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D44. Est: 15 min. Status: pending; can run in same session as Q9c.
+
+**Meta-task for next session — triage and execute Tier 0:** before starting any downstream work, open this NEXT.md, run through the three Tier 0 gates, report status of each, then reassess Tier 1+ priorities based on what Tier 0 findings say about E3 feasibility and dispatcher architecture.
 
 #### TIER 1 — Task 5 eval-arm build (the core deliverable)
 
