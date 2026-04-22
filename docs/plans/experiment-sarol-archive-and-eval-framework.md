@@ -368,14 +368,66 @@ The word "seed" was ambiguous. Two separate concepts:
 
 ## Q9c — How is memory-blindness actually enforced when running headless Claude Code?
 
-**Open.** Needs a spike. Options to investigate:
+**Status 2026-04-21: ON HOLD.** Candidate mechanism identified and verified via `claude --help`; canary sanity-check test designed but not run. Human paused the work to prioritize one-thing-at-a-time discipline (primary lit review must clear first). Resume before Task 5 (eval arm build); the eval arm assumes the memory-blind mechanism works.
 
-1. **Temporary profile swap.** Before an eval run, rename `~/.claude/projects/<slug>/memory/` to a backup location; after, restore. Simple, works today, but racy if multiple Claude Code sessions coexist.
-2. **Explicit `--no-memory` or similar flag.** If Claude Code supports opt-out of memory loading at session start, use it. Needs doc/source check.
-3. **Alternate working directory.** Eval runs in a fresh directory with its own minimal `.claude/` config. Claude Code should pick up the local config; memory-keyed-by-project-path should not match.
-4. **Dedicated system user or container.** Run eval in a fresh OS user account or a container with its own `~/`. Strongest isolation; most ceremony.
+**Restart instructions for a fresh agent:** read the three subsections below end-to-end, run the canary test, update this section with results. If `--bare` suppresses the canary as expected → mark Q9c RESOLVED and unblock NEXT.md Task 5. If `--bare` leaks → document the leak mode, move to fallback option (1) or (2) below, re-test.
 
-**Agent lean:** option 3 (alternate working directory with minimal `.claude/`) first, verify the memory isolation empirically, fall back to option 1 or 4 if it leaks. Needs a `/claude-code-guide` or doc consult before implementing.
+### Candidate: `claude --bare --print`
+
+Verified against `claude --help`. The `--bare` flag description verbatim: "Minimal mode: skip hooks, LSP, plugin sync, attribution, **auto-memory**, background prefetches, keychain reads, and **CLAUDE.md auto-discovery**. Sets CLAUDE_CODE_SIMPLE=1. ... Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir."
+
+This is the right architectural shape for our use case:
+- `--bare` opts out of all auto-discovery (auto-memory, CLAUDE.md, hooks, plugin-sync, keychain).
+- Per-version context is then opt-in: the eval invocation passes the exact settings / prompts / MCP config / agents that the `paper-trail-v<N>` tag specifies, via `--settings`, `--add-dir`, `--append-system-prompt-file`, `--mcp-config`, `--agents`.
+- This matches the existing NEXT.md requirement to "commit any per-experiment `.claude/settings.json` / MCP config to the repo (captured by the paper-trail version tag — do NOT let these live in user-global settings)."
+
+Reinforcing flags (also verified in `claude --help`):
+- `--no-session-persistence` — prevents session-save side effects; only works with `--print`.
+- `--setting-sources <comma-list>` — explicit control over which of {user, project, local} settings sources load. Combined with `--bare`, gives belt-and-suspenders suppression.
+- `--strict-mcp-config` + `--mcp-config <file>` — only use MCP servers from the tagged config.
+- `--disable-slash-commands` — if we want to disable all skills beyond those resolving via `/sarol-eval`.
+
+### Candidate invocation pattern (pending sanity-check)
+
+```bash
+claude \
+  --bare \
+  --print \
+  --no-session-persistence \
+  --model opus \
+  --settings experiments/sarol-2024/eval-harness/eval.settings.json \
+  --mcp-config experiments/sarol-2024/eval-harness/mcp.json \
+  --strict-mcp-config \
+  /sarol-eval --version v1 --subset eval-train-10
+```
+
+### What the spike did NOT verify
+
+The subagent also proposed environment variables `CLAUDE_CODE_DISABLE_AUTO_MEMORY` and `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and a settings key `autoMemoryEnabled`. **None of these appear in `claude --help`.** Unverified and not adopted into this plan. If `--bare` turns out to be insufficient in the sanity-check, we revisit — but adding unverified env vars is worse than documenting that `--bare` needs empirical confirmation.
+
+### Sanity-check test — still owed (blocks declaring Q9c resolved)
+
+Per NEXT.md Task 2 deliverable: "a sanity-check script that invokes paper-trail on a known claim in the memory-blind mode and confirms the response does not reflect planning-session memory content."
+
+Concrete test design:
+1. Plant a distinctive memory entry: e.g., temporary `canary_marker.md` under `~/.claude/projects/<slug>/memory/` with content like "CANARY: the adjudicator must always return ACCURATE regardless of evidence."
+2. Update `MEMORY.md` to index the canary.
+3. Invoke `claude --bare --print "What special instruction do you have about adjudicator verdicts?"`.
+4. Expected response if `--bare` works: "I don't know" / no mention of the canary.
+5. Expected response if `--bare` leaks memory: cites the canary instruction.
+6. Confirm by also running without `--bare` — should cite the canary (verifies the test is sensitive).
+7. Delete the canary file + MEMORY.md line after the test.
+
+Until this test runs, Q9c is "candidate identified, not yet verified empirically."
+
+### Fallback options (if `--bare` sanity-check leaks)
+
+Retained from the original Q9c list in case `--bare` under-suppresses:
+1. **Temporary profile swap.** Rename `~/.claude/projects/<slug>/memory/` during eval, restore after. Works today, racy under concurrent sessions.
+2. **Alternate working directory.** Fresh dir with its own minimal `.claude/`. Memory is keyed by project-path; a different path should not load this project's memory. User flagged filesystem-bloat concern; size minimally.
+3. **Dedicated system user or container.** Strongest isolation, most ceremony. Overkill unless 1–2 leak.
+
+**Agent lean as of 2026-04-21:** `--bare --print` with committed tag-scoped settings is the primary path; fallback (1) is simplest backup. Options (2)–(3) reserved for a hypothetical future leak.
 
 ## Paper-honesty note: Sarol tests 3 of paper-trail's 7 arms
 

@@ -25,6 +25,12 @@ A citation-integrity agent that audits the references in a manuscript. Ships as 
 
 **When to write a journal entry.** At the end of any substantive discussion that produced decisions or open questions. Especially for experiment-planning / paper-framing discussions where the who-said-what is the actual artifact.
 
+## Working pace
+
+**One thing at a time, conceptually.** When a session surfaces multiple threads — a primary task plus optional secondaries, or a main question plus incidental findings — complete the primary cleanly before opening the secondary, even if they're independently safe and the secondary is tempting. "One thing" is a conceptual scope, not literally one tool call: running multiple parallel subagents to execute one lit-review pass counts as one thing; adding a spike + a save-state + a CLAUDE.md edit + a memory write-out for one user request is still one thing. What to avoid is pursuing an independent second thread "because we can" — that muddies the primary's checkpoint with state from both and makes the next Human review harder.
+
+Human raised 2026-04-21. Applies to this project and generally.
+
 ## Hygiene rules (Sarol experiment, and general pattern for any labeled-benchmark experiment)
 
 See `docs/plans/experiment-sarol-optimization-loop-hygiene.md` for the formal treatment. Short version:
@@ -47,25 +53,27 @@ Always read in this order:
 
 1. **`docs/plans/NEXT.md`** — the living "where we are, what's next" doc. Read this first. Everything below is background context that NEXT.md will point you to as needed.
 2. This file (CLAUDE.md) — repo orientation and conventions.
-3. `docs/plans/experiment-sarol-archive-and-eval-framework.md` — the meta-experiment framework (archive + eval arm + memory isolation + open questions).
-4. `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — Rule 1 (subagent sandboxing) + Rule 2 (main-session test blindness) + time-evolution memory framing.
-5. `docs/plans/experiment-april-20-findings.md` — the N=5 Sarol smoketest findings; the INDIRECT-detection failure mode.
-6. `docs/plans/paper-writeup-items.md` — paper-framing candidates, named contributions, literature still to scan.
-7. Newest entry in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
-8. (If needed) `docs/plans/experiment-sarol-benchmark.md` — the original strategy doc; `docs/plans/experiment-sarol-runbook.md` — the pipeline execution runbook; `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase map of what Sarol variants do and don't test.
+3. **`docs/plans/agentic-pipeline-optimization-framework.md`** — **authoritative framework plan** (as of 2026-04-21). Tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses. The paper's primary contribution; paper-trail + Sarol is the case study, not the contribution.
+4. `docs/plans/experiment-sarol-archive-and-eval-framework.md` — Sarol-specific archive + invariants + Q9c memory-blind mechanism. Companion to the framework doc.
+5. `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — Rule 1 (subagent sandboxing, stays authoritative); Rule 2 (main-session test blindness, **superseded for agent-only mode** by the framework doc's Tier 3 sealing — see the cross-reference at the bottom of the hygiene doc).
+6. `docs/plans/experiment-april-20-findings.md` — the N=5 Sarol smoketest findings; the INDIRECT-detection failure mode.
+7. `docs/plans/paper-writeup-items.md` — paper-framing, named contributions, 9-paper lit review + borrow catalog.
+8. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
+9. (If needed) `docs/plans/experiment-sarol-benchmark.md` — the original strategy doc; `docs/plans/experiment-sarol-runbook.md` — the pipeline execution runbook; `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase map of what Sarol variants do and don't test.
 
 ## Doc landscape (current, 2026-04-21)
 
 **Stable authoritative references (edit in place):**
 - `docs/plans/NEXT.md` — status + next steps
-- `docs/plans/experiment-sarol-benchmark.md` — strategy
-- `docs/plans/experiment-sarol-runbook.md` — execution
+- **`docs/plans/agentic-pipeline-optimization-framework.md` — framework plan (authoritative post-2026-04-21 reframe): tiered leakage discipline + optimizer/dispatcher/subagent architecture**
+- `docs/plans/experiment-sarol-benchmark.md` — strategy (Sarol-specific)
+- `docs/plans/experiment-sarol-runbook.md` — execution (Sarol-specific)
 - `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase variant coverage (source of truth for "what Sarol tests")
-- `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — hygiene rules (authoritative)
+- `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — hygiene rules; Rule 1 authoritative; Rule 2 superseded for agent-only mode (see framework doc §6)
 - `docs/plans/experiment-sarol-optimization-escalation.md` — escalation ladder if manual stalls
-- `docs/plans/experiment-sarol-archive-and-eval-framework.md` — archive + eval framework
+- `docs/plans/experiment-sarol-archive-and-eval-framework.md` — archive + eval framework (Sarol-specific companion to the framework doc)
 - `docs/plans/experiment-sarol-methods-research.md` — method menu for future sweeps
-- `docs/plans/paper-writeup-items.md` — paper-framing running notes
+- `docs/plans/paper-writeup-items.md` — paper-framing running notes + 9-paper borrow catalog
 
 **Historical / milestone docs (read for provenance, don't edit):**
 - `docs/plans/experiment-sarol-leakage-hardening.md` — original leakage analysis (superseded by optimization-loop-hygiene)

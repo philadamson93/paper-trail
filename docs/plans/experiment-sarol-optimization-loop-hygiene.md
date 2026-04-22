@@ -2,6 +2,8 @@
 
 Companion to `experiment-sarol-leakage-hardening.md` and `experiment-sarol-hardening-implementation.md`. Those documents cover the structural defenses for subagent dispatches. This document articulates the **orchestrator-session rule**: the main planning session (the researcher ↔ LLM discussion in which failure modes are diagnosed and prompt edits are proposed) must also be test-blind, and why.
 
+> **Important 2026-04-21 — scope update.** Rule 1 (subagent sandboxing) remains authoritative. **Rule 2 is superseded for the agent-only experiment** defined in `agentic-pipeline-optimization-framework.md`: in agent-only mode there is no human main planning session, and test-blindness is enforced structurally as Tier 3 sealing (filesystem + CLI gating) rather than as a human-discipline norm. Rule 2 remains the authoritative rule for any human-in-the-loop variant (e.g., the deferred future paper on human-agent research collaboration). The discussion below is preserved for that context; see §"Relationship to the agent-only framework" at the end of this doc for the mapping.
+
 ## The two rules
 
 ### Rule 1 — Subagents are structurally sandboxed from gold
@@ -82,3 +84,15 @@ Any deviation voids the reporting value. If test is inadvertently exposed mid-it
 The paper argues (per `paper-writeup-items.md`) that agentic-pipeline prompt iteration is a closed-loop optimization with the same overfitting risks as gradient-based training. That argument is only defensible if **we ourselves held the discipline**. If the main session touched test mid-iteration, the paper's methodology contribution collapses — and so, by extension, does confidence in whatever test numbers we report.
 
 Seal is cheap. Unsealed test is expensive.
+
+## Relationship to the agent-only framework (2026-04-21 update)
+
+The agent-only reframe (see `agentic-pipeline-optimization-framework.md`) changes the enforcement model for both rules:
+
+| This doc | Agent-only framework equivalent | What changed |
+| --- | --- | --- |
+| Rule 1 — Subagent sandboxing | Unchanged. Rule 1 applies identically to train / val / test subagents in agent-only mode. | Nothing. Rule 1 is independent of whether the optimizer is human or agent. |
+| Rule 2 — Main-session test blindness | **Tier 3 sealing** (§2 of the framework doc). Optimizer cannot invoke test at all during iteration; enforced by filesystem permissions + CLI gating, not human discipline. | The *mechanism* changes from "researcher discipline" to "structural sealing." The *intent* is preserved. |
+| *New:* no prior analog | **Tier 2 — Val scalar-only** (§2 of the framework doc). Optimizer receives only aggregate val F1 via fixed-schema dispatcher CLI; no per-example val access. | New hygiene layer specific to agent-only optimization. No analog in the original Rule 1 / Rule 2 formulation. |
+
+**When does Rule 2 (as written here) still apply?** In any human-in-the-loop variant. The deferred future paper on human-agent research collaboration would re-activate Rule 2 as an operational norm alongside or instead of the agent-only framework. For the current paper (agent-only + paper-trail + Sarol case study), Tier 3 sealing is the authoritative mechanism and this doc's §Rule 2 is historical / preserved-for-future-use.

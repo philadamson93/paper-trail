@@ -23,6 +23,52 @@ Success criteria:
 - **A-9way — set the first baseline.** Report per-class F1 across all 9 Sarol labels; no prior baselines at this granularity.
 - **C — end-to-end credibility.** Demonstrates paper-trail on full, real citing manuscripts (the thing it's actually designed for). Expected to be noisier than A but the only test that covers what real users do. This is the paper's headline end-to-end story even if raw numbers are lower than Sarol's narrow benchmark.
 
+## Variant strategy (decision 2026-04-21) — Variant C is the headline
+
+**Context.** After the agent-only reframe (see `agentic-pipeline-optimization-framework.md`), the paper's primary contribution is the framework for agent-only optimization of multi-subagent pipelines. The case study must exercise enough of the pipeline to plausibly require the pipeline — otherwise a reviewer can rebut "this task could have been solved with a single LLM prompt; your framework over-engineers the solution."
+
+**Variant A is exposed to the single-prompt rebuttal.** Variant A's input is short (citing sentence + pre-selected chunks, ~5K tokens) and its output is a 9-class label. A long-context LLM with the rubric inline can plausibly solve this task directly. The extractor/adjudicator/verifier decomposition's marginal *accuracy* value on Variant A is probably small; its value is in auditability / per-stage cost attribution / optimizability. A reviewer asking "why not just one prompt?" has a fair question for Variant A specifically.
+
+**Variant C is not exposed to the single-prompt rebuttal.** Variant C's input is a full citing PDF. Phases 1-7 must run: claim extraction from the manuscript, bib resolution, PDF fetch (tool-use against PMC / arXiv APIs), GROBID ingest, then extractor/adjudicator/verifier per claim. No single prompt can do PDF-fetch tool-use loops, cross-document retrieval, or iterate over N citations with per-citation structured output. Variant C is agentic by construction.
+
+### Decision
+
+**Variant C is the paper's headline task.** Paper's headline results table reports Variant C numbers. Variant A stays as the iteration workbench + apples-to-apples comparison arm (Sarol's published baselines were essentially verdict-core, not end-to-end).
+
+**Rationale (Human 2026-04-21):** *"we lean in to experiment C, to your point."* Variant C justifies the agentic framing by construction rather than by defensive argument; the agentic-optimization-for-scientific-measurement angle is more defensible under C than under A (where the single-prompt rebuttal has more bite). Also matches the faithfulness-doc framing already in place: *"This is the paper's headline end-to-end story even if raw numbers are lower than Sarol's narrow benchmark."*
+
+### Operational split
+
+- **Variant A — iteration workbench.** Cheaper per run (no PDF fetch, no ingest). Used as the benchmark the optimizer agent iterates against during revision cycles. Fast feedback, short turnaround. Fits the graduated-N ramp (N=10/25/50/100/200) naturally.
+- **Variant C — landmark validation.** More expensive per run (full-pipeline tool use). Run at a smaller set of landmarks — at minimum, `paper-trail-v1` and `paper-trail-v_final`; possibly one mid-curve landmark. Where the paper's headline numbers come from.
+
+The optimizer iterates against Variant A gradients; Variant C landmarks are the reportable headline. Same underlying Sarol train/val/test splits and gold labels — no additional leakage risk introduced by running both variants against the same benchmark.
+
+### Zero-shot single-prompt baseline — backlog, not priority (2026-04-21)
+
+A zero-shot single-prompt baseline on Variant A is a mandatory paper table row (cf. TextGrad Table 3 "CoT (0-shot)"). **Human 2026-04-21:** *"I still think we want the zeroshot comparison but imo it's a baseline, not a 'need to do now' priority."*
+
+- Scope: one prompt call per claim, N=50-600 on Variant A test (Sarol's native split). Cost ≈ $5-30 at Opus 4.7.
+- Purpose: apples-to-apples comparison row in the paper, not a strategic pivot trigger. The strategic pivot (lean into Variant C) is already decided.
+- Pin: before paper submission, not before Task 5 framework build-out.
+
+### Variant D (proposed, backburnered) — raw source papers + independent claim extraction
+
+**Human 2026-04-21:** *"ideally we test end to end too from ORIGINAL source papers but to your point that requires matching claim-level to the original dataset to measure which is not guaranteed. But extending their dataset to *raw* original 100 paper and seeing how close our claim extraction even matches their source data is a task in and of itself and we can consider using their dataset as a proxy to measuring the full system. Put it on the backburner."*
+
+What this would be:
+- Start from the 100 citing papers' raw text (PMC XML or PDF), not from Sarol's pre-staged claim instances.
+- Run paper-trail's full claim-extraction phase independently — every `\cite{}` in every paper.
+- Match extracted claims to Sarol's annotated claims (the alignment problem — faithfulness doc §"Variant C claim-alignment problem" already flags fuzzy-match as the approach).
+- Evaluate: does paper-trail's claim-extractor recall all Sarol-annotated claims? What fraction? Once matched, how well does the verdict core do on the matched subset?
+- The Sarol dataset then becomes a *proxy measurement* of the full-system behavior on raw source inputs, not a claim-pre-staged benchmark.
+
+**Why backburnered:** it's a task of its own — matching paper-trail's independently-extracted claims to Sarol's annotation schema is non-trivial, probably requires a new alignment rubric, and is meaningfully harder than Variant C's already-partially-aligned flow. Ambition-justifying but scope-expanding. Pin: consider after Variant C primary results are in; could be a follow-up experiment or a second-paper.
+
+### Open operational question (deferred)
+
+Whether Variant A or Variant C is the substrate against which the optimizer's train/val split is materially defined has an important implication: the optimizer optimizes against Variant A gradients (because it's cheap), but the paper reports Variant C (because it's the headline). If phases 1-4 (claim extraction, bib resolution, PDF fetch, ingest) are not meaningfully edited across revisions — because the optimizer never gets Variant A gradient on them — then Variant C improvements across versions are attributed to phases 5-7 only. That's fine if we disclose it honestly. If we want Variant C phases 1-4 to also improve, the optimizer needs some Variant-C-based signal. Probably addressable with a small-scale Variant C iteration budget alongside the Variant A main loop. Deferred until Task 5 build-out forces the question.
+
 ## Data
 
 Cached at `data/benchmarks/sarol-2024/` (gitignored bulk; `download.sh` + `README.md` committed). License: MIT (upstream).
