@@ -177,6 +177,7 @@ The optimizer agent's initial state — system prompt, tool availability, `--add
 - Run web searches for literature on a specific problem the optimizer has encountered — including meta-strategy literature ("what's a more efficient way to keep sub-agents on track in a multi-agent pipeline").
 - Run web searches for specific data when the optimizer suspects the train labels are wrong, with an explicit guard: **do not overfit on this information.** Train labels are the optimization substrate; test labels are the ground truth. Web-sourced "corrections" are a known overfitting attack vector and must not propagate into prompts as label overrides.
 - Use whatever tools are available in the Claude Code environment.
+- **Sample-efficiency hint (D52, 2026-04-22):** for cheap hypothesis-checking before committing to a full E3 evaluation (the canonical fetch-through-verdict experiment), the optimizer may dispatch an isolated phase-5-only sub-experiment (E1-shaped, with pre-staged Sarol chunks as input) using the same dispatcher infrastructure but a different invocation path. This is a debugging tool — sub-dispatches are logged but do NOT enter the canonical E3 train+val curve. Use sparingly and judiciously; the canonical metric stays E3.
 
 This list is non-exhaustive — the intent is to give the optimizer permission to think beyond prompt-text edits on the currently-deployed subagents, not to fence it in.
 

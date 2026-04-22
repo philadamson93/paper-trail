@@ -2,11 +2,68 @@
 
 Focused execution plan for the headline validation experiment from the umbrella plan (`paper-tool-validation.md`, Experiments 1A / 1A-9way / 1A').
 
-## Objective
+> **2026-04-22 reframe — E1/E2/E3/E4 supersedes the Variant-A/B/C/D naming below.** Decision log: `docs/journal/2026-04-22-experiment-design-e1-e4.md` D50–D53. **Headline experiment is E3 (the fetch-through-verdict experiment, phases 2-5)** with input shape (citing sentence + claim, reference token, citing paper PDF). The prior Variant-A/B/C/D framing is preserved below for historical context but is no longer canonical. Read the §"Experiment design (E1-E4)" subsection immediately below first; everything farther down is provenance.
 
-Run the actual paper-trail orchestrator (extractor → adjudicator → verifier) on Sarol et al.'s human-annotated citation-integrity corpus and compare per-claim verdicts to Sarol's 9-class gold labels.
+## Experiment design (E1-E4, canonical 2026-04-22)
 
-Two variants, A and C. A is the narrow apples-to-apples test; C is the full-pipeline test on the raw citing PDF.
+The 5 phases of paper-trail (note: phase 4 renamed from "GROBID ingest" to the tool-agnostic "PDF parsing"):
+
+1. **Claim extraction** — citing paper (PDF / LaTeX / text) → list of (citing_sentence, cited_ref_id, claim_text). PDF input requires PDF parsing as a sub-step.
+2. **Bibliography resolution** — cited_ref_id + citing paper's reference list → canonical identifier (DOI / PMC ID).
+3. **PDF fetching** — canonical identifier → cited paper PDF.
+4. **PDF parsing** — cited paper PDF → structured text. (GROBID is current tool; phase is tool-agnostic.)
+5. **Verdict production** — structured cited paper + citing_sentence + claim_text → 9-class Sarol verdict. Currently 3-subagent (extractor/adjudicator/verifier) under topology-freedom (D32 from earlier 2026-04-22 — the decision that lets the optimizer restructure paper-trail's internal subagent layout).
+
+The 4 experimental setups:
+
+| Name | Phases tested | Input | Status |
+|---|---|---|---|
+| **E1** (verdict-only) | Phase 5 only | Sarol pre-staged: structured cited paper chunks + citing sentence + claim | **Subaim / seeding only.** Not on the headline plot. May be dispatched by the optimizer for sample-efficient sub-experiment hypothesis-checking (per D52); not part of the canonical reported curve. Useful as initial isolated-component sanity check. |
+| **E2** (claim-extraction-only) | Phase 1 only | Citing paper (PDF or text) | **Backlogged.** Decision deferred until after the main experiment lands. Requires LLM-as-judge alignment because Sarol annotations are a subset of any paper's claims by design — not strictly verifiable reward. May appear as supplementary proof-of-concept with explicit limitations note, OR skipped entirely. Resolve based on how the paper feels post-main-results. |
+| **E3** (fetch-through-verdict) | Phases 2-5 | (citing sentence + claim text, reference token, citing paper PDF) | **Headline experiment we design for.** Paper-trail parses the citing PDF to find the bib entry corresponding to the reference token, resolves to canonical ID, fetches cited paper PDF, parses, produces verdict. Closest defensible end-to-end given the dataset; ties cleanly to Sarol's existing annotations. The plot. |
+| **E4** (full end-to-end) | Phases 1-5 | Citing paper PDF (no pre-registration of which claims to evaluate) | **Not designed for in this paper.** Phase 2-5 numbers become a function of phase 1 quality, requires stratification, alignment problem with Sarol annotations is the well-known unresolved problem. Not on the roadmap. Future work. |
+
+### E3 dataset-extension work (D51, new Task 5 deliverable)
+
+E3's input shape is `(citing sentence + claim, reference token, citing paper PDF)` per claim. Sarol's existing annotations don't directly provide this — they give us per-claim records keyed by (citing sentence, pre-staged cited chunks, gold verdict), with citing paper identity implicit. We need a small dataset-extension step:
+
+- For each Sarol claim, identify which citing paper it came from (Sarol annotations have this implicitly).
+- For each claim, identify the reference token within the citing paper that points to the cited paper (the `\cite{}` key or `[N]` reference number).
+- Package as: per-claim record = (citing sentence, claim text, reference token, path to citing paper PDF).
+- Citing paper PDFs need to be fetched / collected (Sarol's 100 citing papers).
+
+Estimated effort: ~1 day of dataset-engineering scripts + manual spot-check on a few papers. Lands as part of the eval-arm build. Acknowledge in paper methods section: "the experimental setup wasn't free; we extended Sarol's per-claim framing to test more pipeline phases."
+
+### E3 scoring
+
+- Input per claim: `(citing sentence + claim, reference token, citing paper PDF)`.
+- Paper-trail output: 9-class Sarol verdict.
+- Scoring: macro-F1 against Sarol's gold verdict for that claim. Same metric as the original Variant A.
+- Coverage instrumentation: also report fetch-success-rate per landmark (did paper-trail successfully fetch the cited paper for this claim? what fraction of the dataset is reachable?), and ingest-success-rate (did PDF parsing produce usable structured text?). These are infrastructure-quality metrics, reported as a supplementary table per landmark, not as primary metrics the optimizer chases.
+
+### Optimizer-canonical-vs-sample-efficiency split (D52)
+
+- **Canonical run (always E3):** the dispatcher always invokes E3 for the train+val curve. Reported metric is E3 macro-F1.
+- **Optional sample-efficient sub-dispatch (E1):** the optimizer's initial system prompt mentions that for cheap hypothesis-checking, it may dispatch isolated phase-5-only sub-experiments (E1-shaped, with pre-staged Sarol chunks as input). Useful for cheap "did this prompt edit improve adjudication?" pre-checks before committing to a full E3 run.
+- **What's reported:** only E3 numbers go on the train+val curve. E1 sub-dispatches are logged for transparency but don't enter the canonical metric.
+
+This gives the optimizer the sample-efficiency lever Karpathy-style autoresearch would expect, without confusing the canonical metric. Cleanliness preserved.
+
+---
+
+## Historical Variant-A/B/C/D framing (preserved for provenance, superseded 2026-04-22)
+
+Original objective: run the actual paper-trail orchestrator (extractor → adjudicator → verifier) on Sarol et al.'s human-annotated citation-integrity corpus and compare per-claim verdicts to Sarol's 9-class gold labels.
+
+Originally framed as two variants (A and C), with B and D added later. Mapping to current E-naming:
+
+- **Variant A** ≈ **E1** (verdict-only, Sarol pre-staged inputs, phase 5 only). Was the "iteration workbench" in the prior framing; now demoted to subaim/sample-efficiency-only per D52.
+- **Variant B** ≈ **E2** (claim-extraction-only, phase 1 only). Was the 2026-04-22-morning addition; now backlogged per D50.
+- **Variant C** ≈ **E4** (full end-to-end, phases 1-5). Was originally the headline pre-2026-04-22-afternoon; now not designed for due to the unresolved alignment problem.
+- **(no prior letter)** ≈ **E3** (the fetch-through-verdict experiment, phases 2-5). New 2026-04-22 — emerged from the experiment-design conversation as the defensible end-to-end given the dataset.
+- **Variant D** = future-paper raw-source-extraction work; unaffected by E-naming reframe.
+
+Original Variant-A/C table:
 
 | Variant | Input to paper-trail | Phases exercised | Apples-to-apples with Sarol? |
 | --- | --- | --- | --- |

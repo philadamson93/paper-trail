@@ -103,6 +103,13 @@ Once tasks 1–4 are closed:
 - **`paper-trail-v<N>.json` archive artifact** — emitted per tagged revision alongside the git tag. Contains {prompt hashes, signature specs, rubric examples, eval-arm tag, dispatcher versions, model aliases, settings.json hash, MCP config hash, handoff-doc schema version}.
 - Test on paper-trail-v1 + eval-train-10 (~$7 smoketest of the new plumbing; validates that invariant-check machinery fires correctly)
 
+**New deliverable from 2026-04-22 experiment-design decision (D50/D51 — design for E3, the fetch-through-verdict experiment):**
+
+- **E3 dataset-extension** (D51, the small-but-non-trivial work to convert Sarol's per-claim records into the (citing PDF + reference token + claim) shape E3 needs): for each Sarol claim, identify the citing paper it came from, identify the reference token within that paper that points to the cited paper, package as `(citing_sentence, claim_text, reference_token, citing_paper_PDF_path)`, fetch/collect Sarol's 100 citing paper PDFs. Estimated ~1 day of dataset-engineering scripts + manual spot-check on a few papers. Acknowledge in paper methods section as honest engineering work — we extended Sarol's framing to test more of the pipeline.
+- **E3 dispatcher** (replaces / extends the prior `run_train_eval.py` spec): takes per-claim records of the form above; orchestrates phases 2-5 of paper-trail; emits per-claim verdict + fetch-success bool + ingest-success bool + macro-F1 aggregate. Locked schema. The canonical reported metric.
+- **E1 sub-dispatcher** (the sample-efficiency sub-experiment per D52, for the optimizer's optional cheap hypothesis-checking on phase-5-only): same dispatcher infrastructure but with pre-staged Sarol chunked inputs (Sarol's flat JSONL claims). Optimizer may invoke for cheap pre-checks; logged but not part of the canonical curve.
+- See `docs/journal/2026-04-22-experiment-design-e1-e4.md` for the full decision log.
+
 **New deliverables from 2026-04-22 lit-review-2 (autoresearch + VeRO borrow-lists):**
 
 - **Per-claim budget as Tier 1 invariant** (D45): fixed per-claim wall-clock OR fixed per-claim model-call count so the optimizer cannot "win" by growing per-claim compute. Probably model-call-count as primary (deterministic), wall-clock as secondary. Default `1.5 × paper-trail-v1's per-claim call count` for headroom without encouraging bloat. Specific bound set at Task-5 build time. `validate_run.py` enforces.
