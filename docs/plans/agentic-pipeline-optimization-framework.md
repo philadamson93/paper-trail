@@ -394,7 +394,16 @@ Honest list of what's not yet solved.
 8. **Cost accounting.** The framework adds overhead (multiple dispatchers, uniform headless invocation, optimizer respawns). Need to quantify vs a naive iteration loop. Logging already planned in archive framework.
 9. **Attribution on failure modes.** Per-stage sub-scores (DSPy trace-aware metric pattern, deferred clarification) let us attribute macro-F1 deltas to extractor vs adjudicator vs verifier. Specification pending.
 10. **What counts as "the optimizer agent"?** Its system prompt, its tools, its `--add-dir` scope, its initial context — all of these are Tier 1 invariants for reproducibility. Needs a schema (folds into the `paper-trail-v<N>.json` archive artifact). **Partial spec committed 2026-04-22** — see §3 "Optimizer agent initial configuration" (affordance catalog, performance-not-cost philosophy, fight-Python-default guidance). Full machine-checkable schema still owed.
-11. **`--bare` + Agent-tool compatibility canary.** Our dispatcher architecture (§3 "Architectural note") assumes `claude --bare --print` preserves Agent-tool availability so paper-trail can spawn its internal subagents inside a fresh subprocess-launched main. Testable via a trivial canary slash command. **Gate before Task 5 eval-arm build**, parallel to the Q9c memory-blind canary. See journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D44.
+11. **`--bare` + Task-tool compatibility canary.** Our dispatcher architecture (§3 "Architectural note") assumes `claude --bare --print` can spawn paper-trail's internal subagents inside a fresh subprocess-launched main.
+
+    **Partial resolution 2026-04-22 via direct CLI-ref docs sweep** (see `docs/plans/canary-runbook-vertex.md` for full runbook):
+    - Per CLI reference verbatim, `--bare`'s default toolset is "Bash, file read, file edit tools" only. **Task is NOT in the default `--bare` toolset.**
+    - Per `--tools` flag docs, passing `--tools default` (or explicit `--tools "Bash,Edit,Read,Write,Glob,Grep,Task"`) enables Task under `--bare`. **This is the unlock.**
+    - Per `--bare` auto-discovery skip, paper-trail's custom subagents in `.claude/agents/*.md` don't auto-load. `--agents '<json>'` flag is the documented workaround.
+    - **Final dispatcher invocation shape:** `claude --bare --print --tools default --agents '<json-registry>' --model opus [per-run flags]`.
+    - Empirical canary still owed to confirm: (a) `--tools default` actually loads Task as docs suggest, (b) `--agents '<json>'` actually loads custom subagents under `--bare`, (c) functional subagent spawn works end-to-end. Runbook at `docs/plans/canary-runbook-vertex.md`. Execution backlogged pending Vertex VM session; estimated $0.21–$0.25 GCP Vertex spend.
+
+    See journal `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` D44 for the initial framing, and `canary-runbook-vertex.md` for the execution plan.
 12. **Round-trip sanity canary** — per-run eval-arm check that processes a known-good canonical claim and confirms the expected verdict is returned. Defends against silent metric bugs in the Karpathy autoresearch issue #384 shape (BPB metric inflated by UTF-8 replacement chars for weeks). See journal D46.
 
 ---

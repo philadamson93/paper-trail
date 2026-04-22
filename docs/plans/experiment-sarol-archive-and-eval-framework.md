@@ -387,7 +387,7 @@ Reinforcing flags (also verified in `claude --help`):
 - `--strict-mcp-config` + `--mcp-config <file>` — only use MCP servers from the tagged config.
 - `--disable-slash-commands` — if we want to disable all skills beyond those resolving via `/sarol-eval`.
 
-### Candidate invocation pattern (pending sanity-check)
+### Candidate invocation pattern (updated 2026-04-22 post-docs-sweep)
 
 ```bash
 claude \
@@ -395,11 +395,20 @@ claude \
   --print \
   --no-session-persistence \
   --model opus \
+  --tools default \
+  --agents "$(cat experiments/sarol-2024/eval-harness/subagent-registry-v<N>.json)" \
   --settings experiments/sarol-2024/eval-harness/eval.settings.json \
   --mcp-config experiments/sarol-2024/eval-harness/mcp.json \
   --strict-mcp-config \
-  /sarol-eval --version v1 --subset eval-train-10
+  /sarol-eval --version v<N> --subset eval-train-10
 ```
+
+Two new flags added 2026-04-22 after CLI-ref docs sweep surfaced that `--bare`'s default toolset omits `Task` (the subagent-spawn tool) and skips `.claude/agents/*.md` auto-discovery:
+
+- `--tools default` — per CLI reference, enables all built-in tools including Task. Without this, `--bare` provides only `Bash`, file-read (Read/Grep/Glob), and file-edit (Edit/Write) tools, which blocks paper-trail's dispatcher from spawning extractor/adjudicator/verifier subagents.
+- `--agents '<json>'` — loads custom subagents under `--bare` since auto-discovery is off. The JSON is built from paper-trail's `.claude/agents/*.md` frontmatter + body at each `paper-trail-v<N>` tag, and committed alongside the tag as `subagent-registry-v<N>.json`. See NEXT.md Tier 1 deliverables.
+
+**Vertex AI deployment note:** under the chosen auth path (Vertex AI on a GCP VM with `CLAUDE_CODE_USE_VERTEX=1` + `ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-7`), the same invocation shape applies. `--bare` refuses Anthropic OAuth/keychain auth but delegates to Vertex's GCP credentials cleanly.
 
 ### What the spike did NOT verify
 

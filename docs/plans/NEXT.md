@@ -2,7 +2,7 @@
 
 **Always-current.** Edit this file when state changes. Fresh agents picking up work should read this *first*, then follow the reading path in `CLAUDE.md`.
 
-**Last updated:** 2026-04-21
+**Last updated:** 2026-04-22
 
 > **Major reframe 2026-04-21: experiment is agent-only; infrastructure is the contribution.** Human decision: the optimizer is an agent (not human-in-the-loop). Paper-trail + Sarol is the case study; the framework is the primary contribution. See `docs/plans/agentic-pipeline-optimization-framework.md` for the authoritative plan (tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses). Everything downstream — contributions list, Task 5 eval-arm deliverables, hygiene rules — has been updated below.
 
@@ -97,6 +97,8 @@ Once tasks 1–4 are closed:
 - `/sarol-eval-item` slash command — non-interactive, takes all inputs via CLI args. Uniform invocation for train / val / test subagents (`claude --bare --print /sarol-eval-item ...`). No interactive questions.
 - Pre-commit hook enforcing eval-harness immutability on non-eval branches
 - Commit any per-experiment `.claude/settings.json` / MCP config to the repo (captured by the paper-trail version tag — do NOT let these live in user-global settings)
+- **Dispatcher invocation shape (new 2026-04-22 from CLI-ref docs sweep):** every subprocess invocation must be `claude --bare --print --tools default --agents '<json-registry>' --model opus --settings experiments/sarol-2024/eval-harness/eval.settings.json ...`. Two new flags are load-bearing: (a) `--tools default` enables Task tool which `--bare` omits from the default toolset; (b) `--agents '<json>'` loads paper-trail's custom subagents (extractor/adjudicator/verifier) which `--bare` skips from auto-discovery.
+- **Custom-subagent JSON registry builder (new 2026-04-22):** a small utility that reads `.claude/agents/*.md` YAML frontmatter + body at a given paper-trail-v<N> git tag, serializes to the `--agents` JSON format, and emits `experiments/sarol-2024/eval-harness/subagent-registry-v<N>.json`. Committed alongside each tag. ~50 lines Python.
 - Move orchestrator-runtime decisions (verifier sampling, retry, bounce, schema validation) into eval-harness Python
 - **3-seed minimum at v1 landmark** — non-negotiable per lit-review convergent signal (MIPROv2, TextGrad, BetterTogether, OPRO, MASS).
 - **Train dispatcher emits raw per-subagent traces + macro-F1 + per-class F1** (topology-agnostic; no pre-computed per-stage sub-scores — those are the optimizer's job via its own mutable trace-aware metric). Per `docs/journal/2026-04-22-topology-freedom-and-optimizer-affordances.md` D36: the DSPy-pattern sub-metric (extractor recall, adjudicator conditional-F1, verifier flip rate, etc.) is an optimizer-owned artifact seeded at v1, not frozen eval-arm infrastructure — the optimizer rewrites it when paper-trail-v<N>'s topology evolves.
@@ -147,7 +149,16 @@ Both are implementation-close specs, not speculative feature docs. They exist to
 
 #### TIER 0 — Immediate gates (block Task 5 eval-arm build; all three run in parallel)
 
-All three gates independently block the big eval-arm engineering build (Task 5 the eval-arm build deliverable). Each has a clean pass/fail outcome. Run them in any order or all at once.
+**Status 2026-04-22:**
+- **Gate 1 (E3 dataset-extension feasibility):** ✅ **RESOLVED GREEN** with yellow caveat on PMC PDF fetch. See `docs/journal/2026-04-22-e3-dataset-extension-feasibility.md`. Key numbers verified from disk: 70 Train cited-paper buckets, 2,141 annotation files (1:1 with claims-train.jsonl rows), 1,628 unique citing PMC IDs in Train. Citing-paper identity lives in annotation filenames `citations/<bucket>_PMC<cited>/<citing_PMC>_<N>.json`; reference token pre-extracted in each JSON's `marker_span.text`. ~1,900 unique citing PDFs to fetch across Train+Dev (Test deferred to unseal-time). Estimated ~1.5 engineering days for the full extension pipeline. No reason to descope E3 to E3-lite or swap headline to E1.
+- **Gate 2 (Q9c memory-blind canary) + Gate 3 (D44 Task-tool compatibility):** ⏸ **RUNBOOK DRAFTED, EMPIRICAL EXECUTION BACKLOGGED.** Runbook at `docs/plans/canary-runbook-vertex.md`. User decision 2026-04-22: auth path = Vertex AI (Claude Code already configured on the project's GCP VM). Empirical canary execution deferred to a future session on that VM. Estimated GCP Vertex spend: $0.21–$0.25 for the full runbook.
+- **Docs-derived findings that don't require empirical canary** (surfaced 2026-04-22 by direct docs sweep):
+  - Per CLI reference verbatim: `claude --bare --print` default toolset is `Bash, file read, file edit` — does NOT include Task (the subagent-spawn tool). **Fix:** dispatcher must pass `--tools default` (or explicit `--tools "Bash,Edit,Read,Write,Glob,Grep,Task"`) to enable Task under `--bare`. One-flag addition, not an architecture problem.
+  - `--bare` also skips `.claude/agents/*.md` auto-discovery (agent files are part of "skills/plugins" auto-discovery that `--bare` suppresses). **Fix:** dispatcher must construct + pass `--agents '<json>'` registry serialized from paper-trail's `.claude/agents/*.md` frontmatter. New Task 5 deliverable — see Tier 1.
+  - `--bare` also refuses `CLAUDE_CODE_OAUTH_TOKEN` (the 1-year subscription-scoped token from `claude setup-token`). So even the scriptable subscription-auth path doesn't work under `--bare`. Confirms: Vertex AI (or a Console API key) is the only viable auth path — matching the decision already taken.
+- **Meta-task for the canary-execution session:** follow `canary-runbook-vertex.md` end-to-end. Pass/fail updates land in archive-framework §Q9c and framework doc §7 open problem #11. Then reassess Tier 1+ priorities based on any architectural surprises.
+
+**Legacy gate descriptions below (preserved for history; superseded by the status block above where applicable).**
 
 **Dependency note:** Gate 1 (dataset-extension feasibility) blocks the E3 dispatcher spec; Gates 2 & 3 (the two substrate canaries) block the `claude --bare --print` invocation architecture. If any of the three fails, re-scope the downstream plan before continuing.
 
