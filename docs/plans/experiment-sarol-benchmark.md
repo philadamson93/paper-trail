@@ -52,6 +52,40 @@ A zero-shot single-prompt baseline on Variant A is a mandatory paper table row (
 - Purpose: apples-to-apples comparison row in the paper, not a strategic pivot trigger. The strategic pivot (lean into Variant C) is already decided.
 - Pin: before paper submission, not before Task 5 framework build-out.
 
+### Variant B — phase 1 (claim extraction) evaluation (added 2026-04-22)
+
+**Origin:** raised by Human 2026-04-22 while reviewing the lit-review-2 competitor landscape. Observation: Sarol's annotations include the citing sentence and cited reference for each claim; given a raw paper as input, paper-trail's phase 1 extractor should produce the same tuples. That's a verifiable-reward signal at phase 1 — independently measurable, before downstream adjudication runs.
+
+**Input:** raw citing paper text (PMC XML or PDF). Sarol provides the annotated ground-truth `(citing_sentence, cited_reference, claim_text)` tuples for the paper.
+
+**Task (paper-trail side):** run phase 1 only — extract every `\cite{}` citation, identify the citing sentence(s), produce the specific claim being made. Output: list of `(citing_sentence, cited_reference, claim_text)` tuples.
+
+**Scoring:** LLM-as-judge matching of paper-trail's extracted tuples against Sarol's annotations for the same paper.
+- Match rubric: given two tuples, "same claim" or "different claim." Consider reference equivalence (Smith 2020 ≈ \cite{smith2020} ≈ [3] if all resolve to the same paper), citing-sentence overlap (same sentence or substantially-overlapping sentences), claim-text semantic equivalence.
+- Metrics: precision = `matched / extracted`; recall = `matched / Sarol-annotated`; F1.
+- Judge-model choice: **probably not Opus** (risk of self-agreement artifact since Opus is also the extractor). Lean: Sonnet 4.6 or a cheaper frontier model. 3-seed judge agreement required for high-confidence matches.
+
+**Why this variant exists:**
+- Isolates phase 1 as a measurable, separately optimizable unit. Currently Variant A bypasses phase 1 (claims pre-staged); Variant C rolls phase 1 into the end-to-end number.
+- Gives the optimizer a phase-1-specific gradient. Per D47 (train-tier per-claim adjudicator reasoning), the optimizer already sees downstream failure modes; Variant B adds upstream extraction failure modes to the visible gradient.
+- De-risks Variant C scoring. The same LLM-as-judge matcher is what Variant C needs; Variant B validates the matcher as a sub-experiment.
+
+**Cost estimate (rough):** ~$2-5 per paper for extraction + matching at Opus 4.7 + Sonnet 4.6 judge. For 100 Sarol-train papers, ~$200-500 per revision. Cheaper than Variant C full-pipeline. Probably runs at landmark tags alongside Variant A rather than on every revision.
+
+**Empirical gate before commit (~1-2 hrs):** spot-check extraction on 5 Sarol-train papers; compute rough alignment rate with Sarol annotations using the LLM-judge matcher. Accept if alignment-rate ≥ ~70%; reconsider design if < ~50%.
+
+**Open questions (to resolve during/after spot-check):**
+- Reference disambiguation: what counts as "same reference" in the match rubric? Need a resolution step (probably via cited-paper title+author) as sub-primitive.
+- Partial-match semantics: if paper-trail's claim is a superset of Sarol's annotation (includes extra clause), is that a match? Rubric-call for the LLM-judge.
+- Inference cost for the matching step: if LLM-judge on every extracted × annotated cross product is prohibitive, use embedding-similarity as a cheap filter, LLM-judge only on ambiguous pairs.
+- Does Variant B bypass bibliography resolution (phase 2)? Probably yes — we assume paper-trail extracts `\cite{key}` verbatim; resolution lives in phase 2 and belongs to Variant C.
+
+**Relationship to Variant D (below):** Variant B is a narrower, tractable sub-experiment that de-risks Variant D's alignment problem before committing to it. Variant D is Variant B + downstream phases on the extracted claims. Variant B can land first; Variant D folds in after.
+
+### Variant C end-to-end scoring — unresolved design question (deferred 2026-04-22)
+
+Variant C as currently described (full PDF → all 7 phases → verdicts per Sarol annotation) has an unresolved scoring-alignment problem. Brainstormed options from Human + Agent 2026-04-22 (full thought-process logged in `paper-writeup-items.md` §"Other paper-level threads" — the "Variant C end-to-end scoring brainstorm" bullet). Tentative lean: **Option B (seed with pre-registered Sarol reference IDs; paper-trail extracts claims for those references, then runs downstream)** because it cleanly removes the "which claims count" ambiguity without opening composite-metric fiddly-ness. Defer resolution until Variant B alignment-rate spot-check gives empirical data on LLM-judge matching behavior. The end-to-end story for the paper may ultimately be: Variant A (iteration workbench) + Variant B (phase 1 validated separately) + Option B (phase 1 + A on pre-registered references) as the defensible end-to-end. Variant C full-PDF-start-to-finish then appears as a qualitative demonstration, not primary evaluation.
+
 ### Variant D (proposed, backburnered) — raw source papers + independent claim extraction
 
 **Human 2026-04-21:** *"ideally we test end to end too from ORIGINAL source papers but to your point that requires matching claim-level to the original dataset to measure which is not guaranteed. But extending their dataset to *raw* original 100 paper and seeing how close our claim extraction even matches their source data is a task in and of itself and we can consider using their dataset as a proxy to measuring the full system. Put it on the backburner."*

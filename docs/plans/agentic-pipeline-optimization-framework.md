@@ -336,9 +336,22 @@ The optimizer agent runs a long loop over many revisions. A single Claude Code s
 - **Respawn budget.** Is there a cap on respawns? Probably yes — if the optimizer respawns 100 times, it's likely spinning. Cap + stopping rule.
 - **Who writes the initial handoff-doc format?** This doc will evolve across revisions. Needs a schema and versioning (the handoff schema itself should be a Tier 1 invariant per the archive framework).
 
-### Alternative considered
+### Alternative — promoted to default recommendation 2026-04-22
 
-Claude Code Opus 4.7 1M-context variants. Would reduce (but not eliminate) the respawn problem by extending the single-session horizon. Tradeoff: higher cost per token; cache warming matters more; some features may degrade. Not adopting by default; keep as a fallback if respawns become a pain.
+**Claude Code Opus 4.7 1M-context variant as the optimizer's default.** Extends the single-session horizon roughly 5×, pushing out "context full" as a terminal state sufficiently that the self-respawn protocol (still an open problem, §7 #1) becomes an edge case rather than the main loop. Tradeoffs: higher cost per token; cache warming matters more; some features may degrade. The engineering-debt reduction (fewer respawns to design defenses for) justifies the tradeoff. Decision log: `docs/journal/2026-04-22-lit-review-2-competitor-landscape.md` (informal discussion — Human raised mid-session).
+
+**Action at Task 5 build time:** optimizer launcher uses the 1M-context Opus 4.7 model alias. Per-session cost measured and logged. If cost-per-revision balloons past what the overall experiment budget supports, fall back to 200K + respawn protocol.
+
+### Stall-prevention outer-harness (beyond respawn) — open for impl-time investigation
+
+A related but distinct failure mode from context exhaustion: **the optimizer pauses to wait for input and never self-continues**, even with a `NEVER STOP` instruction in its seed prompt. Observed in practice (our own Agent exhibited this 2026-04-22 multiple times when user interrupts broke task-queue invariants). `NEVER STOP` is a behavioral defense only; structural defense is owed.
+
+Candidate mechanisms to investigate at Task 5 build time:
+- **Heartbeat + outer watchdog.** Optimizer writes a timestamp to `experiments/sarol-2024/archive/paper-trail-v<N>/_heartbeat` every N seconds. External process (a cron, a supervisor, or a second Claude session doing only watchdog work) checks staleness. If >M minutes since last heartbeat: send a "continue per `program.md`" message, or spawn a successor with the latest handoff-doc and kill the stalled one.
+- **Log-line-rate monitor.** Cheaper: watchdog tails the optimizer's run log; if no new lines for M minutes, act.
+- **Stall-as-invariant.** Tier 1 invariants include "optimizer did not pause-for-input during this revision cycle" — enforced via log + timing data. Stall invalidates the run.
+
+These are investigation items, not decisions. Landing as NEXT.md Task-5-or-later for concrete design. Heartbeat approach is the leading candidate because it composes cleanly with the self-respawn protocol (watchdog becomes the process that detects both context-exhaustion and stall, and triggers the appropriate response).
 
 ---
 
