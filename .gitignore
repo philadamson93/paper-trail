@@ -11,8 +11,13 @@
 
 # Machine-local Claude Code state (per-user permissions, auto-installed skills).
 # Workspace specs/scripts/prompts/commands under .claude/ are still tracked.
+# Project-owned skills (committed intentionally) are carved out with `!` below.
+# NOTE: `.claude/skills/*` not `.claude/skills/` — the former lets `!` exceptions
+# re-include specific files; the latter ignores the directory entirely and `!`
+# cannot re-include anything inside it (per git ignore rules).
 .claude/settings.local.json
-.claude/skills/
+.claude/skills/*
+!.claude/skills/doc-split-check.md
 .claude/scripts/__pycache__/
 *.pyc
 

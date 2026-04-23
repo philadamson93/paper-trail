@@ -56,10 +56,11 @@ Always read in this order:
 3. **`docs/plans/agentic-pipeline-optimization-framework.md`** — **authoritative framework plan** (as of 2026-04-21). Tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses. The paper's primary contribution; paper-trail + Sarol is the case study, not the contribution.
 4. `docs/plans/experiment-sarol-archive-and-eval-framework.md` — Sarol-specific archive + invariants + Q9c memory-blind mechanism. Companion to the framework doc.
 5. `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — Rule 1 (subagent sandboxing, stays authoritative); Rule 2 (main-session test blindness, **superseded for agent-only mode** by the framework doc's Tier 3 sealing — see the cross-reference at the bottom of the hygiene doc).
-6. `docs/plans/experiment-april-20-findings.md` — the N=5 Sarol smoketest findings; the INDIRECT-detection failure mode.
-7. `docs/plans/paper-writeup-items.md` — paper-framing, named contributions, 9-paper lit review + borrow catalog.
-8. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
-9. (If needed) `docs/plans/experiment-sarol-benchmark.md` — the original strategy doc; `docs/plans/experiment-sarol-runbook.md` — the pipeline execution runbook; `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase map of what Sarol variants do and don't test.
+6. `docs/plans/experiment-sarol-eval-arm-isolation.md` — Rule 3 (eval-time IN/OUT isolation; iteration-tier wrapper-script invocation + landmark-tier Docker). **Split from optimization-loop-hygiene 2026-04-23** — companion to #5.
+7. `docs/plans/experiment-april-20-findings.md` — the N=5 Sarol smoketest findings; the INDIRECT-detection failure mode.
+8. `docs/plans/paper-writeup-items.md` — paper-framing, named contributions, 9-paper lit review + borrow catalog.
+9. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
+10. (If needed) `docs/plans/experiment-sarol-benchmark.md` — the original strategy doc; `docs/plans/experiment-sarol-runbook.md` — the pipeline execution runbook; `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase map of what Sarol variants do and don't test.
 
 ## Doc landscape (current, 2026-04-21)
 
@@ -70,6 +71,7 @@ Always read in this order:
 - `docs/plans/experiment-sarol-runbook.md` — execution (Sarol-specific)
 - `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase variant coverage (source of truth for "what Sarol tests")
 - `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — hygiene rules; Rule 1 authoritative; Rule 2 superseded for agent-only mode (see framework doc §6)
+- `docs/plans/experiment-sarol-eval-arm-isolation.md` — Rule 3 (eval-time IN/OUT isolation); canonical iteration-tier + landmark-tier invocation shapes; "alternatives evaluated" catalog. Split from optimization-loop-hygiene 2026-04-23.
 - `docs/plans/experiment-sarol-optimization-escalation.md` — escalation ladder if manual stalls
 - `docs/plans/experiment-sarol-archive-and-eval-framework.md` — archive + eval framework (Sarol-specific companion to the framework doc)
 - `docs/plans/experiment-sarol-methods-research.md` — method menu for future sweeps
@@ -81,6 +83,7 @@ Always read in this order:
 - `docs/plans/experiment-sarol-hardening-implementation.md` — status doc on hardening defenses that landed
 - `docs/plans/experiment-sarol-smoketest-handoff.md` — the original N=5 smoketest handoff prompt
 - `docs/plans/experiment-april-20-findings.md` — the N=5 findings themselves (milestone, not updated)
+- `docs/plans/tier-0-resolution-2026-04-22.md` — Tier 0 gates resolution narrative (2026-04-22 / 2026-04-23 empirical canaries + critic audit + benchmark-integrity lit-review + creative-defenses brainstorm). Milestone, not updated.
 
 **Journal (append-only, daily-per-topic):**
 - `docs/journal/YYYY-MM-DD-<topic>.md` — decision logs with inline **Human:** / **Agent:** attribution
