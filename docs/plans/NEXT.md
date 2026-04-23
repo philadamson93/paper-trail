@@ -164,7 +164,26 @@ Full resolution narrative, all six 2026-04-22 canaries, the 2026-04-22 critic au
 - `experiment-sarol-optimization-loop-hygiene.md` — Rules 1 (subagent sandboxing) + 2 (main-session blindness); still authoritative.
 - `canary-runbook-vertex.md` — landmark-tier empirical canary runbook (pending VM execution).
 
-**Next-session meta-task:** begin Task 5 eval-arm scaffolding (Tier 1 below). Run the nine blocking-priority canaries early (five from the 2026-04-22 critic + four adversarial-agent smoketests from Berkeley / Zhu et al. — full specs in `experiment-sarol-eval-arm-isolation.md` §Residual-investigation-items). Token rotation reminder: the `CLAUDE_CODE_OAUTH_TOKEN` used in 2026-04-22 canaries was shared in session transcript; rotate at claude.ai settings before running new canaries.
+**Next-session meta-task** (ordered — do 0 first since it may reshape 1):
+
+0. **Write a consolidated experimental-plan-of-record doc** (new 2026-04-23 per Human observation that planning has accreted across many sessions into many specialized docs with no single holistic view). **Problem:** an agent or collaborator reasoning over the whole plan currently has to cross-reference ~10 plan docs + journal entries to reconstruct thesis → phases → criteria → non-goals; the non-linear accretion may be hiding soundness pitfalls that a holistic view would surface. **Deliverable:** `docs/plans/experimental-plan-of-record.md` — outline with:
+   - Thesis (1-2 sentences: the paper's core claim)
+   - Primary + secondary contributions (consolidated from `paper-writeup-items.md` §Core contributions)
+   - Phase-by-phase plan start-to-finish (Phase 0 current state → Phase 1 Task 5 eval-arm build → Phase 2 v1 tag + smoketest → Phase 3 iteration curve under optimizer → Phase 4 landmark tags + v_final + test unseal → Phase 5 paper writing)
+   - Per-phase success criteria + descope triggers
+   - Explicit non-goals (what's pinned to future papers — Variant D, from-scratch, backbone portability, multi-benchmark, human-in-loop, etc.)
+   - Pointers per section to the authoritative deep-spec docs (framework doc §1-§8, eval-arm-isolation, hygiene Rules 1+2, benchmark doc, archive-and-eval, paper-writeup-items, milestone docs)
+   - Consolidated view of the D-number decisions (D1…D53+) and what each settled — a decision-log table so readers can find "what did we decide about X" without grepping journals
+   
+   **First-pass scope:** outline-with-pointers is fine — the precursor form is already valuable because it forces the plan into one navigable artifact. Full prose can follow once the structure is agreed.
+
+   **Follow-up: spawn a soundness-review agent** on the plan-of-record doc. Brief: adjudicate whether the plan is sound; identify pitfalls, missing criteria, inconsistencies between phases, unstated assumptions, paths where empirical results could invalidate downstream plans. Pattern mirrors the 2026-04-22 critic audit on the Rule-3 isolation claim (separately briefed, pressure-test, grade, return actionable findings). Expected outputs: findings integrated into the plan-of-record + any open decisions or rescopes that surface become new Tier 1+ items.
+
+1. **Begin Task 5 eval-arm scaffolding** (Tier 1 below) — after the plan-of-record + soundness review lands, because the audit may rescope some deliverables.
+
+2. **Run the nine blocking-priority canaries early in Task 5** (five from the 2026-04-22 critic + four adversarial-agent smoketests from Berkeley / Zhu et al. — full specs in `experiment-sarol-eval-arm-isolation.md` §Residual-investigation-items).
+
+3. **Token rotation reminder:** the `CLAUDE_CODE_OAUTH_TOKEN` used in 2026-04-22 canaries was shared in session transcript; rotate at claude.ai settings before running new canaries. (Session-local cleanup of the cached approval-pattern in `.claude/settings.local.json` already done 2026-04-23.)
 
 #### TIER 1 — Task 5 eval-arm build (the core deliverable)
 
