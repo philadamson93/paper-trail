@@ -368,9 +368,14 @@ The word "seed" was ambiguous. Two separate concepts:
 
 ## Q9c — How is memory-blindness actually enforced when running headless Claude Code?
 
-**Status 2026-04-21: ON HOLD.** Candidate mechanism identified and verified via `claude --help`; canary sanity-check test designed but not run. Human paused the work to prioritize one-thing-at-a-time discipline (primary lit review must clear first). Resume before Task 5 (eval arm build); the eval arm assumes the memory-blind mechanism works.
+**Status 2026-04-22: RESOLVED as a two-tier architecture.** The single-mechanism framing ("does --bare suppress memory?") was reframed into an **IN-system vs OUT-of-system** discipline after Human's 2026-04-22 formalization push, and empirically validated via multiple canaries in a local working session (see `docs/journal/2026-04-22-memblind-oauth-findings.md` for the full empirical record). The two tiers are:
 
-**Restart instructions for a fresh agent:** read the three subsections below end-to-end, run the canary test, update this section with results. If `--bare` suppresses the canary as expected → mark Q9c RESOLVED and unblock NEXT.md Task 5. If `--bare` leaks → document the leak mode, move to fallback option (1) or (2) below, re-test.
+- **Iteration tier** (local, OAuth subscription): `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 claude --print ...`. Blinds auto-memory and all CLAUDE.md scopes under OAuth. Subagent inheritance verified (env vars propagate transitively). Residual leakage on user-level hooks/skills/plugins accepted because iteration-tier evals compare same-host same-time runs. **Unblocks Task 5 scaffolding immediately — no Vertex required.**
+- **Landmark tier** (Vertex or ANTHROPIC_API_KEY, `--bare`): full `--bare` isolation. Used for paper-reportable numbers at each `paper-trail-v<N>` tag. Auth path = Vertex on the project's GCP VM (per NEXT.md Tier 0 decision) or API key as fallback.
+
+Both tiers share the same dispatcher code; only the env prefix + `--bare` flag differ. Full mechanism coverage and IN/OUT formalization live in `docs/journal/2026-04-22-memblind-oauth-findings.md` §2 and §4.
+
+**Historical record below** (preserved for provenance; the "candidate: `claude --bare --print`" framing was superseded 2026-04-22 by the two-tier split):
 
 ### Candidate: `claude --bare --print`
 
@@ -387,13 +392,19 @@ Reinforcing flags (also verified in `claude --help`):
 - `--strict-mcp-config` + `--mcp-config <file>` — only use MCP servers from the tagged config.
 - `--disable-slash-commands` — if we want to disable all skills beyond those resolving via `/sarol-eval`.
 
-### Candidate invocation pattern (updated 2026-04-22 post-docs-sweep)
+### Canonical invocation patterns (two-tier, updated 2026-04-22 post-empirical-verification)
+
+**Iteration-tier** (local, subscription-token, verified 2026-04-22 + amended post-critic-audit — see `docs/journal/2026-04-22-memblind-oauth-findings.md` §5.1 for empirical record and §Critic-audit-addendum for the two flags added 2026-04-22 post-audit):
 
 ```bash
+CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN \
+CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
+CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
+CLAUDE_CONFIG_DIR=/tmp/paper-trail-eval-$$/ \
 claude \
-  --bare \
   --print \
   --no-session-persistence \
+  --exclude-dynamic-system-prompt-sections \
   --model opus \
   --tools default \
   --agents "$(cat experiments/sarol-2024/eval-harness/subagent-registry-v<N>.json)" \
@@ -403,6 +414,34 @@ claude \
   /sarol-eval --version v<N> --subset eval-train-10
 ```
 
+Token comes from a one-time `claude setup-token` (subscription-scoped, NOT pay-per-token API; 1-year TTL). Stored in gitignored `experiments/sarol-2024/eval-harness/.env` per the Task 5 scaffolding plan; template committed as `.env.example`.
+
+Two flags added 2026-04-22 after a critic audit found them necessary:
+- `--exclude-dynamic-system-prompt-sections` — moves cwd / env / memory-path / **git-status** sections OUT of the system prompt (they default to inline injection, which leaks host state across an eval calendar). Paper-trail's eval arm cares: a landmark run at week 4 against a dirty git working tree would see different context than the same run at week 1 on a clean tree.
+- `--no-session-persistence` — prevents `sessions/` from accumulating under the fresh `CLAUDE_CONFIG_DIR`. Also already present in the landmark-tier shape; added here for parity.
+
+**Landmark-tier** (Vertex VM or ANTHROPIC_API_KEY, `--bare` for max isolation / clean-VM reproducibility; used for paper-reportable numbers at `paper-trail-v<N>` landmark tags):
+
+```bash
+# Under Vertex: env vars = CLAUDE_CODE_USE_VERTEX=1, CLOUD_ML_REGION=global, ANTHROPIC_VERTEX_PROJECT_ID=<proj>, ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-7
+# OR under Anthropic direct: ANTHROPIC_API_KEY=<key-from-console.anthropic.com>
+
+claude \
+  --bare \
+  --print \
+  --no-session-persistence \
+  --exclude-dynamic-system-prompt-sections \
+  --model opus \
+  --tools default \
+  --agents "$(cat experiments/sarol-2024/eval-harness/subagent-registry-v<N>.json)" \
+  --settings experiments/sarol-2024/eval-harness/eval.settings.json \
+  --mcp-config experiments/sarol-2024/eval-harness/mcp.json \
+  --strict-mcp-config \
+  /sarol-eval --version v<N> --subset eval-train-10
+```
+
+Landmark-tier ALSO gets `--exclude-dynamic-system-prompt-sections` (2026-04-22 post-critic) — `--bare` alone doesn't suppress dynamic-system-prompt sections. Binary version pinning (via `npm install -g @anthropic-ai/claude-code@<pinned>` on the Vertex VM before the run) is required for landmark-tier; `claude --version` capture goes into the `paper-trail-v<N>.json` archive artifact.
+
 Two new flags added 2026-04-22 after CLI-ref docs sweep surfaced that `--bare`'s default toolset omits `Task` (the subagent-spawn tool) and skips `.claude/agents/*.md` auto-discovery:
 
 - `--tools default` — per CLI reference, enables all built-in tools including Task. Without this, `--bare` provides only `Bash`, file-read (Read/Grep/Glob), and file-edit (Edit/Write) tools, which blocks paper-trail's dispatcher from spawning extractor/adjudicator/verifier subagents.
@@ -410,9 +449,11 @@ Two new flags added 2026-04-22 after CLI-ref docs sweep surfaced that `--bare`'s
 
 **Vertex AI deployment note:** under the chosen auth path (Vertex AI on a GCP VM with `CLAUDE_CODE_USE_VERTEX=1` + `ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-7`), the same invocation shape applies. `--bare` refuses Anthropic OAuth/keychain auth but delegates to Vertex's GCP credentials cleanly.
 
-### What the spike did NOT verify
+### What the spike did NOT verify (historical — superseded 2026-04-22)
 
-The subagent also proposed environment variables `CLAUDE_CODE_DISABLE_AUTO_MEMORY` and `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and a settings key `autoMemoryEnabled`. **None of these appear in `claude --help`.** Unverified and not adopted into this plan. If `--bare` turns out to be insufficient in the sanity-check, we revisit — but adding unverified env vars is worse than documenting that `--bare` needs empirical confirmation.
+The subagent also proposed environment variables `CLAUDE_CODE_DISABLE_AUTO_MEMORY` and `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and a settings key `autoMemoryEnabled`. **None of these appear in `claude --help`.** They were therefore unverified and not adopted into this plan as of 2026-04-21.
+
+**Update 2026-04-22:** direct docs sweep at `https://code.claude.com/docs/en/env-vars` confirmed both env vars ARE documented by Anthropic — they simply don't appear in `claude --help`. The CLI reference explicitly notes: *"`claude --help` does not list every flag, so a flag's absence from `--help` does not mean it is unavailable."* Same applies to env vars. Both `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` were empirically verified to work under OAuth in the 2026-04-22 local session — see `docs/journal/2026-04-22-memblind-oauth-findings.md` §1. They are the iteration-tier memory-blindness mechanism. The `autoMemoryEnabled` settings key is also documented on the memory page and is an alternative form of the env var for configs that prefer settings-file control.
 
 ### Sanity-check test — still owed (blocks declaring Q9c resolved)
 

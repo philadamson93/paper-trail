@@ -30,3 +30,17 @@
 /experiments/*/predictions/
 /experiments/*/staging/
 /experiments/*/gold/
+
+# Secrets — env files that may hold API keys, OAuth tokens, GCP credentials, etc.
+# Reproducibility is achieved via committed invocation shape + each reproducer supplying
+# their own auth; the secret values themselves MUST NOT enter version control.
+# Template files (.env.example) are allowed so the expected variables are documented.
+.env
+.env.local
+.env.*
+!.env.example
+
+# Service-account JSON keys (GCP Vertex path). Generally stored outside the repo, but
+# belt-and-suspenders in case someone drops one under the tree.
+*-service-account*.json
+gcp-credentials*.json
