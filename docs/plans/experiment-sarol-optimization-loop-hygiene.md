@@ -130,39 +130,99 @@ The agent-only reframe (see `agentic-pipeline-optimization-framework.md`) change
 - **Claude Code binary version itself** — the binary is external to the git tag; version drift across a landmark-tier curve invalidates tag-reproducibility. Pin the binary version on landmark eval hosts and record it in archive metadata (added 2026-04-22 post-critic; see binary-version invariant note in mechanisms block below).
 - Shell env (LANG, LC_ALL, TZ, PATH, Python virtualenv state) — rarely load-bearing for Claude's context, but can surface through Bash tool behavior. Accept as residual at iteration tier; name in paper methods if measured to matter.
 
-### Mechanisms (two-tier; verified 2026-04-22, amended 2026-04-22 post-critic-audit — see `docs/journal/2026-04-22-memblind-oauth-findings.md`)
+### Canonical operator interface — `scripts/run-eval.sh` (wrapper script)
 
-**Honest scope of the isolation claim** (updated 2026-04-22 post-critic): the iteration-tier stack is functionally equivalent to `--bare` **for the six documented auto-discovery sources** that `--bare` skips (hooks, skills, plugins, MCP servers, auto-memory, CLAUDE.md). It does NOT by default suppress the dynamic-system-prompt sections Claude Code injects into every invocation (cwd, git status, env info, memory paths) or pin the Claude Code binary version itself; both are addressable with additional flags/conventions documented below. Subagent-level persistent memory (per `code.claude.com/docs/en/sub-agents#enable-persistent-memory`) is assumed suppressed-by-inheritance but not yet empirically canary-tested at the subagent-specific memory path. "Equivalent to `--bare`" is true for the six published sources; for the full list of OUT-of-system items below, both tiers need additional discipline (documented in the invocation blocks and OUT-of-system table).
+**2026-04-23 update:** operator-facing invocation is the committed wrapper script; the full env-var + flag chain documented below is what the script runs internally. Rationale: 4 env vars + 8 flags + clean-cwd + `--add-dir` is operator-error-prone; baking the invocation into a committed script both prevents forgotten pieces AND commits the invocation shape as a reviewable artifact. Addresses the "why didn't he just use a script?" criticism pre-emptively.
 
-**Iteration tier** (local, subscription token, used during optimizer revision loops):
+```bash
+# Operator-facing (iteration tier):
+./scripts/run-eval.sh --tier iteration --version v<N> --claim <id>
 
-```
-CLAUDE_CODE_OAUTH_TOKEN=<from claude setup-token>
-CLAUDE_CODE_DISABLE_AUTO_MEMORY=1
-CLAUDE_CODE_DISABLE_CLAUDE_MDS=1
-CLAUDE_CONFIG_DIR=/tmp/paper-trail-eval-<uuid>/        # fresh uuid per invocation, not persistent
-```
-
-Plus on the `claude --print` invocation:
-
-```
---tools default
---agents '<tag-scoped-json>'
---settings <tag-scoped>
---mcp-config <tag-scoped>  --strict-mcp-config
---exclude-dynamic-system-prompt-sections               # suppresses cwd/git-status/env/memory-path system-prompt leakage (added 2026-04-22)
---no-session-persistence                               # prevents sessions/ accumulation under CLAUDE_CONFIG_DIR (added 2026-04-22)
+# Operator-facing (landmark tier, via committed Dockerfile):
+docker run --rm \
+  -e ANTHROPIC_VERTEX_PROJECT_ID=<proj> \
+  -v <gcp-key>:/creds/key.json:ro \
+  -v <repo>:/repo:ro \
+  paper-trail-eval:v<N> \
+  /repo/scripts/run-eval.sh --tier landmark --version v<N> --claim <id>
 ```
 
-**Landmark tier** (Vertex VM or ANTHROPIC_API_KEY, `--bare`, used for paper-reportable numbers at `paper-trail-v<N>` landmark tags):
+The Docker image `paper-trail-eval:v<N>` is built from a committed `experiments/sarol-2024/eval-harness/Dockerfile` at the tag; pins Claude Code binary via `npm install -g @anthropic-ai/claude-code@<specific-version>`. This closes the binary-drift gap the critic identified 2026-04-22 for landmark-tier numbers.
 
+### Mechanisms (two-tier; verified 2026-04-22, amended 2026-04-23 post-benchmark-integrity-lit-review — see `docs/journal/2026-04-23-benchmark-integrity-lit-review.md` and `docs/journal/2026-04-22-memblind-oauth-findings.md`)
+
+**Honest scope of the isolation claim** (updated 2026-04-23 post-lit-review): the iteration-tier stack is functionally equivalent to `--bare` **for the six documented auto-discovery sources** that `--bare` skips (hooks, skills, plugins, MCP servers, auto-memory, CLAUDE.md). Additional flags and conventions cover dynamic-system-prompt sections, session persistence, shell env determinism, git-state leakage, and binary version — each tied to a specific vector identified either empirically in a canary or documented in prior-art benchmark-integrity work (Zhu et al. 2025 arxiv 2507.02825 Agentic Benchmark Checklist; Wang et al. 2026 Berkeley Agent-Eval Checklist). Subagent-level persistent memory is assumed suppressed-by-inheritance but not yet empirically canary-tested at the subagent-specific memory path.
+
+**Iteration tier — internal bash that the wrapper script runs** (local, subscription token, used during optimizer revision loops):
+
+```bash
+# Fresh uuid per invocation for both CLAUDE_CONFIG_DIR and the working directory
+EVAL_UUID=$(uuidgen)
+mkdir -p "/tmp/pt-eval-cfg-$EVAL_UUID" "/tmp/pt-eval-wd-$EVAL_UUID"
+
+env -i \
+  HOME="$HOME" \
+  PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin \
+  LANG=en_US.UTF-8 \
+  TZ=UTC \
+  CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 \
+  CLAUDE_CODE_DISABLE_CLAUDE_MDS=1 \
+  CLAUDE_CONFIG_DIR="/tmp/pt-eval-cfg-$EVAL_UUID" \
+  /bin/sh -c "cd /tmp/pt-eval-wd-$EVAL_UUID && \
+    claude \
+      --add-dir $REPO \
+      --print --model opus \
+      --no-session-persistence \
+      --exclude-dynamic-system-prompt-sections \
+      --tools default \
+      --agents \"\$(cat \$REPO/experiments/sarol-2024/eval-harness/subagent-registry-v${VERSION}.json)\" \
+      --settings \$REPO/experiments/sarol-2024/eval-harness/eval.settings.json \
+      --mcp-config \$REPO/experiments/sarol-2024/eval-harness/mcp.json \
+      --strict-mcp-config \
+      /sarol-eval-item --version v$VERSION --claim $CLAIM"
+
+# Cleanup
+rm -rf "/tmp/pt-eval-cfg-$EVAL_UUID" "/tmp/pt-eval-wd-$EVAL_UUID"
 ```
---bare --print
+
+Each piece of this stack is there because of a specific leakage source:
+
+- `env -i` + pinned `HOME` / `PATH` / `LANG` / `TZ` — strips parent shell env (aliases, TZ, LC_ALL, virtualenv state, inherited CLAUDE_CODE_* env vars); sets only what we need. (Added 2026-04-23 per creative-defenses brainstorm.)
+- `CLAUDE_CODE_OAUTH_TOKEN` — subscription-scoped env-var auth; replaces keychain OAuth (which `--bare` refuses, and which is host-specific).
+- `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` — suppresses auto-memory at main-session scope; verified propagates to Agent-tool-spawned subagents.
+- `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` — suppresses user CLAUDE.md, project CLAUDE.md, `.claude/rules/*.md`, CLAUDE.local.md.
+- `CLAUDE_CONFIG_DIR=/tmp/pt-eval-cfg-$EVAL_UUID/` — structurally blinds user hooks/skills/plugins (they live under the config dir); fresh per invocation so no session-history accumulation.
+- Clean cwd (`cd /tmp/pt-eval-wd-$EVAL_UUID/`) — kills dynamic-system-prompt git-state leakage at the source (no `.git/` in cwd means no branch/uncommitted-files section in the prompt); empirically verified 2026-04-23.
+- `--add-dir $REPO` — grants file access to the committed paper-trail repo without making it a config root.
+- `--no-session-persistence` — prevents `sessions/` accumulation even under the fresh config dir (belt + suspenders with per-uuid cleanup).
+- `--exclude-dynamic-system-prompt-sections` — suppresses the remaining dynamic-prompt sections (cwd-path, env info, memory paths) that clean-cwd alone doesn't cover.
+- `--tools default` — enables Task (the subagent-spawn tool) which `--bare`-style default toolsets omit.
+- `--agents '<tag-scoped-json>'` — loads paper-trail's custom subagents (extractor/adjudicator/verifier) under suppressed auto-discovery.
+- `--settings`, `--mcp-config`, `--strict-mcp-config` — tag-scoped tool-permission + MCP-server config; replaces host-level merge.
+
+**Landmark tier — internal bash that the wrapper script runs inside the Docker container** (used for paper-reportable numbers at `paper-trail-v<N>` landmark tags):
+
+```bash
+# Dockerfile: FROM node:22; RUN npm install -g @anthropic-ai/claude-code@<specific-version>; COPY eval-arm files.
+# Host-side env: CLAUDE_CODE_USE_VERTEX=1, CLOUD_ML_REGION=global, ANTHROPIC_VERTEX_PROJECT_ID, GOOGLE_APPLICATION_CREDENTIALS,
+#                ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-7
+
+claude \
+  --bare \
+  --print --model opus \
+  --no-session-persistence \
+  --exclude-dynamic-system-prompt-sections \
+  --tools default \
+  --agents "$(cat /repo/experiments/sarol-2024/eval-harness/subagent-registry-v$VERSION.json)" \
+  --settings /repo/experiments/sarol-2024/eval-harness/eval.settings.json \
+  --mcp-config /repo/experiments/sarol-2024/eval-harness/mcp.json \
+  --strict-mcp-config \
+  --add-dir /repo \
+  /sarol-eval-item --version v$VERSION --claim $CLAIM
 ```
 
-Plus the same flag set as iteration tier (the two flags added 2026-04-22 apply equally to landmark tier; `--bare` doesn't suppress dynamic system prompt sections by itself).
-
-Auth via `CLAUDE_CODE_USE_VERTEX=1 + ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-7 + GCP ADC` or `ANTHROPIC_API_KEY`. `--bare` handles the six auto-discovery sources in a single flag; the additional flags above cover dynamic-system-prompt and session-persistence, which `--bare` doesn't.
+Docker-in-Vertex provides: (a) pinned Claude Code binary (closes the 2026-04-22 critic-flagged binary-drift gap), (b) clean-by-construction container filesystem (no user ~/.claude), (c) read-only repo mount (Berkeley Agent-Eval Checklist: "read-only filesystems for binaries, test files, or infrastructure the evaluation depends on"), (d) Vertex GCP-mediated auth (no keychain / OAuth-token considerations).
 
 **Binary version invariant (added 2026-04-22 post-critic).** Every archived `paper-trail-v<N>` eval run must record the Claude Code binary version (`claude --version` captured at run time) in its `summary.json` / archive metadata. Landmark-tier runs SHOULD pin the binary version via `npm install -g @anthropic-ai/claude-code@<pinned>` on the eval host; iteration-tier runs record version without pinning and accept version-drift-within-iteration as an acknowledged residual. A binary-version change across a landmark-tier curve requires re-baselining.
 
@@ -174,23 +234,56 @@ Auth via `CLAUDE_CODE_USE_VERTEX=1 + ANTHROPIC_DEFAULT_OPUS_MODEL=claude-opus-4-
 
 All three rules must hold simultaneously. Rule 3 is the newest and covers a vector the first two don't address.
 
-### Residual investigation items (flagged, with priority from 2026-04-22 critic audit)
+### Structural defenses beyond native Claude Code flags (alternatives evaluated 2026-04-23)
+
+Evaluated during the 2026-04-23 creative-defenses brainstorm; each listed with what it solves, what it doesn't, and our adoption decision. Serves as the pre-emptive answer to "why didn't you just use X?" reviewer criticism, and as a menu of escalation options if specific empirical canaries fail. Full brainstorm captured in `docs/journal/2026-04-23-benchmark-integrity-lit-review.md` §2.
+
+| Mechanism | Solves | Doesn't solve | Our adoption |
+|---|---|---|---|
+| `env -i` + pinned `LANG`/`TZ`/`PATH` | Shell env leakage | File-based | **Adopted** in canonical iteration-tier shape |
+| Clean cwd + `--add-dir` (empirically verified 2026-04-23) | Dynamic-prompt git-state at source + project CLAUDE.md walk | User-level | **Adopted** in canonical shape |
+| Git worktree at tag (`git worktree add /tmp/eval-v<N> v<N>`) | Clean-tree + exact-tag-content guarantee | Host state | Task 5 option; implement if operator-forgetfulness of git-state becomes an issue |
+| Wrapper script (`scripts/run-eval.sh`) | Operator forgetfulness; commits invocation as reviewable artifact | No new isolation | **Adopted as canonical operator interface** |
+| APFS/ZFS pre-run snapshot of relevant paths | Silent-drift detection post-run | Not isolation | Defer |
+| macOS `sandbox-exec` | OS-level read-denial | Binary version | Defer (bespoke, one-platform) |
+| Separate OS user | User-scope isolation | Binary drift, dynamic prompt | Defer (CLAUDE_CONFIG_DIR gets same cheaper) |
+| `chmod` / `mv` on discovery targets | File-based source suppression (read-only FS per Berkeley checklist) | Runtime-constructed context, racy with parallel sessions | Belt-and-suspenders option if `CLAUDE_CONFIG_DIR` empirically fails |
+| Docker with pinned Claude Code | Binary drift, clean-by-construction, read-only infra (Berkeley-recommended) | Container latency × iteration throughput | **Adopted for landmark tier** — committed `Dockerfile` |
+| Ephemeral VM per run | Maximum isolation | Latency + cost for iteration | Already via Vertex for landmark tier |
+| Transactional FS (Fan et al. 2512.12806) | Rollback on state tampering | Requires fault-tolerant-filesystem layer | Future-work / post-submission |
+| Pre-run state assertion (path hash) | Silent-drift detection | Not isolation | Partial: `paper-trail-v<N>.json` records binary version + MCP + subagent registry hashes |
+
+**Why not Docker for iteration tier too?** Docker startup latency (~1-2 s per invocation) × thousands of per-claim invocations per optimizer revision × many revisions = non-trivial wall-clock + cost overhead. Iteration tier's env-var-based approach achieves same-host-same-time reproducibility without the per-call container spin-up. The tier split is deliberate; paper methods should name this tradeoff explicitly.
+
+**Why not a separate OS user?** CLAUDE_CONFIG_DIR override gets the same user-scope isolation without per-user keychain provisioning (which on macOS is non-trivial) and without the operational overhead of managing a dedicated eval user. Doesn't solve binary drift or dynamic-prompt leakage either way; those need orthogonal mechanisms.
+
+### Residual investigation items (flagged, with priority from 2026-04-22 critic audit + 2026-04-23 benchmark-integrity lit-review)
 
 **Blocking-for-landmark-tagging** (must resolve before the first `paper-trail-v<N>` landmark run producing paper-reportable numbers):
 
 1. **Dynamic system prompt canary** — verify `--exclude-dynamic-system-prompt-sections` actually moves cwd/git/env/memory-path sections out of the system prompt. One probe invocation asking a subagent to report verbatim what its system prompt contains re: those sections.
-2. **Claude Code binary version pinning** — on the Vertex VM (landmark-tier host), `npm install -g @anthropic-ai/claude-code@<version>` before the first landmark run; add version capture to archive metadata schema in `paper-trail-v<N>.json`.
+2. **Claude Code binary version pinning** — on the landmark-tier host (Vertex VM; inside Docker image at the tag), `npm install -g @anthropic-ai/claude-code@<version>` before the first landmark run; add version capture to archive metadata schema in `paper-trail-v<N>.json`. Docker image `paper-trail-eval:v<N>` supersedes ad-hoc pinning.
 3. **Subagent-side persistent memory canary** — plant a canary at the subagent-scoped memory path (first identify canonical path from sub-agents docs) and verify main-session env vars suppress it. Mirror Test 4 design but at subagent-specific plant location.
+4. **Adversarial-agent smoketest suite** (new 2026-04-23, from Berkeley Agent-Eval Checklist + Zhu et al. ABC). Four small agents in `experiments/sarol-2024/eval-harness/adversarial/`:
+   - `null_agent.py` — returns empty verdict. Expected: ~0 macro-F1 on Sarol. Floor test.
+   - `random_agent.py` — samples from 9-class verdict uniformly. Expected: ~11% random baseline.
+   - `injection_agent.py` — attempts prompt injection in the adjudicator's input. Expected: verifier catches.
+   - `tamper_agent.py` — attempts filesystem writes to gold / eval-harness dirs. Expected: Rule-1 structural defenses block at OS-error.
+   Results land in `paper-trail-v1.json` alongside the real run.
+5. **Scorer adversarial audit** (new 2026-04-23). Before v1 tag, run `parse_verdict.py` + macro-F1 against malformed inputs: empty string, whitespace, wrong-schema JSON, extra-keys JSON, all-9-verdicts JSON, non-UTF-8 bytes. All must fail with typed errors, not silently score.
+6. **LLM-judge sanitization audit** (new 2026-04-23). Review adjudicator + verifier prompts for: delimiter discipline around agent content, escape of system-prompt-looking text, structured-output enforcement (no substring matching against gold labels).
+7. **E3 dispatcher crashed-task semantics** (new 2026-04-23). Explicit spec: fetch-failure → claim scored as FAILED_FETCH → counts as missed in macro-F1 denominator; not dropped. Matches Berkeley / Zhu et al. crashed-task discipline (TAU-bench "empty = success" bug).
 
 **Blocking-for-iteration-tier-Task-5-scaffolding**:
 
-4. Project-level `.claude/commands/` resolution under fresh `CLAUDE_CONFIG_DIR` — not yet tested; deferred to Task 5 scaffolding. Write a trivial `/sarol-canary-cmd` and confirm it loads from project cwd despite config-dir override.
-5. Settings-merge fail-closed canary — verify user `~/.claude/settings.json` IS suppressed by fresh `CLAUDE_CONFIG_DIR`, NOT just by `--settings`. Negative-test (prove suppression is load-bearing, not belt-and-suspenders). Protocol involves temporarily moving user settings.json; handle carefully.
+8. Project-level `.claude/commands/` resolution under fresh `CLAUDE_CONFIG_DIR` — not yet tested; deferred to Task 5 scaffolding. Write a trivial `/sarol-canary-cmd` and confirm it loads from project cwd despite config-dir override.
+9. Settings-merge fail-closed canary — verify user `~/.claude/settings.json` IS suppressed by fresh `CLAUDE_CONFIG_DIR`, NOT just by `--settings`. Negative-test (prove suppression is load-bearing). Protocol involves temporarily moving user settings.json; handle carefully.
 
 **Nice-to-have** (document, don't necessarily fix):
 
-6. Hook granular disable under non-`--bare` — no `CLAUDE_CODE_DISABLE_HOOKS` env var documented; acceptable for iteration tier where paper-trail ships no hooks, becomes landmark-tier concern but `--bare` covers it.
-7. `@imports` in skill files (`.claude/commands/*.md` can use `@~/...` imports per CLAUDE.md mechanism docs) — if paper-trail's skill definitions ever use `@` imports, verify they resolve as expected under the committed invocation shape.
-8. Two-tier cross-comparability — whether iteration-tier and landmark-tier numbers differ systematically on the same input. Pin to empirical side-by-side at `paper-trail-v1` smoketest.
-9. `--bare` skill resolution with user-vs-project skill-name collision — if both `~/.claude/skills/foo` and `.claude/skills/foo` exist, which wins under `--bare --print /foo`? Docs silent.
-10. `@imports` expansion in `--append-system-prompt-file` — unverified whether `@` syntax is honored outside CLAUDE.md.
+10. Hook granular disable under non-`--bare` — no `CLAUDE_CODE_DISABLE_HOOKS` env var documented; acceptable for iteration tier where paper-trail ships no hooks; `--bare` covers it at landmark.
+11. `@imports` in skill files (`.claude/commands/*.md` can use `@~/...` imports per CLAUDE.md mechanism docs) — if paper-trail's skill definitions ever use `@` imports, verify they resolve as expected.
+12. Two-tier cross-comparability — whether iteration-tier and landmark-tier numbers differ systematically on the same input. Pin to empirical side-by-side at `paper-trail-v1` smoketest.
+13. `--bare` skill resolution with user-vs-project skill-name collision — if both `~/.claude/skills/foo` and `.claude/skills/foo` exist, which wins under `--bare --print /foo`? Docs silent.
+14. `@imports` expansion in `--append-system-prompt-file` — unverified whether `@` syntax is honored outside CLAUDE.md.
+15. Transactional-filesystem sandboxing (Fan et al. 2512.12806) for paper-trail's PDF-fetch cache — future-paper investigation.
