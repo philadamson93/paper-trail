@@ -334,6 +334,7 @@ Flagged for visibility; not on the current Sarol-experiment critical path. May b
 - **`paper-tool-validation.md`** — paper-trail validation plan (synthetic injection, opt-in cohort). Relevant to "pretraining contamination mitigation" paragraph; otherwise parallel.
 - **`experiment-sarol-methods-research.md`** — method menu (multi-cit prompting, decomposition, few-shot, rubric phrasing) for future sweeps. **Pin:** post-baseline-iteration.
 - **`experiment-sarol-optimization-escalation.md`** — escalation ladder if manual iteration stalls. Trigger-based, not proactively scheduled.
+- **`paper-trail-product-backlog.md`** — product backlog for shipping paper-trail-the-tool alongside the paper / blog post (incremental re-validation feature, UI improvements, product docs pass, MCP / skill registry submissions). Created 2026-04-23 by migrating items out of `paper-writeup-items.md` that belonged to product mode rather than paper-writing mode. Off critical path during the current experiment + writeup phase; pick up post-submission.
 
 #### TIER 8 — Historical / milestone docs (read-only, don't edit)
 

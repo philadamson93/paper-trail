@@ -74,6 +74,7 @@ Always read in this order:
 - `docs/plans/experiment-sarol-archive-and-eval-framework.md` — archive + eval framework (Sarol-specific companion to the framework doc)
 - `docs/plans/experiment-sarol-methods-research.md` — method menu for future sweeps
 - `docs/plans/paper-writeup-items.md` — paper-framing running notes + 9-paper borrow catalog
+- `docs/plans/paper-trail-product-backlog.md` — product backlog for shipping paper-trail-the-tool alongside the paper / blog post (off critical path during experiment + writeup phase; created 2026-04-23)
 
 **Historical / milestone docs (read for provenance, don't edit):**
 - `docs/plans/experiment-sarol-leakage-hardening.md` — original leakage analysis (superseded by optimization-loop-hygiene)
