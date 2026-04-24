@@ -1,6 +1,6 @@
 # Optimization of agentic programs requires instrumentable agentic ecosystems
 
-*Rough draft, 2026-04-24. Speech-to-text origin, not ready to send. Full bibliographic entries for the agent-as-optimizer cluster are pending a follow-up system-prompt drop. Figure 1 is at `docs/plans/figures/v1.jpg`, with caption and prompt of record in `docs/plans/figures/v1.md`.*
+*2026-04-24. Full bibliographic entries for the agent-as-optimizer cluster are pending a follow-up system-prompt drop.*
 
 ---
 
@@ -29,6 +29,8 @@ I believe I have designed a reasonable attempt at building this experimental sep
 ## Proposed architecture
 
 The architecture in Figure 1 rests on a two-mechanism isolation discipline. First, host-state isolation at the invocation boundary around the agentic program, achieved through scrubbed env, fresh config dir, and a pinned binary version at the reproducibility-critical tier. Second, split-differentiated scoring return via a deterministic Python dispatcher that sits between the agentic optimizer and the agentic program. The training split will expose per-sample labels alongside full per-sample agent traces (each subagent's reasoning, intermediate verdicts, and final outputs), a case-by-case view of how the agentic program arrived at each answer. The validation split will return only aggregate scores (MCC or F1), to avoid collapse of validation into training. The test split will remain unexposed until a single terminal evaluation. This asymmetric access is what will make the observable evidence meaningful across optimizer revisions. Training macro-F1 and validation macro-F1 will be plotted as paired curves against revision index M, analogous to training and validation loss across epochs in classical machine learning. Divergence between the two curves would signal overfitting to the training set and serve as a natural stopping rule. The methodology also supports two dials. N is the number of held-out samples evaluated per revision. Human involvement ranges from in-loop review of every revision to fully autonomous optimization, and the planned case study will run in autonomous mode.
+
+![Figure 1](figures/v1.jpg)
 
 *Figure 1. Isolation around `/paper-trail` (the agentic program), evaluated by a filtering dispatcher. Left: one `--bare` invocation of `/paper-trail` tag v1, walled against ambient host context, invoked N times per revision, one item per invocation. Middle: a deterministic Python dispatcher with filtering locked at write-time that invokes the program, collects per-item verdicts, and returns per-split signal to the agentic optimizer (train: per-sample inputs + labels + traces; val: macro F1 only). Right: the agentic optimizer, a Claude Code session co-resident with the ambient host context (CLAUDE.md, auto-memory, hooks, plugins, dynamic system-prompt content) and using it by default. Below: the test set sealed, unsealed only at terminal evaluation. A stand-in agent supplies human-like input to the agentic program if needed. A human may drive the agentic optimizer at a configurable cadence, from in-loop at every revision to fully autonomous.*
 
