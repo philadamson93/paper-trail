@@ -9,6 +9,12 @@
 # Anchored to repo root so curated examples under examples/paper-trail-*/ are not excluded.
 /paper-trail-*/
 
+# Experiment subtrees and their generated artifacts. Experiments live on dedicated
+# branches (e.g., `sarol`) where their tracked content + per-experiment .gitignore
+# are committed. On main, the working tree may contain leftover experiment artifacts
+# from branch switches; this rule keeps them out of `git status` noise.
+/experiments/
+
 # Machine-local Claude Code state (per-user permissions, auto-installed skills).
 # Workspace specs/scripts/prompts/commands under .claude/ are still tracked.
 # Project-owned skills (committed intentionally) are carved out with `!` below.
@@ -20,3 +26,18 @@
 !.claude/skills/doc-split-check.md
 .claude/scripts/__pycache__/
 *.pyc
+
+# Secrets — env files that may hold API keys, OAuth tokens, GCP credentials, etc.
+# Reproducibility is achieved via committed invocation shape + each reproducer
+# supplying their own auth; the secret values themselves MUST NOT enter version
+# control. Template files (.env.example) are allowed so the expected variables
+# are documented.
+.env
+.env.local
+.env.*
+!.env.example
+
+# Service-account JSON keys (e.g., GCP). Generally stored outside the repo, but
+# belt-and-suspenders in case someone drops one under the tree.
+*-service-account*.json
+gcp-credentials*.json
