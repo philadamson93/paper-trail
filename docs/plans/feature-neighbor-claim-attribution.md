@@ -6,13 +6,24 @@
 
 ---
 
+## Codebase pointers
+
+- **Where claim extraction actually lives:** `.claude/commands/paper-trail.md` Phase 3.1 ("Claim extraction", line 315+). **Important reframe:** the orchestrator IS the agent driven by this slash-command prompt — there is no separate Python "orchestrator's Phase-3.1 claim-extraction step." To extend extraction to neighbor sentences, the change is in the Phase-3.1 prompt instructions, telling the agent to do the bidirectional ±1-sentence walk and emit additional claims tagged to the same citekey with `claim_source: inferred_*`.
+- **Per-claim workflow:** `.claude/commands/ground-claim.md` — claims flow through here once extracted. The new `claim_source` value is set at dispatch time from `paper-trail.md` Phase 3.1 and travels through to the per-claim ledger entry.
+- **Schema:** `.claude/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below. (If Feature 1 also bumps to 1.1, both features share one schema_version bump.)
+- **Adjudicator behavior:** `.claude/prompts/adjudicator-dispatch.md` — add one paragraph to the rubric about leaning AMBIGUOUS for thin-evidence inferred claims (where `claim_source != "explicit"`).
+- **Ledger renderer:** `.claude/scripts/render_html_demo.py` — needs to visually distinguish inferred claims from explicit ones in the per-claim ledger entries.
+- **Smoke test:** re-run /paper-trail on `examples/paper-trail-adamson-2025/` and check whether new `inferred_forward` / `inferred_backward` claims appear (there are forward/backward sentence patterns in the MRM paper that should match). Verify all existing `explicit` claims still appear with the same verdicts as baseline (regression check).
+
+---
+
 ## Goal
 
 When an author writes a sentence with reference `[m]` and the next or previous sentence makes an additional claim about `[m]` without re-citing it, paper-trail should detect the implicit attribution and treat the neighbor sentence as an additional claim about `[m]`. There is no strict syntactic rule for this — it is a judgment call about reading flow and whether the neighbor sentence is genuinely making an attributable claim about the cited reference.
 
 ## Current behavior
 
-The claim-extractor pre-step (the orchestrator-side pass that runs before `extractor-dispatch.md`) extracts one claim per cited sentence. Sentences without explicit citations are not analyzed against any reference. A sentence sequence like:
+The orchestrator's Phase-3.1 claim-extraction step (the orchestrator-side pass that runs before `extractor-dispatch.md`) extracts one claim per cited sentence. Sentences without explicit citations are not analyzed against any reference. A sentence sequence like:
 
 > Smith et al. report a 23% reduction in inference latency for their attention-pruning approach [smith2024]. The same method scales linearly with model size, holding the latency benefit constant up to 70B parameters.
 
@@ -20,7 +31,7 @@ produces one claim against `smith2024` (the first sentence). The second sentence
 
 ## Proposed change
 
-Extend the claim-extractor pre-step to look ±1 sentence around each cited sentence, bidirectionally, and judgment-call which neighbor sentences also make claims about the same reference. Emit those as additional claims tagged to the same `citekey`.
+Extend the orchestrator's Phase-3.1 claim-extraction step to look ±1 sentence around each cited sentence, bidirectionally, and judgment-call which neighbor sentences also make claims about the same reference. Emit those as additional claims tagged to the same `citekey`.
 
 **Window.** ±1 sentence (the immediately preceding sentence and the immediately following sentence). Larger windows can come later if the v1 behavior shows clear under-recall, but the principle that this is a judgment call rather than a syntactic rule means a tight window is the right starting point — we trade some recall for low false-positive rate.
 
@@ -69,9 +80,9 @@ The "inferred from sentence X" parenthetical is the load-bearing UI element. A r
 
 ## Open questions for implementation
 
-1. **Sentence boundary detection robustness.** The claim-extractor pre-step needs reliable sentence segmentation. Common edge cases: abbreviations ("e.g.", "et al."), citations mid-sentence interpreted as boundary, equation-bearing sentences, list items. Worth checking what segmenter the current pre-step uses and whether ±1 sentence is well-defined for edge inputs.
+1. **Sentence boundary detection robustness.** The orchestrator's Phase-3.1 claim-extraction step needs reliable sentence segmentation. Common edge cases: abbreviations ("e.g.", "et al."), citations mid-sentence interpreted as boundary, equation-bearing sentences, list items. Worth checking what segmenter the current pre-step uses and whether ±1 sentence is well-defined for edge inputs.
 2. **What counts as a "claim" in a neighbor sentence.** Sentences that are framing-only ("This is interesting because...") or transition-only ("Building on this...") should not be extracted as claims even if they appear in the inference window. The judgment call is fundamentally about whether the neighbor sentence asserts a fact attributable to the source.
-3. **Cost.** Each multi-citation manuscript sentence today triggers N extractor + adjudicator chains. Adding inferred-neighbor extraction adds up to 2 more chains per cited sentence (one per direction), if both neighbors qualify. Estimate the budget delta on a representative manuscript before shipping.
+3. **Cost.** Each cited sentence today triggers one extractor + adjudicator chain (N chains if the sentence has N citations). Adding inferred-neighbor extraction adds up to 2 more chains per cited sentence (one per qualifying neighbor direction). Estimate the budget delta on a representative manuscript before shipping — the canonical run at `examples/paper-trail-adamson-2025/` is a good reference.
 4. **Coordinate with Feature 1 (joint verdicts).** The premise-decomposition case in Feature 1 sometimes spans two sentences ("Premise A holds [refs]. Premise B follows from..."). Whether neighbor-attribution + joint-verdict interact cleanly is worth verifying during implementation — both features are on `feature/multi-cite-and-neighbor-claims` so they will land in coordinated diffs.
 
 ## Out of scope for v1

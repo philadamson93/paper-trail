@@ -6,6 +6,17 @@
 
 ---
 
+## Codebase pointers
+
+- **Orchestrator (slash-command prompt):** `.claude/commands/paper-trail.md` — Phase 3 dispatches per-claim subagent chains; Phase 5 renders the ledger. Pass-3 joint-adjudicator dispatch logic is added to Phase 3 here, after all per-ref Pass-2 adjudicators have completed for the same `claim_text`.
+- **Per-claim workflow:** `.claude/commands/ground-claim.md` — current multi-cite handling lives in the "Multi-cite citations" section ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"). The orchestrator already populates `co_cite_context.sibling_citekeys` in each per-ref dispatch. Pass 3 is the new cross-citekey aggregation that runs once per multi-ref `claim_text` after the per-ref Pass-2s complete.
+- **New dispatch prompt to author:** `.claude/prompts/joint-adjudicator-dispatch.md` (new file). Model from `.claude/prompts/adjudicator-dispatch.md`. Same blindness discipline — reads only the per-ref adjudicator JSONs and the rubric, never the source PDFs.
+- **Schema:** `.claude/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below.
+- **Ledger renderer:** `.claude/scripts/render_html_demo.py` (and any other consumers of `ledger/claims/*.json`) — needs an update to render the new joint rows + asterisk-pointer per-ref annotations.
+- **Smoke test:** re-run /paper-trail on `examples/paper-trail-adamson-2025/` (the canonical M1 reference run per memory `project_m1_complete.md`). The MRM paper contains multi-cite sentences; joint verdicts should appear without changing per-ref verdicts on single-cite claims (regression check).
+
+---
+
 ## Goal
 
 When a manuscript sentence cites multiple references — `"X [a, b, c]"` — paper-trail should produce both per-reference verdicts (today's behavior) AND a joint verdict that assesses whether the citation block, taken together, supports the claim. The joint pass catches a real and common false-positive failure mode of per-reference-only assessment: a claim that no single reference supports alone but that the references jointly support via premise decomposition.

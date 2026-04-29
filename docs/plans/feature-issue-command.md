@@ -6,6 +6,19 @@
 
 ---
 
+## Codebase pointers
+
+- **New slash command file:** `.claude/commands/issue.md`. Slash commands in this project live as markdown prompt files in `.claude/commands/`. Six existing commands to model from; the closest sister-template is `.claude/commands/ground-claim.md` (172 lines — focused per-claim workflow with AskUserQuestion handling).
+- **Where runs live (for run discovery):**
+  - **Reader mode:** output dirs at `<cwd>/paper-trail-<pdf-stem>/` (default location per `.claude/commands/paper-trail.md` Phase 0). Find recent runs by globbing `paper-trail-*/` in cwd or walking a user-specified path.
+  - **Author mode:** the project's `claims_ledger.md` declares the run state in its YAML frontmatter (`pdf_dir`, `bib_files`). The per-claim verdict files live alongside in the project root.
+- **Verdict structured truth:** `<run-dir>/ledger/claims/<claim_id>.json` — schema at `.claude/specs/verdict_schema.md`. Pull the relevant slice (claim_text, verdict, adjudicator reasoning) into the issue body's collapsible details block.
+- **Local draft path:** `.paper-trail/issue-draft.json` in the audited project's working dir. Note: the existing `/paper-trail-*/` `.gitignore` pattern is anchored and does NOT match `.paper-trail/` (leading dot, no trailing wildcard match). The `/issue` implementation needs to add `.paper-trail/` to the project's `.gitignore` (or instruct the user to) so the draft does not leak into commits.
+- **Submission tool:** `gh issue create --repo philadamson93/paper-trail --label <bug|verdict-dispute>`. Requires `gh` CLI authenticated.
+- **Smoke test:** run /paper-trail against `examples/paper-trail-adamson-2025/` to produce a known set of verdicts, then invoke `/issue` and walk through the verdict-dispute flow on any one claim. Verify the assembled issue body contains BibTeX + citing sentence + verdict JSON slice + user reasoning. Use `gh issue create --dry-run` (or equivalent local-render check) before live submission during development.
+
+---
+
 ## Goal
 
 Give paper-trail users a structured, low-friction path to file GitHub issues against the paper-trail repo for two distinct cases:
@@ -82,7 +95,7 @@ The verdict-dispute flow publishes the citing sentence and the cited reference's
 ## Open questions for implementation
 
 1. **`gh` auth gating.** Detect missing `gh` setup and surface clear setup instructions vs silently failing. Worth defining the error UX before implementing.
-2. **Run-discovery UX.** When the user invokes `/issue` without a run argument, how does the command find recent runs? Probably scans `~/.paper-trail/runs/` (or wherever the orchestrator writes runs) and offers a list — verify the run-output directory convention before implementing.
+2. **Run-discovery UX.** When the user invokes `/issue` without a run argument, the command needs to find the relevant run. Per the Codebase pointers section above, runs live at `<cwd>/paper-trail-<pdf-stem>/` in reader mode and alongside `claims_ledger.md` in author mode — there is no central registry. v1 behavior: glob `paper-trail-*/` in cwd; if zero matches, prompt for a path; if multiple, AskUserQuestion to pick. Author mode: detect `claims_ledger.md` in cwd and use that.
 3. **Multi-claim batching vs one-at-a-time.** Each picked claim becomes a separate issue (per the plan above). Worth confirming this with first real users — some may prefer one consolidated issue. Easy to A/B at the confirm step if needed.
 4. **Issue title format.** Probably `[verdict-dispute] <claim_id> against <citekey> — <one-line user reason>`. Pin the format in implementation; consistent titles make the issue list scannable.
 5. **Bug-report flow specifics.** Largely follows standard GitHub issue templates, but worth checking whether paper-trail has a `.github/ISSUE_TEMPLATE/` directory to inform the prompt structure.
