@@ -36,7 +36,8 @@ When picking up a feature plan doc and starting implementation, the relevant fil
 - **Verdict schema:** `.claude/specs/verdict_schema.md` — the source-of-truth contract for what each subagent emits. Includes verdict enum, `co_cite_context` envelope, `attestation` envelope, rollup rules.
 - **Subagent dispatch prompts:** `.claude/prompts/extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md` — the literal prompts subagents receive, with `{{slot}}` placeholders.
 - **Ledger template:** `templates/claims_ledger.md` — author-mode ledger frontmatter and body schema.
-- **Canonical fixture:** `examples/paper-trail-adamson-2025/` — reference output to compare against when validating that a feature change has not regressed.
+- **Canonical fixture (reader mode):** `examples/paper-trail-adamson-2025/data/claims/` — 87 baseline claim JSONs (83 with multi-cite siblings) for regression checks. Note the `data/claims/` path uses the legacy layout; the modern layout is `ledger/claims/`. Both are produced by paper-trail and `render_html_demo.py` auto-detects either path. New code that loads claim JSONs should follow the same auto-detect pattern.
+- **Canonical fixture (author mode):** `examples/DFD_authormode/ledger/claims/` — modern-layout author-mode example with `claims_ledger.md` frontmatter, `pdfs/`, and `ledger/`. Use this when smoke-testing author-mode behavior.
 
 ## Documentation conventions
 

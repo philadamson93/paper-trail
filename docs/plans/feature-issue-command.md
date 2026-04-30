@@ -6,9 +6,87 @@
 
 ---
 
+## Implementation surface (post-critic-review 2026-04-29)
+
+Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-agent review. Treat as authoritative over the more abstract prose below — several pointers in the earlier draft were factually wrong.
+
+**Files to create:**
+
+- NEW: `.claude/commands/issue.md` — the slash-command prompt. **Use `paper-trail.md` as the AskUserQuestion-pattern template, NOT `ground-claim.md`.** paper-trail.md has 11 AskUserQuestion invocations covering the canonical patterns (option-list presentation, post-action pause, run-discovery prompts) that `/issue` needs to mirror. ground-claim.md has only 1 AskUserQuestion reference and is not the right template for AskUserQuestion-driven flows.
+- OPTIONAL: `.github/ISSUE_TEMPLATE/verdict-dispute.md` — does not exist today; `/issue` can self-generate the body content without it. Add only if it improves the GitHub-side issue-list ergonomics.
+
+**Slash-command file conventions to honor:**
+
+- **NO YAML frontmatter.** All commands in `.claude/commands/` start with a one-paragraph description, then `## Invocation forms` (or similar). Do not invent a frontmatter convention.
+- **The prompt INSTRUCTS the agent to use AskUserQuestion** — the prompt is documentation of orchestrator behavior, not a literal interactive wizard. The flows described in this plan should be written as instructions like "Call `AskUserQuestion` with options A / B" rather than as live prompts.
+
+**Run-discovery convention (corrected from earlier draft):**
+
+- **Reader mode:** glob `paper-trail-*/` in cwd; if zero matches, AskUserQuestion for path; if multiple, AskUserQuestion to pick.
+- **Author mode:** detect `claims_ledger.md` in cwd. **Author mode never produces a `paper-trail-*/` dir** (per `paper-trail.md` line 574: "Never write a `./paper-trail-*/` output-dir in author mode"). The per-claim verdicts live at `<project-root>/ledger/claims/<claim_id>.json`, not under any run subdirectory. The earlier draft's "verdict files live alongside in the project root" understated this.
+
+**BibTeX source (filled in — was missing in earlier draft):**
+
+- **Reader mode:** extract by citekey from `<run-dir>/refs.verified.bib` (Phase-1 post-CrossRef-enriched bib; canonical for the run). Fall back to `<run-dir>/refs.bib` (raw) if `refs.verified.bib` is absent.
+- **Author mode:** extract by citekey from the project's `bib_files` (declared in `claims_ledger.md` YAML frontmatter as `bib_files`).
+
+**JSON fields to extract for the issue body's `<details>` block** (earlier draft said "adjudicator reasoning" — this is not a single field; the actual fields are):
+
+- `claim_text`
+- `claim_type.type`
+- `sub_claims[*].text`, `sub_claims[*].verdict`, `sub_claims[*].nuance`
+- `attestation.closest_adjacent`
+- `attestation.indirect_attribution_check`, `attestation.out_of_context_check` (when populated)
+- `overall_verdict`
+- `remediation.suggested_edit`
+
+Do not dump the whole verdict JSON (often 100+ lines); pin to this list.
+
+**Submission mechanics (corrected):**
+
+- `gh issue create` has **NO `--dry-run` flag**. The earlier draft's smoke-test step was impossible. Replacement convention: render the assembled issue body to `.paper-trail/issue-preview-<claim_id>.md` and report the path. User `cat`s and visually verifies before sending. After verification, user re-invokes `/issue --submit` (or similar) to actually submit.
+- Live submission: `gh issue create --repo philadamson93/paper-trail --label <bug|verdict-dispute> --title "<title>" --body-file <preview-path>`.
+- **Issue title format** (corrected from earlier draft to drop em-dash per project style — see thesis style rules and the project's no-em-dash convention): `[verdict-dispute] <claim_id> against <citekey>: <one-line user reason>` (colon, not em-dash).
+
+**Maintainer setup (one-time):**
+
+- Create the GitHub labels: `gh label create bug --color FF0000 --description "Bug report"` and `gh label create verdict-dispute --color FFA500 --description "User disagreement with paper-trail's verdict"`.
+- The `.github/` directory does not exist in the repo today; if `/issue` references issue templates, the directory needs to be created.
+
+**`.paper-trail/issue-draft.json` schema** (pin field names so cross-implementation consistency):
+
+```json
+{
+  "run_id": "<string>",
+  "mode": "reader" | "author",
+  "entries": [
+    {
+      "claim_id": "<string>",
+      "citekey": "<string>",
+      "kind": "bug" | "verdict-dispute",
+      "user_reason": "<string>",
+      "proposed_verdict": "<verdict-enum-or-null>",
+      "assembled_body_path": "<path to rendered preview .md>",
+      "submitted": false,
+      "issue_url": null
+    }
+  ]
+}
+```
+
+**Smoke-test fixture (corrected):**
+
+- Reader-mode smoke: `examples/paper-trail-adamson-2025/data/claims/` (NOT `ledger/claims/` — the earlier draft was wrong about this path).
+- Author-mode smoke: `examples/DFD_authormode/ledger/claims/` (this fixture uses the modern `ledger/claims/` layout).
+- Verify the assembled issue body contains BibTeX + citing sentence + verdict JSON slice + user reasoning. Verify the preview file lands at the expected path; verify the local-draft `.paper-trail/issue-draft.json` accumulates entries correctly across multiple `/issue` invocations.
+
+**.gitignore note:** the existing `/paper-trail-*/` pattern in the project's `.gitignore` is anchored and does NOT match `.paper-trail/` (leading dot, no trailing wildcard). The `/issue` implementation needs to add `.paper-trail/` to the project's `.gitignore` (or instruct the user to) so the local draft does not leak into commits.
+
+---
+
 ## Codebase pointers
 
-- **New slash command file:** `.claude/commands/issue.md`. Slash commands in this project live as markdown prompt files in `.claude/commands/`. Six existing commands to model from; the closest sister-template is `.claude/commands/ground-claim.md` (172 lines — focused per-claim workflow with AskUserQuestion handling).
+- **New slash command file:** `.claude/commands/issue.md`. Slash commands in this project live as markdown prompt files in `.claude/commands/`. Six existing commands. **Use `paper-trail.md` (the orchestrator) as the sister-template for AskUserQuestion patterns** — it has 11 AskUserQuestion invocations covering the canonical flows. (`ground-claim.md` is the closest match in size and surface area but has only one AskUserQuestion reference, so it is not the right model for this command's flows.)
 - **Where runs live (for run discovery):**
   - **Reader mode:** output dirs at `<cwd>/paper-trail-<pdf-stem>/` (default location per `.claude/commands/paper-trail.md` Phase 0). Find recent runs by globbing `paper-trail-*/` in cwd or walking a user-specified path.
   - **Author mode:** the project's `claims_ledger.md` declares the run state in its YAML frontmatter (`pdf_dir`, `bib_files`). The per-claim verdict files live alongside in the project root.

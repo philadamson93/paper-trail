@@ -6,6 +6,40 @@
 
 ---
 
+## Implementation surface (post-critic-review 2026-04-29)
+
+Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-agent review. Treat as authoritative over the more abstract architectural prose below.
+
+**Files to edit:**
+
+- `.claude/commands/paper-trail.md` Phase 3.1 (line 315+): add the bidirectional ±1-sentence walk instruction with the skip-when-neighbor-cited rule, plus 4-6 calibration examples (see "Calibration examples" subsection below). Today Phase 3.1 line 341 says "Every sentence containing one or more confirmed citation markers is a candidate claim" — the new behavior extends this to also consider ±1-sentence neighbors of cited sentences.
+- `.claude/commands/paper-trail.md` line 396 (dispatch payload JSON): add `claim_source` slot to the orchestrator-computed dispatch payload. Without this, the extractor never receives the field.
+- `.claude/prompts/extractor-dispatch.md` line 18 (Inputs slot list): add `{{claim_source}}` so the extractor can read it.
+- `.claude/prompts/adjudicator-dispatch.md`: add one paragraph to the rubric instructing the adjudicator to lean toward `AMBIGUOUS` (rather than `UNSUPPORTED`) when `claim_source != "explicit"` and the evidence is thin. Slots cleanly into the existing rubric structure.
+- `.claude/specs/verdict_schema.md`: add `claim_source` as a sibling top-level field (NOT nested under the existing `claim_type` enum — see "Schema-design pin" below). Bump `schema_version` 1.0 → 1.1.
+- `.claude/scripts/validate_claims.py` (NOT mentioned in earlier draft of this doc — single most likely implementation blocker): the existing `CITEKEY_MARKER_MISMATCH` check looks for the citekey within ±280 chars of the claim's text anchor. For inferred-forward claims the anchor is in sentence S+1 but the marker is in sentence S, which can exceed the window. **Resolution:** skip the CITEKEY_MARKER_MISMATCH check entirely when `claim_source != "explicit"`. The text-anchor check (`TEXT_ANCHOR_MISSING`) still runs against the claim's own (verbatim neighbor) sentence.
+- `.claude/scripts/render_html_demo.py` lines 1474-1534 (highlight-anchor logic in `findClaimSentenceIndex`): update to anchor the in-PDF highlight to the inferred-claim's own sentence (not to the citation marker's sentence, which is the current behavior). Without this, inferred claims will mis-highlight to the wrong sentence in the viewer.
+
+**Schema-design pin:** `claim_source` is a NEW SIBLING top-level field, not nested under the existing `claim_type` enum. Reasoning: `claim_type` (`DIRECT | PARAPHRASED | SUPPORTING | BACKGROUND | CONTRASTING | FRAMING`) describes the manuscript's RHETORICAL framing of the claim. `claim_source` (`explicit | inferred_forward | inferred_backward`) describes HOW paper-trail attributed the claim to a reference. They are orthogonal — a `PARAPHRASED` claim can be either `explicit` or `inferred`, and an `inferred_forward` claim can be any `claim_type`.
+
+**`claim_text` for inferred claims:** the verbatim NEIGHBOR sentence (single sentence, not the citing sentence + neighbor joined). The validator's `TEXT_ANCHOR_MISSING` check uses this verbatim text to anchor the claim against the source `.tex` — so it must be a literal substring of the manuscript.
+
+**Tagging direction when both S and S+2 cite [m]:** sentence S+1 is bidirectionally adjacent to two cited sentences. Emit ONE inferred claim attributed to whichever direction the extractor judges stronger; record the choice in the existing `nuance` field (no new field needed).
+
+**Calibration examples** for the Phase 3.1 prompt language (POSITIVE = extract as inferred claim; NEGATIVE = do not extract; BORDERLINE = extract with `claim_source: inferred_*` and let the adjudicator AMBIGUOUS it):
+
+- POSITIVE forward: *"Smith et al. report a 23% reduction in inference latency [smith2024]. The same method scales linearly with model size, holding the latency benefit constant up to 70B parameters."* → extract sentence 2 as `inferred_forward` against `smith2024`.
+- POSITIVE backward: *"Inference latency drops by 23% with attention pruning. Smith et al. report this for transformer architectures up to 70B parameters [smith2024]."* → extract sentence 1 as `inferred_backward` against `smith2024`.
+- NEGATIVE (author framing): *"Smith et al. report X [smith2024]. This is interesting because it suggests broader applicability."* → do not extract sentence 2; "interesting because" is author commentary, not attributed claim.
+- NEGATIVE (author's own contribution): *"Smith et al. report X [smith2024]. We extend this approach to..."* → do not extract sentence 2; first-person "we" indicates author's own contribution.
+- BORDERLINE: *"Smith et al. report X [smith2024]. The mechanism is hypothesized to involve..."* → extract with `claim_source: inferred_forward`; whose hypothesis is genuinely ambiguous, let the adjudicator handle it.
+
+**Cost stop condition** (open-question 3 from earlier draft, now pinned): if the budget delta on the canonical M1 reference run (`examples/paper-trail-adamson-2025/`) exceeds +30% of baseline, narrow extraction by adding stronger heuristic gates before the LLM-judgment step (e.g., require a subject-pronoun referent agreement check that flags "We extend..." and "This suggests..." patterns as not-attributed-claims). Roll back to v1 if even gated narrowing exceeds +50%.
+
+**Smoke test:** re-run /paper-trail on `examples/paper-trail-adamson-2025/data/claims/` (NOT `ledger/claims/` — the canonical reader-mode fixture uses the legacy `data/claims/` layout). Verify (a) all 87 baseline `explicit` claims produce identical verdicts (regression check); (b) new `inferred_forward` / `inferred_backward` claims appear where the calibration examples above would suggest; (c) `validate_claims.py` does not reject any inferred claim (CITEKEY_MARKER_MISMATCH skip rule fires correctly).
+
+---
+
 ## Codebase pointers
 
 - **Where claim extraction actually lives:** `.claude/commands/paper-trail.md` Phase 3.1 ("Claim extraction", line 315+). **Important reframe:** the orchestrator IS the agent driven by this slash-command prompt — there is no separate Python "orchestrator's Phase-3.1 claim-extraction step." To extend extraction to neighbor sentences, the change is in the Phase-3.1 prompt instructions, telling the agent to do the bidirectional ±1-sentence walk and emit additional claims tagged to the same citekey with `claim_source: inferred_*`.

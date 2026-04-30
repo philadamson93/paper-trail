@@ -94,6 +94,16 @@ Plan refers to "the claim-extractor pre-step" or "the orchestrator's parsing mod
 
 Plan describes the feature without saying how the implementer knows it works. **Fix:** Name a canonical run (e.g., a fixture under `examples/`), list the expected output, name what should not regress.
 
+### "The orchestrator IS the agent" (Python plumbing missed)
+
+Plan correctly notes that the orchestrator is driven by a slash-command prompt rather than a Python program, and concludes that prompt edits are the entire surface area. Wrong — the project also has Python validators, renderers, dispatch-payload schemas, and subagent-prompt slot lists that almost always need to change in lockstep with prompt edits. **Fix:** when a feature touches `.claude/commands/*.md`, also check whether it touches:
+- **Validators** like `.claude/scripts/validate_claims.py` — invariants (e.g., `CITEKEY_MARKER_MISMATCH`, `TEXT_ANCHOR_MISSING`) may reject the new feature's outputs without an explicit relax-rule.
+- **Renderers** like `.claude/scripts/render_html_demo.py` — UI-anchor logic (e.g., highlight-claim-sentence-in-PDF) may mis-render new claim shapes without explicit handling.
+- **Dispatch payloads** declared as JSON inside `.claude/commands/paper-trail.md` (around line 396) — new fields the subagents need must be added here, not just to the schema.
+- **Subagent prompt slot lists** in `.claude/prompts/<role>-dispatch.md` — `{{slot}}` placeholders must be added before the subagent can read the new field.
+
+This is the most common gap pattern observed in real critic-agent reviews. Always check all four when reviewing a plan that touches the orchestrator.
+
 ## Project conventions to honor
 
 - Plan docs in `docs/plans/` follow the project's "one topic per file" convention. The companion skill `doc-split-check` checks length and topical drift; this skill checks implementability. Both can run on the same commit.

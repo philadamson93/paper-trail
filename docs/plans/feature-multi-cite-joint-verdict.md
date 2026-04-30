@@ -6,10 +6,42 @@
 
 ---
 
+## Implementation surface (post-critic-review 2026-04-29)
+
+Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-agent review. Treat as authoritative over the more abstract architectural prose below.
+
+**Files to edit:**
+
+- `.claude/commands/paper-trail.md` Phase 3 (around line 414): add Pass-3 barrier semantics — group per-ref adjudicator outputs by `claim_text` (or a normalized claim-key hash) and dispatch the joint-adjudicator only when all N per-ref Pass-2s for the same sentence have completed. Today Phase 3 groups by citekey for handle amortization; the new group-by-sentence step runs after.
+- `.claude/commands/paper-trail.md` Phase 3 Step 3.3 (around line 430): update `ledger.md` markdown rendering to include the joint row inline below the per-ref rows for multi-cite sentences, with the asterisk-pointer convention.
+- `.claude/commands/paper-trail.md` Phase 5 (around line 507) and `.claude/scripts/render_html_demo.py`: HTML viewer renders the joint-verdict row plus per-ref asterisk pointers. (Note: Phase 5 renders HTML, not the markdown ledger — the markdown is Phase 3 Step 3.3. Both surfaces need joint-row support.)
+- `.claude/commands/paper-trail.md` end-of-run summary (around line 658-668): report joint-verdict counts separately from per-ref counts to avoid double-counting in the run-level totals.
+- `.claude/specs/verdict_schema.md` validation rules section (lines 179-193, NOT 196-208 as the earlier draft of this doc said): admit `C*__joint.json` filenames; admit the new top-level `joint_verdict` envelope; bump `schema_version` 1.0 → 1.1.
+- `.claude/scripts/render_html_demo.py` claim-loading code (`load_claims()` around line 144): auto-detect both legacy `data/claims/` (reader-mode fixture layout) and modern `ledger/claims/` layouts; treat `*__joint.json` as a separate render type, not a peer claim, so existing per-claim iteration paths don't double-count.
+- NEW: `.claude/prompts/joint-adjudicator-dispatch.md` modeled on `adjudicator-dispatch.md`. Reads only the per-ref adjudicator JSONs and the rubric; never reads source PDFs.
+
+**Naming and shape pins:**
+
+- **Joint file naming:** `<C-id>__joint.json` where `<C-id>` is the alphabetically-first per-ref claim_id for the sentence (stable across runs given seeded ordering). Example: sentence with C042 (chen2022) + C043 (sandino2020) → joint file is `C042__joint.json`.
+- **Joint envelope shape:** a complete `verdict_envelope` (reuse the existing schema), with the per-claim fields populated as usual PLUS a new top-level `joint_verdict` object containing `participating_citekeys` array, `relation_to_per_ref` enum, joint-level `overall_verdict` and reasoning. The joint envelope is "additive to" the existing schema in the sense that it slots in alongside per-ref envelopes — not a new file format.
+- **`participates_in_joint` per-ref pointer:** orchestrator patches each per-ref envelope after Pass 3 completes (write-after-finalize step — call this out in Phase 3.3 narrative). Per-ref envelope schema gains an additive optional `participates_in_joint: <joint_claim_id>` field.
+
+**Pinned design decisions** (promoted from "Open questions" in earlier draft):
+
+- **AMBIGUOUS handling in joint pass:** treat per-ref AMBIGUOUS as evidence-present-but-uncertain. Joint verdict CONFIRMS only if all non-AMBIGUOUS per-ref verdicts contribute to a coherent joint support; otherwise joint verdict is AMBIGUOUS.
+- **Single-ref shortcut:** orchestrator skips Pass 3 for single-citation sentences (nothing to combine). Renderer still emits a one-row per-ref view (no synthesized joint row).
+- **Unanimous-CONFIRMED shortcut:** orchestrator skips Pass 3 when all N per-ref verdicts agree on `CONFIRMED`. Renderer shows the per-ref rows without a joint row in this case (no rescue needed; trivial case).
+
+**Co-cite plumbing accuracy** (correction from earlier draft of this doc): the orchestrator passes `co_citekeys` as a flat dispatch slot (`paper-trail.md` line 406; `extractor-dispatch.md` line 29 `{{co_citekeys}}`). The **extractor** writes `co_cite_context.sibling_citekeys` into the evidence JSON. So the data is already available where the joint pass needs it.
+
+**Smoke-test fixture layout:** `examples/paper-trail-adamson-2025/data/claims/` (legacy `data/claims/` layout, 87 claims with 83 multi-cite siblings — strong regression base). After implementation, re-running paper-trail against the fixture produces the same per-ref verdicts AND new `*__joint.json` files for multi-cite sentences. Diff per-ref verdicts against baseline (must be identical = no regression); inspect joint files for the four-case rollup behavior.
+
+---
+
 ## Codebase pointers
 
-- **Orchestrator (slash-command prompt):** `.claude/commands/paper-trail.md` — Phase 3 dispatches per-claim subagent chains; Phase 5 renders the ledger. Pass-3 joint-adjudicator dispatch logic is added to Phase 3 here, after all per-ref Pass-2 adjudicators have completed for the same `claim_text`.
-- **Per-claim workflow:** `.claude/commands/ground-claim.md` — current multi-cite handling lives in the "Multi-cite citations" section ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"). The orchestrator already populates `co_cite_context.sibling_citekeys` in each per-ref dispatch. Pass 3 is the new cross-citekey aggregation that runs once per multi-ref `claim_text` after the per-ref Pass-2s complete.
+- **Orchestrator (slash-command prompt):** `.claude/commands/paper-trail.md` — Phase 3 dispatches per-claim subagent chains. Note Phase 3 Step 3.3 (around line 430) renders the markdown `ledger.md`, while Phase 5 (around line 507) renders the HTML viewer via `render_html_demo.py` — both surfaces need joint-row support. Pass-3 joint-adjudicator dispatch logic is added to Phase 3 here, after all per-ref Pass-2 adjudicators have completed for the same `claim_text`.
+- **Per-claim workflow:** `.claude/commands/ground-claim.md` — current multi-cite handling lives in the "Multi-cite citations" section ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"). The orchestrator passes `co_citekeys` as a flat dispatch slot (see `paper-trail.md` line 406 + `extractor-dispatch.md` line 29 `{{co_citekeys}}`); the **extractor** is what writes `co_cite_context.sibling_citekeys` into the evidence JSON. Pass 3 is the new cross-citekey aggregation that runs once per multi-ref `claim_text` after the per-ref Pass-2s complete.
 - **New dispatch prompt to author:** `.claude/prompts/joint-adjudicator-dispatch.md` (new file). Model from `.claude/prompts/adjudicator-dispatch.md`. Same blindness discipline — reads only the per-ref adjudicator JSONs and the rubric, never the source PDFs.
 - **Schema:** `.claude/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below.
 - **Ledger renderer:** `.claude/scripts/render_html_demo.py` (and any other consumers of `ledger/claims/*.json`) — needs an update to render the new joint rows + asterisk-pointer per-ref annotations.
@@ -88,7 +120,7 @@ The verdict schema in `.claude/specs/verdict_schema.md` needs:
 - A `joint_verdict.relation_to_per_ref` enum: `redundant_independent | joint_premise_decomposition | mixed_one_carries | truly_unsupported_jointly` — mirrors the four-case table; lets the report-renderer pick the right diagnostic copy.
 - A pointer field on each per-ref verdict: `participates_in_joint: <claim_id>__joint` — so the report-renderer can wire the asterisk pointer.
 
-Schema versioning: bump `schema_version` from `"1.0"` to `"1.1"`. The orchestrator's validation rules (lines 196-208) should not break on existing 1.0 ledger files — joint-verdict fields are additive optional.
+Schema versioning: bump `schema_version` from `"1.0"` to `"1.1"`. The orchestrator's validation rules (lines 179-193) should not break on existing 1.0 ledger files — joint-verdict fields are additive optional.
 
 ## Open questions for implementation
 
