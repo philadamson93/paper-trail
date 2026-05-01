@@ -79,6 +79,8 @@ Always read in this order:
 **Stable authoritative references (edit in place):**
 
 - `docs/plans/feature-paperclip-first-architecture.md` — paperclip-first read-path with PDF fallback (post-2026-05-01 arxiv-fulltext re-probe; supersedes the April PDF-centric default)
+- `docs/plans/repo-organization.md` — agent-instruction-forward repo with top-level `src/` mirroring `.claude/` via subdirectory symlinks, callgraph spec at `src/specs/control_flow.md`, light brevity audit
+- `docs/plans/run-isolation-framework.md` — isolated `/paper-trail` run framework under `dev/isolation/` (Docker + GROBID sidecar, host paperclip-credential mount, regression-investigation report rather than pass/fail test)
 - `docs/plans/feature-multi-cite-joint-verdict.md` — joint-verdict pass for multi-citation sentences (per-ref + joint, both reported)
 - `docs/plans/feature-neighbor-claim-attribution.md` — ±1-sentence bidirectional neighbor inference, skip-when-neighbor-cited
 - `docs/plans/feature-issue-command.md` — `/issue` slash command for bug reports + verdict disputes
