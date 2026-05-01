@@ -1,117 +1,78 @@
 ---
-name: plan-doc-readiness-check
-description: Before committing a plan doc (new or substantially edited), check whether a fresh-agent in a future session has enough information to implement from it without conversation context. Surfaces missing codebase pointers, undefined integration points, schema-change details left as "TBD," and absent smoke-test criteria. Pauses for user sign-off before allowing commit. Invoke BEFORE commit-review on any plan-doc-bearing commit, or whenever finishing a planning conversation that produced a plan doc.
+name: plan-check
+description: paper-trail-specific extension of the user-level plan-check skill. Adds project-specific file paths, gap patterns observed in paper-trail's plan-doc history, and pointers to the project's actual code structure. Read after the global skill, not instead of it. TRIGGER right after a Write or Edit tool call that produces a plan doc in paper-trail's docs/plans/, BEFORE invoking commit-review.
 ---
 
-# plan-doc-readiness-check
+# plan-check (paper-trail extension)
 
-Plan docs in `docs/plans/` are designed to outlive the conversation that produced them. A fresh-agent in a future session reads the plan doc and starts implementing; that agent has no memory of the brainstorm, no context for "what we decided versus what we considered." This skill is the check that the plan doc carries enough self-contained information to make that handoff work — and pauses to fix it before the doc lands if it does not.
+This is the paper-trail-specific extension of the user-level skill at `~/.claude/commands/plan-check.md`. The global skill carries the universal principle (a plan doc is a fresh-agent handoff; context must be POINTED-AT or STATED-DIRECTLY) and the universal six-category checklist. This file adds:
 
-## When to run
+- paper-trail's actual file paths
+- gap patterns observed in past plan-doc reviews on this project
+- pointers to the project's actual code structure that mismatch fresh-agent assumptions
 
-- **Before commit-review on any commit that creates or substantially modifies a plan doc** in `docs/plans/`. Typical timing: after the plan doc is drafted, before invoking commit-review.
-- **At end of a planning conversation** that produced a plan doc, even if no commit is imminent — flag gaps so the user can decide whether to enrich now or later.
-- **When updating an existing plan doc** with new sections — verify the new sections meet the same standard as the rest of the doc.
+Read the global skill first. Apply the six universal checks. Then layer in the project-specific patterns below.
 
-## Skip conditions
+## paper-trail's actual ship surface
 
-- The plan doc is itself meta-doc (e.g., a "decisions log" or "open questions" file that intentionally does not pin implementation details).
-- The user has explicitly said to skip ("just commit the rough draft, we'll fix it later").
-- The doc edit is a typo fix or pure prose-cleanup with no new content.
+Fresh-agent gap patterns often stem from getting the project's structure wrong. The actual structure today (post-repo-org reshuffle, see `docs/plans/repo-organization.md`):
 
-## Check procedure
+- **Slash commands** live at `src/commands/<name>.md` (mirrored to `.claude/commands/<name>.md` via subdirectory symlink). Six exist: `paper-trail.md`, `ground-claim.md`, `verify-bib.md`, `fetch-paper.md`, `init-writing-tools.md`, `paper-trail-init.md`.
+- **Dispatch prompts** for subagents live at `src/prompts/<role>-dispatch.md`. Three roles: extractor, adjudicator, verifier.
+- **Specs** live at `src/specs/`. `verdict_schema.md` is the verdict-envelope source of truth. `ingest.md` is the GROBID source-handle layout. `control_flow.md` (post-repo-org) is the orchestrator-to-dispatch-to-subagent-to-validator graph.
+- **Python helpers** live at `src/scripts/`: `validate_claims.py`, `render_html_demo.py`, `ingest_pdf.py`.
+- **Templates** live at `src/templates/`: `claims_ledger.md`.
 
-For each plan doc being committed, read it fully and answer the following questions on behalf of a fresh agent. Any "no" or "unclear" is a gap to surface.
+If a feature plan refers to `.claude/commands/` instead of `src/commands/`, check whether the plan is post-repo-org (use `src/`) or pre-repo-org (use `.claude/`) and flag if mixed.
 
-### 1. Codebase pointers
+## paper-trail-specific gap patterns
 
-- Does the doc name the **specific files** the change touches? (e.g., `.claude/commands/paper-trail.md` line 315, not just "the orchestrator")
-- Does the doc name the **convention or directory** for any new file it introduces? (e.g., "new slash command lives at `.claude/commands/issue.md` — see existing six commands for template")
-- Does the doc point at **existing related code** the implementer should mirror or coordinate with? (e.g., "the existing `co_cite_context.sibling_citekeys` mechanism in `ground-claim.md` already provides sibling-extractor awareness")
+These supplement the universal patterns in the global skill.
 
-### 2. Schema and interface changes
+### "We add a Pass-N X" (no dispatch-prompt file pointer)
 
-- If the doc proposes a schema change, does it name the **schema file** (`.claude/specs/verdict_schema.md`) and the **specific fields** being added or changed?
-- If the doc proposes a new prompt or command, does it name the **file path** and any **template file** to model from?
-- If the doc proposes an enum extension, does it list the **specific enum values**?
-- Does the doc address **versioning impact** if the schema change is non-backward-compatible? (e.g., bump `schema_version` from "1.0" to "1.1"?)
+Plan says "add a Pass-3 joint adjudicator" without naming where the new dispatch prompt lives. paper-trail's convention: dispatch prompts at `src/prompts/<role>-dispatch.md`. **Fix:** Name the new dispatch prompt path (e.g., `src/prompts/joint-adjudicator-dispatch.md`); list the orchestrator files that need to change to dispatch it (e.g., `src/commands/paper-trail.md` Phase 3, `src/commands/ground-claim.md`).
 
-### 3. Integration with existing patterns
+### "Schema needs new field Y" (no schema file)
 
-- Does the doc explain how the change **interacts with the existing pipeline architecture** (orchestrator, dispatch prompts, subagents)?
-- For features that touch multiple pipeline stages, does the doc name **all the stages** that need updating?
-- Does the doc address **author-mode versus reader-mode** if the change affects both (or clarify it only affects one)?
-- Does the doc address **interaction with other in-flight features** if any are coordinated? (e.g., "Feature 1 and Feature 2 both touch the orchestrator; coordinate during implementation")
-
-### 4. Smoke-test and success criteria
-
-- Does the doc say **how the implementer would know the feature works**? (canonical run, expected output, regression check)
-- Does the doc point at a **canonical example or test fixture** the implementer should run against? (e.g., `examples/paper-trail-adamson-2025/` per memory `project_m1_complete.md`)
-- Does the doc list **what should NOT change** as a regression check?
-
-### 5. Open questions vs. decided design
-
-- Does the doc clearly distinguish **decisions already made** from **questions left open for the implementer**?
-- For open questions, does the doc give the implementer enough context to make a defensible call (or know to ask the user)?
-- For decisions, does the doc include the **rationale** — at minimum a one-line "why" so the implementer can reason about edge cases that fall outside the decided scope?
-
-### 6. Out-of-scope statement
-
-- Does the doc have an explicit "Out of scope" section listing what is intentionally NOT in v1?
-- This protects against scope creep and gives the implementer permission to defer items that look adjacent.
-
-## Surface gaps and pause
-
-If any check returns "no" or "unclear," list each gap with:
-
-- **File and section** the gap is in
-- **What's missing** (the specific question the doc fails to answer)
-- **Suggested addition** (concrete prose or pointer the doc should have)
-
-Then pause for user sign-off. The user picks: (a) add the suggested fixes now, (b) commit as-is and queue the fixes for next session, (c) the gap is intentional (e.g., a known open question being deferred).
-
-## Common gap patterns and fix recipes
-
-These are the patterns this skill is designed to catch — based on real misses observed in earlier plan-doc work.
-
-### "We add a Pass-3 X" (no file pointer)
-
-Plan says "add a Pass-3 joint adjudicator" without naming where the new dispatch prompt lives or which orchestrator file dispatches it. **Fix:** Name the new file path (e.g., `.claude/prompts/joint-adjudicator-dispatch.md`), list the orchestrator files that need to change to dispatch it (e.g., `.claude/commands/paper-trail.md`, `.claude/commands/ground-claim.md`).
-
-### "New schema field Y" (no schema file)
-
-Plan says "the schema needs a new `claim_source` field" without saying the schema lives at `.claude/specs/verdict_schema.md` or whether the change is additive (1.0 → 1.1) or breaking (1.0 → 2.0). **Fix:** Point at the schema file, specify field type and enum values, address backward-compatibility.
+Plan says "the schema needs a new `claim_source` field" without saying the schema lives at `src/specs/verdict_schema.md` or addressing whether the change is additive (1.0 → 1.1) or breaking (1.0 → 2.0). **Fix:** POINT AT the schema file. STATE DIRECTLY the field type, any enum values, and the versioning bump.
 
 ### "New slash command /Z" (no command convention)
 
-Plan says "add `/issue` slash command" without saying slash commands live at `.claude/commands/<name>.md`, that there are six existing commands to model from (`paper-trail.md`, `ground-claim.md`, etc.), and which is the closest template. **Fix:** Name the file path and the closest sister command to model from.
+Plan says "add `/issue` slash command" without saying slash commands live at `src/commands/<name>.md` or naming the closest sister command to model from. **Fix:** Name the file path and the sister command — `paper-trail.md` for orchestrator-shaped commands, `verify-bib.md` for single-purpose Phase commands, `ground-claim.md` for per-item subworkflows.
 
-### "Pre-step does X" (no pre-step exists)
+### "Pre-step does X" (no Python pre-step)
 
-Plan refers to "the claim-extractor pre-step" or "the orchestrator's parsing module" or other architectural-sounding components that do not actually exist as separate code units in this project. (Often the orchestrator IS the agent driven by a slash-command prompt; there is no separate Python pre-step.) **Fix:** Re-frame against the actual code structure — usually means naming the prompt file the orchestrator instructions live in.
+Plan refers to "the claim-extractor pre-step" or "the orchestrator's parsing module" — components that don't exist as Python code. The orchestrator IS an agent driven by `src/commands/paper-trail.md`'s prompt. The claim-extractor work happens inline in Phase 3.1 of that prompt, not in a Python module. **Fix:** Re-frame against the actual structure — the change is in the orchestrator's prompt instructions, not in a separate Python module.
 
-### "When the feature is done" (no success criterion)
+### "When the feature is done" (no fixture)
 
-Plan describes the feature without saying how the implementer knows it works. **Fix:** Name a canonical run (e.g., a fixture under `examples/`), list the expected output, name what should not regress.
+Plan describes the feature without naming the canonical fixture. paper-trail's convention: `examples/paper-trail-adamson-2025/` is the M1 reference run for reader mode (per memory `project_m1_complete.md`); `examples/DFD_authormode/` for author mode. **Fix:** Name the fixture, list the expected output (e.g., "87 claims with correct verdicts; diff against `examples/paper-trail-adamson-2025/data/claims/`"), name what should not regress.
 
-### "The orchestrator IS the agent" (Python plumbing missed)
+### Cross-stage plumbing missed (paper-trail's four surfaces)
 
-Plan correctly notes that the orchestrator is driven by a slash-command prompt rather than a Python program, and concludes that prompt edits are the entire surface area. Wrong — the project also has Python validators, renderers, dispatch-payload schemas, and subagent-prompt slot lists that almost always need to change in lockstep with prompt edits. **Fix:** when a feature touches `.claude/commands/*.md`, also check whether it touches:
-- **Validators** like `.claude/scripts/validate_claims.py` — invariants (e.g., `CITEKEY_MARKER_MISMATCH`, `TEXT_ANCHOR_MISSING`) may reject the new feature's outputs without an explicit relax-rule.
-- **Renderers** like `.claude/scripts/render_html_demo.py` — UI-anchor logic (e.g., highlight-claim-sentence-in-PDF) may mis-render new claim shapes without explicit handling.
-- **Dispatch payloads** declared as JSON inside `.claude/commands/paper-trail.md` (around line 396) — new fields the subagents need must be added here, not just to the schema.
-- **Subagent prompt slot lists** in `.claude/prompts/<role>-dispatch.md` — `{{slot}}` placeholders must be added before the subagent can read the new field.
+When a plan touches `src/commands/paper-trail.md` (the orchestrator), it almost always also touches:
 
-This is the most common gap pattern observed in real critic-agent reviews. Always check all four when reviewing a plan that touches the orchestrator.
+- **Validators** at `src/scripts/validate_claims.py` — invariants like `CITEKEY_MARKER_MISMATCH` and `TEXT_ANCHOR_MISSING` may reject the new feature's outputs without an explicit relax-rule. Plan must say which validator rules need updating.
+- **Renderers** at `src/scripts/render_html_demo.py` — UI-anchor logic (e.g., highlight-claim-sentence-in-PDF) may mis-render new claim shapes. Plan must say if a new render path is needed.
+- **Dispatch payloads** in `src/commands/paper-trail.md` (around line 396, the per-claim dispatch JSON) — new fields the subagents need must be added here, not just to `verdict_schema.md`. Plan must list the dispatch-payload fields being added.
+- **Subagent prompt slot lists** at `src/prompts/<role>-dispatch.md` — `{{slot}}` placeholders must be added before the subagent can read the new field. Plan must name which dispatch prompts get new slots.
 
-## Project conventions to honor
+This is the most common gap pattern observed in paper-trail's plan-doc reviews. Always check all four surfaces when reviewing a plan that touches the orchestrator.
 
-- Plan docs in `docs/plans/` follow the project's "one topic per file" convention. The companion skill `doc-split-check` checks length and topical drift; this skill checks implementability. Both can run on the same commit.
-- Cross-reference any related plan docs and journal entries so the implementer can trace the design history.
-- If the plan doc already does the right thing — passes all six checks — say so explicitly and proceed to commit-review without modification. Don't add fluff for its own sake.
+### Reader-mode vs author-mode parity
 
-## Non-goals
+paper-trail has two workflow modes (per CLAUDE.md and memory `project_author_vs_reader_user_shape.md`): reader mode audits someone else's PDF; author mode audits your own LaTeX manuscript. Many features apply to both; some apply to only one. Plan must say explicitly which modes are affected, or that the feature is mode-blind.
 
-- Don't rewrite the plan doc — propose specific additions and let the user approve them. The user wrote the plan; this skill is a checker, not an editor.
-- Don't apply this to status / index docs (e.g., `NEXT.md`-style files) where the convention is brevity-with-pointers, not implementability.
-- Don't apply this to milestone / read-only docs that capture frozen historical state.
+## Coordination with other paper-trail skills
+
+- **`doc-split-check`** (project skill): checks plan-doc length and topical drift. Runs in parallel with this skill on the same commit. They are orthogonal — `doc-split-check` is about "is the doc the right shape," `plan-check` is about "is the doc implementable from."
+- **`commit-review`** (user-level skill, project-shared): runs after this skill, before the actual commit. plan-check surfaces gaps; commit-review surfaces appropriateness concerns.
+
+## What this extension does NOT replace
+
+- The universal six-category check is in the global skill at `~/.claude/commands/plan-check.md`. This extension does not duplicate it.
+- The principle (POINT AT vs STATE DIRECTLY) is in the global skill. This extension assumes it.
+- Generic gap patterns (cross-stage plumbing as a concept) are in the global skill. This extension lists paper-trail's specific four surfaces.
+
+If a fresh agent runs this extension without first reading the global skill, the result is incomplete. Always read both.
