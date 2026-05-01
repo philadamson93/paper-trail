@@ -120,9 +120,9 @@ The single largest deliverable of this plan. Today there is no map of which orch
 | Skill file | Trigger condition | Used by |
 |---|---|---|
 | `src/skills/doc-split-check.md` | doc edit ≥ 400 lines | manual + commit-review |
-| `src/skills/plan-doc-readiness-check.md` | new or substantially-edited plan doc in `docs/plans/` | manual + commit-review |
+| `src/skills/plan-check.md` | new or substantially-edited plan doc in `docs/plans/` | manual + commit-review |
 
-The exact line numbers are pinned in `control_flow.md` and updated when the orchestrator changes. The validator names are pinned to specific functions in `src/scripts/validate_claims.py`. Updates to `control_flow.md` are part of any feature plan that touches the dispatch graph (this becomes a check item in `plan-doc-readiness-check.md`).
+The exact line numbers are pinned in `control_flow.md` and updated when the orchestrator changes. The validator names are pinned to specific functions in `src/scripts/validate_claims.py`. Updates to `control_flow.md` are part of any feature plan that touches the dispatch graph (this becomes a check item in `plan-check.md`).
 
 ---
 
@@ -195,7 +195,7 @@ Specific verification steps:
 
 - Run `/paper-trail` after the symlink rewire. If Claude Code can't find the slash command, the symlink approach is wrong and we need to escalate to one of the open-question alternatives (build script or gitignored `.claude/`).
 - Run `/ground-claim` and any other slash command from the new location. Same check.
-- Run a project-owned skill (`doc-split-check`, `plan-doc-readiness-check`). Same check.
+- Run a project-owned skill (`doc-split-check`, `plan-check`). Same check.
 - `git log --follow src/commands/paper-trail.md` should show full history back through the `.claude/commands/paper-trail.md` era. (`git mv` preserves history.)
 - `git status` shows no spurious diffs from the symlink wiring.
 

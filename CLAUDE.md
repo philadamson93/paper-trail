@@ -19,10 +19,11 @@ Both modes share the per-claim two-pass workflow (extractor → adjudicator) plu
 - `.claude/prompts/<role>-dispatch.md` — literal prompts the orchestrator passes to subagents. Three roles: `extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md`.
 - `.claude/specs/<topic>.md` — interface specifications. `verdict_schema.md` is the per-claim verdict JSON schema (source of truth — `ledger.md` is rendered from these). `ingest.md` is the source-handle layout produced by `scripts/ingest_pdf.py`.
 - `.claude/scripts/<name>.py` — supporting Python: `validate_claims.py`, `render_html_demo.py`, `ingest_pdf.py`.
-- `.claude/skills/<name>.md` — project-owned skills. Currently `doc-split-check.md` and `plan-doc-readiness-check.md`. The `.gitignore` carveout pattern (`.claude/skills/*` + `!` re-includes) is what makes these committable while machine-local skills stay ignored.
+- `.claude/skills/<name>.md` — project-owned skills. Currently `doc-split-check.md` and `plan-check.md` (the latter is a thin extension of the user-level `~/.claude/commands/plan-check.md`, adding paper-trail-specific gap patterns). The `.gitignore` carveout pattern (`.claude/skills/*` + `!` re-includes) is what makes these committable while machine-local skills stay ignored.
 - `templates/claims_ledger.md` — the canonical author-mode ledger schema. Reused verbatim by reader mode.
 - `examples/` — canonical runs. `paper-trail-adamson-2025/` is the M1 reference run (per memory `project_m1_complete.md`); start review-agents at its README.md. `paper-trail-adamson-dmi-cns-lesions/` and `DFD_authormode/` are additional fixtures.
 - `docs/plans/` — stable reference plans. Long-lived; edit in place when decisions change. One file per major topic.
+- `docs/NEXT.md` — pointer-style implementation queue for plans in `docs/plans/`. Updated during `/wrapup`. Recommended sequence + status table; substance lives in the linked plan docs.
 - `docs/journal/YYYY-MM-DD-<topic>.md` — per-day-per-topic decision log with attribution. Append-only in practice; captures *who* raised *what* and *why*. No subfolders.
 - `docs/claude_ops.md` — operational standards referenced by existing plan docs.
 - `docs/trust-model.md`, `docs/internals.md`, `docs/prerequisites.md` — architecture and setup references.
@@ -47,7 +48,7 @@ When picking up a feature plan doc and starting implementation, the relevant fil
 
 **Modularity over monolith.** One topic per file. Long monolithic docs are hard to navigate later. The `doc-split-check` project-owned skill enforces this (~400-line trigger).
 
-**Plan-doc readiness.** Before committing a new plan doc, the `plan-doc-readiness-check` project-owned skill verifies the doc carries enough self-contained information for a fresh-agent in a future session to implement from it without the conversation context — codebase pointers, schema-change details, smoke-test criteria, integration points.
+**Plan-doc readiness.** After writing a plan doc, the `plan-check` skill (user-level at `~/.claude/commands/plan-check.md`, with a thin paper-trail-specific extension at `.claude/skills/plan-check.md`) verifies the doc carries enough self-contained information for a fresh-agent in a future session to implement from it without the conversation context. The principle: every piece of context the current session accumulated must either be **pointed at** (name the docs / files / memories the fresh agent should read first) or **stated directly** (when the context is load-bearing and brittle to indirection).
 
 **When to write a journal entry.** At the end of any substantive discussion that produced decisions or open questions. Especially for design / scope discussions where the who-said-what is the actual artifact.
 

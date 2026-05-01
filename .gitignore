@@ -24,7 +24,7 @@
 .claude/settings.local.json
 .claude/skills/*
 !.claude/skills/doc-split-check.md
-!.claude/skills/plan-doc-readiness-check.md
+!.claude/skills/plan-check.md
 .claude/scripts/__pycache__/
 *.pyc
 
