@@ -78,6 +78,7 @@ Always read in this order:
 
 **Stable authoritative references (edit in place):**
 
+- `docs/plans/feature-paperclip-first-architecture.md` — paperclip-first read-path with PDF fallback (post-2026-05-01 arxiv-fulltext re-probe; supersedes the April PDF-centric default)
 - `docs/plans/feature-multi-cite-joint-verdict.md` — joint-verdict pass for multi-citation sentences (per-ref + joint, both reported)
 - `docs/plans/feature-neighbor-claim-attribution.md` — ±1-sentence bidirectional neighbor inference, skip-when-neighbor-cited
 - `docs/plans/feature-issue-command.md` — `/issue` slash command for bug reports + verdict disputes
@@ -93,5 +94,5 @@ Always read in this order:
 ## Branch model
 
 - **`main`** — paper-trail-the-tool. Plan docs land here as forward-looking to-do items; code changes go on feature branches off main.
-- **`feature/<scope>`** — feature-implementation branches off main. Currently `feature/multi-cite-and-neighbor-claims` (Features 1+2 share a branch since both touch the orchestrator and adjudicator).
+- **`feature/<scope>`** — feature-implementation branches off main. Currently `feature/multi-cite-and-neighbor-claims` (Features 1+2 share a branch since both touch the orchestrator and adjudicator), and `feature/paperclip-primary-workflow` (paperclip-first architecture; the architectural-shift branch supersedes the April PDF-centric default).
 - **`sarol`** — paused agentic-pipeline-optimization research line (Sarol-2024 benchmark). Not part of paper-trail-the-tool development. Out of scope for fresh-agent main-branch work.
