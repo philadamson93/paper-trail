@@ -1,0 +1,989 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paperclip-first architecture — visual plan</title>
+<meta name="plan-source" content="docs/plans/feature-paperclip-first-architecture.md">
+<meta name="plan-sha256" content="9eb4e5c98cbdde565024e1c3aca3cdf5dcc35211297e2fd1f1fa68da444316d8">
+<meta name="generated" content="2026-05-15">
+<style>
+  :root {
+    --bg: #f8fafc;
+    --fg: #0f172a;
+    --muted: #475569;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --accent: #0e7490;
+    --accent-bg: #ecfeff;
+    --warn: #b45309;
+    --warn-bg: #fef3c7;
+    --gate: #9f1239;
+    --gate-bg: #fff1f2;
+    --code-bg: #f1f5f9;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220;
+      --fg: #e2e8f0;
+      --muted: #94a3b8;
+      --card: #111827;
+      --border: #1f2937;
+      --accent: #22d3ee;
+      --accent-bg: #083344;
+      --warn: #fbbf24;
+      --warn-bg: #422006;
+      --gate: #fda4af;
+      --gate-bg: #4c0519;
+      --code-bg: #0f172a;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 28px 120px;
+  }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  h2 { margin: 0 0 12px; font-size: 19px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { margin: 18px 0 8px; font-size: 16px; color: var(--accent); }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre.code { background: var(--code-bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+  a { color: var(--accent); }
+  .hero {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 22px;
+    box-shadow: var(--shadow);
+  }
+  .hero .meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 14px;
+    row-gap: 4px;
+    margin-top: 10px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .hero .meta dt { font-weight: 600; color: var(--fg); }
+  .hero .meta dd { margin: 0; }
+  .status-pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--warn-bg);
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+  section p { margin: 6px 0 10px; }
+  pre.mermaid {
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin: 10px 0 8px;
+    overflow-x: auto;
+    text-align: center;
+  }
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin: 6px 0;
+    background: var(--bg);
+  }
+  details[open] { background: var(--card); }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    list-style: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: "▸ ";
+    color: var(--accent);
+    display: inline-block;
+    width: 14px;
+  }
+  details[open] summary::before { content: "▾ "; }
+  .chip {
+    display: inline-block;
+    font-size: 11.5px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 6px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    vertical-align: middle;
+  }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .chip.gate { background: var(--gate-bg); color: var(--gate); border-color: var(--gate); }
+  .chip.unchanged {
+    background: transparent;
+    color: var(--muted);
+    border-color: var(--muted);
+  }
+  table.knobs {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 13.5px;
+  }
+  table.knobs th, table.knobs td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.knobs th { background: var(--code-bg); font-weight: 600; }
+  textarea.section-feedback, textarea.global-feedback {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: 13.5px;
+    margin-top: 8px;
+    resize: vertical;
+  }
+  textarea.global-feedback { min-height: 100px; }
+  .oq-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 10px 0;
+    background: var(--bg);
+  }
+  .oq-card h3 { margin-top: 0; color: var(--fg); font-size: 15px; }
+  .oq-card .oq-status {
+    margin: 8px 0;
+    font-size: 13.5px;
+  }
+  .oq-card select {
+    font: inherit;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--fg);
+  }
+  .legend-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .legend-inline span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend-swatch {
+    display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--muted);
+  }
+  footer.sticky {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    padding: 10px 28px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 -2px 6px rgba(0,0,0,0.06);
+    z-index: 50;
+  }
+  footer.sticky button {
+    background: var(--accent);
+    color: white;
+    border: 0;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  footer.sticky button:hover { filter: brightness(1.1); }
+  footer.sticky .pill {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  ul.tight { margin: 6px 0; padding-left: 22px; }
+  ul.tight li { margin: 3px 0; }
+  .files-touched {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 6px 0;
+  }
+  .files-touched code { font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Paperclip-first architecture <span class="status-pill">⏳ Plan-only</span></h1>
+  <div class="meta">
+    <dl style="display: contents;">
+      <dt>Source plan</dt>
+      <dd><a href="feature-paperclip-first-architecture.md"><code>docs/plans/feature-paperclip-first-architecture.md</code></a></dd>
+      <dt>Plan SHA-256</dt>
+      <dd><code>9eb4e5c98cbd</code> (full: <code>9eb4e5c98cbdde565024e1c3aca3cdf5dcc35211297e2fd1f1fa68da444316d8</code>)</dd>
+      <dt>Branch</dt>
+      <dd><code>feature/paperclip-primary-workflow</code></dd>
+      <dt>Scoped</dt>
+      <dd>2026-05-01 (after upstream paperclip announced arXiv full-text + PubMed abstracts)</dd>
+      <dt>Visual companion generated</dt>
+      <dd>2026-05-15</dd>
+    </dl>
+  </div>
+</header>
+
+<section id="tldr">
+  <h2>TL;DR</h2>
+  <p>Paper-trail's read path becomes paperclip-first by default. A May 1 2026 re-probe of the canonical Adamson fixture measured <strong>27/56 (48%)</strong> greppable full-text via paperclip — roughly 4× the April baseline that triggered the 2026-04-18 reversal.</p>
+  <p>The plan ships paperclip-mode and PDF-mode as parallel dispatch paths under one shared exit schema, with a <strong>1.1 to 1.2 hard schema bump</strong> adding <code>source_mode</code> and <code>paperclip_handle</code>. Mixed-path is permanent (paywalled MRM / IEEE TMI references will not deposit to arxiv); the <code>external</code> slice is not a deprecation target.</p>
+  <p>Plan-only; no code yet. Gated behind <strong>repo-organization</strong> and <strong>run-isolation-framework</strong> plans per <a href="../NEXT.md"><code>docs/NEXT.md</code></a>, and coordinated with the in-flight <code>feature/multi-cite-and-neighbor-claims</code> branch (lands at schema 1.1 first, then paperclip-first rebases and bumps to 1.2).</p>
+</section>
+
+<section id="repo-map" data-feedback-section="repo-map">
+  <h2>Repo map — where this PR sits in the whole pipeline</h2>
+  <p>The zoomed-out view. Negative space matters: <span class="chip unchanged">gray dashed</span> nodes are passthrough (paperclip is upstream we read from, the user's PDF and downstream reader are endpoints), <span class="chip">cyan</span> is what this PR adds, <span class="chip warn">amber</span> is what it modifies.</p>
+  <pre class="mermaid">
+flowchart LR
+  classDef pr fill:#06b6d4,stroke:#0e7490,stroke-width:3px,color:#022;
+  classDef mod fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#220;
+  classDef ext fill:#64748b,stroke:#334155,stroke-dasharray:4 3,color:#fff;
+  classDef def fill:#a78bfa,stroke:#6d28d9,stroke-dasharray:4 3,color:#fff;
+  classDef gate fill:#f43f5e,stroke:#9f1239,stroke-width:2px,color:#fff;
+
+  subgraph upstream["Upstream corpus"]
+    pc["paperclip server<br/>PMC, bioRxiv, medRxiv,<br/>arXiv full-text, PubMed abstracts"]
+  end
+
+  subgraph input_layer["User input"]
+    pdf["manuscript.pdf"]
+  end
+
+  subgraph cfg["Config knobs (this PR adds)"]
+    flag["paperclip flag<br/>prefer, only, never, off"]
+  end
+
+  subgraph orch["Orchestrator"]
+    pt[".claude/commands/paper-trail.md<br/>Phases 0 to 5"]
+  end
+
+  subgraph helpers["Slash-command helpers (this PR modifies)"]
+    vb[".../verify-bib.md"]
+    fp[".../fetch-paper.md"]
+    gc[".../ground-claim.md"]
+  end
+
+  subgraph dispatch["Dispatch prompts"]
+    ex_pc[".../extractor-dispatch-paperclip.md<br/>(this PR creates)"]
+    ex_pdf[".../extractor-dispatch-pdf.md<br/>(this PR renames)"]
+    adj[".../adjudicator-dispatch.md<br/>(unchanged)"]
+    ver[".../verifier-dispatch.md<br/>(minor edit)"]
+  end
+
+  subgraph schema_layer["Schema, validators, render"]
+    sch[".claude/specs/verdict_schema.md<br/>1.1 to 1.2 hard bump"]
+    val[".claude/scripts/validate_claims.py<br/>SOURCE_MODE_MISSING,<br/>PAPERCLIP_HANDLE_MISMATCH"]
+    ren[".claude/scripts/render_html_demo.py<br/>source_mode badge"]
+    led["templates/claims_ledger.md<br/>source_mode column"]
+  end
+
+  subgraph skill_layer["Skill"]
+    sk[".claude/skills/paperclip/SKILL.md<br/>refresh from upstream"]
+  end
+
+  subgraph outputs["Outputs"]
+    out1["refs.verified.bib"]
+    out2["per-claim verdict JSONs"]
+    out3["claims_ledger.md"]
+    out4["HTML report"]
+  end
+
+  subgraph downstream["Downstream"]
+    reader["reader / author / reviewer"]
+  end
+
+  subgraph gates_grp["Sequencing gates (must clear first)"]
+    g1["repo-organization plan"]
+    g2["run-isolation-framework plan"]
+    g3["feature/multi-cite-and-neighbor-claims<br/>lands at schema 1.1 first"]
+  end
+
+  pc --> vb
+  pdf --> pt
+  flag --> pt
+  pt --> vb
+  pt --> fp
+  pt --> gc
+  vb --> out1
+  fp -. external slice .-> ex_pdf
+  fp -. paperclip slice .-> ex_pc
+  gc --> ex_pc
+  gc --> ex_pdf
+  ex_pc --> adj
+  ex_pdf --> adj
+  adj --> ver
+  ver --> out2
+  sch -. validates .-> out2
+  out2 --> val
+  out2 --> led
+  led --> ren
+  ren --> out4
+  sk -. read by .-> ex_pc
+
+  g1 -.-> pt
+  g2 -.-> pt
+  g3 -.-> sch
+
+  subgraph legend["Color legend"]
+    L1["THIS PR adds or creates (cyan)"]
+    L2["THIS PR modifies (amber)"]
+    L3["Unchanged passthrough (gray dashed)"]
+    L4["Deferred / out-of-scope (purple dashed)"]
+    L5["Sequencing gate (rose)"]
+  end
+
+  class flag,ex_pc pr
+  class pt,vb,fp,gc,ver,sch,val,ren,led,sk,ex_pdf mod
+  class pc,pdf,adj,out1,reader ext
+  class g1,g2,g3 gate
+  class out2,out3,out4 mod
+  class L1 pr
+  class L2 mod
+  class L3 ext
+  class L4 def
+  class L5 gate
+  </pre>
+  <textarea class="section-feedback" data-section="repo-map" placeholder="Feedback on the repo map — granularity, missing nodes, wrong edges..."></textarea>
+</section>
+
+<section id="blast-radius" data-feedback-section="blast-radius">
+  <h2>Blast radius — knobs to files to outputs to consumers</h2>
+  <p>Entity-level zoom. Each node is a concrete file, knob, or output. Phase-2 deferred work is parked at the bottom with a purple dashed border — it is intentionally <em>not</em> in scope for this PR.</p>
+  <pre class="mermaid">
+flowchart LR
+  classDef knob fill:#06b6d4,stroke:#0e7490,stroke-width:2px,color:#022;
+  classDef mod fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#220;
+  classDef new fill:#06b6d4,stroke:#0e7490,stroke-width:3px,color:#022;
+  classDef unchanged fill:#64748b,stroke:#334155,stroke-dasharray:4 3,color:#fff;
+  classDef out fill:#fbbf24,stroke:#92400e,color:#220;
+  classDef def fill:#a78bfa,stroke:#6d28d9,stroke-dasharray:4 3,color:#fff;
+
+  subgraph knobs["Knobs (this PR adds)"]
+    k1["paperclip flag<br/>prefer, only, never, off"]
+    k2["source_mode enum<br/>paperclip, pdf, pdf_ocr_fallback"]
+    k3["coverage enum<br/>paperclip, external, unresolved"]
+    k4["paperclip_handle<br/>e.g., PMC10131505, 2407.11321"]
+  end
+
+  subgraph orch_files["Orchestrator + helpers (modified)"]
+    f1["paper-trail.md<br/>Phases 1, 2, 2.5, 3, 3.5, 5<br/>+ dispatch payload at line 396<br/>+ end-of-run summary"]
+    f2["verify-bib.md<br/>paperclip lookup pre-step"]
+    f3["fetch-paper.md<br/>coverage-aware branch"]
+    f4["ground-claim.md<br/>add Mode section"]
+  end
+
+  subgraph prompts["Dispatch prompts"]
+    p1["extractor-dispatch-paperclip.md<br/>(new)"]
+    p2["extractor-dispatch-pdf.md<br/>(renamed from extractor-dispatch.md)"]
+    p3["adjudicator-dispatch.md<br/>(unchanged; verify mode-blind)"]
+    p4["verifier-dispatch.md<br/>minor: paperclip grep re-run"]
+  end
+
+  subgraph schema_files["Schema, validators, render, skill"]
+    s1["verdict_schema.md<br/>1.1 to 1.2 hard bump<br/>+source_mode, +paperclip_handle,<br/>new attestation shape"]
+    s2["validate_claims.py<br/>SOURCE_MODE_MISSING,<br/>PAPERCLIP_HANDLE_MISMATCH"]
+    s3["render_html_demo.py<br/>source_mode badge<br/>green / blue / yellow"]
+    s4["claims_ledger.md template<br/>source_mode column"]
+    s5["paperclip/SKILL.md<br/>refresh from upstream"]
+  end
+
+  subgraph outputs2["Outputs (shape changes)"]
+    o1["refs.verified.bib<br/>+ coverage, paperclip_handle"]
+    o2["per-claim verdict JSONs<br/>+ source_mode,<br/>new attestation shape"]
+    o3["claims_ledger.md<br/>+ source_mode column"]
+    o4["HTML report<br/>+ source_mode badge"]
+  end
+
+  subgraph consumers["Consumers"]
+    c1["validators (CI / pre-commit)"]
+    c2["user reviewer"]
+  end
+
+  subgraph deferred["Phase 2 (deferred, out of scope)"]
+    d1["paperclip map<br/>as fan-out primitive"]
+    d2["LLM-based verifier layer"]
+    d3["Parallelization (serial first)"]
+    d4["Author-mode-only differences<br/>(separate plan)"]
+  end
+
+  k1 --> f1
+  k1 --> f3
+  k2 --> s1
+  k2 --> p1
+  k2 --> p2
+  k3 --> f2
+  k3 --> f3
+  k4 --> f2
+  k4 --> p1
+
+  f1 --> p1
+  f1 --> p2
+  f1 --> p3
+  f1 --> p4
+  f2 --> o1
+  f3 -. external slice .-> p2
+  f3 -. paperclip slice .-> p1
+  f4 --> p1
+  f4 --> p2
+
+  p1 --> o2
+  p2 --> o2
+  p3 --> o2
+  p4 --> o2
+
+  s1 -. validates .-> o2
+  s2 --> c1
+  s3 --> o4
+  s4 --> o3
+  s5 -. read by .-> p1
+
+  o1 --> f3
+  o2 --> s4
+  o2 --> s3
+  o3 --> o4
+  o4 --> c2
+  o2 --> c1
+
+  subgraph legend["Color legend"]
+    L1["Knob added by this PR (cyan)"]
+    L2["File modified by this PR (amber)"]
+    L3["File created by this PR (cyan thick)"]
+    L4["Unchanged passthrough (gray dashed)"]
+    L5["Output (gold)"]
+    L6["Deferred / out-of-scope (purple dashed)"]
+  end
+
+  class k1,k2,k3,k4 knob
+  class p1 new
+  class f1,f2,f3,f4,p2,p4,s1,s2,s3,s4,s5 mod
+  class p3 unchanged
+  class o1,o2,o3,o4 out
+  class d1,d2,d3,d4 def
+  class L1 knob
+  class L2 mod
+  class L3 new
+  class L4 unchanged
+  class L5 out
+  class L6 def
+  </pre>
+  <textarea class="section-feedback" data-section="blast-radius" placeholder="Feedback on the blast radius — missing files, wrong edges, scope creep..."></textarea>
+</section>
+
+<section id="flow" data-feedback-section="flow">
+  <h2>Order of operations</h2>
+  <p>Two sequencing gates and one coordination step come before implementation can start. The status chips reflect the May 15 2026 state — all PENDING, gates BLOCKED.</p>
+  <pre class="mermaid">
+flowchart TD
+  classDef gate fill:#f43f5e,stroke:#9f1239,color:#fff,stroke-width:2px;
+  classDef pending fill:#94a3b8,stroke:#475569,color:#fff;
+  classDef coord fill:#a78bfa,stroke:#6d28d9,color:#fff;
+
+  g0["Gate 1: 🛑 repo-organization plan lands<br/>(per NEXT.md sequencing)"]
+  g1["Gate 2: 🛑 run-isolation-framework plan lands<br/>(per NEXT.md sequencing)"]
+  g2["Coordination: ⏳ feature/multi-cite-and-neighbor-claims<br/>lands at schema 1.1 first;<br/>then rebase paperclip-first to bump 1.2"]
+
+  s0["Step 0: ⏳ Refresh paperclip skill<br/>via paperclip install (refresh from upstream)<br/>(stale: missing arxiv + abstracts surface)"]
+  s1["Step 1: ⏳ Phase 1 paperclip-aware verify-bib<br/>emit coverage field<br/>target ~27/56 paperclip on Adamson fixture"]
+  s2["Step 2: ⏳ Phase 2 coverage-aware fetch-paper<br/>skip download for paperclip slice;<br/>existing path for external"]
+  s3["Step 3: ⏳ Phase 3 mode-aware dispatch<br/>extractor split + schema 1.2 +<br/>validators + ledger column + renderer badge"]
+  s4["Step 4: ⏳ End-to-end Adamson smoke test<br/>diff verdicts vs M1 baseline<br/>(must agree on non-PENDING refs)"]
+  s5["Step 5: ⏳ Author-mode parity<br/>run end-to-end on DFD_authormode"]
+
+  g0 --> g1
+  g1 --> g2
+  g2 --> s0
+  s0 --> s1
+  s1 --> s2
+  s2 --> s3
+  s3 --> s4
+  s4 --> s5
+
+  subgraph legend["Legend"]
+    LG["🛑 BLOCKED gate (rose)"]
+    LC["⏳ Coordination step (purple)"]
+    LS["⏳ PENDING step (slate)"]
+  end
+
+  class g0,g1 gate
+  class g2 coord
+  class s0,s1,s2,s3,s4,s5 pending
+  class LG gate
+  class LC coord
+  class LS pending
+  </pre>
+  <textarea class="section-feedback" data-section="flow" placeholder="Feedback on sequencing — wrong order, missing dependency, bundle-into-one-commit hints..."></textarea>
+</section>
+
+<section id="knobs" data-feedback-section="knobs">
+  <h2>Knobs and contracts</h2>
+
+  <h3>CLI flag</h3>
+  <table class="knobs">
+    <thead><tr><th>Knob</th><th>Type</th><th>Default</th><th>Allowed values</th><th>Where used</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>--paperclip=&lt;mode&gt;</code></td>
+        <td>string</td>
+        <td><code>prefer</code></td>
+        <td><code>prefer</code> (shipped default), <code>only</code> (abort on external), <code>never</code> (force PDF path), <code>off</code> (paperclip unavailable; equivalent to <code>never</code> with startup warning)</td>
+        <td>Orchestrator <code>paper-trail.md</code> Phases 1 and 2; auth probe at Phase 0 may auto-downgrade to <code>off</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>New schema fields (verdict_schema.md 1.1 to 1.2 hard bump)</h3>
+  <table class="knobs">
+    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>source_mode</code></td>
+        <td>enum: <code>paperclip</code>, <code>pdf</code>, <code>pdf_ocr_fallback</code></td>
+        <td>yes</td>
+        <td>verdict envelope (top-level)</td>
+      </tr>
+      <tr>
+        <td><code>paperclip_handle</code></td>
+        <td>string (e.g., <code>PMC10131505</code>, <code>2407.11321</code>, <code>bio_&lt;uuid&gt;</code>)</td>
+        <td>iff <code>source_mode == "paperclip"</code></td>
+        <td>verdict envelope and per-reference metadata</td>
+      </tr>
+      <tr>
+        <td><code>coverage</code></td>
+        <td>enum: <code>paperclip</code>, <code>external</code>, <code>unresolved</code></td>
+        <td>yes (emitted by Phase 1)</td>
+        <td>verified-bib metadata; consumed by Phase 2 and Phase 3</td>
+      </tr>
+      <tr>
+        <td><code>attestation.hits[].paperclip_snippet</code></td>
+        <td>string</td>
+        <td>iff paperclip-mode</td>
+        <td>replaces <code>pdf_excerpt</code> for paperclip-mode entries</td>
+      </tr>
+      <tr>
+        <td><code>attestation.hits[].location</code></td>
+        <td>string</td>
+        <td>yes</td>
+        <td>paperclip: <code>/papers/&lt;doc_id&gt;/sections/&lt;name&gt;.lines#L&lt;n&gt;</code>; pdf: <code>pdfs/&lt;citekey&gt;.pdf#page=&lt;n&gt;</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>New validation rules in <code>validate_claims.py</code></h3>
+  <ul class="tight">
+    <li><code>SOURCE_MODE_MISSING</code> — verdict envelope lacks <code>source_mode</code> after schema 1.2 bump.</li>
+    <li><code>PAPERCLIP_HANDLE_MISMATCH</code> — <code>source_mode == "paperclip"</code> with no <code>paperclip_handle</code>, or vice versa.</li>
+    <li><em>Unaffected:</em> existing <code>CITEKEY_MARKER_MISMATCH</code> rule continues unchanged.</li>
+  </ul>
+
+  <textarea class="section-feedback" data-section="knobs" placeholder="Feedback on knobs — wrong defaults, missing enum value, contract holes..."></textarea>
+</section>
+
+<section id="steps">
+  <h2>Phase steps (expand for detail)</h2>
+  <p>Each phase is collapsible — closed by default. Inside: what changes, files touched, verify-gate, and a feedback field.</p>
+
+  <details data-feedback-section="phase-0">
+    <summary>Phase 0 — input PDF parse <span class="chip unchanged">unchanged</span></summary>
+    <p>Extract bibliography from the user's input PDF. <code>pdftotext</code> then heuristic ref parsing then CrossRef cross-check; emit <code>refs.bib</code> and <code>parse_report.md</code>. Paperclip is corpus-side; it does not help parse the user's manuscript.</p>
+    <p><em>Plan adds:</em> Phase-0 should also call <code>paperclip config</code> and check the <code>Auth: ✓</code> line. If unauthed, the run goes straight to <code>--paperclip=off</code> with a one-line warning (per Open Question 4).</p>
+    <textarea class="section-feedback" data-section="phase-0" placeholder="Feedback on Phase 0..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-1">
+    <summary>Phase 1 — <code>/verify-bib</code> paperclip-aware <span class="chip">core change</span></summary>
+    <p>For each reference, in order:</p>
+    <ol>
+      <li>Try paperclip exact-DOI lookup (PMC, bioRxiv, medRxiv). Hit → <code>coverage: paperclip</code>, store <code>paperclip_handle</code>, record metadata diffs.</li>
+      <li>Miss → paperclip title-search against arXiv. Filter by normalized-title overlap (≥0.6) and ±2-year sanity. Hit → <code>coverage: paperclip</code>.</li>
+      <li>Miss → paperclip <code>abstracts</code> source for identity resolution (catching wrong-paper citations). Hit → <code>coverage: external</code> (paperclip cannot ground but can verify).</li>
+      <li>Fall back to today's CrossRef → arXiv-API → Semantic Scholar chain. Mark <code>coverage: external</code> or <code>unresolved</code>.</li>
+    </ol>
+    <p class="files-touched"><strong>Files:</strong> <code>.claude/commands/verify-bib.md</code>, <code>.claude/commands/paper-trail.md</code> (around line 200).</p>
+    <p><strong>Verify gate:</strong> Phase-1 summary line on the Adamson fixture should read <code>verified: 56/56 (paperclip:~27, external:~29, unresolved:0)</code> (May 1 probe result, ±2 references).</p>
+    <textarea class="section-feedback" data-section="phase-1" placeholder="Feedback on Phase 1..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-2">
+    <summary>Phase 2 — <code>/fetch-paper</code> coverage-aware <span class="chip">core change</span></summary>
+    <p>Branch on <code>coverage</code>:</p>
+    <ul class="tight">
+      <li><code>paperclip</code> → skip download. The paper never hits disk. Pass through to Phase 3 with <code>paperclip_handle</code>.</li>
+      <li><code>external</code> → existing download path (paper-search MCP → PapersFlow → CrossRef OA → arXiv API). Save to <code>pdfs/&lt;citekey&gt;.pdf</code>. On paywall, flag for user triage as today.</li>
+      <li><code>unresolved</code> → skip; flag for user triage at end of run.</li>
+    </ul>
+    <p><strong>Pinned framing:</strong> paywalled fallback is <em>not</em> a regression — today's PDF-centric path already requires manual download for paywalled refs. Paperclip-first shrinks the slice, not the failure mode.</p>
+    <p class="files-touched"><strong>Files:</strong> <code>.claude/commands/fetch-paper.md</code>, <code>.claude/commands/paper-trail.md</code> (around line 230).</p>
+    <p><strong>Verify gate:</strong> on Adamson with <code>--paperclip=prefer</code>, ~27 refs skip download; ~29 hit existing fetch path.</p>
+    <textarea class="section-feedback" data-section="phase-2" placeholder="Feedback on Phase 2..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-2.5">
+    <summary>Phase 2.5 — Ingest (PDF-only) <span class="chip unchanged">unchanged shape</span></summary>
+    <p>Only runs over PDFs actually fetched (the <code>external</code> slice). GROBID and figure extraction unchanged. Cache ingest artifacts; skip on re-run.</p>
+    <p>If GROBID fails (image-based PDF, odd layout), fall back to <code>pdftotext</code> plus tesseract OCR and mark the entry <code>ingest_mode: ocr_fallback</code>. Phase 3 propagates this to the verdict envelope's <code>source_mode</code> as <code>pdf_ocr_fallback</code> (lower confidence weighting in the adjudicator's prompt).</p>
+    <textarea class="section-feedback" data-section="phase-2.5" placeholder="Feedback on Phase 2.5..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-3">
+    <summary>Phase 3 — <code>/ground-claim</code> mode-aware <span class="chip">core change</span></summary>
+    <p>Orchestrator dispatches Pass 1 (extractor) and Pass 2 (adjudicator) per <code>(claim, citekey)</code> pair. The new branch is in extractor selection:</p>
+    <ul class="tight">
+      <li><code>source_mode: paperclip</code> → dispatch with <code>extractor-dispatch-paperclip.md</code>. Subagent operates on <code>/papers/&lt;paperclip_handle&gt;/</code> via paperclip CLI primitives (grep, cat sections, ask-image on figures, optionally map across sibling handles).</li>
+      <li><code>source_mode: pdf</code> or <code>pdf_ocr_fallback</code> → dispatch with <code>extractor-dispatch-pdf.md</code> (current extractor-dispatch.md, renamed). Existing local-rg / pdfplumber workflow.</li>
+    </ul>
+    <p>Both extractors produce the same evidence-JSON shape. Pass-2 adjudicator is mode-blind: it reads the evidence JSON plus the rubric and emits a verdict, never knowing whether evidence came from paperclip or PDF.</p>
+    <p>Multi-cite handling (<code>co_cite_context.sibling_citekeys</code>) carries over unchanged from the orchestrator's flat <code>co_citekeys</code> slot; mode does not affect it.</p>
+    <p class="files-touched"><strong>Files:</strong> <code>.claude/commands/ground-claim.md</code> (Mode section), <code>.claude/commands/paper-trail.md</code> (around line 315 onward + line-396 dispatch payload JSON + slot placeholders), <code>.claude/prompts/extractor-dispatch-paperclip.md</code> (NEW), <code>.claude/prompts/extractor-dispatch-pdf.md</code> (RENAMED), <code>.claude/specs/verdict_schema.md</code> (1.2 bump).</p>
+    <p><strong>Verify gate:</strong> single claim (e.g., <code>C001</code>) run end-to-end in paperclip mode; evidence JSON validates against schema 1.2.</p>
+    <textarea class="section-feedback" data-section="phase-3" placeholder="Feedback on Phase 3..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-3.5">
+    <summary>Phase 3.5 — verifier mode-aware <span class="chip">minor</span></summary>
+    <p>Verifier picks one attestation line and re-checks it. If <code>source_mode: paperclip</code>, re-runs the same <code>paperclip grep</code> against the same handle. If <code>source_mode: pdf*</code>, re-runs existing local re-check. Exit shape is mode-agnostic.</p>
+    <p>Open Question 3: stay deterministic or add an LLM-based judgment layer? Default: deterministic in v1; LLM-based is a separate plan.</p>
+    <textarea class="section-feedback" data-section="phase-3.5" placeholder="Feedback on Phase 3.5..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-4">
+    <summary>Phase 4 — triage <span class="chip unchanged">unchanged</span></summary>
+    <p>Interactive AMBIGUOUS triage. Mode-blind.</p>
+    <textarea class="section-feedback" data-section="phase-4" placeholder="Feedback on Phase 4..."></textarea>
+  </details>
+
+  <details data-feedback-section="phase-5">
+    <summary>Phase 5 — render mode-aware HTML <span class="chip">minor</span></summary>
+    <p>Add <code>source_mode</code> badge per claim row in the HTML renderer. Color-key: paperclip = green, pdf = blue, pdf_ocr_fallback = yellow (lower confidence visual signal).</p>
+    <p class="files-touched"><strong>Files:</strong> <code>.claude/scripts/render_html_demo.py</code>, <code>templates/claims_ledger.md</code>.</p>
+    <textarea class="section-feedback" data-section="phase-5" placeholder="Feedback on Phase 5..."></textarea>
+  </details>
+</section>
+
+<section id="gotchas">
+  <h2>Gotchas + pinned design decisions</h2>
+
+  <details data-feedback-section="gotcha-mixed-path">
+    <summary>Mixed-path is permanent, not a temporary state</summary>
+    <p>Paperclip and PDF dispatch prompts both ship and stay. Paywalled MRM and IEEE TMI references will not deposit to arxiv; the <code>external</code> slice is not a deprecation target. Two extractor prompts, one shared exit schema, one shared adjudicator.</p>
+    <textarea class="section-feedback" data-section="gotcha-mixed-path" placeholder="..."></textarea>
+  </details>
+
+  <details data-feedback-section="gotcha-abstracts-helper">
+    <summary>The <code>abstracts</code> source is a Phase-1 helper, not a Phase-3 source</summary>
+    <p>The PubMed-abstracts corpus paperclip 0.3.0 ships is explicitly "no full text." It can help bib verification and catch wrong-paper citations. Phase 3 never reads from <code>abstracts</code> — a hit there marks <code>coverage: external</code>.</p>
+    <textarea class="section-feedback" data-section="gotcha-abstracts-helper" placeholder="..."></textarea>
+  </details>
+
+  <details data-feedback-section="gotcha-no-backcompat">
+    <summary>No back-compat for the 1.1 to 1.2 schema bump</summary>
+    <p>Per memory <code>feedback_rework_for_quality.md</code>. Old verdict files without <code>source_mode</code> will fail validation; users re-run paper-trail to regenerate. No migration shim.</p>
+    <textarea class="section-feedback" data-section="gotcha-no-backcompat" placeholder="..."></textarea>
+  </details>
+
+  <details data-feedback-section="gotcha-auth-nonfatal">
+    <summary>Authentication failure is non-fatal</summary>
+    <p>If <code>paperclip config</code> shows unauthenticated, the run proceeds in <code>--paperclip=off</code> with a one-line warning. Product remains useful without paperclip (parity with today's PDF-centric path).</p>
+    <textarea class="section-feedback" data-section="gotcha-auth-nonfatal" placeholder="..."></textarea>
+  </details>
+
+  <details data-feedback-section="gotcha-coordination">
+    <summary>Coordination with <code>feature/multi-cite-and-neighbor-claims</code></summary>
+    <p>Both branches touch <code>paper-trail.md</code> Phase 3 and the line-396 dispatch payload. Sequence: land Features 1+2 first (additive 1.0 → 1.1) → paperclip-first rebases onto stable per-ref + joint dispatch shape → bumps schema to 1.2. The rebase needs a careful three-way merge on the dispatch payload JSON.</p>
+    <textarea class="section-feedback" data-section="gotcha-coordination" placeholder="..."></textarea>
+  </details>
+
+  <details data-feedback-section="gotcha-dispatch-surfaces">
+    <summary>Dispatch payload JSON and slot placeholders are SEPARATE surfaces</summary>
+    <p>Easy miss: the orchestrator's per-claim dispatch payload (around <code>paper-trail.md</code> line 396) and the <code>{{slot}}</code> placeholders in the dispatch prompt are different files. Both need <code>source_mode</code> and <code>paperclip_handle</code> additions. Without the JSON-payload edit, the prompt slot has nothing to interpolate; without the slot edit, the prompt cannot consume the new fields.</p>
+    <textarea class="section-feedback" data-section="gotcha-dispatch-surfaces" placeholder="..."></textarea>
+  </details>
+
+  <details data-feedback-section="gotcha-ocr-rename">
+    <summary><code>pdf_ocr_fallback</code> aligns Phase-2.5 and Phase-3 vocabulary</summary>
+    <p>Today Phase 2.5 marks OCR-fallback entries with <code>ingest_mode: ocr_fallback</code>. Phase 3's <code>source_mode</code> enum uses <code>pdf_ocr_fallback</code> for the same condition — renaming under one vocabulary. The adjudicator's prompt weights this lower-confidence than plain <code>pdf</code>.</p>
+    <textarea class="section-feedback" data-section="gotcha-ocr-rename" placeholder="..."></textarea>
+  </details>
+</section>
+
+<section id="oqs">
+  <h2>Open questions</h2>
+  <p>Five questions the plan leaves open. Each has a default disposition recorded in the plan body — set status to <strong>Resolved</strong>, <strong>Deferred</strong>, or leave <strong>Pending</strong> as you review.</p>
+
+  <article class="oq-card" data-feedback-section="OQ1">
+    <h3>OQ1 — Repo concept (paperclip 0.3.0)</h3>
+    <p>The new <code>paperclip init &lt;topic&gt;</code> / <code>paperclip checkout &lt;topic&gt;</code> workflow scopes subsequent queries to a "repo" of papers. Should one paper-trail run = one paperclip repo (auto-init at Phase 1, all Phase-3 queries scoped to it)? Pros: cleaner provenance, amortized work. Cons: extra setup; unclear interaction with <code>--no-repo</code> escape.</p>
+    <p><em>Plan default:</em> Discover empirically — try both shapes in the smoke test.</p>
+    <div class="oq-status">Status:
+      <select data-oq="1">
+        <option>Pending</option>
+        <option>Resolved</option>
+        <option>Deferred</option>
+      </select>
+    </div>
+    <textarea class="section-feedback" data-section="OQ1" placeholder="Notes on OQ1..."></textarea>
+  </article>
+
+  <article class="oq-card" data-feedback-section="OQ2">
+    <h3>OQ2 — Sibling co-citation: <code>paperclip map</code> or per-citekey loop?</h3>
+    <p>Today the orchestrator dispatches one extractor-adjudicator chain per <code>(claim, citekey)</code> with multi-cite siblings in <code>co_cite_context.sibling_citekeys</code>. Paperclip's <code>map</code> primitive could fan out a single "does this paper support &lt;claim&gt;?" query across N siblings.</p>
+    <p><em>Plan default:</em> per-citekey loop in v1 (parity with PDF mode); revisit <code>map</code> after smoke test.</p>
+    <div class="oq-status">Status:
+      <select data-oq="2">
+        <option>Pending</option>
+        <option>Resolved</option>
+        <option>Deferred</option>
+      </select>
+    </div>
+    <textarea class="section-feedback" data-section="OQ2" placeholder="Notes on OQ2..."></textarea>
+  </article>
+
+  <article class="oq-card" data-feedback-section="OQ3">
+    <h3>OQ3 — Verifier: re-grep or LLM-based check?</h3>
+    <p>Today's verifier picks an attestation line and re-checks the source. Paperclip's <code>paperclip grep</code> re-run is deterministic (same query → same hits), so the verifier becomes near-trivial. Should it stay deterministic, or keep an LLM-based judgment layer for nuance?</p>
+    <p><em>Plan default:</em> deterministic re-grep in v1; LLM-based layer is a separate <code>verifier-dispatch.md</code> change orthogonal to this plan.</p>
+    <div class="oq-status">Status:
+      <select data-oq="3">
+        <option>Pending</option>
+        <option>Resolved</option>
+        <option>Deferred</option>
+      </select>
+    </div>
+    <textarea class="section-feedback" data-section="OQ3" placeholder="Notes on OQ3..."></textarea>
+  </article>
+
+  <article class="oq-card" data-feedback-section="OQ4">
+    <h3>OQ4 — Authentication startup probe UX</h3>
+    <p>Phase 0 should call <code>paperclip config</code> and check the <code>Auth: ✓</code> line. If unauthed, the run goes to <code>--paperclip=off</code>. Open: one-line warning at start of run, or prompt the user to run <code>paperclip login</code> interactively?</p>
+    <p><em>Plan default:</em> one-line warning plus auto-fall-back-to-PDF; user can re-run after login. Per memory <code>feedback_author_mode_always_ask_path.md</code>, no silent probes — the warning surfaces state.</p>
+    <div class="oq-status">Status:
+      <select data-oq="4">
+        <option>Pending</option>
+        <option>Resolved</option>
+        <option>Deferred</option>
+      </select>
+    </div>
+    <textarea class="section-feedback" data-section="OQ4" placeholder="Notes on OQ4..."></textarea>
+  </article>
+
+  <article class="oq-card" data-feedback-section="OQ5">
+    <h3>OQ5 — <code>abstracts</code> source in Phase 1: opt-in or default?</h3>
+    <p>Identity resolution via the <code>abstracts</code> corpus could surface wrong-paper citations the CrossRef chain misses. Cost is one extra paperclip query per Phase-1 reference (sub-second).</p>
+    <p><em>Plan default:</em> default-on.</p>
+    <div class="oq-status">Status:
+      <select data-oq="5">
+        <option>Pending</option>
+        <option>Resolved</option>
+        <option>Deferred</option>
+      </select>
+    </div>
+    <textarea class="section-feedback" data-section="OQ5" placeholder="Notes on OQ5..."></textarea>
+  </article>
+</section>
+
+<section id="oos">
+  <h2>Out of scope</h2>
+  <ul class="tight">
+    <li><strong>Parallel optimization.</strong> Per memory <code>feedback_serial_then_parallel.md</code>, harden the serial path first.</li>
+    <li><strong>Replacing the PDF-centric path entirely.</strong> The <code>external</code> slice is permanent.</li>
+    <li><strong>Citation hygiene checks</strong> beyond what the existing rubric does — this plan is a read-path change.</li>
+    <li><strong><code>paperclip map</code> as the dominant fan-out primitive</strong> — investigated in OQ2 but not committed in v1.</li>
+    <li><strong>Author-mode-only or reader-mode-only behavior differences</strong> — symmetrical here; author-mode specifics belong in <code>docs/plans/author-mode-parity.md</code>.</li>
+    <li><strong>Optimizing the paperclip skill prompt itself</strong> — refreshing from upstream is in scope; rewriting upstream's skill prose is not.</li>
+  </ul>
+</section>
+
+<section id="smoke">
+  <h2>Smoke-test plan</h2>
+  <ol class="tight">
+    <li>Run <code>paperclip install --dir .</code> to refresh <code>.claude/skills/paperclip/SKILL.md</code>.</li>
+    <li>Implement Phase 1 paperclip-aware verify-bib first. Run on Adamson <code>refs.verified.bib</code>. Expected: <code>verified: 56/56 (paperclip:~27, external:~29, unresolved:0)</code>.</li>
+    <li>Implement Phase 2 coverage-aware fetch-paper. Run on the same fixture with <code>--paperclip=prefer</code>. Expected: ~27 refs skip download; ~29 hit existing PDF-fetch path.</li>
+    <li>Implement Phase 3 mode-aware dispatch. Run on a single claim (e.g., <code>C001</code>) in paperclip mode; evidence JSON validates against schema 1.2.</li>
+    <li>Run end-to-end on the full Adamson fixture. Diff per-claim verdicts vs M1 baseline at <code>examples/paper-trail-adamson-2025/data/claims/</code>. Verdicts must agree on any reference where M1 produced a non-PENDING verdict.</li>
+    <li>Run end-to-end on <code>examples/DFD_authormode/</code> to confirm author-mode parity.</li>
+  </ol>
+  <p><strong>Success criteria:</strong></p>
+  <ul class="tight">
+    <li>Phase 1 hit rate matches May 1 probe within ±2 references.</li>
+    <li>No regression on per-claim verdicts vs M1 baseline.</li>
+    <li>Average per-claim wall-clock time on paperclip-mode references is materially lower than PDF-mode (no fetch, no GROBID).</li>
+    <li>Paywalled-reference handling at parity with today on the <code>external</code> slice.</li>
+  </ul>
+</section>
+
+<section id="overall" data-feedback-section="Overall">
+  <h2>Overall feedback</h2>
+  <p>Anything that cuts across sections — naming, scope, sequencing, missing risk, second-thought.</p>
+  <textarea class="global-feedback" data-section="Overall" placeholder="Overall comments on the plan..."></textarea>
+</section>
+
+<footer class="sticky">
+  <span class="pill" id="pending-count"></span>
+  <button id="copy-feedback-btn">Copy all feedback as Claude prompt</button>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  (function () {
+    const darkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (window.mermaid) {
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: darkMode ? 'dark' : 'default',
+        securityLevel: 'loose',
+        flowchart: { useMaxWidth: true, htmlLabels: true }
+      });
+    }
+
+    const PLAN_STEM = 'feature-paperclip-first-architecture';
+    const PLAN_SHA = '9eb4e5c98cbdde565024e1c3aca3cdf5dcc35211297e2fd1f1fa68da444316d8';
+    const STORAGE_PREFIX = 'pt-feedback:' + PLAN_STEM + ':';
+    const SHA_KEY = STORAGE_PREFIX + '__plan_sha';
+
+    // Clear stored feedback if plan SHA changed (HTML regenerated; stale feedback)
+    try {
+      const storedSha = localStorage.getItem(SHA_KEY);
+      if (storedSha && storedSha !== PLAN_SHA) {
+        Object.keys(localStorage)
+          .filter(function (k) { return k.indexOf(STORAGE_PREFIX) === 0; })
+          .forEach(function (k) { localStorage.removeItem(k); });
+      }
+      localStorage.setItem(SHA_KEY, PLAN_SHA);
+    } catch (e) { /* private mode, etc. */ }
+
+    function restoreField(el, key) {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored !== null) el.value = stored;
+      } catch (e) {}
+    }
+    function persistField(el, key) {
+      try { localStorage.setItem(key, el.value); } catch (e) {}
+    }
+
+    // Restore + persist textareas
+    document.querySelectorAll('textarea[data-section]').forEach(function (ta) {
+      const key = STORAGE_PREFIX + 'ta:' + ta.dataset.section;
+      restoreField(ta, key);
+      ta.addEventListener('input', function () {
+        persistField(ta, key);
+        updatePendingCount();
+      });
+    });
+
+    // Restore + persist OQ selects
+    document.querySelectorAll('select[data-oq]').forEach(function (sel) {
+      const key = STORAGE_PREFIX + 'oq:' + sel.dataset.oq;
+      restoreField(sel, key);
+      sel.addEventListener('change', function () {
+        persistField(sel, key);
+        updatePendingCount();
+      });
+    });
+
+    function updatePendingCount() {
+      let count = 0;
+      document.querySelectorAll('textarea[data-section]').forEach(function (ta) {
+        if (ta.value.trim()) count++;
+      });
+      document.querySelectorAll('select[data-oq]').forEach(function (sel) {
+        if (sel.value && sel.value !== 'Pending') count++;
+      });
+      const btn = document.getElementById('copy-feedback-btn');
+      const pill = document.getElementById('pending-count');
+      if (count > 0) {
+        btn.textContent = 'Copy feedback (' + count + ' pending)';
+        pill.textContent = count + ' field' + (count === 1 ? '' : 's') + ' with input';
+      } else {
+        btn.textContent = 'Copy all feedback as Claude prompt';
+        pill.textContent = '';
+      }
+    }
+
+    function buildFeedbackMarkdown() {
+      const lines = ['# Feedback on ' + PLAN_STEM, ''];
+      const sections = document.querySelectorAll('[data-feedback-section]');
+      sections.forEach(function (section) {
+        const id = section.dataset.feedbackSection;
+        const ta = section.querySelector('textarea[data-section]');
+        const sel = section.querySelector('select[data-oq]');
+        const text = ta ? ta.value.trim() : '';
+        const status = sel ? sel.value : null;
+        const hasStatus = sel && status !== 'Pending';
+        if (!text && !hasStatus) return;
+        lines.push('## ' + id);
+        if (hasStatus) lines.push('Status: ' + status);
+        if (text) lines.push(text);
+        lines.push('');
+      });
+      // Also pick up the global Overall textarea if not already wrapped
+      // (it is wrapped in section#overall with data-feedback-section="Overall")
+      return lines.join('\n');
+    }
+
+    document.getElementById('copy-feedback-btn').addEventListener('click', function () {
+      const md = buildFeedbackMarkdown();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(md).then(function () {
+          const btn = document.getElementById('copy-feedback-btn');
+          const orig = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(updatePendingCount, 1400);
+        });
+      } else {
+        // Fallback: select-and-copy via a temp textarea
+        const tmp = document.createElement('textarea');
+        tmp.value = md;
+        document.body.appendChild(tmp);
+        tmp.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(tmp);
+      }
+    });
+
+    updatePendingCount();
+  })();
+</script>
+</body>
+</html>
