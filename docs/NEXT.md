@@ -2,7 +2,7 @@
 
 Pointer-style index of plan docs in `docs/plans/` that are scoped but not yet implemented. Each item is 1-3 lines + a link to the plan doc for substance.
 
-**Last updated:** 2026-05-01
+**Last updated:** 2026-05-18
 
 ---
 
@@ -10,7 +10,7 @@ Pointer-style index of plan docs in `docs/plans/` that are scoped but not yet im
 
 Plans coordinated by sequence rather than scope (the earlier ones reshuffle paths or surfaces that the later ones reference).
 
-1. **[Repo organization](plans/repo-organization.md)** — top-level `src/` mirroring `.claude/` via subdirectory symlinks; new `src/specs/control_flow.md` callgraph spec; light brevity audit. Path-shuffles all the other plan docs' references, so goes first.
+1. **[Repo organization](plans/repo-organization.md)** ([visual companion](plans/repo-organization.html)) — top-level `src/` mirroring `.claude/` via subdirectory symlinks; new `src/specs/control_flow.md` callgraph spec; light brevity audit. Path-shuffles all the other plan docs' references, so goes first. Codex review applied 2026-05-18 — three RDs pinned (vendor-copy `src/` alongside `.claude/`, migrate shipped refs to `src/`, mirror directory-shaped skills like `paperclip/SKILL.md`).
 2. **[Run-isolation framework](plans/run-isolation-framework.md)** — `dev/isolation/` Docker + GROBID sidecar + `report.py`; regression-investigation report (not pass/fail test). Uses post-repo-org `src/` paths cleanly.
 3. **[Paperclip-first architecture](plans/feature-paperclip-first-architecture.md)** — paperclip-mode read-path with PDF fallback; schema 1.1 → 1.2 hard bump adds `source_mode` enum and `paperclip_handle`. In flight on `feature/paperclip-primary-workflow`; rebases against post-repo-org `main`.
 4. **[Multi-cite joint verdict (Feature 1)](plans/feature-multi-cite-joint-verdict.md)** + **[Neighbor-claim attribution (Feature 2)](plans/feature-neighbor-claim-attribution.md)** — share `feature/multi-cite-and-neighbor-claims` branch (both touch the orchestrator and adjudicator). Land at schema 1.1; coordinate with paperclip-first's 1.2 bump.
@@ -22,13 +22,15 @@ Plans coordinated by sequence rather than scope (the earlier ones reshuffle path
 - **Queued** — plan committed (typically to `main` or a feature branch), no implementation work started.
 - **Implemented** — promoted to a release tag; remove from this doc and note in commit message.
 
-| Plan | Status | Branch |
-|---|---|---|
-| repo-organization | Queued | none yet |
-| run-isolation-framework | Queued | none yet |
-| feature-paperclip-first-architecture | In flight (plan-only) | `feature/paperclip-primary-workflow` |
-| feature-multi-cite-joint-verdict + feature-neighbor-claim-attribution | In flight (plan-only) | `feature/multi-cite-and-neighbor-claims` |
-| feature-issue-command | Queued | none yet |
+| Plan | Status | Reviewed | Branch |
+|---|---|---|---|
+| repo-organization | Queued (review-applied 2026-05-18) | No | plan-doc commits ride on `feature/paperclip-primary-workflow` |
+| run-isolation-framework | Queued | No | none yet |
+| feature-paperclip-first-architecture | In flight (plan-only) | No | `feature/paperclip-primary-workflow` |
+| feature-multi-cite-joint-verdict + feature-neighbor-claim-attribution | In flight (plan-only) | No | `feature/multi-cite-and-neighbor-claims` |
+| feature-issue-command | Queued | No | none yet |
+
+**Reviewed column.** `Yes` = user has read the current plan content end-to-end (typically via `/read-plan` completion). `Stale` = was `Yes` before a substantive edit. `No` = never reviewed, or never recorded as reviewed. Only `/read-plan` promotes a row to `Yes`.
 
 ## Backlog (deferred, not on the immediate sequence)
 
