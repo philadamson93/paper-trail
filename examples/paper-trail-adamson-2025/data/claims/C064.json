@@ -6,7 +6,7 @@
   "handle": "pdfs/pathak2016/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/pathak2016.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/pathak2016.pdf"
   ],
   "claim_text": "The in-domain DFD, SSFD, utilizes a self-supervised model trained on the fastMRI knee dataset described in 2.1 with a self-supervised in-painting task^48 following optimal parameters from a prior transfer learning study for knee cartilage segmentation.^49",
   "manuscript_section": "Methods (SSFD)",

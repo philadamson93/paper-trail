@@ -171,7 +171,7 @@ Do **not** touch:
 
 No unit-test suite (per `docs/claude_ops.md`). Verification is end-to-end against a public-ish test paper:
 
-**Test PDF**: `/Users/pmayankees/Documents/Stanford/RSL/Chaudhari_Lab/MRM/Magnetic Resonance in Med - 2025 - Adamson - Using deep feature distances for evaluating the perceptual quality of MR image.pdf` — one of the user's own 2025 MRM papers, so ground-truth reference metadata and claim accuracy are knowable, and parser / verifier output can be checked against the real bibliography and known source papers.
+**Test PDF**: `/Users/philadamson/Documents/Stanford/RSL/Chaudhari_Lab/MRM/Magnetic Resonance in Med - 2025 - Adamson - Using deep feature distances for evaluating the perceptual quality of MR image.pdf` — one of the user's own 2025 MRM papers, so ground-truth reference metadata and claim accuracy are knowable, and parser / verifier output can be checked against the real bibliography and known source papers.
 
 ### After Round 1
 

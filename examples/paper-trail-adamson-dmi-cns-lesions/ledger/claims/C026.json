@@ -6,7 +6,7 @@
   "handle": "pdfs/fan2020/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/fan2020.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/fan2020.pdf"
   ],
   "claim_text": "MRI has been used to measure cerebral blood flow (CBF) but is not yet validated for cerebral metabolic rate of oxygen (CMRO2), a measure of OXPHOS23.",
   "manuscript_section": "1.2 Alternative measures of glucose metabolism",

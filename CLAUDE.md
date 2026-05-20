@@ -62,7 +62,7 @@ Short single-line thematic commit messages. No AI attribution trailers. Per memo
 
 ## Where the user's global memory lives
 
-`/Users/pmayankees/.claude/projects/-Users-pmayankees-Documents-Misc-Projects-paper-trail/memory/`. Indexed by `MEMORY.md`. Out-of-repo; will not be seen by subagents. Do not rely on memory content to make a prompt file "work" — prompts must be self-contained.
+`/Users/philadamson/.claude/projects/-Users-philadamson-Documents-Misc-Projects-paper-trail/memory/`. Indexed by `MEMORY.md`. Out-of-repo; will not be seen by subagents. Do not rely on memory content to make a prompt file "work" — prompts must be self-contained.
 
 ## Reading path for a fresh agent picking up this work
 

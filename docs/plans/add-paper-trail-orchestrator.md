@@ -108,7 +108,7 @@ Three parallel batches (default batch size 10; override via `--batch-size N` or 
 
 No unit-test suite (per `docs/claude_ops.md`). Verification is end-to-end, against this test input:
 
-**Test PDF:** `/Users/pmayankees/Documents/Stanford/RSL/Spielman_Lab/Papers/DMI/Deuterium_Metabolic_Imaging__DMI__for_3D_Mapping_of_Glucose_Metabolism_in_Humans_with_Central_Nervous_System_Lesions_at_3T.pdf.pdf` — one of the user's own published papers (MRM 2023, Adamson et al.), so ground-truth reference metadata is knowable and parser output can be checked against the real bibliography.
+**Test PDF:** `/Users/philadamson/Documents/Stanford/RSL/Spielman_Lab/Papers/DMI/Deuterium_Metabolic_Imaging__DMI__for_3D_Mapping_of_Glucose_Metabolism_in_Humans_with_Central_Nervous_System_Lesions_at_3T.pdf.pdf` — one of the user's own published papers (MRM 2023, Adamson et al.), so ground-truth reference metadata is knowable and parser output can be checked against the real bibliography.
 
 1. **Smoke run** — `/paper-trail` against the DMI paper. Expect:
    - `<output-dir>/refs.bib` with one entry per reference; DOI present where source has one.

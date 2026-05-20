@@ -6,8 +6,8 @@
   "handle": "pdfs/taglang2022/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/taglang2022.pdf#page=3",
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/taglang2022.pdf#page=8"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/taglang2022.pdf#page=3",
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/taglang2022.pdf#page=8"
   ],
   "claim_text": "In preclinical animal models, Kreis, et al, showed that dynamic DMI acquisitions at 9.4T could be used to acquire quantitative and spatially resolved measurements of glycolytic flux in tumors15, which can be used to assess treatment response46.",
   "manuscript_section": "Introduction \u00a71.4",

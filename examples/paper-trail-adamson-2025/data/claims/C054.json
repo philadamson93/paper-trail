@@ -6,7 +6,7 @@
   "handle": "pdfs/zhouwang2004/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/zhouwang2004.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/zhouwang2004.pdf"
   ],
   "claim_text": "SSIM is a combined measure of the luminance, contrast, and structure of the image given by^45 SSIM(x, x\u0302) = l(x, x\u0302) \u00b7 c(x, x\u0302) \u00b7 s(x, x\u0302), where luminance l assesses the mean pixel values across the images, contrast c measures the similarity of the standard deviations of the pixel values across the images, and structure s compares the structure.",
   "manuscript_section": "Methods (SSIM definition)",

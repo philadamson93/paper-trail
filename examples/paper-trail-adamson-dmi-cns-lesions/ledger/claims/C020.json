@@ -6,7 +6,7 @@
   "handle": "pdfs/vlassenko2015/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/vlassenko2015.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/vlassenko2015.pdf"
   ],
   "claim_text": "However clinical impact is severely limited by the short 2-min 15O half-life17,18,19.",
   "manuscript_section": "1.2 Alternative measures of glucose metabolism",

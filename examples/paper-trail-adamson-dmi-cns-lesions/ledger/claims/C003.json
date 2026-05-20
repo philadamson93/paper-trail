@@ -6,7 +6,7 @@
   "handle": "pdfs/chesnelong2014/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/chesnelong2014.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/chesnelong2014.pdf"
   ],
   "claim_text": "Further, the Warburg effect, as part of tumor metabolic reprogramming in which GLY is favored over OXPHOS, is a hallmark of cancer and is particularly pronounced in glioma and other brain tumors2,3,4 .",
   "manuscript_section": "1.1 Metabolic Reprogramming",

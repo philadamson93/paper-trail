@@ -6,8 +6,8 @@
   "handle": "pdfs/beare2018/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/beare2018.pdf#page=10",
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/beare2018.pdf#page=19"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/beare2018.pdf#page=10",
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/beare2018.pdf#page=19"
   ],
   "claim_text": "The additional proton scans acquired with a conventional multi-channel head coil were aligned to the body-coil proton scan (acquired with the 2 H coil in place), and therefore the DMI dataset, via 3D rigid registration using the SimpleITK toolkit50 .",
   "manuscript_section": "Methods \u00a72.4",

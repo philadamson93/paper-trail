@@ -6,7 +6,7 @@
   "handle": "pdfs/defeyter2018/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
   ],
   "claim_text": "T1 of 297 ms for 2 H-Lac and 320 ms for HDO at 11.7 T)37.",
   "manuscript_section": "4 Discussion (SNR optimization / relaxation parameters paragraph)",

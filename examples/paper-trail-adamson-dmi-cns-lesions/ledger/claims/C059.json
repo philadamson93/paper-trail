@@ -6,7 +6,7 @@
   "handle": "pdfs/defeyter2018/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
   ],
   "claim_text": "The additional proton scans acquired with a conventional multi-channel head coil were aligned to the body-coil proton scan (acquired with the 2 H coil in place), and therefore the DMI dataset, via 3D rigid registration using the SimpleITK toolkit50. 2.5 Phantom Design For the purposes of SNR comparison experiments, we constructed a phantom with relaxation properties comparable to those reported in vivo in human brain tissue37.",
   "manuscript_section": "2.4 / 2.5 Methods (Registration; Phantom Design)",

@@ -6,7 +6,7 @@
   "handle": "pdfs/spence2004/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/spence2004.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/spence2004.pdf"
   ],
   "claim_text": "However, its use in studying brain tumors is somewhat limited by high gray matter FDG uptake14.",
   "manuscript_section": "1.2 Alternative measures of glucose metabolism",
