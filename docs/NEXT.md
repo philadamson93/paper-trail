@@ -2,7 +2,7 @@
 
 Pointer-style index of plan docs in `docs/plans/` that are scoped but not yet implemented. Each item is 1-3 lines + a link to the plan doc for substance.
 
-**Last updated:** 2026-05-18
+**Last updated:** 2026-05-21
 
 ---
 
@@ -10,7 +10,7 @@ Pointer-style index of plan docs in `docs/plans/` that are scoped but not yet im
 
 Plans coordinated by sequence rather than scope (the earlier ones reshuffle paths or surfaces that the later ones reference).
 
-1. **[Repo organization](plans/repo-organization.md)** ([visual companion](plans/repo-organization.html)) — top-level `src/` mirroring `.claude/` via subdirectory symlinks; new `src/specs/control_flow.md` callgraph spec; light brevity audit. Path-shuffles all the other plan docs' references, so goes first. Codex review applied 2026-05-18 — three RDs pinned (vendor-copy `src/` alongside `.claude/`, migrate shipped refs to `src/`, mirror directory-shaped skills like `paperclip/SKILL.md`).
+1. **[Repo organization](plans/repo-organization.md)** ([visual companion](plans/repo-organization.html)) — top-level `src/` mirroring `.claude/` via subdirectory symlinks; new `src/specs/control_flow.md` callgraph spec; light brevity audit. Path-shuffles all the other plan docs' references, so goes first. **Fully review-revised 2026-05-20/21**: three reviewer passes (Codex 5-18, fresh-Claude 5-20, Codex second-pass 5-20) + a user-driven architectural pivot — **RD-9 supersedes RD-1: author mode now takes a manuscript path argument, no cross-repo vendoring**. All open questions resolved (OQ-A ship paperclip; OQ-B `src/skills/*` ignore with carveouts; OQ-C/C' → RD-9; OQ-D `{{spec_root}}` slot). Review artifacts in [plans/reviews/](plans/reviews/). Ready to implement pending a `/read-plan` pass to record review.
 2. **[Run-isolation framework](plans/run-isolation-framework.md)** — `dev/isolation/` Docker + GROBID sidecar + `report.py`; regression-investigation report (not pass/fail test). Uses post-repo-org `src/` paths cleanly.
 3. **[Paperclip-first architecture](plans/feature-paperclip-first-architecture.md)** — paperclip-mode read-path with PDF fallback; schema 1.1 → 1.2 hard bump adds `source_mode` enum and `paperclip_handle`. In flight on `feature/paperclip-primary-workflow`; rebases against post-repo-org `main`.
 4. **[Multi-cite joint verdict (Feature 1)](plans/feature-multi-cite-joint-verdict.md)** + **[Neighbor-claim attribution (Feature 2)](plans/feature-neighbor-claim-attribution.md)** — share `feature/multi-cite-and-neighbor-claims` branch (both touch the orchestrator and adjudicator). Land at schema 1.1; coordinate with paperclip-first's 1.2 bump.
@@ -24,7 +24,7 @@ Plans coordinated by sequence rather than scope (the earlier ones reshuffle path
 
 | Plan | Status | Reviewed | Branch |
 |---|---|---|---|
-| repo-organization | Queued (review-applied 2026-05-18) | No | plan-doc commits ride on `feature/paperclip-primary-workflow` |
+| repo-organization | Queued (3 reviews + RD-9 pivot applied 2026-05-20/21) | No (ready for `/read-plan`) | plan-doc commits ride on `feature/paperclip-primary-workflow` |
 | run-isolation-framework | Queued | No | none yet |
 | feature-paperclip-first-architecture | In flight (plan-only) | No | `feature/paperclip-primary-workflow` |
 | feature-multi-cite-joint-verdict + feature-neighbor-claim-attribution | In flight (plan-only) | No | `feature/multi-cite-and-neighbor-claims` |
