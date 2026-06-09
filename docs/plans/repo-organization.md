@@ -18,6 +18,8 @@ The plan succeeds if a fresh agent can (a) browse `src/` on GitHub and see the s
 
 ## Provenance and status
 
+**Path-literal note.** This plan documents the `.claude/` → `src/` migration itself, so its `.claude/` and `templates/` literals intentionally describe the pre-move layout and the publication-target symlinks; they are exempt from the RD-2 path-policy sweep (annotated here once rather than per-line).
+
 **Status.** Plan-only. No code yet. Companion to `docs/plans/feature-paperclip-first-architecture.md` (which assumes the present `.claude/` layout) and `docs/plans/run-isolation-framework.md` (the next plan doc, which will lean on this one's ship-surface map).
 
 **Provenance.** Scoped 2026-05-01 immediately after the paperclip-first commit. Decision-log entry is the same day's `docs/journal/2026-05-01-paperclip-coverage-revisit.md` end section (to be appended). Codex review of this plan landed 2026-05-18 at `docs/plans/reviews/repo-organization-feedback.md` (Verdict: Revise); findings applied in the corresponding revision pass — see "Resolved decisions" below for the three design forks the review surfaced (RD-1, RD-2, RD-3). On 2026-05-20 the five then-open questions were resolved by the user (RD-4..RD-8), and a fresh-Claude-Code second-reviewer pass at `docs/plans/reviews/repo-organization-feedback-claude.md` (Verdict: Revise) surfaced load-bearing gaps in the migration-manifest regex, the gitignored→tracked transition for `paperclip/SKILL.md`, the vendoring symlink contract, and a few smoke-test holes; agreed findings applied inline, four user-decision items preserved as OQ-A..OQ-D. A Codex second-pass review the same day at `docs/plans/reviews/repo-organization-feedback-2026-05-20.md` (Verdict: Revise) caught that the post-fresh-Claude regex fix was *still wrong* — `git grep -E` is POSIX ERE and `\b` is treated as a literal `b`, not a word boundary; the manifest count was 12 instead of the correct 45 and missed every sentinel doc. The regex now uses `(^|[^[:alnum:]_])templates/`, and the manifest gate now requires sentinel-file coverage in addition to a hit-count threshold. Later the same day the user resolved OQ-A/OQ-B/OQ-D, and the resolution of OQ-C escalated into an architectural pivot (**RD-9 supersedes RD-1**): author mode is redesigned to take a manuscript path argument rather than require vendoring paper-trail into the writing repo. RD-1, the six-step vendoring smoke test, the `readlink` relative-target invariant, and the `core.symlinks` portability concern are all retired by RD-9; the "Author-mode invocation" section captures the new contract.
@@ -360,6 +362,77 @@ All four user-decision items surfaced by the 2026-05-20 fresh-Claude review pass
 - **OQ-D (resolved 2026-05-20): orchestrator passes the spec path in the slot fill** — option (3). The orchestrator knows its own canonical path (paper-trail repo root via `git rev-parse --show-toplevel` at dispatch time) and passes a `{{spec_root}}` (or `{{repo_root}}`) slot to dispatch prompts that need to reference specs. Dispatch prompts construct paths as `{{spec_root}}/src/specs/<file>` and resolve correctly regardless of the subagent's cwd. Relative paths embedded as literals in dispatch prompts (options 1 and 2) don't work because the subagent's cwd varies. The path-policy sweep gets a carveout: `{{spec_root}}/src/...` occurrences in dispatch prompts are valid; bare `src/specs/<file>` literals (no slot prefix) are stale. **Cross-check against RD-9:** with RD-9 in place, the subagent's cwd is whatever Claude Code was launched from (the user's choice); the `{{spec_root}}` slot makes that irrelevant for spec resolution.
 
 ---
+
+## Implementation results (2026-06-09)
+
+Implemented on branch `repo-organization` (off `feature/paperclip-primary-workflow`). Mechanical move landed as its own commit so `git mv` rename detection stays clean of the content edits.
+
+### Manifest sanity check (gate) — PASS
+
+`git grep -nE '\.claude/|(^|[^[:alnum:]_])templates/' -- ':!docs/journal/*' ':!docs/plans/reviews/*'` on the pre-move tree returned **306 hits, 48 `templates/` hits** (threshold ≥ 30), with all five sentinel files covered (`README.md` 1, `CLAUDE.md` 16, `docs/claude_ops.md` 5, `.claude/commands/paper-trail.md` 13, `.claude/commands/init-writing-tools.md` 2).
+
+### Brevity audit deliverable (RD-5)
+
+Per-prompt line counts (before → after; "before" includes the +~20 lines the RD-9 arg contract and `{{spec_root}}` payload additions added to `paper-trail.md` during this same implementation):
+
+| Prompt | Before | After | Change |
+|---|---|---|---|
+| `paper-trail.md` | 698 (+~20 RD-9/OQ-D) | 674 | trace-log reference block → `src/specs/trace_log.md`; "why two passes" → Provenance footer |
+| `ground-claim.md` | 172 | 172 | unchanged this round (content-driven pass found no spec-duplicating blocks; revisit after a real-workflow run per RD-5) |
+| `paper-trail-init.md` | 146 | 146 | unchanged |
+| `verify-bib.md` | 121 | 121 | unchanged |
+| `init-writing-tools.md` | 87 | 87 | < 100 lines — skipped per RD-5 |
+| `fetch-paper.md` | 70 | 70 | < 100 lines — skipped |
+| `extractor-dispatch.md` | 87 | 87 | < 100 lines — skipped |
+| `adjudicator-dispatch.md` | 102 | 102 | dispatch prompt — slot lists out of scope per audit rules |
+| `verifier-dispatch.md` | 90 | 90 | < 100 lines — skipped |
+
+Subagent-reader side-check for each moved block:
+
+| Moved block | Source | Destination | Who reads the destination | Net |
+|---|---|---|---|---|
+| Trace-log record schema + event list + jq recipes (~40 lines) | `paper-trail.md` § Trace log | `src/specs/trace_log.md` (new spec) | orchestrator only — no dispatch prompt references it, so no subagent context cost | net-positive (orchestrator loads on demand; pointer + event-name summary stays inline) |
+| "Why two passes" rationale (5 lines) | `paper-trail.md` § Step 3.2 | `paper-trail.md` § Provenance (bottom) | human reviewers | net-positive (orientation content out of the dispatch-time read path) |
+
+### Pre-drafted RD-4 fallback patch (NOT applied — symlinks passed structural checks)
+
+Prepared before smoke tests per RD-4, kept here in case a future behavioral smoke fails for a symlink-related reason:
+
+1. `docs/claude_ops.md` — replace the "There is no build step, no runtime, and no test suite." sentence in the Environment section with: "One build step: `make sync` keeps `.claude/<dir>/` in sync with `src/<dir>/` between sessions. No runtime, no test suite."
+2. New `Makefile`:
+
+   ```make
+   DIRS = commands prompts specs skills scripts
+
+   sync:
+   	for d in $(DIRS); do rm -rf .claude/$$d && rsync -a --delete src/$$d/ .claude/$$d/; done
+
+   check-sync:
+   	@for d in $(DIRS); do diff -r src/$$d/ .claude/$$d/ || exit 1; done
+   ```
+
+3. Gate `make check-sync` in a pre-commit hook (and CI when it exists) so session-start divergence fails loudly.
+
+### Structural smoke results
+
+All run 2026-06-09 on the `repo-organization` branch:
+
+- **Path-policy sweep (`.claude/`)** — PASS. Residual hits are all annotated/intentional: `.gitignore` comments, the out-of-repo user-global memory path in `CLAUDE.md`, `src/skills/plan-check.md`'s pre-vs-post-repo-org guidance, and symlink-explaining prose. `docs/plans/repo-organization.md` is exempt via its single top-of-file annotation (documents the migration itself); generated `docs/plans/*.html` companions are excluded (regenerate via `/explain-plan`, never hand-edit).
+- **Path-policy sweep (`templates/`)** — PASS, zero hits.
+- **Git history continuity** — PASS. `git log --follow src/commands/paper-trail.md` reaches the original "Add /paper-trail orchestrator command" commit; `--follow src/skills/plan-check.md` reaches its `plan-doc-readiness-check` origin. (Checked a tracked skill, not `paperclip/SKILL.md`, whose history legitimately starts at the move commit.)
+- **`settings.local.json` stays put** — PASS in the implementation worktree (`src/settings.local.json` absent); the `test -f .claude/settings.local.json` half holds in the user's main checkout where the machine-local file lives.
+- **Read-through-symlink** — PASS. `.claude/commands` → `../src/commands` (relative target); file reads resolve.
+- **iCloud gotcha (new, worth knowing):** the repo lives under iCloud-synced `Documents/`; iCloud renamed the five freshly-created symlinks to `<name> 2` mid-creation (sync-conflict suffix) on the first attempt. Fixed by `mv`-ing back; if symlinks ever show ` 2` suffixes after a checkout, that's iCloud, not git.
+- **Fresh-clone symlink resolution** — PASS. `git clone --branch repo-organization` into a clean directory: `readlink .claude/commands` → `../src/commands`, file reads resolve through the symlink, and `git ls-files src/skills/` shows all three shipped skills including `paperclip/SKILL.md`.
+
+### Deferred to user (behavioral smokes)
+
+Discovery + execution smokes need real interactive Claude Code sessions against the main checkout after this branch merges:
+
+1. `/paper-trail examples/paper-trail-adamson-2025/<input>.pdf` end-to-end from a clean tree (move pre-existing output aside first; diff after).
+2. Per-command discovery coverage: `/ground-claim`, `/init-writing-tools`, `/paper-trail-init`, `/fetch-paper` (discover only), `/verify-bib`.
+3. Skill discovery both shapes: a single-file skill (`plan-check`) AND the directory-shaped `paperclip`.
+4. Author-mode two-cwd smoke (RD-9): `/paper-trail --author <abs>/examples/DFD_authormode/main.tex` once from inside paper-trail's dir, once from `/tmp` via `claude --add-dir`; outputs must be identical.
 
 ## Out of scope
 
