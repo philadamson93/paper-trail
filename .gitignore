@@ -15,17 +15,24 @@
 # from branch switches; this rule keeps them out of `git status` noise.
 /experiments/
 
-# Machine-local Claude Code state (per-user permissions, auto-installed skills).
-# Workspace specs/scripts/prompts/commands under .claude/ are still tracked.
-# Project-owned skills (committed intentionally) are carved out with `!` below.
-# NOTE: `.claude/skills/*` not `.claude/skills/` — the former lets `!` exceptions
-# re-include specific files; the latter ignores the directory entirely and `!`
-# cannot re-include anything inside it (per git ignore rules).
+# Machine-local Claude Code state (per-user permissions, background-session
+# worktrees). Content-bearing .claude/<dir>/ entries are tracked symlinks into
+# src/ (the canonical ship surface); settings.local.json stays canonical at
+# .claude/ root and never ships.
 .claude/settings.local.json
-.claude/skills/*
-!.claude/skills/doc-split-check.md
-!.claude/skills/plan-check.md
-.claude/scripts/__pycache__/
+.claude/worktrees/
+
+# Skills (shipped surface) — explicit carveout list; everything else under
+# src/skills/ stays local-only so auto-installed or local-experiment skills
+# don't accidentally ship.
+# NOTE: `src/skills/*` not `src/skills/` — the former lets `!` exceptions
+# re-include specific entries; the latter ignores the directory entirely and
+# `!` cannot re-include anything inside it (per git ignore rules).
+src/skills/*
+!src/skills/doc-split-check.md
+!src/skills/plan-check.md
+!src/skills/paperclip/
+src/scripts/__pycache__/
 *.pyc
 
 # Secrets — env files that may hold API keys, OAuth tokens, GCP credentials, etc.
