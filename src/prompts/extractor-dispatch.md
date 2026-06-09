@@ -55,7 +55,7 @@ Execute every step. Do not skip. Rigor beats compute — a false `no evidence` i
 
 ### Output contract
 
-Write a single JSON file to `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json` conforming to the schema in `.claude/specs/verdict_schema.md` with the following differences (because you are an **extractor, not an adjudicator**):
+Write a single JSON file to `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json` conforming to the schema in `{{spec_root}}/src/specs/verdict_schema.md` with the following differences (because you are an **extractor, not an adjudicator**):
 
 - `stage` = `"grounding"`
 - `sub_claims[*].verdict` — **do not assign**. Leave as `"PENDING"` for the adjudicator.

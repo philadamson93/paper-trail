@@ -4,7 +4,7 @@
 
 **Provenance.** Scoped 2026-05-01 after the upstream paperclip team announced full-text arXiv coverage and an abstract-only PubMed corpus. Coverage probe re-measured the same day on the canonical `examples/paper-trail-adamson-2025/` fixture; results in `experiments/paperclip-coverage-2026-05-01/` (gitignored). Decision-log entry to be written in `docs/journal/2026-05-01-paperclip-coverage-revisit.md`.
 
-**Supersedes.** The 2026-04-18 reversal recorded in user memory `project_paperclip_primary.md` and the in-repo plan `docs/plans/add-paper-trail-orchestrator.md`'s implicit PDF-centric default. The previously-archived `~/.claude/plans/shiny-juggling-fountain--v1-paperclip-primary-ARCHIVED.md` (out-of-repo) anticipated this design; the changes here adapt it to the post-2026-05-01 paperclip corpus and to the `verdict_schema.md` / dispatch-template structure paper-trail has shipped since then.
+**Supersedes.** The 2026-04-18 reversal recorded in user memory `project_paperclip_primary.md` and the in-repo plan `docs/plans/add-paper-trail-orchestrator.md`'s implicit PDF-centric default. The previously-archived `~/src/plans/shiny-juggling-fountain--v1-paperclip-primary-ARCHIVED.md` (out-of-repo) anticipated this design; the changes here adapt it to the post-2026-05-01 paperclip corpus and to the `verdict_schema.md` / dispatch-template structure paper-trail has shipped since then.
 
 ---
 
@@ -26,30 +26,30 @@ Concrete edits-list and pinned design decisions. Treat as authoritative over the
 
 **Files to edit:**
 
-- `.claude/commands/paper-trail.md` — Phases 1, 2, 2.5, 3, 3.5. Specifically:
+- `src/commands/paper-trail.md` — Phases 1, 2, 2.5, 3, 3.5. Specifically:
   - Phase 1 (`/verify-bib` invocation, around line 200ish — re-locate at implementation time): add a paperclip-lookup pre-step before the CrossRef → arXiv → Semantic Scholar chain. Marks each reference's `coverage` field as `paperclip` / `external` / `unresolved`.
   - Phase 2 (`/fetch-paper` invocation, around line 230ish): make coverage-aware. Skip PDF download for `coverage: paperclip` references; existing path for `external`; flag `unresolved` for user triage as today.
   - Phase 2.5 (GROBID ingest): unchanged in shape, but only runs over the PDFs that actually got fetched (i.e., the `external` slice).
   - Phase 3 (per-claim two-pass dispatch, around line 315 onward): branch on the reference's `source_mode` field. Paperclip-mode subagents use the new dispatch prompt and operate on `/papers/<doc_id>/` handles via `paperclip` CLI primitives. PDF-mode subagents continue to use the existing dispatch flow over `pdfs/<citekey>/` GROBID-parsed handles.
   - Phase 3.5 (verifier): unchanged in shape; verifier picks an attestation line and re-checks it. For paperclip-mode entries, this is a `paperclip grep` re-run; for PDF-mode entries, the existing local re-grep.
   - End-of-run summary: add per-source-mode counts so `paperclip` / `external` / `unresolved` slices are reportable separately.
-- `.claude/commands/ground-claim.md` — per-claim workflow doc. Add a Mode section near the top distinguishing paperclip-mode vs PDF-mode workflows, sharing the same Pass 1 / Pass 2 / Pass 3 (verifier) skeleton and the same exit JSON schema. Existing multi-cite handling (`co_cite_context.sibling_citekeys`) carries over unchanged — the sibling list is computed at extraction time from `\cite{a,b,c}` and is mode-agnostic.
-- `.claude/commands/verify-bib.md` — Phase 1 helper. Adds the paperclip-lookup pre-step. Falls back to the existing CrossRef → arXiv → Semantic Scholar chain on miss. The paperclip `abstracts` source (description: "Title + abstract corpus, broader coverage, no full text") is useful here as an identity-resolution helper for paywalled references that have a PubMed entry — it is **not** useful for grounding.
-- `.claude/commands/fetch-paper.md` — Phase 2 helper. Becomes coverage-aware (skip in-corpus references). Existing PDF-download path unchanged for the `external` slice.
-- `.claude/specs/verdict_schema.md` — additive 1.1 → 1.2 bump. New top-level `source_mode` enum field on the verdict envelope: `paperclip` | `pdf` | `pdf_ocr_fallback`. New `paperclip_handle` field on the per-reference metadata (the `/papers/<doc_id>/` directory name). New `attestation` shape variants for paperclip-mode (server-side grep hits with `L<n>` line citations) versus PDF-mode (existing local-page citations).
-- `.claude/prompts/extractor-dispatch.md` — split into two variants: `extractor-dispatch-paperclip.md` (new) and `extractor-dispatch-pdf.md` (rename of current). Orchestrator picks based on `source_mode`. Both produce the same evidence-JSON shape, differing only in the read primitives (`paperclip grep / cat / scan` vs `rg / pdftotext`).
-- `.claude/prompts/adjudicator-dispatch.md` — unchanged in shape (adjudicator is blind to the read mode). Confirm by re-reading: the adjudicator should not need to know whether evidence came from paperclip or PDF.
-- `.claude/prompts/verifier-dispatch.md` — minor: verifier picks one attestation line and re-checks it; if `source_mode: paperclip`, re-runs `paperclip grep` instead of local `rg`.
-- `.claude/skills/paperclip/SKILL.md` — refresh from upstream via `paperclip install --dir .`. Currently stale (still describes corpus as "PMC + bioRxiv + medRxiv" with no arXiv or PubMed-abstract surface, and references commands the 0.3.0 CLI no longer exposes the same way). The refresh is a prerequisite for any paperclip-mode dispatch prompt to work — subagents read this skill, not memory.
-- `.claude/scripts/render_html_demo.py` — add a `source_mode` badge per claim row so the user can see at a glance which references were grounded via paperclip vs PDF. Color-key for visual scan.
-- `.claude/scripts/validate_claims.py` — add a `SOURCE_MODE_MISSING` validation if a verdict envelope lacks the new `source_mode` field after the 1.2 schema bump. Existing `CITEKEY_MARKER_MISMATCH` validation is unaffected.
-- `templates/claims_ledger.md` — add a `source_mode` column to the per-claim table render and document the three-value enum near the top.
+- `src/commands/ground-claim.md` — per-claim workflow doc. Add a Mode section near the top distinguishing paperclip-mode vs PDF-mode workflows, sharing the same Pass 1 / Pass 2 / Pass 3 (verifier) skeleton and the same exit JSON schema. Existing multi-cite handling (`co_cite_context.sibling_citekeys`) carries over unchanged — the sibling list is computed at extraction time from `\cite{a,b,c}` and is mode-agnostic.
+- `src/commands/verify-bib.md` — Phase 1 helper. Adds the paperclip-lookup pre-step. Falls back to the existing CrossRef → arXiv → Semantic Scholar chain on miss. The paperclip `abstracts` source (description: "Title + abstract corpus, broader coverage, no full text") is useful here as an identity-resolution helper for paywalled references that have a PubMed entry — it is **not** useful for grounding.
+- `src/commands/fetch-paper.md` — Phase 2 helper. Becomes coverage-aware (skip in-corpus references). Existing PDF-download path unchanged for the `external` slice.
+- `src/specs/verdict_schema.md` — additive 1.1 → 1.2 bump. New top-level `source_mode` enum field on the verdict envelope: `paperclip` | `pdf` | `pdf_ocr_fallback`. New `paperclip_handle` field on the per-reference metadata (the `/papers/<doc_id>/` directory name). New `attestation` shape variants for paperclip-mode (server-side grep hits with `L<n>` line citations) versus PDF-mode (existing local-page citations).
+- `src/prompts/extractor-dispatch.md` — split into two variants: `extractor-dispatch-paperclip.md` (new) and `extractor-dispatch-pdf.md` (rename of current). Orchestrator picks based on `source_mode`. Both produce the same evidence-JSON shape, differing only in the read primitives (`paperclip grep / cat / scan` vs `rg / pdftotext`).
+- `src/prompts/adjudicator-dispatch.md` — unchanged in shape (adjudicator is blind to the read mode). Confirm by re-reading: the adjudicator should not need to know whether evidence came from paperclip or PDF.
+- `src/prompts/verifier-dispatch.md` — minor: verifier picks one attestation line and re-checks it; if `source_mode: paperclip`, re-runs `paperclip grep` instead of local `rg`.
+- `src/skills/paperclip/SKILL.md` — refresh from upstream via `paperclip install --dir .`. Currently stale (still describes corpus as "PMC + bioRxiv + medRxiv" with no arXiv or PubMed-abstract surface, and references commands the 0.3.0 CLI no longer exposes the same way). The refresh is a prerequisite for any paperclip-mode dispatch prompt to work — subagents read this skill, not memory.
+- `src/scripts/render_html_demo.py` — add a `source_mode` badge per claim row so the user can see at a glance which references were grounded via paperclip vs PDF. Color-key for visual scan.
+- `src/scripts/validate_claims.py` — add a `SOURCE_MODE_MISSING` validation if a verdict envelope lacks the new `source_mode` field after the 1.2 schema bump. Existing `CITEKEY_MARKER_MISMATCH` validation is unaffected.
+- `src/templates/claims_ledger.md` — add a `source_mode` column to the per-claim table render and document the three-value enum near the top.
 - **Dispatch payload JSON in `paper-trail.md` (around line 396, the per-claim dispatch block):** add `source_mode` and `paperclip_handle` fields to the orchestrator's per-claim dispatch payload. Without these, the new paperclip-mode extractor cannot know which mode to run in or which `/papers/<doc_id>/` to read from. This is in addition to the dispatch-prompt files listed above — the JSON payload and the `{{slot}}` placeholders are separate surfaces and both need updating.
 - **Slot placeholders in dispatch prompts:** new `{{source_mode}}` and `{{paperclip_handle}}` slots in `extractor-dispatch-paperclip.md` (read by the paperclip-mode extractor); the PDF-mode variant only needs `{{source_mode}}` (already has `{{handle}}` which is the local PDF path).
 
 **New files to create:**
 
-- `.claude/prompts/extractor-dispatch-paperclip.md` — paperclip-mode extractor dispatch. Uses `paperclip grep` / `paperclip cat /papers/<doc_id>/sections/<name>.lines` / `paperclip ask-image /papers/<doc_id>/figures/<file>` as the read primitives. Same evidence-JSON exit schema as the PDF variant.
+- `src/prompts/extractor-dispatch-paperclip.md` — paperclip-mode extractor dispatch. Uses `paperclip grep` / `paperclip cat /papers/<doc_id>/sections/<name>.lines` / `paperclip ask-image /papers/<doc_id>/figures/<file>` as the read primitives. Same evidence-JSON exit schema as the PDF variant.
 
 **Naming and shape pins:**
 
@@ -76,14 +76,14 @@ Concrete edits-list and pinned design decisions. Treat as authoritative over the
 
 When picking up this plan and starting implementation, the relevant files to read first:
 
-- **Orchestrator (slash-command prompt):** `.claude/commands/paper-trail.md` — phases 0-5, 698 lines. The bulk of the changes land here. Phase 1 verify-bib, Phase 2 fetch-paper, Phase 2.5 ingest, Phase 3 per-claim dispatch, Phase 3.5 verifier all need updates per the implementation surface above.
-- **Per-claim workflow:** `.claude/commands/ground-claim.md` — per-claim two-pass workflow, 172 lines. Adds a Mode section. Existing multi-cite handling (`co_cite_context.sibling_citekeys`) carries over unchanged.
-- **Verdict schema:** `.claude/specs/verdict_schema.md` — source-of-truth contract. The 1.1 → 1.2 bump is the single largest schema change in the plan; read this whole file before implementing schema changes.
-- **Subagent dispatch prompts:** `.claude/prompts/extractor-dispatch.md`, `.claude/prompts/adjudicator-dispatch.md`, `.claude/prompts/verifier-dispatch.md` — the literal prompts subagents receive. The extractor split into paperclip-mode and PDF-mode is the most prompt-heavy change.
-- **Paperclip skill:** `.claude/skills/paperclip/SKILL.md` — currently stale; refresh first via `paperclip install --dir .`. The refresh affects what primitives the new paperclip-mode extractor can call.
+- **Orchestrator (slash-command prompt):** `src/commands/paper-trail.md` — phases 0-5, 698 lines. The bulk of the changes land here. Phase 1 verify-bib, Phase 2 fetch-paper, Phase 2.5 ingest, Phase 3 per-claim dispatch, Phase 3.5 verifier all need updates per the implementation surface above.
+- **Per-claim workflow:** `src/commands/ground-claim.md` — per-claim two-pass workflow, 172 lines. Adds a Mode section. Existing multi-cite handling (`co_cite_context.sibling_citekeys`) carries over unchanged.
+- **Verdict schema:** `src/specs/verdict_schema.md` — source-of-truth contract. The 1.1 → 1.2 bump is the single largest schema change in the plan; read this whole file before implementing schema changes.
+- **Subagent dispatch prompts:** `src/prompts/extractor-dispatch.md`, `src/prompts/adjudicator-dispatch.md`, `src/prompts/verifier-dispatch.md` — the literal prompts subagents receive. The extractor split into paperclip-mode and PDF-mode is the most prompt-heavy change.
+- **Paperclip skill:** `src/skills/paperclip/SKILL.md` — currently stale; refresh first via `paperclip install --dir .`. The refresh affects what primitives the new paperclip-mode extractor can call.
 - **Existing reader-mode fixture:** `examples/paper-trail-adamson-2025/data/claims/` — 87 baseline claim JSONs, the M1 regression base. Use as the smoke-test target.
 - **Existing author-mode fixture:** `examples/DFD_authormode/ledger/claims/` — modern-layout author-mode example. Use to confirm author-mode parity (the plan applies equally to author and reader modes).
-- **The current PDF-centric plan it supersedes:** `~/.claude/plans/shiny-juggling-fountain.md` (out-of-repo, in user home directory). Has the architectural prose for the PDF-centric M1 design that paperclip-first now sits beside as the second mode. The archived v1-paperclip-primary plan in the same directory has the original architectural sketch for paperclip-first.
+- **The current PDF-centric plan it supersedes:** `~/src/plans/shiny-juggling-fountain.md` (out-of-repo, in user home directory). Has the architectural prose for the PDF-centric M1 design that paperclip-first now sits beside as the second mode. The archived v1-paperclip-primary plan in the same directory has the original architectural sketch for paperclip-first.
 
 ---
 
@@ -147,7 +147,7 @@ Add `source_mode` badge per claim row in the HTML renderer. Color-key: paperclip
 
 ## Schema changes
 
-`.claude/specs/verdict_schema.md` 1.1 → 1.2 bump:
+`src/specs/verdict_schema.md` 1.1 → 1.2 bump:
 
 **New top-level fields on the verdict envelope:**
 
@@ -163,7 +163,7 @@ Existing `attestation.hits[]` shape is reused. Per-hit fields adapt:
 - `location`: `/papers/<doc_id>/sections/<name>.lines#L<n>` for paperclip-mode, `pdfs/<citekey>.pdf#page=<n>` for PDF-mode.
 - `figures_checked[]`: each item has `figure_id`, `figure_path` (`/papers/<doc_id>/figures/<file>` or `pdfs/<citekey>/figures/<file>`), `ask_image_summary`.
 
-**Validation rule additions** (`.claude/scripts/validate_claims.py`):
+**Validation rule additions** (`src/scripts/validate_claims.py`):
 
 - `SOURCE_MODE_MISSING` — verdict envelope lacks `source_mode`.
 - `PAPERCLIP_HANDLE_MISMATCH` — `source_mode == "paperclip"` but no `paperclip_handle`, or vice versa.
@@ -193,7 +193,7 @@ Existing `attestation.hits[]` shape is reused. Per-hit fields adapt:
 
 ## Smoke-test plan
 
-1. Run `paperclip install --dir .` to refresh `.claude/skills/paperclip/SKILL.md`.
+1. Run `paperclip install --dir .` to refresh `src/skills/paperclip/SKILL.md`.
 2. Implement Phase 1 paperclip-aware verify-bib first. Run on `examples/paper-trail-adamson-2025/refs.verified.bib`. Expected output: `verified: 56/56 (paperclip:~27, external:~29, unresolved:0)` matching the May 1 probe results.
 3. Implement Phase 2 coverage-aware fetch-paper. Run on the same fixture with `--paperclip=prefer`. Expected: ~27 references skip download; ~29 hit the existing PDF-fetch path.
 4. Implement Phase 3 mode-aware dispatch. Run on a single claim from the fixture (e.g., `C001`) in paperclip mode and confirm the evidence JSON validates against schema 1.2.

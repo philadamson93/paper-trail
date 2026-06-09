@@ -62,12 +62,12 @@ The `L<n>` prefix lets subagents cite the exact line in their attestation. The `
 
 ## Running
 
-Script: `.claude/scripts/ingest_pdf.py`
+Script: `src/scripts/ingest_pdf.py`
 
 Usage:
 
 ```
-python3 .claude/scripts/ingest_pdf.py \
+python3 src/scripts/ingest_pdf.py \
     --pdf pdfs/hammernik2021.pdf \
     --citekey hammernik2021 \
     --out-dir pdfs/hammernik2021/

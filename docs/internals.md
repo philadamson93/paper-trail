@@ -6,11 +6,11 @@
 
 | Command | Purpose |
 |---|---|
-| [`/paper-trail-init`](../.claude/commands/paper-trail-init.md) | Probe + optionally install system dependencies (pdftotext, Docker, GROBID, `papersflow` MCP). Auto-invoked by `/paper-trail`'s preflight when blocking deps are missing. |
-| [`/init-writing-tools`](../.claude/commands/init-writing-tools.md) | One-time author-mode bootstrap: detect `.bib` + PDF layout, write `claims_ledger.md` config. |
-| [`/verify-bib`](../.claude/commands/verify-bib.md) | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` writes corrections. |
-| [`/fetch-paper`](../.claude/commands/fetch-paper.md) | Download open-access PDFs or surface retrieval prompts for paywalled ones. |
-| [`/ground-claim`](../.claude/commands/ground-claim.md) | Two-pass grounding of a single claim or a whole `.tex` file. Also provides `--triage`. |
+| [`/paper-trail-init`](../src/commands/paper-trail-init.md) | Probe + optionally install system dependencies (pdftotext, Docker, GROBID, `papersflow` MCP). Auto-invoked by `/paper-trail`'s preflight when blocking deps are missing. |
+| [`/init-writing-tools`](../src/commands/init-writing-tools.md) | One-time author-mode bootstrap: detect `.bib` + PDF layout, write `claims_ledger.md` config. |
+| [`/verify-bib`](../src/commands/verify-bib.md) | BibTeX metadata audit against CrossRef / arXiv / PapersFlow; `--fix` writes corrections. |
+| [`/fetch-paper`](../src/commands/fetch-paper.md) | Download open-access PDFs or surface retrieval prompts for paywalled ones. |
+| [`/ground-claim`](../src/commands/ground-claim.md) | Two-pass grounding of a single claim or a whole `.tex` file. Also provides `--triage`. |
 
 None of these edits the manuscript. Every issue is surfaced as a proposal for the user to accept.
 
@@ -18,9 +18,9 @@ None of these edits the manuscript. Every issue is surfaced as a proposal for th
 
 The slash-command files and schemas *are* the spec, not a wrapper around hidden code:
 
-- **Orchestrator phases (0 → 4) + invocation flags** — [`.claude/commands/paper-trail.md`](../.claude/commands/paper-trail.md).
-- **Verdict JSON schema + rollup rules + validation** — [`.claude/specs/verdict_schema.md`](../.claude/specs/verdict_schema.md).
-- **Ingest handle layout + GROBID pipeline** — [`.claude/specs/ingest.md`](../.claude/specs/ingest.md) and [`.claude/scripts/ingest_pdf.py`](../.claude/scripts/ingest_pdf.py).
-- **Pre-dispatch claim validator** (`TEXT_ANCHOR_MISSING`, `FRONT_MATTER_ANCHOR`, `CITEKEY_MARKER_MISMATCH`) — [`.claude/scripts/validate_claims.py`](../.claude/scripts/validate_claims.py).
-- **Dispatch prompts** (extractor / adjudicator / verifier) — [`.claude/prompts/`](../.claude/prompts/).
-- **HTML demo renderer** — [`.claude/scripts/render_html_demo.py`](../.claude/scripts/render_html_demo.py).
+- **Orchestrator phases (0 → 4) + invocation flags** — [`src/commands/paper-trail.md`](../src/commands/paper-trail.md).
+- **Verdict JSON schema + rollup rules + validation** — [`src/specs/verdict_schema.md`](../src/specs/verdict_schema.md).
+- **Ingest handle layout + GROBID pipeline** — [`src/specs/ingest.md`](../src/specs/ingest.md) and [`src/scripts/ingest_pdf.py`](../src/scripts/ingest_pdf.py).
+- **Pre-dispatch claim validator** (`TEXT_ANCHOR_MISSING`, `FRONT_MATTER_ANCHOR`, `CITEKEY_MARKER_MISMATCH`) — [`src/scripts/validate_claims.py`](../src/scripts/validate_claims.py).
+- **Dispatch prompts** (extractor / adjudicator / verifier) — [`src/prompts/`](../src/prompts/).
+- **HTML demo renderer** — [`src/scripts/render_html_demo.py`](../src/scripts/render_html_demo.py).

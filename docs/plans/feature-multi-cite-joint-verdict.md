@@ -12,13 +12,13 @@ Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-
 
 **Files to edit:**
 
-- `.claude/commands/paper-trail.md` Phase 3 (around line 414): add Pass-3 barrier semantics — group per-ref adjudicator outputs by `claim_text` (or a normalized claim-key hash) and dispatch the joint-adjudicator only when all N per-ref Pass-2s for the same sentence have completed. Today Phase 3 groups by citekey for handle amortization; the new group-by-sentence step runs after.
-- `.claude/commands/paper-trail.md` Phase 3 Step 3.3 (around line 430): update `ledger.md` markdown rendering to include the joint row inline below the per-ref rows for multi-cite sentences, with the asterisk-pointer convention.
-- `.claude/commands/paper-trail.md` Phase 5 (around line 507) and `.claude/scripts/render_html_demo.py`: HTML viewer renders the joint-verdict row plus per-ref asterisk pointers. (Note: Phase 5 renders HTML, not the markdown ledger — the markdown is Phase 3 Step 3.3. Both surfaces need joint-row support.)
-- `.claude/commands/paper-trail.md` end-of-run summary (around line 658-668): report joint-verdict counts separately from per-ref counts to avoid double-counting in the run-level totals.
-- `.claude/specs/verdict_schema.md` validation rules section (lines 179-193, NOT 196-208 as the earlier draft of this doc said): admit `C*__joint.json` filenames; admit the new top-level `joint_verdict` envelope; bump `schema_version` 1.0 → 1.1.
-- `.claude/scripts/render_html_demo.py` claim-loading code (`load_claims()` around line 144): auto-detect both legacy `data/claims/` (reader-mode fixture layout) and modern `ledger/claims/` layouts; treat `*__joint.json` as a separate render type, not a peer claim, so existing per-claim iteration paths don't double-count.
-- NEW: `.claude/prompts/joint-adjudicator-dispatch.md` modeled on `adjudicator-dispatch.md`. Reads only the per-ref adjudicator JSONs and the rubric; never reads source PDFs.
+- `src/commands/paper-trail.md` Phase 3 (around line 414): add Pass-3 barrier semantics — group per-ref adjudicator outputs by `claim_text` (or a normalized claim-key hash) and dispatch the joint-adjudicator only when all N per-ref Pass-2s for the same sentence have completed. Today Phase 3 groups by citekey for handle amortization; the new group-by-sentence step runs after.
+- `src/commands/paper-trail.md` Phase 3 Step 3.3 (around line 430): update `ledger.md` markdown rendering to include the joint row inline below the per-ref rows for multi-cite sentences, with the asterisk-pointer convention.
+- `src/commands/paper-trail.md` Phase 5 (around line 507) and `src/scripts/render_html_demo.py`: HTML viewer renders the joint-verdict row plus per-ref asterisk pointers. (Note: Phase 5 renders HTML, not the markdown ledger — the markdown is Phase 3 Step 3.3. Both surfaces need joint-row support.)
+- `src/commands/paper-trail.md` end-of-run summary (around line 658-668): report joint-verdict counts separately from per-ref counts to avoid double-counting in the run-level totals.
+- `src/specs/verdict_schema.md` validation rules section (lines 179-193, NOT 196-208 as the earlier draft of this doc said): admit `C*__joint.json` filenames; admit the new top-level `joint_verdict` envelope; bump `schema_version` 1.0 → 1.1.
+- `src/scripts/render_html_demo.py` claim-loading code (`load_claims()` around line 144): auto-detect both legacy `data/claims/` (reader-mode fixture layout) and modern `ledger/claims/` layouts; treat `*__joint.json` as a separate render type, not a peer claim, so existing per-claim iteration paths don't double-count.
+- NEW: `src/prompts/joint-adjudicator-dispatch.md` modeled on `adjudicator-dispatch.md`. Reads only the per-ref adjudicator JSONs and the rubric; never reads source PDFs.
 
 **Naming and shape pins:**
 
@@ -40,11 +40,11 @@ Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-
 
 ## Codebase pointers
 
-- **Orchestrator (slash-command prompt):** `.claude/commands/paper-trail.md` — Phase 3 dispatches per-claim subagent chains. Note Phase 3 Step 3.3 (around line 430) renders the markdown `ledger.md`, while Phase 5 (around line 507) renders the HTML viewer via `render_html_demo.py` — both surfaces need joint-row support. Pass-3 joint-adjudicator dispatch logic is added to Phase 3 here, after all per-ref Pass-2 adjudicators have completed for the same `claim_text`.
-- **Per-claim workflow:** `.claude/commands/ground-claim.md` — current multi-cite handling lives in the "Multi-cite citations" section ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"). The orchestrator passes `co_citekeys` as a flat dispatch slot (see `paper-trail.md` line 406 + `extractor-dispatch.md` line 29 `{{co_citekeys}}`); the **extractor** is what writes `co_cite_context.sibling_citekeys` into the evidence JSON. Pass 3 is the new cross-citekey aggregation that runs once per multi-ref `claim_text` after the per-ref Pass-2s complete.
-- **New dispatch prompt to author:** `.claude/prompts/joint-adjudicator-dispatch.md` (new file). Model from `.claude/prompts/adjudicator-dispatch.md`. Same blindness discipline — reads only the per-ref adjudicator JSONs and the rubric, never the source PDFs.
-- **Schema:** `.claude/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below.
-- **Ledger renderer:** `.claude/scripts/render_html_demo.py` (and any other consumers of `ledger/claims/*.json`) — needs an update to render the new joint rows + asterisk-pointer per-ref annotations.
+- **Orchestrator (slash-command prompt):** `src/commands/paper-trail.md` — Phase 3 dispatches per-claim subagent chains. Note Phase 3 Step 3.3 (around line 430) renders the markdown `ledger.md`, while Phase 5 (around line 507) renders the HTML viewer via `render_html_demo.py` — both surfaces need joint-row support. Pass-3 joint-adjudicator dispatch logic is added to Phase 3 here, after all per-ref Pass-2 adjudicators have completed for the same `claim_text`.
+- **Per-claim workflow:** `src/commands/ground-claim.md` — current multi-cite handling lives in the "Multi-cite citations" section ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"). The orchestrator passes `co_citekeys` as a flat dispatch slot (see `paper-trail.md` line 406 + `extractor-dispatch.md` line 29 `{{co_citekeys}}`); the **extractor** is what writes `co_cite_context.sibling_citekeys` into the evidence JSON. Pass 3 is the new cross-citekey aggregation that runs once per multi-ref `claim_text` after the per-ref Pass-2s complete.
+- **New dispatch prompt to author:** `src/prompts/joint-adjudicator-dispatch.md` (new file). Model from `src/prompts/adjudicator-dispatch.md`. Same blindness discipline — reads only the per-ref adjudicator JSONs and the rubric, never the source PDFs.
+- **Schema:** `src/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below.
+- **Ledger renderer:** `src/scripts/render_html_demo.py` (and any other consumers of `ledger/claims/*.json`) — needs an update to render the new joint rows + asterisk-pointer per-ref annotations.
 - **Smoke test:** re-run /paper-trail on `examples/paper-trail-adamson-2025/` (the canonical M1 reference run per memory `project_m1_complete.md`). The MRM paper contains multi-cite sentences; joint verdicts should appear without changing per-ref verdicts on single-cite claims (regression check).
 
 ---
@@ -57,7 +57,7 @@ When a manuscript sentence cites multiple references — `"X [a, b, c]"` — pap
 
 One extractor + adjudicator pair runs per `(claim, citekey)` pair. For sentence `"X [a, b, c]"`, this dispatches three independent extractor → adjudicator chains and produces three verdict files.
 
-The extractor has limited sibling awareness: `co_cite_context.sibling_verdicts` records which of the focal claim's sub-claims a sibling paper also supports (see `.claude/specs/verdict_schema.md` lines 168-172 and `.claude/prompts/extractor-dispatch.md` step 8). The adjudicator does NOT see sibling adjudicators' verdicts and operates only on the focal extractor's evidence file plus the rubric. There is no joint-verdict pass.
+The extractor has limited sibling awareness: `co_cite_context.sibling_verdicts` records which of the focal claim's sub-claims a sibling paper also supports (see `src/specs/verdict_schema.md` lines 168-172 and `src/prompts/extractor-dispatch.md` step 8). The adjudicator does NOT see sibling adjudicators' verdicts and operates only on the focal extractor's evidence file plus the rubric. There is no joint-verdict pass.
 
 ## Proposed change
 
@@ -113,7 +113,7 @@ The asterisk pointer is the load-bearing UI element: it tells a reader scanning 
 
 ## Schema changes needed
 
-The verdict schema in `.claude/specs/verdict_schema.md` needs:
+The verdict schema in `src/specs/verdict_schema.md` needs:
 
 - A new `joint_verdict` envelope (separate from `overall_verdict` which is the per-claim sub-claim rollup, not a multi-ref rollup).
 - A `joint_verdict.participating_citekeys` array naming which refs the joint applies to (so the mixed case "joint verdict applies to [a, b] but not [c]" renders correctly).

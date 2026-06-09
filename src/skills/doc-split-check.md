@@ -60,7 +60,7 @@ Plan docs in this project follow "one topic per file." Project `CLAUDE.md` says:
 After any file-layout change, grep for references that may now be broken:
 
 ```bash
-grep -rn "<old-doc-name>\|§<old-section-name>" docs/ .claude/
+grep -rn "<old-doc-name>\|§<old-section-name>" docs/ src/
 ```
 
 Update each reference to point at the new location. Common places that accumulate cross-references:

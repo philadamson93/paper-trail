@@ -1,6 +1,6 @@
 One-shot bootstrap for the `/paper-trail` dependency stack. Probes each dependency, reports what's missing, and offers to install/start the ones that can be automated — with explicit per-step confirmation. Safe to re-run; idempotent.
 
-Intended entry point: the user runs `/paper-trail-init` on a fresh machine before their first `/paper-trail` audit. Also auto-invoked by `/paper-trail`'s preflight when blocking dependencies are missing (see `.claude/commands/paper-trail.md`).
+Intended entry point: the user runs `/paper-trail-init` on a fresh machine before their first `/paper-trail` audit. Also auto-invoked by `/paper-trail`'s preflight when blocking dependencies are missing (see `src/commands/paper-trail.md`).
 
 ## 1. Probe all dependencies
 

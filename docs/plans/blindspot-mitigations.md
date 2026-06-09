@@ -50,7 +50,7 @@ Fix: Add a **verifier probe** phase. After a subagent produces a verdict, spawn 
 
 Default: run the verifier against every claim for v1 (rigor > compute). Add a `--verifier-sample=<pct>` flag to tune this once we have cost data; not a v1 default.
 
-Files: `ground-claim.md` (new "Attestation verification" section; new `UNVERIFIED_ATTESTATION` flag in the Flag table); `paper-trail.md` (Phase 3.5 — Attestation verification, after claim-grounding and before Phase 4 triage); `templates/claims_ledger.md` (taxonomy).
+Files: `ground-claim.md` (new "Attestation verification" section; new `UNVERIFIED_ATTESTATION` flag in the Flag table); `paper-trail.md` (Phase 3.5 — Attestation verification, after claim-grounding and before Phase 4 triage); `src/templates/claims_ledger.md` (taxonomy).
 
 #### #5 — Multi-cite sub-aspect resolution (coverage)
 
@@ -149,9 +149,9 @@ Files: `paper-trail.md` (Phase 0 — PDF read early-check); `ground-claim.md` (S
 
 ## Files to Modify / Create
 
-- **`.claude/commands/paper-trail.md`** — Round 1: Phase 3.1 citation-marker disambiguation (#6), Phase 3.3 inflight-file layout (#3), new Phase 3.5 Attestation verification (#1). Round 2: Phase 0 dual-source + confirmation gate (#4), Phase 3.2 pointer to chunked-read (#2), Phase 0 image-based-PDF detection (#9).
-- **`.claude/commands/ground-claim.md`** — Round 1: Step 1 confidence output + Step 2 strict-default branch (#8), Step 2 sub-aspect attribution guidance (#5), Step 5 inflight-file spec (#3), new Attestation verification section + new `UNVERIFIED_ATTESTATION` flag (#1). Round 2: Step 2 chunked-read branch (#2), Step 2 Minimum reading overhaul for non-IMRaD (#7), Step 2 image-based-PDF detection (#9).
-- **`templates/claims_ledger.md`** — add `UNVERIFIED_ATTESTATION` to flag taxonomy (Round 1).
+- **`src/commands/paper-trail.md`** — Round 1: Phase 3.1 citation-marker disambiguation (#6), Phase 3.3 inflight-file layout (#3), new Phase 3.5 Attestation verification (#1). Round 2: Phase 0 dual-source + confirmation gate (#4), Phase 3.2 pointer to chunked-read (#2), Phase 0 image-based-PDF detection (#9).
+- **`src/commands/ground-claim.md`** — Round 1: Step 1 confidence output + Step 2 strict-default branch (#8), Step 2 sub-aspect attribution guidance (#5), Step 5 inflight-file spec (#3), new Attestation verification section + new `UNVERIFIED_ATTESTATION` flag (#1). Round 2: Step 2 chunked-read branch (#2), Step 2 Minimum reading overhaul for non-IMRaD (#7), Step 2 image-based-PDF detection (#9).
+- **`src/templates/claims_ledger.md`** — add `UNVERIFIED_ATTESTATION` to flag taxonomy (Round 1).
 - **`README.md`** — brief note in Features section on verifier pattern and chunked reads once both rounds land. Docs-only, last step.
 
 Do **not** touch:

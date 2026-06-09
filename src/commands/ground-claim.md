@@ -4,7 +4,7 @@ Verify that a cited claim in the manuscript is supported by its source paper. Ma
 
 - **Rigor beats compute.** A false verdict — a `CONFIRMED` that should have been `OVERSTATED`, or an `UNSUPPORTED` that should have been `CONFIRMED` — is materially worse than spending extra tokens to prevent it. Prefer thorough reads, more phrasings, and figure inspection over any shortcut.
 - **Raise, don't fix.** This command never edits the manuscript. Every issue is surfaced as a remediation proposal for the user to accept, modify, or reject.
-- **Two-pass, structured output.** A Phase-3 subagent no longer "reads a PDF and narrates evidence" open-endedly. It runs two bounded passes against a pre-ingested source handle (`pdfs/<citekey>/`): an extractor that gathers evidence, then an adjudicator that picks a verdict from the rubric. Both emit JSON conforming to `.claude/specs/verdict_schema.md`.
+- **Two-pass, structured output.** A Phase-3 subagent no longer "reads a PDF and narrates evidence" open-endedly. It runs two bounded passes against a pre-ingested source handle (`pdfs/<citekey>/`): an extractor that gathers evidence, then an adjudicator that picks a verdict from the rubric. Both emit JSON conforming to `src/specs/verdict_schema.md`.
 
 ## Invocation forms
 
@@ -21,7 +21,7 @@ Read `pdf_dir`, `pdf_naming`, `bib_files` from `claims_ledger.md` YAML frontmatt
 ## Canonical artifacts
 
 - `pdfs/<citekey>.pdf` — the fetched PDF (Phase 2 output)
-- `pdfs/<citekey>/` — the ingest handle (Phase 2.5 output; see `.claude/specs/ingest.md`)
+- `pdfs/<citekey>/` — the ingest handle (Phase 2.5 output; see `src/specs/ingest.md`)
 - `ledger/evidence/<claim_id>.json` — extractor output (pass 1)
 - `ledger/claims/<claim_id>.json` — adjudicated verdict (pass 2, source of truth)
 - `ledger/verifications/<claim_id>__<sub_claim_id>.json` — verifier spot-check output (pass 3)
@@ -40,7 +40,7 @@ For every unique citekey in scope:
 1. Check if `<pdf_dir>/<citekey>.pdf` exists.
 2. If missing: invoke `/fetch-paper` logic. If paywalled or retrieval fails, mark the claim `PENDING` with `NEEDS_PDF` and continue.
 3. Check if `<pdf_dir>/<citekey>/ingest_report.json` exists with `success: true`.
-4. If missing or unsuccessful: run `.claude/scripts/ingest_pdf.py --pdf <path>.pdf --citekey <citekey> --out-dir <pdf_dir>/<citekey>/`. If GROBID is not available, the script falls back to `pdftotext_fallback` mode — that's acceptable; the handle still exposes `content.txt` and `figures/`.
+4. If missing or unsuccessful: run `src/scripts/ingest_pdf.py --pdf <path>.pdf --citekey <citekey> --out-dir <pdf_dir>/<citekey>/`. If GROBID is not available, the script falls back to `pdftotext_fallback` mode — that's acceptable; the handle still exposes `content.txt` and `figures/`.
 5. Record `ingest_mode` on the claim's dispatch payload. If `error`, mark `NEEDS_PDF`.
 
 **Never hard-fail** on missing PDFs or failed ingest — the run processes whatever can be processed.
@@ -51,7 +51,7 @@ For each claim, the orchestrator dispatches three subagents in sequence. Each ha
 
 ### Pass 1 — Evidence extractor
 
-Dispatches the prompt in `.claude/prompts/extractor-dispatch.md`, filling `{{slots}}` with run values. The subagent:
+Dispatches the prompt in `src/prompts/extractor-dispatch.md`, filling `{{slots}}` with run values. The subagent:
 
 - Reads `pdfs/<citekey>/meta.json`, `sections/*.txt`, `content.txt`, `figures/index.json`
 - Decomposes the claim into atomic sub-claims
@@ -64,17 +64,17 @@ Dispatches the prompt in `.claude/prompts/extractor-dispatch.md`, filling `{{slo
 
 ### Pass 2 — Verdict adjudicator
 
-Dispatches the prompt in `.claude/prompts/adjudicator-dispatch.md`. The subagent reads **only** the evidence JSON and the rubric (`.claude/specs/verdict_schema.md`) — not the source paper. Picks a verdict per sub-claim from the enum, computes the overall verdict via the rollup rule, proposes a remediation. Writes `ledger/claims/<claim_id>.json`.
+Dispatches the prompt in `src/prompts/adjudicator-dispatch.md`. The subagent reads **only** the evidence JSON and the rubric (`src/specs/verdict_schema.md`) — not the source paper. Picks a verdict per sub-claim from the enum, computes the overall verdict via the rollup rule, proposes a remediation. Writes `ledger/claims/<claim_id>.json`.
 
 This split keeps the adjudicator's context tiny (~2kb of JSON + ~4kb of rubric) and makes verdicts deterministic given the evidence.
 
 ### Pass 3 — Attestation verifier
 
-Dispatches the prompt in `.claude/prompts/verifier-dispatch.md`. The orchestrator samples one evidence entry from the adjudicated claim and passes it to the verifier, which confirms or rejects that the recorded passage exists in the source as claimed. On `FAIL` → bounce the claim back through Pass 1 (max 2 bounces, then flag AMBIGUOUS with SCHEMA_VIOLATION). On `PARTIAL` → add `UNVERIFIED_ATTESTATION` flag. On `PASS` → verdict stands.
+Dispatches the prompt in `src/prompts/verifier-dispatch.md`. The orchestrator samples one evidence entry from the adjudicated claim and passes it to the verifier, which confirms or rejects that the recorded passage exists in the source as claimed. On `FAIL` → bounce the claim back through Pass 1 (max 2 bounces, then flag AMBIGUOUS with SCHEMA_VIOLATION). On `PARTIAL` → add `UNVERIFIED_ATTESTATION` flag. On `PASS` → verdict stands.
 
 ## Taxonomy references
 
-Claim types, verdict enums, flag enum, remediation categories, and rollup rules all live in `.claude/specs/verdict_schema.md`. This command does not duplicate them — treat that file as authoritative. Any enum drift between prompts and ledger is a bug.
+Claim types, verdict enums, flag enum, remediation categories, and rollup rules all live in `src/specs/verdict_schema.md`. This command does not duplicate them — treat that file as authoritative. Any enum drift between prompts and ledger is a bug.
 
 Claim types (quick reference):
 
@@ -169,4 +169,4 @@ Every flagged entry includes a `file://...#page=N` click-through so the user can
 - Do not hallucinate evidence. If no supporting text after ≥3 phrasings, the extractor records a `closest_adjacent` passage and leaves the verdict for the adjudicator to mark UNSUPPORTED.
 - Do not treat PARAPHRASED and SUPPORTING as interchangeable — the evidence bars differ.
 - Do not flag an issue without a page number click-through (or explicit "nowhere in paper" for UNSUPPORTED).
-- Do not duplicate the verdict / claim-type / flag enums in this file. Reference `.claude/specs/verdict_schema.md` instead. Drift between spec and prompts is a bug.
+- Do not duplicate the verdict / claim-type / flag enums in this file. Reference `src/specs/verdict_schema.md` instead. Drift between spec and prompts is a bug.

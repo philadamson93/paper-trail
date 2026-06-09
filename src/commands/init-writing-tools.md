@@ -46,11 +46,11 @@ last_bootstrap: <today's ISO date>
 ---
 ```
 
-Below the frontmatter, add a short explanatory header and empty Summary / Details sections. If `templates/claims_ledger.md` is available in the package, use it as the base and fill in the frontmatter values.
+Below the frontmatter, add a short explanatory header and empty Summary / Details sections. If `src/templates/claims_ledger.md` is available in the package, use it as the base and fill in the frontmatter values.
 
 Create the configured PDF directory if it doesn't exist (`mkdir -p`).
 
-When copying from `templates/claims_ledger.md`, replace any placeholder values (e.g., `last_bootstrap` empty) with real values before writing — the ledger should never contain literal placeholders after init completes.
+When copying from `src/templates/claims_ledger.md`, replace any placeholder values (e.g., `last_bootstrap` empty) with real values before writing — the ledger should never contain literal placeholders after init completes.
 
 ## 5. PDF coverage check
 

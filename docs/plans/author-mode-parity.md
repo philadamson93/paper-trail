@@ -6,12 +6,12 @@ Reference: docs/claude_ops.md
 
 Reader mode (`/paper-trail <pdf>`) has been extensively tested against `examples/paper-trail-adamson-2025/` (the MRM paper) and is solid. Author mode (`/paper-trail --author`) hasn't been exercised end-to-end since the M1 rewrite, and the README / `paper-trail.md` still describe it as "writes to `claims_ledger.md`" — language that predates the JSON-first ledger format.
 
-Before writing this plan I re-audited author mode. The picture is better than expected: `/ground-claim` already implements the modern architecture (per `.claude/commands/ground-claim.md`):
+Before writing this plan I re-audited author mode. The picture is better than expected: `/ground-claim` already implements the modern architecture (per `src/commands/ground-claim.md`):
 
 - ✅ `ledger/evidence/<claim_id>.json` (extractor, Pass 1)
 - ✅ `ledger/claims/<claim_id>.json` (adjudicator, Pass 2 — source of truth)
 - ✅ `ledger/verifications/<claim_id>__<sub_claim_id>.json` (verifier, Pass 3)
-- ✅ Verdict schema enforcement per `.claude/specs/verdict_schema.md`
+- ✅ Verdict schema enforcement per `src/specs/verdict_schema.md`
 - ✅ Ambiguity triage
 
 So architecturally, author mode is already at parity. The actual gaps are narrower, focused on the **pre-dispatch validator (Step 3.1.5)** and the **documentation surface**.
@@ -33,7 +33,7 @@ Success criteria:
 |---|---|---|---|
 | Ledger format | `ledger/claims/<id>.json` + rendered `ledger.md` | Same (via `/ground-claim`) | **none** |
 | 3-pass dispatch | Extractor / adjudicator / verifier | Same | **none** |
-| Verdict schema | `.claude/specs/verdict_schema.md` | Same | **none** |
+| Verdict schema | `src/specs/verdict_schema.md` | Same | **none** |
 | Manuscript source | `paper.txt` (pdftotext of input PDF) | `.tex` at project root | **validator only knows paper.txt** |
 | Validator (3.1.5) | Runs + flags work | `load_paper_text()` fails → every claim `NO_PAPER_TEXT` | **blocks dispatch in author mode** |
 | `FRONT_MATTER_ANCHOR` | Applies (author block is ambiguous in pdftotext) | N/A — LaTeX `\author{…}` isn't ambiguous | **should be skipped for .tex** |
@@ -56,7 +56,7 @@ Execution order: MRM `.tex` first (known-good reference), thesis chapter second 
 
 ### Phase 1 — Validator supports `.tex`
 
-Scope: `.claude/scripts/validate_claims.py`.
+Scope: `src/scripts/validate_claims.py`.
 
 1. Add `--manuscript-path <file>` CLI flag. Overrides the auto-detection.
 2. Update `load_paper_text()` to a broader `load_manuscript_text()`:
@@ -75,9 +75,9 @@ Risk: `.tex` with conditional `\input{…}` / `\include{…}` of sub-files. Defe
 
 ### Phase 2 — Orchestrator passes manuscript path in author mode
 
-Scope: `.claude/commands/paper-trail.md` Step 3.1.5.
+Scope: `src/commands/paper-trail.md` Step 3.1.5.
 
-Currently: `python3 .claude/scripts/validate_claims.py --run-dir <output-dir>`.
+Currently: `python3 src/scripts/validate_claims.py --run-dir <output-dir>`.
 
 Update to: in author mode, pass `--manuscript-path <path/to/document.tex>` explicitly. Use the `.tex` path the orchestrator already has from the author-mode input-paper discovery step.
 
@@ -85,7 +85,7 @@ Author mode `run_dir` for the validator should be the project root (where `ledge
 
 ### Phase 3 — Doc refresh
 
-Scope: README, `docs/internals.md`, `docs/output.md`, `.claude/commands/paper-trail.md`.
+Scope: README, `docs/internals.md`, `docs/output.md`, `src/commands/paper-trail.md`.
 
 1. **README "Run it" → Author mode.** Replace "Writes to `claims_ledger.md` at the project root — that's both the audit config (YAML frontmatter: `pdf_dir`, `bib_files`, institutional access) and the rendered ledger." with something accurate:
 

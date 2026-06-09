@@ -3,7 +3,7 @@ The single entry point for the `paper-trail` workflow. Given a paper to audit, e
 Two workflow modes:
 
 - **Reader mode** (default) — audit someone else's paper end-to-end from a single PDF. Used for peer review, literature vetting, skeptical reading. Self-contained: no project config, no manuscript editing.
-- **Author mode** — audit your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs in a directory). Orchestrates `/init-writing-tools` (first run only), `/verify-bib`, `/fetch-paper`, and `/ground-claim` against your writing project; writes to `claims_ledger.md` at the project root per the existing author-mode conventions.
+- **Author mode** — audit your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs in a directory), passed as an **absolute manuscript path argument**. Orchestrates `/init-writing-tools` (first run only), `/verify-bib`, `/fetch-paper`, and `/ground-claim` against the manuscript's directory; writes to `claims_ledger.md` there (or at `--output-dir`) per the existing author-mode conventions. paper-trail is never vendored into the writing repo — it runs from its own clone.
 
 Both modes share the per-claim workflow (Step 1 classify → Step 2 locate evidence with full attestation → Step 3 support level → Step 4 remediation → Step 5 ledger write), the same taxonomies, and the same Phase 3.5 attestation verifier. The difference is **who owns the paper** and therefore what gets written where.
 
@@ -11,7 +11,7 @@ Both modes share the per-claim workflow (Step 1 classify → Step 2 locate evide
 
 - **Reader mode** writes everything inside a single `<output-dir>/`. Never touches project-level config. If a project `claims_ledger.md` exists in cwd, ignore it — reader mode is for *external* papers.
 - **Author mode** writes to the project's existing `claims_ledger.md` (or bootstraps one via `/init-writing-tools` on first run). Never edits the manuscript; all remediations are surfaced as proposals for the user to accept.
-- Both modes reuse the ledger schema at `templates/claims_ledger.md` verbatim.
+- Both modes reuse the ledger schema at `src/templates/claims_ledger.md` verbatim.
 
 ## Invocation forms
 
@@ -29,12 +29,19 @@ Reader mode (default when a PDF path is given):
 - `/paper-trail <path-to-pdf> --fetch-substitute=<never|ask|always>` — policy for Phase 2 when a target paper's primary URL is paywalled but a related-but-not-identical paper (e.g., an arXiv preprint of the same work, an earlier arXiv version, a workshop paper vs. a later journal version) is available. Default: `ask`.
 - `/paper-trail <path-to-pdf> --skip-preflight` — bypass the dependency check in Preflight; assume the caller has already staged `pdftotext` / GROBID / MCPs (CI / headless contexts).
 
-Author mode:
+Author mode (the manuscript path is a required argument — an **absolute** path to a `.tex` file or a directory containing one):
 
-- `/paper-trail --author` — author mode against the current writing project (expects a `.tex` file + `.bib` + source PDFs in cwd, or config in `claims_ledger.md`).
-- `/paper-trail --author path/to/document.tex` — author mode against a specific manuscript file.
-- `/paper-trail --author --scope=single` — ground one specific claim (prompts for claim description).
+- `/paper-trail --author /abs/path/to/writing-repo/main.tex` — author mode against that manuscript.
+- `/paper-trail --author /abs/path/to/writing-repo/` — author mode against the single `.tex` in that directory (if zero or multiple `.tex` files match, ask which via `AskUserQuestion`).
+- `/paper-trail --author <abs-path> --output-dir <path>` — override the output location. Default: alongside the manuscript — `<manuscript-dir>/claims_ledger.md`, `<manuscript-dir>/ledger/`, `<manuscript-dir>/demo.html`.
+- `/paper-trail --author <abs-path> --scope=single` — ground one specific claim (prompts for claim description).
 - All the `--skip-paywalled` / `--sequential` / `--batch-size` / `--recheck` / `--triage` / `--fetch-substitute` flags apply in author mode too.
+
+Author-mode path validation (before any dispatch fires):
+
+- **Reject relative manuscript paths** with: "manuscript path must be absolute so paper-trail can locate the manuscript regardless of which directory Claude Code was launched from."
+- Validate the manuscript path exists and is readable.
+- paper-trail resolves its own prompts / specs / scripts via its canonical repo root (`git rev-parse --show-toplevel` run from the paper-trail clone), never via the session cwd — author mode behaves identically whether invoked from inside paper-trail's directory or from elsewhere via `claude --add-dir`.
 
 ## Initial questions
 
@@ -45,10 +52,10 @@ Use `AskUserQuestion` for any value not provided via args or reliably inferrable
    - **Reader mode:** the input PDF. Offer two ways to provide it:
      - **Paste a path** (absolute or relative).
      - **Search by name** — ask for the paper's filename or title fragment (e.g., "deuterium metabolic imaging" or "DMI Adamson 2023"). Run a filesystem search (`Glob` + lightweight `find`) against likely locations (`~/Documents`, `~/Downloads`, `~/Desktop`, and cwd). If multiple candidates match, let the user pick via `AskUserQuestion`; if zero match, iterate on the search fragment. Never silently pick a PDF — always confirm.
-   - **Author mode:** if the invocation included a `.tex` path argument, accept it without a question. Otherwise, **always prompt via `AskUserQuestion` for the manuscript path** — do not probe cwd and proceed silently, even if cwd contains a `.tex` + `.bib` + `claims_ledger.md`. The author-mode project root is load-bearing: every write lands there, and "cwd happens to look right" is not confirmation. Cwd auto-detection may appear as one option alongside "paste a path" / "search by name", but it is never the default action. If no `claims_ledger.md` exists at the chosen project root, offer to run `/init-writing-tools` first.
+   - **Author mode:** if the invocation included an absolute `.tex` (or manuscript-directory) path argument, accept it after validation without a question. Otherwise, **always prompt via `AskUserQuestion` for the absolute manuscript path** — do not probe cwd and proceed silently, even if cwd contains a `.tex` + `.bib` + `claims_ledger.md`. The manuscript directory is load-bearing: every write lands there, and "cwd happens to look right" is not confirmation. Cwd auto-detection may appear as one option alongside "paste a path" / "search by name", but it is never the default action, and whatever is chosen must resolve to an absolute path. If no `claims_ledger.md` exists at the manuscript directory, offer to run `/init-writing-tools` first.
 3. **Output location**
    - **Reader mode:** output directory, default `./paper-trail-<pdf-stem>/`, confirmable or overridable.
-   - **Author mode:** uses the existing project `claims_ledger.md`; no separate output dir.
+   - **Author mode:** defaults to the manuscript's directory (`<manuscript-dir>/claims_ledger.md`, `<manuscript-dir>/ledger/`, `<manuscript-dir>/demo.html`); overridable via `--output-dir`.
 4. **Scope** — grounding scope for this run: `full` (default — ground every claim) or `single` (ground one claim the user describes).
 5. **Institutional access** — short free-text note (e.g., "university library proxy", "personal only"). Used by Phase 2 paywall prompts. If a project `claims_ledger.md` exists with this field, offer its value as the default.
 6. **(single scope only)** — "Describe the claim you want to ground" — free text. Interpret semantically against the input PDF (reader mode) or the manuscript (author mode); do not require a verbatim quote.
@@ -59,14 +66,14 @@ Keep the question count at or below these six (not counting the internal search-
 
 `<output-dir>/`:
 
-- `ledger.md` — audit artifact (**human-readable view, rendered from `ledger/claims/*.json`**). Reuses `templates/claims_ledger.md` schema with the additions below.
-- `ledger/claims/<claim_id>.json` — **source-of-truth verdict** per claim. Schema: `.claude/specs/verdict_schema.md`. The orchestrator renders `ledger.md` from these files after every merge; edits to `ledger.md` are overwritten on the next render.
+- `ledger.md` — audit artifact (**human-readable view, rendered from `ledger/claims/*.json`**). Reuses `src/templates/claims_ledger.md` schema with the additions below.
+- `ledger/claims/<claim_id>.json` — **source-of-truth verdict** per claim. Schema: `src/specs/verdict_schema.md`. The orchestrator renders `ledger.md` from these files after every merge; edits to `ledger.md` are overwritten on the next render.
 - `ledger/evidence/<claim_id>.json` — extractor output (Pass 1). Verdict fields are `PENDING`; used by the adjudicator in Pass 2 and retained for verifier bounces.
 - `ledger/verifications/<claim_id>__<sub_claim_id>.json` — verifier spot-check output (Phase 3.5).
 - `refs.bib` — PDF-parsed BibTeX (Phase 0).
 - `refs.verified.bib` — bib-audit-corrected copy emitted by Phase 1 (Phases 2–3 prefer this if present).
 - `pdfs/<citekey>.pdf` — fetched source PDFs.
-- `pdfs/<citekey>/` — per-PDF **ingest handle** (Phase 2.5 output): `meta.json`, `content.txt`, `sections/*.txt`, `figures/*.png`, `figures/index.json`, `ingest_report.json`. Schema: `.claude/specs/ingest.md`.
+- `pdfs/<citekey>/` — per-PDF **ingest handle** (Phase 2.5 output): `meta.json`, `content.txt`, `sections/*.txt`, `figures/*.png`, `figures/index.json`, `ingest_report.json`. Schema: `src/specs/ingest.md`.
 - `parse_report.md` — bibliography parser diagnostics + ingest-mode summary (how many refs ingested via GROBID vs fallbacks).
 - `demo.html` — standalone HTML viewer rendered from the verdict JSONs (PDF.js viewer + claims sidebar). Produced by Phase 5.
 - `trace/<subagent_id>.jsonl` — per-subagent trace log for observability (see "Trace log").
@@ -281,7 +288,7 @@ Never suggest Sci-Hub, LibGen, or similar. Inherit the `/fetch-paper` policy.
 
 ## Phase 2.5 — Ingest
 
-After every successful fetch, run the ingest pipeline to turn the PDF into Phase 3's structured handle. Spec: `.claude/specs/ingest.md`.
+After every successful fetch, run the ingest pipeline to turn the PDF into Phase 3's structured handle. Spec: `src/specs/ingest.md`.
 
 ### Pre-flight — GROBID availability check
 
@@ -298,7 +305,7 @@ Per-run summary of ingest modes lands in `parse_report.md` so downstream consume
 For each `<citekey>` with a fetched `<output-dir>/pdfs/<citekey>.pdf`:
 
 1. If `<output-dir>/pdfs/<citekey>/ingest_report.json` exists with `success: true`, skip (resumability).
-2. Else invoke `.claude/scripts/ingest_pdf.py --pdf <path>.pdf --citekey <citekey> --out-dir <output-dir>/pdfs/<citekey>/`.
+2. Else invoke `src/scripts/ingest_pdf.py --pdf <path>.pdf --citekey <citekey> --out-dir <output-dir>/pdfs/<citekey>/`.
 3. Record the resulting `ingest_mode` per citekey.
 
 ### Failure handling
@@ -349,18 +356,18 @@ Before any Phase 3 dispatch, run the claim-extraction validator. Invocation diff
 - **Reader mode:**
 
   ```bash
-  python3 .claude/scripts/validate_claims.py --run-dir <output-dir>
+  python3 src/scripts/validate_claims.py --run-dir <output-dir>
   ```
 
   Auto-detects `<output-dir>/paper.txt` as the manuscript source (kind: `pdftotext`).
 
-- **Author mode:** pass the manuscript path explicitly; use the project root as `--run-dir` (that's where `ledger/claims/` lives):
+- **Author mode:** pass the manuscript path explicitly; use the manuscript directory (or `--output-dir` if set) as `--run-dir` (that's where `ledger/claims/` lives):
 
   ```bash
-  python3 .claude/scripts/validate_claims.py --run-dir <project-root> --manuscript-path <path/to/document.tex>
+  python3 src/scripts/validate_claims.py --run-dir <manuscript-dir> --manuscript-path </abs/path/to/document.tex>
   ```
 
-  Kind is inferred from extension (`.tex` → `latex`). If only a single `*.tex` exists at the project root, `--manuscript-path` may be omitted.
+  Kind is inferred from extension (`.tex` → `latex`). If only a single `*.tex` exists in the run dir, `--manuscript-path` may be omitted.
 
 The validator enforces these invariants per extracted claim, with no LLM cost:
 
@@ -380,9 +387,7 @@ Running retroactively against an existing run is safe and informative — the re
 
 ### Step 3.2 — Two-pass dispatch (extractor → adjudicator)
 
-Each claim is processed by **two subagents in sequence**, then a **third verifier subagent** in Phase 3.5. The three dispatch prompts are materialized in `.claude/prompts/` — the orchestrator reads the template, fills `{{slots}}` with per-claim values, and sends the result verbatim. No improvisation at dispatch time. See `.claude/specs/verdict_schema.md` for the exit-JSON contract both passes share.
-
-**Why two passes:** at 50 parallel subagents the single-pass "read PDF → decide verdict" workflow drifts (subagents write Python, invent taxonomies, default to CONFIRMED). Splitting the work keeps each subagent's context narrow:
+Each claim is processed by **two subagents in sequence**, then a **third verifier subagent** in Phase 3.5. The three dispatch prompts are materialized in `src/prompts/` — the orchestrator reads the template, fills `{{slots}}` with per-claim values, and sends the result verbatim. No improvisation at dispatch time. See `src/specs/verdict_schema.md` for the exit-JSON contract both passes share.
 
 - **Pass 1 — Extractor** reads the paper handle, gathers evidence. Emits `ledger/evidence/<claim_id>.json` with `verdict` fields left `PENDING`.
 - **Pass 2 — Adjudicator** reads only the evidence JSON + the rubric (`verdict_schema.md`), no paper. Emits `ledger/claims/<claim_id>.json` with final verdicts.
@@ -404,11 +409,12 @@ For each claim, the orchestrator computes the dispatch payload:
   "handle": "pdfs/hammernik2021/",
   "ingest_mode": "grobid",
   "co_citekeys": ["chen2022", "sandino2020"],
-  "run_output_dir": "<absolute path>"
+  "run_output_dir": "<absolute path>",
+  "spec_root": "<paper-trail repo root — git rev-parse --show-toplevel at dispatch time, absolute>"
 }
 ```
 
-— then substitutes each `{{slot}}` in `.claude/prompts/extractor-dispatch.md` with the matching value and sends the filled prompt to the extractor subagent. After validation of its `ledger/evidence/<claim_id>.json`, the orchestrator fills `.claude/prompts/adjudicator-dispatch.md` the same way and dispatches the adjudicator.
+— then substitutes each `{{slot}}` in `src/prompts/extractor-dispatch.md` with the matching value and sends the filled prompt to the extractor subagent. The `spec_root` slot is how dispatch prompts reference specs (`{{spec_root}}/src/specs/<file>`) so the path resolves regardless of the subagent's cwd — the orchestrator computes it once per run from paper-trail's own clone, never from the user's cwd. After validation of its `ledger/evidence/<claim_id>.json`, the orchestrator fills `src/prompts/adjudicator-dispatch.md` the same way and dispatches the adjudicator.
 
 #### Grouping
 
@@ -442,7 +448,7 @@ Hand-edits to `ledger.md` are **lost on the next render**. If a user wants to an
 
 Every adjudicated claim (regardless of overall verdict, including `CONFIRMED`) is spot-checked by a narrow verifier subagent before its verdict is considered final. The verifier sees only `{claim, one sampled evidence entry, rubric}` — no paper, no other sub-claims — so it can't drift.
 
-Dispatch template: `.claude/prompts/verifier-dispatch.md`.
+Dispatch template: `src/prompts/verifier-dispatch.md`.
 
 ### Sampling
 
@@ -465,7 +471,7 @@ For each `ledger/claims/<claim_id>.json`:
 }
 ```
 
-Orchestrator fills `.claude/prompts/verifier-dispatch.md` with these slots.
+Orchestrator fills `src/prompts/verifier-dispatch.md` with these slots.
 
 ### Handling results
 
@@ -509,7 +515,7 @@ When invoked with `--triage`, skip Phases 0–3 entirely. Read the existing ledg
 After Phase 4 completes (or at the end of a `--triage`-only run), render the standalone HTML viewer:
 
 ```bash
-python3 .claude/scripts/render_html_demo.py --run-dir <output-dir>
+python3 src/scripts/render_html_demo.py --run-dir <output-dir>
 ```
 
 The script reads `ledger/claims/*.json`, `refs.bib` (or `refs.verified.bib` if present), `paper.txt`, and the input PDF, then emits `<output-dir>/demo.html` — a PDF.js-based viewer with a claims sidebar. Re-run after any `--recheck`, `--triage`, or partial resume to keep the viewer in sync with the JSONs.
@@ -537,15 +543,15 @@ When `--scope=single` or the user selects `single` at prompt time:
 
 ## Author mode (`--author`)
 
-Author mode runs the same underlying workflow as reader mode (extract refs → verify bib → fetch sources → ground claims → attestation verify → triage), but against the user's own writing project rather than an external PDF. It orchestrates the existing component commands instead of re-implementing their logic.
+Author mode runs the same underlying workflow as reader mode (extract refs → verify bib → fetch sources → ground claims → attestation verify → triage), but against the user's own manuscript — located by the required absolute path argument — rather than an external PDF. It orchestrates the existing component commands instead of re-implementing their logic.
 
 ### Input-paper discovery
 
-Unlike reader mode where the input is a single PDF, author mode operates on a writing project:
+Unlike reader mode where the input is a single PDF, author mode operates on the manuscript's directory (everything below is resolved relative to `<manuscript-dir>`, not cwd):
 
-- **Bib files** — read from `claims_ledger.md` frontmatter `bib_files:` if it exists; else auto-detect (top-level `*.bib`, excluding `background/`, `drafts/`, `vendor/`).
-- **Manuscript** — `.tex` file(s) at the project root, or a specific path if provided.
-- **PDF directory** — from `claims_ledger.md` `pdf_dir:`, else auto-detect (`background/`, `papers/`, `refs/`, `pdfs/`, `literature/`).
+- **Manuscript** — the `.tex` file from the path argument (or the single `.tex` in the directory passed; ask if ambiguous).
+- **Bib files** — read from `<manuscript-dir>/claims_ledger.md` frontmatter `bib_files:` if it exists; else auto-detect (`*.bib` in `<manuscript-dir>`, excluding `background/`, `drafts/`, `vendor/`).
+- **PDF directory** — from `claims_ledger.md` `pdf_dir:`, else auto-detect (`background/`, `papers/`, `refs/`, `pdfs/`, `literature/` under `<manuscript-dir>`).
 - If no `claims_ledger.md` exists → prompt to run `/init-writing-tools` first. Author mode does not bypass initialization.
 
 ### Phase mapping
@@ -561,9 +567,9 @@ Unlike reader mode where the input is a single PDF, author mode operates on a wr
 
 ### Artifact layout
 
-No separate output-dir. Everything writes into the project's existing structure:
+No separate `paper-trail-*` output-dir. Everything writes into the manuscript's directory (or `--output-dir` if set):
 
-- `claims_ledger.md` at the project root (author-mode canonical artifact; already maintained by `/ground-claim`).
+- `claims_ledger.md` at `<manuscript-dir>` (author-mode canonical artifact; already maintained by `/ground-claim`).
 - Source PDFs into the configured `pdf_dir/`.
 - Bibliography fixes (if user runs `/verify-bib --fix` afterwards) into the configured `.bib` file with timestamped backup.
 
@@ -602,41 +608,7 @@ Each phase waits for all subagents to return before advancing to the next.
 
 ## Trace log
 
-Every subagent dispatch and final message is logged to `<output-dir>/trace/<subagent_id>.jsonl`. One file per subagent; newline-delimited JSON records. This is the local observability substrate — grep-able, diff-able, no vendor dependency.
-
-### Record schema
-
-Each line is one event:
-
-```json
-{
-  "ts": "2026-04-18T15:22:03.412Z",
-  "run_id": "run_20260418T1522Z",
-  "subagent_id": "extractor-C042",
-  "stage": "grounding",
-  "role": "extractor",
-  "claim_id": "C042",
-  "event": "dispatch",
-  "prompt_hash": "sha256:abcdef...",
-  "payload": {"claim_text": "...", "handle": "pdfs/hammernik2021/"}
-}
-```
-
-Events emitted:
-
-- `dispatch` — orchestrator sends a prompt to a subagent. `payload` = the dispatch slot values.
-- `final_message` — subagent returns. `payload` = the subagent's last message + exit path.
-- `validation_pass` / `validation_fail` — orchestrator's schema check result. On fail, `payload.errors` is populated.
-- `bounce` — verifier rejected; re-dispatching. `payload.reason` is the verifier's note.
-- `escalation` — the orchestrator gave up on a claim (second bounce, second schema fail).
-
-### Usage
-
-- `cat trace/*.jsonl | jq 'select(.event == "validation_fail")'` — find every schema violation across the run.
-- `grep '"claim_id":"C042"' trace/*.jsonl` — reconstruct the full history of one claim.
-- `jq -r 'select(.event == "final_message") | [.role, .claim_id, .payload.exit_path] | @tsv' trace/*.jsonl` — quick tabular view of all subagent outcomes.
-
-No Phoenix / Langfuse dependency in v1. If a vendor observability tool is needed later (M2+), it reads the same JSONL as its source.
+Every subagent dispatch and final message is logged to `<output-dir>/trace/<subagent_id>.jsonl` — one file per subagent, newline-delimited JSON records. Record schema, event types (`dispatch` / `final_message` / `validation_pass` / `validation_fail` / `bounce` / `escalation`), and query recipes: `src/specs/trace_log.md`. Emit every one of those events at the moments named there.
 
 ### Skip handling
 - `--skip=key1,key2` excludes those citekeys from Phases 2 and 3. Their ledger entries become `PENDING` / `NEEDS_PDF`.
@@ -696,3 +668,7 @@ Every flagged entry includes the source paper page number (for claims) or author
 - **Never write a `./paper-trail-*/` output-dir in author mode.** The project's existing `claims_ledger.md` is the canonical artifact.
 - **Never apply `/verify-bib --fix` automatically.** Surface findings and let the user decide whether to run the fix as a separate step.
 - **Never proceed without a `claims_ledger.md` or its equivalent config.** Prompt to run `/init-writing-tools` first.
+
+## Provenance (human-orientation; not load-bearing at dispatch time)
+
+- **Why two passes (Step 3.2):** at 50 parallel subagents the single-pass "read PDF → decide verdict" workflow drifts (subagents write Python, invent taxonomies, default to CONFIRMED). Splitting extractor from adjudicator keeps each subagent's context narrow.

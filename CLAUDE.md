@@ -15,28 +15,32 @@ Both modes share the per-claim two-pass workflow (extractor → adjudicator) plu
 
 ## Where things live
 
-- `.claude/commands/<name>.md` — slash command prompts (the orchestrator IS the agent driven by these prompts; there is no separate Python orchestrator). Six existing: `paper-trail.md` (entry point, 698 lines), `ground-claim.md` (per-claim workflow, 172 lines), `fetch-paper.md`, `verify-bib.md`, `init-writing-tools.md`, `paper-trail-init.md`.
-- `.claude/prompts/<role>-dispatch.md` — literal prompts the orchestrator passes to subagents. Three roles: `extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md`.
-- `.claude/specs/<topic>.md` — interface specifications. `verdict_schema.md` is the per-claim verdict JSON schema (source of truth — `ledger.md` is rendered from these). `ingest.md` is the source-handle layout produced by `scripts/ingest_pdf.py`.
-- `.claude/scripts/<name>.py` — supporting Python: `validate_claims.py`, `render_html_demo.py`, `ingest_pdf.py`.
-- `.claude/skills/<name>.md` — project-owned skills. Currently `doc-split-check.md` and `plan-check.md` (the latter is a thin extension of the user-level `~/.claude/commands/plan-check.md`, adding paper-trail-specific gap patterns). The `.gitignore` carveout pattern (`.claude/skills/*` + `!` re-includes) is what makes these committable while machine-local skills stay ignored.
-- `templates/claims_ledger.md` — the canonical author-mode ledger schema. Reused verbatim by reader mode.
+`src/` is the canonical ship surface; `.claude/<dir>/` entries are subdirectory symlinks into `src/<dir>/` kept only because Claude Code's discovery rules require those paths (intentional `.claude/` reference — publication target). Never edit through `.claude/`; if a symlink breaks, regenerate it from `src/`.
+
+- `src/commands/<name>.md` — slash command prompts (the orchestrator IS the agent driven by these prompts; there is no separate Python orchestrator). Six existing: `paper-trail.md` (entry point), `ground-claim.md` (per-claim workflow), `fetch-paper.md`, `verify-bib.md`, `init-writing-tools.md`, `paper-trail-init.md`.
+- `src/prompts/<role>-dispatch.md` — literal prompts the orchestrator passes to subagents. Three roles: `extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md`.
+- `src/specs/<topic>.md` — interface specifications. `verdict_schema.md` is the per-claim verdict JSON schema (source of truth — `ledger.md` is rendered from these). `ingest.md` is the source-handle layout produced by `src/scripts/ingest_pdf.py`. `control_flow.md` maps the orchestrator → dispatch → subagent → exit-validation graph.
+- `src/scripts/<name>.py` — supporting Python: `validate_claims.py`, `render_html_demo.py`, `ingest_pdf.py`.
+- `src/skills/<name>.md` or `src/skills/<name>/SKILL.md` — project-owned skills. Currently `doc-split-check.md`, `plan-check.md` (a thin extension of the user-level `~/.claude/commands/plan-check.md`, adding paper-trail-specific gap patterns), and the directory-shaped `paperclip/`. The `.gitignore` carveout pattern (`src/skills/*` + `!` re-includes) is what makes these committable while machine-local skills stay ignored.
+- `src/templates/claims_ledger.md` — the canonical author-mode ledger schema. Reused verbatim by reader mode.
 - `examples/` — canonical runs. `paper-trail-adamson-2025/` is the M1 reference run (per memory `project_m1_complete.md`); start review-agents at its README.md. `paper-trail-adamson-dmi-cns-lesions/` and `DFD_authormode/` are additional fixtures.
 - `docs/plans/` — stable reference plans. Long-lived; edit in place when decisions change. One file per major topic.
 - `docs/NEXT.md` — pointer-style implementation queue for plans in `docs/plans/`. Updated during `/wrapup`. Recommended sequence + status table; substance lives in the linked plan docs.
 - `docs/journal/YYYY-MM-DD-<topic>.md` — per-day-per-topic decision log with attribution. Append-only in practice; captures *who* raised *what* and *why*. No subfolders.
 - `docs/claude_ops.md` — operational standards referenced by existing plan docs.
 - `docs/trust-model.md`, `docs/internals.md`, `docs/prerequisites.md` — architecture and setup references.
+- `docs/SHIP_SURFACE.md` — repo-browser-facing "this is what ships" orientation pointing at `src/`.
 
 ## Codebase pointers for fresh agents implementing features
 
 When picking up a feature plan doc and starting implementation, the relevant files to read first are usually:
 
-- **Orchestrator (slash-command prompt):** `.claude/commands/paper-trail.md` — phases 0-5, 698 lines. Phase 3.1 is "Claim extraction" (line 315+); Phase 3 is the per-claim two-pass workflow that dispatches subagents.
-- **Per-claim workflow:** `.claude/commands/ground-claim.md` — explains the multi-cite handling ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"), the `co_cite_context.sibling_citekeys` population, and the Pass 1 / Pass 2 / Pass 3 (verifier) handoffs.
-- **Verdict schema:** `.claude/specs/verdict_schema.md` — the source-of-truth contract for what each subagent emits. Includes verdict enum, `co_cite_context` envelope, `attestation` envelope, rollup rules.
-- **Subagent dispatch prompts:** `.claude/prompts/extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md` — the literal prompts subagents receive, with `{{slot}}` placeholders.
-- **Ledger template:** `templates/claims_ledger.md` — author-mode ledger frontmatter and body schema.
+- **Control-flow map:** `src/specs/control_flow.md` — which phase dispatches which prompt, which subagent emits which schema fields, which validation gates each artifact. Read this before tracing the orchestrator by hand.
+- **Orchestrator (slash-command prompt):** `src/commands/paper-trail.md` — phases 0-5. Phase 3.1 is "Claim extraction"; Phase 3 is the per-claim two-pass workflow that dispatches subagents.
+- **Per-claim workflow:** `src/commands/ground-claim.md` — explains the multi-cite handling ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"), the `co_cite_context.sibling_citekeys` population, and the Pass 1 / Pass 2 / Pass 3 (verifier) handoffs.
+- **Verdict schema:** `src/specs/verdict_schema.md` — the source-of-truth contract for what each subagent emits. Includes verdict enum, `co_cite_context` envelope, `attestation` envelope, rollup rules.
+- **Subagent dispatch prompts:** `src/prompts/extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md` — the literal prompts subagents receive, with `{{slot}}` placeholders.
+- **Ledger template:** `src/templates/claims_ledger.md` — author-mode ledger frontmatter and body schema.
 - **Canonical fixture (reader mode):** `examples/paper-trail-adamson-2025/data/claims/` — 87 baseline claim JSONs (83 with multi-cite siblings) for regression checks. Note the `data/claims/` path uses the legacy layout; the modern layout is `ledger/claims/`. Both are produced by paper-trail and `render_html_demo.py` auto-detects either path. New code that loads claim JSONs should follow the same auto-detect pattern.
 - **Canonical fixture (author mode):** `examples/DFD_authormode/ledger/claims/` — modern-layout author-mode example with `claims_ledger.md` frontmatter, `pdfs/`, and `ledger/`. Use this when smoke-testing author-mode behavior.
 
@@ -48,7 +52,7 @@ When picking up a feature plan doc and starting implementation, the relevant fil
 
 **Modularity over monolith.** One topic per file. Long monolithic docs are hard to navigate later. The `doc-split-check` project-owned skill enforces this (~400-line trigger).
 
-**Plan-doc readiness.** After writing a plan doc, the `plan-check` skill (user-level at `~/.claude/commands/plan-check.md`, with a thin paper-trail-specific extension at `.claude/skills/plan-check.md`) verifies the doc carries enough self-contained information for a fresh-agent in a future session to implement from it without the conversation context. The principle: every piece of context the current session accumulated must either be **pointed at** (name the docs / files / memories the fresh agent should read first) or **stated directly** (when the context is load-bearing and brittle to indirection).
+**Plan-doc readiness.** After writing a plan doc, the `plan-check` skill (user-level at `~/.claude/commands/plan-check.md`, with a thin paper-trail-specific extension at `src/skills/plan-check.md`) verifies the doc carries enough self-contained information for a fresh-agent in a future session to implement from it without the conversation context. The principle: every piece of context the current session accumulated must either be **pointed at** (name the docs / files / memories the fresh agent should read first) or **stated directly** (when the context is load-bearing and brittle to indirection).
 
 **When to write a journal entry.** At the end of any substantive discussion that produced decisions or open questions. Especially for design / scope discussions where the who-said-what is the actual artifact.
 
@@ -71,8 +75,8 @@ Always read in this order:
 1. This file (CLAUDE.md) — repo orientation and conventions.
 2. **`docs/plans/` for the feature you're picking up** — `feature-multi-cite-joint-verdict.md`, `feature-neighbor-claim-attribution.md`, or `feature-issue-command.md`. Each is self-contained with codebase pointers.
 3. **`docs/plans/paper-trail-product-backlog.md`** — broader product backlog context if the feature touches shipping concerns.
-4. **`.claude/commands/paper-trail.md` and `.claude/commands/ground-claim.md`** — the two orchestrator prompts. The feature you're implementing almost certainly modifies one or both.
-5. **`.claude/specs/verdict_schema.md`** — schema source of truth. Most features touch the schema.
+4. **`src/commands/paper-trail.md` and `src/commands/ground-claim.md`** — the two orchestrator prompts. The feature you're implementing almost certainly modifies one or both.
+5. **`src/specs/verdict_schema.md`** — schema source of truth. Most features touch the schema.
 6. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
 
 ## Doc landscape (current)

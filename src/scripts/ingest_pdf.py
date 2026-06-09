@@ -2,7 +2,7 @@
 """
 Phase 2.5 ingest: turn a fetched PDF into paper-trail's canonical per-paper filesystem.
 
-Spec: `.claude/specs/ingest.md`
+Spec: `src/specs/ingest.md`
 Output layout: pdfs/<citekey>/{meta.json, content.txt, sections/*.txt, figures/*.png, figures/index.json, ingest_report.json}
 
 Usage:

@@ -4,7 +4,7 @@
 
 **Provenance.** Scoped 2026-05-01 in the same session as `docs/plans/repo-organization.md` and `docs/plans/feature-paperclip-first-architecture.md`. Decision-log entry to be appended to `docs/journal/2026-05-01-paperclip-coverage-revisit.md`.
 
-**Depends on.** `docs/plans/repo-organization.md` lands first. This plan assumes the post-repo-org world where ship-surface artifacts live under `src/` and `.claude/<dir>/` is a symlink to `src/<dir>/`. If repo-org does not land first, the path references in this doc need updating to `.claude/<dir>/<file>`.
+**Depends on.** `docs/plans/repo-organization.md` lands first. This plan assumes the post-repo-org world where ship-surface artifacts live under `src/` and `.claude/<dir>/` is a symlink to `src/<dir>/` (`.claude/` literals here are intentional — publication target). If repo-org does not land first, the path references in this doc need updating back to `.claude/<dir>/<file>`.
 
 ---
 
@@ -85,7 +85,7 @@ dev/
 
 When picking up this plan and starting implementation:
 
-- **`src/commands/paper-trail.md`** (post-repo-org; today `.claude/commands/paper-trail.md`) — the orchestrator. The Claude container needs to be able to invoke this slash command via Claude Code CLI (the CLI must have access to the project's `.claude/` dir, which means mounting the repo into the container).
+- **`src/commands/paper-trail.md`** (post-repo-org canonical home; discovered by Claude Code via the `.claude/commands` symlink) — the orchestrator. The Claude container needs to be able to invoke this slash command via Claude Code CLI (the CLI must have access to the project's `src/` dir, which means mounting the repo into the container).
 - **`src/commands/paper-trail-init.md`** — the orchestrator's setup probe. Useful as a sanity check at container start: "are all dependencies actually available?" — if not, `/paper-trail` will fail with a confusing error. The driver script could optionally run `/paper-trail-init` before the actual run to surface dep issues fast.
 - **`src/scripts/validate_claims.py`** — the JSON validator. The isolation framework runs it against the run's output as part of report generation. Failures here are real bugs (the run produced invalid claim JSONs), distinct from verdict-drift.
 - **`src/scripts/render_html_demo.py`** — the per-claim HTML renderer. Different from `dev/isolation/report.py`, which is the diff-report tool. Both produce HTML; only `render_html_demo.py` is part of the ship surface. Confusing-but-real distinction.
@@ -128,7 +128,7 @@ What v1 does NOT need to do:
 4. **Network-isolation level.** The Claude container needs network for paperclip, CrossRef, Semantic Scholar. Should it be allowed unrestricted egress, or should the docker-compose network be locked to specific outbound hosts? Default: unrestricted in v1; revisit if it becomes a security concern.
 5. **Capturing the model version.** The Claude session log records which model the container's Claude Code CLI talked to (Opus 4.7 in this user's case at land-time). `report.py` should surface this as a per-run metadata field — a verdict produced by Opus 4.7 vs Sonnet 4.6 should be flagged when comparing across runs.
 6. **Reporting output scope.** `report.html` per-claim rows are the primary surface. Should the report also produce a Markdown summary suitable for pasting into a PR description ("23 agree-same-reasoning, 12 agree-different-reasoning, 3 disagree, 0 errored")? Default: yes, as a top-of-`report.html` summary block plus a `report-summary.md` companion file.
-7. **Symlink-aware bind-mounts in docker-compose.** Post-repo-org, `.claude/<dir>/` is a symlink to `src/<dir>/`. Docker bind-mounts dereference symlinks by default (mounts the target, not the link). Verify in implementation that mounting the repo root preserves both the canonical source and the symlinked-to-by-Claude-Code paths. If there is a problem, fall back to mounting `src/` and `.claude/` separately.
+7. **Symlink-aware bind-mounts in docker-compose.** Post-repo-org, `.claude/<dir>/` is a symlink to `src/<dir>/` (intentional `.claude/` reference — publication target). Docker bind-mounts dereference symlinks by default (mounts the target, not the link). Verify in implementation that mounting the repo root preserves both the canonical source and the symlinked-to-by-Claude-Code paths. If there is a problem, fall back to mounting `src/` and `.claude/` separately.
 
 ---
 

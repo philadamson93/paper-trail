@@ -87,7 +87,7 @@ Three parallel batches (default batch size 10; override via `--batch-size N` or 
 
 ## Files to Create
 
-- `.claude/commands/paper-trail.md` — the orchestrator command prompt (directive-style, ~200 lines in the `ground-claim.md` mold: invocation-forms, config, per-phase specification, resumability, triage-report format, "Do not" section).
+- `src/commands/paper-trail.md` — the orchestrator command prompt (directive-style, ~200 lines in the `ground-claim.md` mold: invocation-forms, config, per-phase specification, resumability, triage-report format, "Do not" section).
 
 ## Files to Modify
 
@@ -95,9 +95,9 @@ Three parallel batches (default batch size 10; override via `--batch-size N` or 
 
 ## Files NOT to Touch Yet
 
-- `templates/claims_ledger.md` — schema is reused verbatim; per-paper additions (input-paper frontmatter, critical-findings header) live in the command prompt, not the template. Only modify if we decide to share these with other commands later.
+- `src/templates/claims_ledger.md` — schema is reused verbatim; per-paper additions (input-paper frontmatter, critical-findings header) live in the command prompt, not the template. Only modify if we decide to share these with other commands later.
 - `examples/` — defer a `paper-trail-example.md` until after we've run it against a real paper and can include a real (not placeholder) artifact. User has explicitly flagged parser-quality testing as a follow-up.
-- `.claude/commands/init-writing-tools.md` — `/paper-trail` deliberately does not depend on init; don't cross-couple.
+- `src/commands/init-writing-tools.md` — `/paper-trail` deliberately does not depend on init; don't cross-couple.
 
 ## Open Questions
 

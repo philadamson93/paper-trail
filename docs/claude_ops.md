@@ -19,7 +19,7 @@ Adapted from the VISTA `claude_ops.md` with paper-trail-specific differences not
 ## Environment
 
 - **Local code execution is allowed on this machine.** Unlike the VISTA VM setup, this repo can be developed and tested locally.
-- **The repo is a collection of slash-command prompts.** Most "code" in `paper-trail` is natural-language prompt text in `.claude/commands/*.md`, read by Claude at invocation time. There is no build step, no runtime, and no test suite.
+- **The repo is a collection of slash-command prompts.** Most "code" in `paper-trail` is natural-language prompt text in `src/commands/*.md` (read through the `.claude/commands` symlink), read by Claude at invocation time. There is no build step, no runtime, and no test suite.
 - **"Testing" means running the command.** Commands are validated by invoking them against a real PDF / `.bib` / manuscript and inspecting the resulting artifact (ledger, report, refs.bib). There is no unit-test suite to gate on.
 
 ---
@@ -89,7 +89,7 @@ How will we know this works? (For paper-trail: which example PDF / `.bib` will w
 ### Re-use Over Duplication
 
 - Existing commands have conventions worth reusing (ledger schema, severity taxonomies, "raise-don't-fix" principle, YAML frontmatter config, per-invocation-form sections). Extend them; don't create parallel ones.
-- Templates in `templates/` are the canonical schemas — modify there rather than re-specifying inline.
+- Templates in `src/templates/` are the canonical schemas — modify there rather than re-specifying inline.
 
 ### Simplicity
 
@@ -169,9 +169,9 @@ Note: no separate test-review agent for this repo — there is no test suite. Ve
 
 This repo *is* slash commands. When adding a new one:
 
-- Follow the existing `.claude/commands/*.md` style (directive "Do X" sentences, numbered steps, explicit "Do not" section, invocation-forms section up top).
+- Follow the existing `src/commands/*.md` style (directive "Do X" sentences, numbered steps, explicit "Do not" section, invocation-forms section up top).
 - If the new command orchestrates existing ones, reuse their semantics (ledger schema, config frontmatter, fallback prompts) rather than re-specifying.
-- If the new command introduces a config field, update `templates/claims_ledger.md` and `init-writing-tools.md`.
+- If the new command introduces a config field, update `src/templates/claims_ledger.md` and `init-writing-tools.md`.
 
 ---
 

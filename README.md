@@ -64,21 +64,27 @@ Writes a self-contained audit artifact to `./paper-trail-<pdf-stem>/`.
 
 ### Author mode: audit your own in-progress manuscript
 
-Vendor-copy `.claude/` and `templates/` into your writing project first:
+Nothing to install into your writing project — paper-trail runs from its own clone and takes your manuscript's **absolute path** as an argument. Any of these invocation patterns works:
 
 ```bash
-cp -r ~/src/paper-trail/.claude .
-cp -r ~/src/paper-trail/templates .
-```
+# 1. From inside paper-trail's directory
+cd ~/src/paper-trail && claude
+/paper-trail --author /abs/path/to/writing-repo/main.tex
 
-Then:
+# 2. From your writing repo, with paper-trail added to the session
+cd /path/to/writing-repo && claude --add-dir ~/src/paper-trail
+/paper-trail --author $(pwd)/main.tex
+```
 
 ```bash
-/paper-trail --author                         # against current writing project
-/paper-trail --author path/to/document.tex    # against a specific .tex
+# 3. Optional convenience: make the command discoverable from any directory
+#    (Claude Code requires the .claude/commands/ path for slash-command discovery)
+ln -s ~/src/paper-trail/.claude/commands/paper-trail.md ~/.claude/commands/paper-trail.md
 ```
 
-Writes to `claims_ledger.md` at the project root. That's both the audit config (YAML frontmatter: `pdf_dir`, `bib_files`, institutional access) and the rendered ledger. On first run, prompts you to bootstrap it via `/init-writing-tools` (one-time, detects your `.bib` and PDF layout).
+The manuscript path must be absolute so paper-trail can locate it regardless of where Claude Code was launched. Outputs land alongside the manuscript by default — `<manuscript-dir>/claims_ledger.md` (audit config + rendered ledger), `<manuscript-dir>/ledger/`, and `<manuscript-dir>/demo.html` — overridable with `--output-dir <path>`. On first run, paper-trail prompts you to bootstrap the ledger via `/init-writing-tools` (one-time, detects your `.bib` and PDF layout).
+
+Copying paper-trail into a writing repo (vendoring) is intentionally not supported: a manual `cp -R` snapshot will work, but updates won't flow to it.
 
 ## How it works
 

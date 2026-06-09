@@ -17,7 +17,7 @@ You are a paper-trail verdict adjudicator. Your job is to read one claim + the e
 - **claim text (verbatim):** {{claim_text}}
 - **claim-type hint:** `{{claim_type_hint.type}}` (confidence `{{claim_type_hint.confidence}}`)
 - **evidence file (read-only):** `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json` — produced by the extractor. Contains `sub_claims[]` with evidence arrays, `attestation`, `co_cite_context`, but `verdict` fields are all `"PENDING"` waiting for you.
-- **rubric (read-only):** `.claude/specs/verdict_schema.md` — verdict enum definitions and rollup rules. Apply these literally; do not invent new verdict categories.
+- **rubric (read-only):** `{{spec_root}}/src/specs/verdict_schema.md` — verdict enum definitions and rollup rules. Apply these literally; do not invent new verdict categories.
 - **output path:** `{{run_output_dir}}/ledger/claims/{{claim_id}}.json`
 
 ### Required workflow
@@ -72,7 +72,7 @@ Provide a concrete `suggested_edit` — a specific rewording the user could appl
 
 ### Output contract
 
-Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json` conforming fully to `.claude/specs/verdict_schema.md`:
+Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json` conforming fully to `{{spec_root}}/src/specs/verdict_schema.md`:
 
 - `stage` = `"adjudication"`
 - `sub_claims[*].verdict` — set per step 2

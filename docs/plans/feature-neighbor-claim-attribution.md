@@ -12,13 +12,13 @@ Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-
 
 **Files to edit:**
 
-- `.claude/commands/paper-trail.md` Phase 3.1 (line 315+): add the bidirectional ±1-sentence walk instruction with the skip-when-neighbor-cited rule, plus 4-6 calibration examples (see "Calibration examples" subsection below). Today Phase 3.1 line 341 says "Every sentence containing one or more confirmed citation markers is a candidate claim" — the new behavior extends this to also consider ±1-sentence neighbors of cited sentences.
-- `.claude/commands/paper-trail.md` line 396 (dispatch payload JSON): add `claim_source` slot to the orchestrator-computed dispatch payload. Without this, the extractor never receives the field.
-- `.claude/prompts/extractor-dispatch.md` line 18 (Inputs slot list): add `{{claim_source}}` so the extractor can read it.
-- `.claude/prompts/adjudicator-dispatch.md`: add one paragraph to the rubric instructing the adjudicator to lean toward `AMBIGUOUS` (rather than `UNSUPPORTED`) when `claim_source != "explicit"` and the evidence is thin. Slots cleanly into the existing rubric structure.
-- `.claude/specs/verdict_schema.md`: add `claim_source` as a sibling top-level field (NOT nested under the existing `claim_type` enum — see "Schema-design pin" below). Bump `schema_version` 1.0 → 1.1.
-- `.claude/scripts/validate_claims.py` (NOT mentioned in earlier draft of this doc — single most likely implementation blocker): the existing `CITEKEY_MARKER_MISMATCH` check looks for the citekey within ±280 chars of the claim's text anchor. For inferred-forward claims the anchor is in sentence S+1 but the marker is in sentence S, which can exceed the window. **Resolution:** skip the CITEKEY_MARKER_MISMATCH check entirely when `claim_source != "explicit"`. The text-anchor check (`TEXT_ANCHOR_MISSING`) still runs against the claim's own (verbatim neighbor) sentence.
-- `.claude/scripts/render_html_demo.py` lines 1474-1534 (highlight-anchor logic in `findClaimSentenceIndex`): update to anchor the in-PDF highlight to the inferred-claim's own sentence (not to the citation marker's sentence, which is the current behavior). Without this, inferred claims will mis-highlight to the wrong sentence in the viewer.
+- `src/commands/paper-trail.md` Phase 3.1 (line 315+): add the bidirectional ±1-sentence walk instruction with the skip-when-neighbor-cited rule, plus 4-6 calibration examples (see "Calibration examples" subsection below). Today Phase 3.1 line 341 says "Every sentence containing one or more confirmed citation markers is a candidate claim" — the new behavior extends this to also consider ±1-sentence neighbors of cited sentences.
+- `src/commands/paper-trail.md` line 396 (dispatch payload JSON): add `claim_source` slot to the orchestrator-computed dispatch payload. Without this, the extractor never receives the field.
+- `src/prompts/extractor-dispatch.md` line 18 (Inputs slot list): add `{{claim_source}}` so the extractor can read it.
+- `src/prompts/adjudicator-dispatch.md`: add one paragraph to the rubric instructing the adjudicator to lean toward `AMBIGUOUS` (rather than `UNSUPPORTED`) when `claim_source != "explicit"` and the evidence is thin. Slots cleanly into the existing rubric structure.
+- `src/specs/verdict_schema.md`: add `claim_source` as a sibling top-level field (NOT nested under the existing `claim_type` enum — see "Schema-design pin" below). Bump `schema_version` 1.0 → 1.1.
+- `src/scripts/validate_claims.py` (NOT mentioned in earlier draft of this doc — single most likely implementation blocker): the existing `CITEKEY_MARKER_MISMATCH` check looks for the citekey within ±280 chars of the claim's text anchor. For inferred-forward claims the anchor is in sentence S+1 but the marker is in sentence S, which can exceed the window. **Resolution:** skip the CITEKEY_MARKER_MISMATCH check entirely when `claim_source != "explicit"`. The text-anchor check (`TEXT_ANCHOR_MISSING`) still runs against the claim's own (verbatim neighbor) sentence.
+- `src/scripts/render_html_demo.py` lines 1474-1534 (highlight-anchor logic in `findClaimSentenceIndex`): update to anchor the in-PDF highlight to the inferred-claim's own sentence (not to the citation marker's sentence, which is the current behavior). Without this, inferred claims will mis-highlight to the wrong sentence in the viewer.
 
 **Schema-design pin:** `claim_source` is a NEW SIBLING top-level field, not nested under the existing `claim_type` enum. Reasoning: `claim_type` (`DIRECT | PARAPHRASED | SUPPORTING | BACKGROUND | CONTRASTING | FRAMING`) describes the manuscript's RHETORICAL framing of the claim. `claim_source` (`explicit | inferred_forward | inferred_backward`) describes HOW paper-trail attributed the claim to a reference. They are orthogonal — a `PARAPHRASED` claim can be either `explicit` or `inferred`, and an `inferred_forward` claim can be any `claim_type`.
 
@@ -42,11 +42,11 @@ Concrete edits-list and pinned design decisions surfaced by a fresh-eyes critic-
 
 ## Codebase pointers
 
-- **Where claim extraction actually lives:** `.claude/commands/paper-trail.md` Phase 3.1 ("Claim extraction", line 315+). **Important reframe:** the orchestrator IS the agent driven by this slash-command prompt — there is no separate Python "orchestrator's Phase-3.1 claim-extraction step." To extend extraction to neighbor sentences, the change is in the Phase-3.1 prompt instructions, telling the agent to do the bidirectional ±1-sentence walk and emit additional claims tagged to the same citekey with `claim_source: inferred_*`.
-- **Per-claim workflow:** `.claude/commands/ground-claim.md` — claims flow through here once extracted. The new `claim_source` value is set at dispatch time from `paper-trail.md` Phase 3.1 and travels through to the per-claim ledger entry.
-- **Schema:** `.claude/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below. (If Feature 1 also bumps to 1.1, both features share one schema_version bump.)
-- **Adjudicator behavior:** `.claude/prompts/adjudicator-dispatch.md` — add one paragraph to the rubric about leaning AMBIGUOUS for thin-evidence inferred claims (where `claim_source != "explicit"`).
-- **Ledger renderer:** `.claude/scripts/render_html_demo.py` — needs to visually distinguish inferred claims from explicit ones in the per-claim ledger entries.
+- **Where claim extraction actually lives:** `src/commands/paper-trail.md` Phase 3.1 ("Claim extraction", line 315+). **Important reframe:** the orchestrator IS the agent driven by this slash-command prompt — there is no separate Python "orchestrator's Phase-3.1 claim-extraction step." To extend extraction to neighbor sentences, the change is in the Phase-3.1 prompt instructions, telling the agent to do the bidirectional ±1-sentence walk and emit additional claims tagged to the same citekey with `claim_source: inferred_*`.
+- **Per-claim workflow:** `src/commands/ground-claim.md` — claims flow through here once extracted. The new `claim_source` value is set at dispatch time from `paper-trail.md` Phase 3.1 and travels through to the per-claim ledger entry.
+- **Schema:** `src/specs/verdict_schema.md` — additive 1.0 → 1.1 bump per "Schema changes needed" below. (If Feature 1 also bumps to 1.1, both features share one schema_version bump.)
+- **Adjudicator behavior:** `src/prompts/adjudicator-dispatch.md` — add one paragraph to the rubric about leaning AMBIGUOUS for thin-evidence inferred claims (where `claim_source != "explicit"`).
+- **Ledger renderer:** `src/scripts/render_html_demo.py` — needs to visually distinguish inferred claims from explicit ones in the per-claim ledger entries.
 - **Smoke test:** re-run /paper-trail on `examples/paper-trail-adamson-2025/` and check whether new `inferred_forward` / `inferred_backward` claims appear (there are forward/backward sentence patterns in the MRM paper that should match). Verify all existing `explicit` claims still appear with the same verdicts as baseline (regression check).
 
 ---
@@ -77,7 +77,7 @@ This skip rule means each sentence gets attributed to at most one reference via 
 
 ## Schema changes needed
 
-A new field on the claim-level schema in `.claude/specs/verdict_schema.md`:
+A new field on the claim-level schema in `src/specs/verdict_schema.md`:
 
 ```
 claim_source: "explicit" | "inferred_forward" | "inferred_backward"
