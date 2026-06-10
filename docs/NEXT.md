@@ -2,7 +2,7 @@
 
 Pointer-style index of plan docs in `docs/plans/` that are scoped but not yet implemented. Each item is 1-3 lines + a link to the plan doc for substance.
 
-**Last updated:** 2026-05-21
+**Last updated:** 2026-06-09
 
 ---
 
@@ -16,6 +16,14 @@ Plans coordinated by sequence rather than scope (the earlier ones reshuffle path
 4. **[Multi-cite joint verdict (Feature 1)](plans/feature-multi-cite-joint-verdict.md)** + **[Neighbor-claim attribution (Feature 2)](plans/feature-neighbor-claim-attribution.md)** — share `feature/multi-cite-and-neighbor-claims` branch (both touch the orchestrator and adjudicator). Land at schema 1.1; coordinate with paperclip-first's 1.2 bump.
 5. **[Issue command](plans/feature-issue-command.md)** — `/issue` slash command for bug reports + verdict disputes. Standalone; lands on its own feature branch when picked up.
 
+## Repo-org close-out items (before or at merge)
+
+- **Behavioral smokes** — user-run interactive sessions; exact list in [repo-organization.md § Deferred to user](plans/repo-organization.md). Before checking out the branch in the main checkout, move aside the untracked `.claude/skills/paperclip/` (now tracked at `src/skills/paperclip/`).
+- **Merge `repo-organization` → `main`**, then rebase `feature/paperclip-primary-workflow` per RD-8.
+- **Regenerate `plans/repo-organization.html`** via `/explain-plan` (stale — plan gained Implementation-results + post-review sections).
+- **Workshop the `docs/SHIP_SURFACE.md` headline** with the user per RD-7 / memory `feedback_short_headline_copy.md`.
+- **Open question:** does the documented author-mode default-output set include `claims_ledger.md`? Settle at the author-mode behavioral smoke; see the adjudication log in [reviews/repo-organization-implementation-feedback.md](plans/reviews/repo-organization-implementation-feedback.md).
+
 ## Status conventions
 
 - **In flight** — plan committed to a feature branch, implementation in progress.
@@ -24,7 +32,7 @@ Plans coordinated by sequence rather than scope (the earlier ones reshuffle path
 
 | Plan | Status | Reviewed | Branch |
 |---|---|---|---|
-| repo-organization | Implemented on `repo-organization` branch 2026-06-09 (structural smokes pass; behavioral smokes + merge to main pending; HTML companion stale — regenerate via `/explain-plan`) | Yes (visual companion read 2026-06-09) | `repo-organization` (off `feature/paperclip-primary-workflow`) |
+| repo-organization | Implemented on `repo-organization` branch 2026-06-09, 4 commits incl. Codex `/review-implementation` fixes (structural smokes pass; behavioral smokes + merge to main pending; HTML companion stale — regenerate via `/explain-plan`) | Stale (visual companion read 2026-06-09 pre-implementation; Implementation-results + post-review sections added after) | `repo-organization` (off `feature/paperclip-primary-workflow`) |
 | run-isolation-framework | Queued | No | none yet |
 | feature-paperclip-first-architecture | In flight (plan-only) | No | `feature/paperclip-primary-workflow` |
 | feature-multi-cite-joint-verdict + feature-neighbor-claim-attribution | In flight (plan-only) | No | `feature/multi-cite-and-neighbor-claims` |

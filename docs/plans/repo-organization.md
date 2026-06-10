@@ -377,7 +377,7 @@ Per-prompt line counts (before → after; "before" includes the +~20 lines the R
 
 | Prompt | Before | After | Change |
 |---|---|---|---|
-| `paper-trail.md` | 698 (+~20 RD-9/OQ-D) | 674 | trace-log reference block → `src/specs/trace_log.md`; "why two passes" → Provenance footer |
+| `paper-trail.md` | 698 (+~20 RD-9/OQ-D) | 670 | trace-log reference block → `src/specs/trace_log.md`; "why two passes" → Provenance footer; verifier handling rules → `src/specs/verifier_results.md` (post-review) |
 | `ground-claim.md` | 172 | 172 | unchanged this round (content-driven pass found no spec-duplicating blocks; revisit after a real-workflow run per RD-5) |
 | `paper-trail-init.md` | 146 | 146 | unchanged |
 | `verify-bib.md` | 121 | 121 | unchanged |
@@ -385,7 +385,7 @@ Per-prompt line counts (before → after; "before" includes the +~20 lines the R
 | `fetch-paper.md` | 70 | 70 | < 100 lines — skipped |
 | `extractor-dispatch.md` | 87 | 87 | < 100 lines — skipped |
 | `adjudicator-dispatch.md` | 102 | 102 | dispatch prompt — slot lists out of scope per audit rules |
-| `verifier-dispatch.md` | 90 | 90 | < 100 lines — skipped |
+| `verifier-dispatch.md` | 90 | 88 | < 100 lines — skipped in the audit; orchestrator-notes handling bullets later moved to `verifier_results.md` (post-review) |
 
 Subagent-reader side-check for each moved block:
 
