@@ -475,15 +475,11 @@ Orchestrator fills `src/prompts/verifier-dispatch.md` with these slots.
 
 ### Handling results
 
-Verifier emits `ledger/verifications/<claim_id>__<sub_claim_id>.json` with `result ∈ {PASS, PARTIAL, FAIL}` and `verdict_impact`:
-
-- `PASS` / `verdict_impact: none` → verdict stands.
-- `PARTIAL` / `flag_unverified_attestation` → patch the verdict JSON's `overall_flag` to include `UNVERIFIED_ATTESTATION`. Verdict itself unchanged.
-- `FAIL` / `bounce_to_re_ground` → re-dispatch the claim through extractor + adjudicator. Increment `attempts` on the claim's JSON; after 2 bounces, flag the claim `AMBIGUOUS` with `SCHEMA_VIOLATION` and stop (systematic extractor issue).
+Verifier emits `ledger/verifications/<claim_id>__<sub_claim_id>.json`. Act on its `result` / `verdict_impact` exactly per `src/specs/verifier_results.md` — verdict-stands vs flag-patch vs bounce, including the two-bounce ceiling.
 
 ### Default
 
-Verify every claim in v1. A `--verify-sample-rate=<pct>` flag may be added later based on cost data; not a v1 default. Rigor beats compute.
+Verify every claim in v1 (`src/specs/verifier_results.md` § Defaults). Rigor beats compute.
 
 ### Do not
 

@@ -41,7 +41,7 @@ Adapted from the VISTA `claude_ops.md` with paper-trail-specific differences not
 
 ### Saving the Plan (after exiting plan mode)
 
-Plan mode can only write to its internal plan file (`~/.claude/plans/`). It cannot write to `docs/plans/` in this repo. So:
+Plan mode can only write to its internal plan file (`~/.claude/plans/` — Claude Code's user-global plan-mode storage in the home directory, not this repo's `.claude/`). It cannot write to `docs/plans/` in this repo. So:
 
 1. **Exit plan mode** — this approves plan *content*, not implementation.
 2. **Immediately copy the plan to `docs/plans/<descriptive-name>.md`** (not `plan_01.md`). Traceability across sessions depends on this.

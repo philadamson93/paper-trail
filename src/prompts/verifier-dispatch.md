@@ -85,6 +85,4 @@ Exit after writing the verification JSON. Final message: absolute path + `result
 ## Orchestrator notes (not sent to subagent)
 
 - Sampling: for each adjudicated claim, randomly sample one entry from `sub_claims[*].evidence[]` (flattened). Skip figure entries — they're marked out of scope above. If a claim has zero evidence (all UNSUPPORTED), sample one entry from `attestation.closest_adjacent` — "does that closest-adjacent passage actually exist where recorded?"
-- On `verdict_impact=bounce_to_re_ground`: re-dispatch the claim through extractor + adjudicator. Increment an attempt counter; after 2 bounces, give up and flag the claim `AMBIGUOUS` with `SCHEMA_VIOLATION` (suggests a systematic extractor issue).
-- On `verdict_impact=flag_unverified_attestation`: update the verdict JSON's `overall_flag` to include `UNVERIFIED_ATTESTATION`.
-- Verifier pass is cheap (small context, no vision). Default: run on every adjudicated claim. Can be downgraded to sampled subset via `--verify-sample-rate` if token budget is tight.
+- Result/`verdict_impact` semantics, handling rules (flag-patch, bounce, two-bounce ceiling), and verification defaults: `src/specs/verifier_results.md` (contract of record — keep the output-contract block above in sync with it).

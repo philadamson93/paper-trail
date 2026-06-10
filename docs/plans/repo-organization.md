@@ -425,6 +425,10 @@ All run 2026-06-09 on the `repo-organization` branch:
 - **iCloud gotcha (new, worth knowing):** the repo lives under iCloud-synced `Documents/`; iCloud renamed the five freshly-created symlinks to `<name> 2` mid-creation (sync-conflict suffix) on the first attempt. Fixed by `mv`-ing back; if symlinks ever show ` 2` suffixes after a checkout, that's iCloud, not git.
 - **Fresh-clone symlink resolution** — PASS. `git clone --branch repo-organization` into a clean directory: `readlink .claude/commands` → `../src/commands`, file reads resolve through the symlink, and `git ls-files src/skills/` shows all three shipped skills including `paperclip/SKILL.md`.
 
+### Post-review fixes (Codex implementation audit, 2026-06-09)
+
+`/review-implementation` ran after the initial commits (verdict: Revise before commit) — feedback + adjudication log at `reviews/repo-organization-implementation-feedback.md`. Applied: dotted `{{claim_type_hint.*}}` slots added to the `control_flow.md` slot map (the original enumeration grep missed dotted placeholders — command fixed in-file), validation cells converted to real Markdown links per the no-drift constraint, and verifier result semantics extracted to a new `src/specs/verifier_results.md` (user's call) with `verifier-dispatch.md` / `paper-trail.md` / `control_flow.md` pointing at it. Open: whether the documented author-mode default-output set includes `claims_ledger.md` (currently documented; confirm at the author-mode behavioral smoke).
+
 ### Deferred to user (behavioral smokes)
 
 Discovery + execution smokes need real interactive Claude Code sessions against the main checkout after this branch merges:

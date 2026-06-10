@@ -17,10 +17,10 @@ Single source of truth for the agent graph behind `/paper-trail`: which orchestr
 | Phase 2.5 — Ingest | "Phase 2.5 — Ingest" heading | `src/scripts/ingest_pdf.py --pdf <path>.pdf --citekey <citekey> --out-dir <output-dir>/pdfs/<citekey>/` (process-local, no subagent) | per-PDF handle (`src/specs/ingest.md`) | `ingest_report.json` `success` flag; `ingest_mode: error` → claims stubbed `PENDING`/`NEEDS_PDF` |
 | Phase 3.1 — Claim extraction | "Step 3.1 — Claim extraction" heading + "Disambiguation heuristics" subsection | In-orchestrator prompt instructions (no subagent dispatch) | candidate-claim list `{claim_text, citekey, manuscript_section}` | (none — orchestrator-internal; Step 3.1.5 gates next) |
 | Phase 3.1.5 — Pre-dispatch claim validator | "Step 3.1.5 — Validate extracted claims against the manuscript" heading | `src/scripts/validate_claims.py --run-dir <output-dir>` (reader) **or** `--run-dir <manuscript-dir> --manuscript-path <…>` (author) | `claim_extraction_report.md` | Script flags `TEXT_ANCHOR_MISSING` / `FRONT_MATTER_ANCHOR` / `CITEKEY_MARKER_MISMATCH`; non-zero exit pauses for user decision before Phase 3.2 |
-| Phase 3.2 Pass 1 — Extractor | "Step 3.2 — Two-pass dispatch (extractor → adjudicator)" heading → "Dispatch inputs" payload, per-claim slot-fill and send | `src/prompts/extractor-dispatch.md` | `ledger/evidence/<claim_id>.json` | per `src/specs/verdict_schema.md` § Validation rules (orchestrator-enforced inline on each return; retry once, then `SCHEMA_VIOLATION`) |
-| Phase 3.2 Pass 2 — Adjudicator | Same "Step 3.2" section, post-extractor slot-fill | `src/prompts/adjudicator-dispatch.md` | `ledger/claims/<claim_id>.json` | per `src/specs/verdict_schema.md` § Validation rules, incl. the rollup-consistency invariant (`overall_verdict` vs `sub_claims[*].verdict`) |
+| Phase 3.2 Pass 1 — Extractor | "Step 3.2 — Two-pass dispatch (extractor → adjudicator)" heading → "Dispatch inputs" payload, per-claim slot-fill and send | `src/prompts/extractor-dispatch.md` | `ledger/evidence/<claim_id>.json` | per [verdict_schema.md § Validation rules](verdict_schema.md#validation-rules-orchestrator-enforced) (orchestrator-enforced inline on each return; retry once, then `SCHEMA_VIOLATION`) |
+| Phase 3.2 Pass 2 — Adjudicator | Same "Step 3.2" section, post-extractor slot-fill | `src/prompts/adjudicator-dispatch.md` | `ledger/claims/<claim_id>.json` | per [verdict_schema.md § Validation rules](verdict_schema.md#validation-rules-orchestrator-enforced), incl. its rollup-consistency invariant |
 | Phase 3.3 — Ledger render | "Step 3.3 — Ledger rendering" heading | Derived-view re-render from `ledger/claims/*.json` | `ledger.md` | (idempotent re-render; not a validation gate) |
-| Phase 3.5 — Verifier | "Phase 3.5 — Attestation verification (gating)" heading; "Sampling" + "Dispatch payload" subsections | `src/prompts/verifier-dispatch.md` | `ledger/verifications/<claim_id>__<sub_claim_id>.json` | `result` enum per verifier prompt (`PASS`/`PARTIAL`/`FAIL`) + `verdict_impact` handling; two-bounce ceiling then `AMBIGUOUS` + `SCHEMA_VIOLATION` |
+| Phase 3.5 — Verifier | "Phase 3.5 — Attestation verification (gating)" heading; "Sampling" + "Dispatch payload" subsections | `src/prompts/verifier-dispatch.md` | `ledger/verifications/<claim_id>__<sub_claim_id>.json` | per [verifier_results.md](verifier_results.md) (result semantics, flag-patch / bounce handling, two-bounce ceiling) |
 | Phase 4 — Ambiguity triage | "Phase 4 — Ambiguity triage" heading | In-orchestrator `/ground-claim --triage` workflow inline | dated `history[]` notes on claim JSONs | user-adjudicated; no schema gate |
 | Phase 5 — HTML render | "Phase 5 — Render HTML viewer" heading | `src/scripts/render_html_demo.py --run-dir <output-dir>` | `<output-dir>/demo.html` | Non-fatal warning on failure; canonical ledger artifacts unaffected |
 
@@ -28,7 +28,7 @@ Single source of truth for the agent graph behind `/paper-trail`: which orchestr
 
 ## Pathway: dispatch slot map
 
-Slots actually present in each dispatch prompt (re-enumerate with `grep -o '{{[a-z_]*}}' src/prompts/*.md | sort -u` after any prompt edit — a `plan-check` requirement). Source fields refer to the "Dispatch inputs" payload JSON in `src/commands/paper-trail.md` (Step 3.2) and the Phase 3.5 "Dispatch payload" JSON.
+Slots actually present in each dispatch prompt (re-enumerate with `grep -ho '{{[^}]*}}' src/prompts/*.md | sort -u` after any prompt edit — a `plan-check` requirement; the simpler `{{[a-z_]*}}` form misses dotted slots like `{{claim_type_hint.type}}`). Source fields refer to the "Dispatch inputs" payload JSON in `src/commands/paper-trail.md` (Step 3.2) and the Phase 3.5 "Dispatch payload" JSON.
 
 | Dispatch prompt | Slot | Source on orchestrator dispatch payload | Notes |
 |---|---|---|---|
@@ -37,6 +37,8 @@ Slots actually present in each dispatch prompt (re-enumerate with `grep -o '{{[a
 | `extractor-dispatch.md` | `{{citekey}}` | payload `citekey` | |
 | `extractor-dispatch.md` | `{{claim_text}}` | payload `claim_text` | |
 | `extractor-dispatch.md` | `{{manuscript_section}}` | payload `manuscript_section` | |
+| `extractor-dispatch.md` | `{{claim_type_hint.type}}` | payload `claim_type_hint.type` | dotted slot — sub-field of the `claim_type_hint` object |
+| `extractor-dispatch.md` | `{{claim_type_hint.confidence}}` | payload `claim_type_hint.confidence` | |
 | `extractor-dispatch.md` | `{{co_citekeys}}` | payload `co_citekeys` (flat array) | extractor populates `evidence.co_cite_context.sibling_citekeys` |
 | `extractor-dispatch.md` | `{{handle}}` | payload `handle` | local PDF-handle dir; becomes `paperclip_handle` for paperclip mode after `feature-paperclip-first-architecture.md` lands |
 | `extractor-dispatch.md` | `{{ingest_mode}}` | payload `ingest_mode` | `grobid` / `pdftotext_fallback` / `ocr_fallback` — drives trust-adjusted confidence |
@@ -45,6 +47,8 @@ Slots actually present in each dispatch prompt (re-enumerate with `grep -o '{{[a
 | `adjudicator-dispatch.md` | `{{claim_id}}` | payload `claim_id` | |
 | `adjudicator-dispatch.md` | `{{run_id}}` | payload `run_id` | |
 | `adjudicator-dispatch.md` | `{{claim_text}}` | payload `claim_text` | |
+| `adjudicator-dispatch.md` | `{{claim_type_hint.type}}` | payload `claim_type_hint.type` | |
+| `adjudicator-dispatch.md` | `{{claim_type_hint.confidence}}` | payload `claim_type_hint.confidence` | |
 | `adjudicator-dispatch.md` | `{{run_output_dir}}` | payload `run_output_dir` | adjudicator reads `ledger/evidence/<claim_id>.json` from here; no paper handle by design |
 | `adjudicator-dispatch.md` | `{{spec_root}}` | payload `spec_root` | rubric path: `{{spec_root}}/src/specs/verdict_schema.md` |
 | `verifier-dispatch.md` | `{{claim_id}}` | Phase 3.5 payload `claim_id` | |
@@ -56,7 +60,7 @@ Slots actually present in each dispatch prompt (re-enumerate with `grep -o '{{[a
 | `verifier-dispatch.md` | `{{handle}}` | Phase 3.5 payload `handle` | |
 | `verifier-dispatch.md` | `{{run_output_dir}}` | Phase 3.5 payload `run_output_dir` | |
 
-(The literal `{{slot}}` token also appears in `extractor-dispatch.md` prose as a generic placeholder example, not a fillable slot.)
+(The literal `{{slot}}` and `{{…}}` tokens appear in prompt prose as generic placeholder examples, not fillable slots.)
 
 ## Pathway: skill auto-load triggers
 
@@ -69,4 +73,4 @@ Slots actually present in each dispatch prompt (re-enumerate with `grep -o '{{[a
 ## Maintenance
 
 - Any feature plan that touches the dispatch graph (new phase, new slot, new validator, changed artifact path) must update this file in the same change — this is a `plan-check` check item.
-- Exit-validation semantics live in `src/specs/verdict_schema.md`; verifier `result`/`verdict_impact` semantics live in `src/prompts/verifier-dispatch.md` and the Phase 3.5 section of the orchestrator. Update there, not here.
+- Exit-validation semantics live in `src/specs/verdict_schema.md`; verifier `result`/`verdict_impact` semantics live in `src/specs/verifier_results.md`. Update there, not here.
