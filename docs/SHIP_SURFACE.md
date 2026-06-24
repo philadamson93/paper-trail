@@ -1,6 +1,6 @@
 # Ship surface
 
-Everything paper-trail ships lives under `src/` — mostly Markdown prompts, because the shipped product is an agent workflow, not a codebase.
+Everything paper-trail ships lives under `src/`. It's mostly Markdown prompts — the product is an agent workflow, not a codebase.
 
 ## What's in `src/`
 
