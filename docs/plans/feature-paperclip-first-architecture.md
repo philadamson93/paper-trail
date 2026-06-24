@@ -193,12 +193,22 @@ Existing `attestation.hits[]` shape is reused. Per-hit fields adapt:
 
 ## Smoke-test plan
 
-1. Run `paperclip install --dir .` to refresh `src/skills/paperclip/SKILL.md`.
-2. Implement Phase 1 paperclip-aware verify-bib first. Run on `examples/paper-trail-adamson-2025/refs.verified.bib`. Expected output: `verified: 56/56 (paperclip:~27, external:~29, unresolved:0)` matching the May 1 probe results.
-3. Implement Phase 2 coverage-aware fetch-paper. Run on the same fixture with `--paperclip=prefer`. Expected: ~27 references skip download; ~29 hit the existing PDF-fetch path.
-4. Implement Phase 3 mode-aware dispatch. Run on a single claim from the fixture (e.g., `C001`) in paperclip mode and confirm the evidence JSON validates against schema 1.2.
-5. Run end-to-end on the full Adamson fixture. Diff per-claim verdicts against the M1 baseline at `examples/paper-trail-adamson-2025/data/claims/`. The verdicts must agree for any reference where M1 produced a non-PENDING verdict, with the only orthogonal change being `source_mode`. Any disagreement is a bug to investigate before merge.
-6. Run end-to-end on `examples/DFD_authormode/` to confirm author-mode parity.
+**Step 0 — paperclip CLI prerequisite gate (install + auth + smoke-verify).** Every step below assumes a working, authenticated `paperclip` CLI; this gate establishes it and is itself a *recorded smoke* — run it and capture the output, don't treat it as setup. The repo otherwise does not pin the binary-install method (`paperclip install --dir .` refreshes the *skill* and presumes the binary already exists), so this is the canonical source. Until this gate passes, steps 1–5 cannot validate the paperclip-mode path.
+
+- **Install the CLI binary:** `curl -fsSL https://paperclip.gxl.ai/install.sh | bash` — installs to `~/.paperclip/` with a wrapper at `~/.local/bin/paperclip`; requires Python 3.8+. (Alternative: the `GXL-ai/paperclip-claude-plugin` Claude Code plugin auto-installs the CLI and configures auth. The MCP transport `claude mcp add --transport http paperclip https://paperclip.gxl.ai/mcp` is a *separate* integration — but the paperclip-mode dispatch prompts call CLI primitives (`paperclip grep / cat / scan`), so the **CLI** is the dependency to install, not just the MCP.)
+- **Authenticate:** sign in when prompted during install, or `paperclip login`; credentials land at `~/.paperclip/credentials.json`. Confirm with `paperclip config` showing `Auth: ✓` — the same probe the runtime uses (Open Question 4) to decide `--paperclip=off`.
+- **Smoke-verify it actually reads full text** (the gating check — *installed-but-unauthed/empty* is the silent-degradation failure mode that would make every step below produce false negatives):
+  - `paperclip search "compressed sensing MRI reconstruction" -n 3` returns results with `/papers/<id>/` handles (not an auth error / empty corpus).
+  - `paperclip cat /papers/<id>/content.lines | head` (or `paperclip grep "<term>" /papers/<id>/content.lines`) returns line-numbered full text.
+  - Resolve at least one real reference from the fixture's `examples/paper-trail-adamson-2025/refs.verified.bib` by identifier (`paperclip lookup doi <DOI>` or `lookup` by arXiv id) and read it — confirming an *in-corpus, citeable* paper is reachable. This directly de-risks the Phase-1 ~27/56 coverage probe in step 1.
+- **Then refresh the project skill:** `paperclip install --dir .` refreshes `src/skills/paperclip/SKILL.md` from upstream (the stale skill is what the paperclip-mode dispatch prompts read). Sequenced *after* the binary install, since it invokes the CLI.
+- **If the gate fails** (CLI uninstallable, unauthed, or corpus unreadable): record the failure mode and stop. The feature still *ships* behind `--paperclip=off` (authentication-non-fatal, above), but the paperclip-mode path is unvalidated on this machine and steps 1–5 are blocked until the gate passes. (This is exactly the wall the 2026-06-24 repo-org smoke hit — no paperclip CLI installed — see `repo-organization.md` § Behavioral smoke results.)
+
+1. Implement Phase 1 paperclip-aware verify-bib first. Run on `examples/paper-trail-adamson-2025/refs.verified.bib`. Expected output: `verified: 56/56 (paperclip:~27, external:~29, unresolved:0)` matching the May 1 probe results.
+2. Implement Phase 2 coverage-aware fetch-paper. Run on the same fixture with `--paperclip=prefer`. Expected: ~27 references skip download; ~29 hit the existing PDF-fetch path.
+3. Implement Phase 3 mode-aware dispatch. Run on a single claim from the fixture (e.g., `C001`) in paperclip mode and confirm the evidence JSON validates against schema 1.2.
+4. Run end-to-end on the full Adamson fixture. Diff per-claim verdicts against the M1 baseline at `examples/paper-trail-adamson-2025/data/claims/`. The verdicts must agree for any reference where M1 produced a non-PENDING verdict, with the only orthogonal change being `source_mode`. Any disagreement is a bug to investigate before merge.
+5. Run end-to-end on `examples/DFD_authormode/` to confirm author-mode parity.
 
 Success criteria:
 
