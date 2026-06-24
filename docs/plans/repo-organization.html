@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Plan — agent-instruction-forward repo organization</title>
-<meta name="plan-sha256" content="0824e21999be0d1649da4615d1efd8befa1c52eec5f0fc44c60c66f88064b02d">
+<meta name="plan-sha256" content="358a75b726ca0187d5eba2f9f273c5dab913219a27d1aa836394574e09b3a661">
 <meta name="plan-path" content="docs/plans/repo-organization.md">
-<meta name="generated-at" content="2026-05-20">
+<meta name="generated-at" content="2026-06-24">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <style>
@@ -185,6 +185,7 @@
     color: var(--fg);
   }
   details summary .chip.gate { background: var(--gate-bg); border-color: var(--gate-border); }
+  details summary .chip.done { background: var(--gate-bg); border-color: var(--gate-border); }
   details > div.details-body { padding: 4px 16px 14px; border-top: 1px solid var(--card-border); }
 
   textarea.section-feedback, textarea.global-feedback {
@@ -267,21 +268,21 @@
 <div class="header-card">
   <h1>Plan — agent-instruction-forward repo organization</h1>
   <div class="meta">
-    <span>Status: <strong>Plan-only (3 reviewer passes + 1 architectural pivot: Codex 2026-05-18, fresh-Claude 2026-05-20, Codex second-pass 2026-05-20, RD-9 pivot 2026-05-20)</strong></span>
-    <span>Branch: <code>feature/paperclip-primary-workflow</code></span>
+    <span>Status: <strong>Implemented + behaviorally smoked (mechanical move + path migration + control_flow.md + brevity audit landed 2026-06-09; behavioral smoke 2026-06-24; grounding loop environment-blocked, not merge-blocking)</strong></span>
+    <span>Branch: <code>repo-organization</code> (off <code>feature/paperclip-primary-workflow</code>)</span>
     <span>Source: <a href="repo-organization.md">repo-organization.md</a></span>
-    <span>SHA: <code>0824e21999be</code></span>
-    <span>Generated: 2026-05-20</span>
+    <span>SHA: <code>358a75b726ca</code></span>
+    <span>Generated: 2026-06-24</span>
   </div>
 </div>
 
 <div class="tldr">
   <strong>TL;DR</strong>
-  Make paper-trail's ship surface visible on GitHub by introducing a top-level <code>src/</code> directory that mirrors today's <code>.claude/</code>. Subdirectory symlinks keep Claude Code's discovery working; shipped runtime references migrate to <code>src/</code> (RD-2); directory-shaped skills like <code>paperclip/SKILL.md</code> ship as part of the mirrored surface (RD-3). <strong>Author mode is redesigned to take a manuscript path argument</strong> (RD-9, supersedes RD-1) — no cross-repo vendoring; paper-trail lives at one canonical path and the slash command resolves its own references regardless of the user's cwd. The flagship deliverable is <code>src/specs/control_flow.md</code> tracing the orchestrator-to-dispatch-to-subagent-to-validator graph. <strong>See <a href="#review-history">Review history</a></strong> for the 3 reviewer passes + RD-9 architectural pivot.
+  Make paper-trail's ship surface visible on GitHub by introducing a top-level <code>src/</code> directory that mirrors today's <code>.claude/</code>. Subdirectory symlinks keep Claude Code's discovery working; shipped runtime references migrate to <code>src/</code> (RD-2); directory-shaped skills like <code>paperclip/SKILL.md</code> ship as part of the mirrored surface (RD-3). <strong>Author mode is redesigned to take a manuscript path argument</strong> (RD-9, supersedes RD-1) — no cross-repo vendoring; paper-trail lives at one canonical path and the slash command resolves its own references regardless of the user's cwd. The flagship deliverable is <code>src/specs/control_flow.md</code> tracing the orchestrator-to-dispatch-to-subagent-to-validator graph. <strong>The plan is now implemented</strong> on the <code>repo-organization</code> branch: the mechanical move, RD-2 path migration, <code>control_flow.md</code>, and the light brevity audit all landed 2026-06-09; a Codex implementation audit + post-review fixes followed; and headless behavioral smokes ran 2026-06-24. <strong>See <a href="#review-history">Review history</a></strong> for the 3 reviewer passes + RD-9 architectural pivot, and <strong><a href="#impl-results">Implementation &amp; smoke results</a></strong> for what actually ran.
 </div>
 
 <h2 id="review-history">Review history</h2>
-<p>This plan has been through three independent reviewer passes. Each row summarizes verdict, the load-bearing findings the pass surfaced, and what was applied to the plan in response. Reviewer artifacts are linked. <strong>Read top-to-bottom to understand how the plan got to its current shape.</strong></p>
+<p>This plan has been through three independent reviewer passes plus a user-driven architectural pivot, then implementation + a Codex implementation audit. Each row summarizes verdict, the load-bearing findings the pass surfaced, and what was applied. Reviewer artifacts are linked. <strong>Read top-to-bottom to understand how the plan got to its current shape.</strong></p>
 
 <table>
   <thead>
@@ -331,7 +332,7 @@
         <br/>Tightening: <code>control_flow.md</code> sample table restated <code>verdict_schema.md</code> validation bullets (drift risk); behavioral smoke named a fixture directory but not the concrete invocation; RD-4 fallback patch was hand-wavy ("pre-draft a diff" without saying what); OQ-C lacked an acceptance criterion.
       </td>
       <td>
-        Regex corrected to <code>(^|[^[:alnum:]_])templates/</code> in all 3 sites; manifest gate now asserts sentinel-file coverage (<code>README.md</code>, <code>CLAUDE.md</code>, <code>docs/claude_ops.md</code>, <code>.claude/commands/paper-trail.md</code>, <code>.claude/commands/init-writing-tools.md</code>) in addition to count. <code>control_flow.md</code> sample-table cells collapsed to anchor-only references. Behavioral smoke now names concrete invocation + clean output dir + expected artifacts. All six slash commands enumerated with per-command test scope. Vendoring smoke uses <code>examples/DFD_authormode/main.tex</code>. RD-4 fallback now includes Makefile <code>sync</code>/<code>check-sync</code> targets + the <code>docs/claude_ops.md:22</code> edit. OQ-C gained an acceptance criterion (declare commit-and-distribute out of scope OR add concrete portability design). Provenance note added: HTML companion is generated, regenerates via <code>/explain-plan</code>, treat markdown as canonical.
+        Regex corrected to <code>(^|[^[:alnum:]_])templates/</code> in all 3 sites; manifest gate now asserts sentinel-file coverage (<code>README.md</code>, <code>CLAUDE.md</code>, <code>docs/claude_ops.md</code>, <code>.claude/commands/paper-trail.md</code>, <code>.claude/commands/init-writing-tools.md</code>) in addition to count. <code>control_flow.md</code> sample-table cells collapsed to anchor-only references. Behavioral smoke now names concrete invocation + clean output dir + expected artifacts. All six slash commands enumerated with per-command test scope. Vendoring smoke uses <code>examples/DFD_authormode/main.tex</code>. RD-4 fallback now includes Makefile <code>sync</code>/<code>check-sync</code> targets + the <code>docs/claude_ops.md:22</code> edit. OQ-C gained an acceptance criterion. Provenance note added: HTML companion is generated, regenerates via <code>/explain-plan</code>, treat markdown as canonical.
       </td>
     </tr>
     <tr>
@@ -348,7 +349,23 @@
         </ul>
       </td>
       <td>
-        <strong>RD-9 supersedes RD-1.</strong> "Author-mode packaging / vendoring" section rewritten as "Author-mode invocation (paths, not vendoring)". Six-step vendoring smoke deleted; replaced with two-cwd invocation smoke (from inside paper-trail's dir AND via <code>claude --add-dir</code> from <code>/tmp</code>). <code>readlink</code> relative-target invariant retired (no cross-repo symlinks). Fresh-clone <code>readlink</code> check kept as internal consistency only. <code>.gitignore</code> shape locked: <code>src/skills/*</code> with <code>!src/skills/doc-split-check.md</code> / <code>!src/skills/plan-check.md</code> / <code>!src/skills/paperclip/</code> carveouts. <code>{{spec_root}}</code> slot added to dispatch-prompt path policy. OQ-C local-copy-vs-commit fork moot (no vendoring → nothing to commit). README "Install into a writing repo" section deleted; replaced with "Use paper-trail on an external manuscript."
+        <strong>RD-9 supersedes RD-1.</strong> "Author-mode packaging / vendoring" section rewritten as "Author-mode invocation (paths, not vendoring)". Six-step vendoring smoke deleted; replaced with two-cwd invocation smoke (from inside paper-trail's dir AND via <code>claude --add-dir</code> from <code>/tmp</code>). <code>readlink</code> relative-target invariant retired (no cross-repo symlinks). Fresh-clone <code>readlink</code> check kept as internal consistency only. <code>.gitignore</code> shape locked. <code>{{spec_root}}</code> slot added to dispatch-prompt path policy. README "Install into a writing repo" section deleted; replaced with "Use paper-trail on an external manuscript."
+      </td>
+    </tr>
+    <tr>
+      <td><strong>5</strong><br/><span style="color:var(--muted)">2026-06-09</span></td>
+      <td>Codex implementation audit<br/><a href="reviews/repo-organization-implementation-feedback.md">artifact</a></td>
+      <td><span class="chip" style="background:var(--warn-bg);border:1px solid var(--warn-border);padding:2px 8px;border-radius:10px;font-size:11px">Revise before commit</span></td>
+      <td>
+        Ran <code>/review-implementation</code> after the initial commits. Findings on the landed code:
+        <ul class="tight">
+          <li>The original <code>control_flow.md</code> slot-map enumeration grep missed dotted <code>{{claim_type_hint.*}}</code> placeholders.</li>
+          <li>Validation cells were prose, not the real Markdown links the no-drift constraint requires.</li>
+          <li>Verifier result semantics lived inline in <code>verifier-dispatch.md</code> / <code>paper-trail.md</code>.</li>
+        </ul>
+      </td>
+      <td>
+        Dotted slots added to the <code>control_flow.md</code> slot map (enumeration grep fixed in-file); validation cells converted to real Markdown links; verifier result semantics extracted to a new <code>src/specs/verifier_results.md</code> (user's call) with <code>verifier-dispatch.md</code> / <code>paper-trail.md</code> / <code>control_flow.md</code> pointing at it. One item left open: whether the default author-mode output set includes <code>claims_ledger.md</code> (the 2026-06-24 smoke used <code>--output-dir</code> overrides, so the default path is still unexercised).
       </td>
     </tr>
   </tbody>
@@ -375,18 +392,18 @@ flowchart LR
 
   subgraph after["After this plan: src/ is canonical, .claude/ is publication"]
     direction TB
-    a_src["src/ (new top-level)<br/>commands, prompts,<br/>specs (incl. control_flow.md),<br/>skills (incl. paperclip/SKILL.md),<br/>scripts, templates"]
+    a_src["src/ (new top-level)<br/>commands, prompts,<br/>specs (incl. control_flow.md, verifier_results.md, trace_log.md),<br/>skills (incl. paperclip/SKILL.md),<br/>scripts, templates"]
     a_claude["(.claude/)<br/>each subdir is a symlink into src/<br/>(settings.local.json stays canonical)"]
   end
 
   subgraph docs["Doc surfaces (RD-2 path migration)"]
     direction TB
-    d_readme["README.md<br/>(RD-1 vendoring contract)"]
+    d_readme["README.md<br/>(RD-9 manuscript-path contract)"]
     d_internals["docs/internals.md"]
     d_output["docs/output.md"]
     d_claudemd["CLAUDE.md"]
     d_plans["docs/plans/ (10 plan docs)"]
-    d_gi[".gitignore (drop skills carveout)"]
+    d_gi[".gitignore (src/skills carveouts)"]
   end
 
   subgraph extman["External manuscripts (RD-9 contract)"]
@@ -452,7 +469,7 @@ flowchart LR
 
   subgraph prestep["Pre-step: build migration manifest"]
     direction TB
-    grep["git grep for .claude and templates refs<br/>(excluding docs/journal, docs/plans/reviews)"]
+    grep["git grep for .claude and templates refs<br/>(excluding docs/journal, docs/plans/reviews)<br/>306 hits, 48 templates/ hits — PASS"]
   end
 
   subgraph moves["File moves (git mv preserves history)"]
@@ -477,7 +494,7 @@ flowchart LR
 
   subgraph runtime["Shipped runtime artifacts (RD-2 path migration)"]
     direction TB
-    rt_ptmd["src/commands/paper-trail.md<br/>(most hits — invocations + dispatch paths)"]
+    rt_ptmd["src/commands/paper-trail.md<br/>(most hits — invocations + dispatch paths)<br/>698 to 670 lines (brevity audit)"]
     rt_ground["src/commands/ground-claim.md"]
     rt_init["src/commands/init-writing-tools.md"]
     rt_ext["src/prompts/extractor-dispatch.md"]
@@ -487,30 +504,32 @@ flowchart LR
     rt_vs["src/specs/verdict_schema.md"]
   end
 
-  subgraph docs["Doc surfaces (RD-1 plus RD-2)"]
+  subgraph docs["Doc surfaces (RD-9 plus RD-2)"]
     direction TB
-    doc_readme["README.md<br/>(RD-1 vendoring contract update)"]
+    doc_readme["README.md<br/>(RD-9 manuscript-path rewrite)"]
     doc_internals["docs/internals.md"]
     doc_output["docs/output.md"]
     doc_claudemd["CLAUDE.md (Where things live)"]
-    doc_gi[".gitignore (drop skills carveout)"]
+    doc_gi[".gitignore (src/skills carveouts)"]
     doc_plans["docs/plans (10 plan docs)"]
     doc_next["docs/NEXT.md"]
   end
 
-  subgraph new_deliverable["New deliverable"]
+  subgraph new_deliverable["New deliverables"]
     direction TB
     cf["src/specs/control_flow.md<br/>orchestrator phase to dispatch<br/>to subagent to emitted JSON<br/>to exit-validation rule"]
+    vr["src/specs/verifier_results.md<br/>(post-review extraction)"]
+    tl["src/specs/trace_log.md<br/>(brevity-audit destination)"]
   end
 
   subgraph tests["Smoke test gates"]
     direction TB
-    t_slash["Slash-command discovery"]
-    t_skill_md["Single-file skill discovery"]
-    t_skill_dir["Directory-shaped skill discovery<br/>(paperclip — closes RD-3)"]
-    t_vendor["Author-mode invocation smoke (RD-9)<br/>two-cwd: from paper-trail dir + via --add-dir"]
-    t_grep["Repo-wide grep sweep<br/>(no orphan .claude refs)"]
-    t_hist["git log --follow continuity"]
+    t_slash["Slash-command discovery (PASS)"]
+    t_skill_md["Single-file skill discovery (PASS)"]
+    t_skill_dir["Directory-shaped skill discovery<br/>(paperclip — closes RD-3) (PASS)"]
+    t_vendor["Author-mode invocation smoke (RD-9)<br/>two-cwd: from paper-trail dir + via --add-dir<br/>(path/routing contract PASS)"]
+    t_grep["Repo-wide grep sweep<br/>(no orphan .claude refs) (PASS)"]
+    t_hist["git log --follow continuity (PASS)"]
   end
 
   subgraph oos["Out of scope (Phase 2)"]
@@ -555,7 +574,7 @@ flowchart LR
   classDef rd fill:#a78bfa,stroke:#6d28d9,stroke-width:2px,color:#1e1b4b
 
   class rd1,rd2,rd3,rd9 rd
-  class cf,mv_skills_dir added
+  class cf,vr,tl,mv_skills_dir added
   class mv_cmd,mv_prompts,mv_specs,mv_skills_md,mv_scripts,mv_tpl,sl_cmd,sl_prompts,sl_specs,sl_skills,sl_scripts modified
   class rt_ptmd,rt_ground,rt_init,rt_ext,rt_adj,rt_ver,rt_ingest,rt_vs,doc_readme,doc_internals,doc_output,doc_claudemd,doc_gi,doc_plans,doc_next modified
   class t_slash,t_skill_md,t_skill_dir,t_vendor,t_grep,t_hist gate
@@ -569,7 +588,7 @@ flowchart LR
 </div>
 
 <h2>Order of operations</h2>
-<p>Implementation sequence with status chips (all <code>⏳ PENDING</code> — plan-only). The decision diamond is RD-4: symlinks first, fallback to <code>make sync</code> if discovery OR behavioral execution fails for a symlink reason. The pre-step (S0) pre-drafts the fallback patch so the gate at smoke-test time is "ship or apply patch," not "design under pressure."</p>
+<p>Implementation sequence with status chips. The mechanical move, path migration, <code>control_flow.md</code>, and brevity audit all landed 2026-06-09 (<code>✅ SHIPPED</code>); structural smokes passed and behavioral smokes ran 2026-06-24 (path/discovery <code>✅</code>, end-to-end grounding <code>⚠️</code> environment-blocked, see results section). The decision diamond is RD-4: symlinks first, fallback to <code>make sync</code> if discovery OR behavioral execution fails for a symlink reason — symlinks passed structural checks, so the fallback patch was pre-drafted but NOT applied.</p>
 <div class="mermaid-container" id="diagram-flow">
   <div class="mermaid-controls">
     <button onclick="resetDiagram('diagram-flow')">Reset</button>
@@ -580,18 +599,19 @@ flowchart LR
 flowchart TD
 
   start(["Start (post-review apply)"])
-  s0["Step 0 ⏳ PENDING<br/>Pre-draft RD-4 fallback patch<br/>(docs/claude_ops.md no-build-step diff)"]
-  s1["Step 1 ⏳ PENDING<br/>Build migration manifest<br/>(POSIX ERE; sanity-check ≥ 20 templates/ hits)"]
-  s2["Step 2 ⏳ PENDING<br/>git mv shipped artifacts to src/<br/>(commands, prompts, specs, skills,<br/>scripts, templates)<br/>OQ-A: confirm paperclip ships"]
-  s3["Step 3 ⏳ PENDING<br/>Create .claude/(subdir) symlinks into src/"]
+  s0["Step 0 ✅ SHIPPED<br/>Pre-draft RD-4 fallback patch<br/>(NOT applied — symlinks passed)"]
+  s1["Step 1 ✅ SHIPPED<br/>Build migration manifest<br/>(306 hits, 48 templates/ hits, all 5 sentinels)"]
+  s2["Step 2 ✅ SHIPPED<br/>git mv shipped artifacts to src/<br/>(commands, prompts, specs, skills,<br/>scripts, templates)<br/>OQ-A: paperclip ships (tracked)"]
+  s3["Step 3 ✅ SHIPPED<br/>Create .claude/(subdir) symlinks into src/<br/>(relative targets)"]
   rd4{{"RD-4 decision<br/>Discovery + behavioral execution<br/>via symlinks both pass?"}}
-  fallback["Fallback (RD-4 alt)<br/>gitignore .claude/(subdir) plus make sync<br/>apply pre-drafted claude_ops.md patch"]
-  s4a["Step 4a ⏳ PENDING<br/>Migrate paths in shipped runtime artifacts<br/>(per RD-2; OQ-D: dispatch-prompt cwd contract)"]
-  s4b["Step 4b ⏳ PENDING<br/>Migrate paths in docs and plans<br/>(per RD-2, plus RD-1 README update)<br/>OQ-B: gitignore for auto-installed skills"]
-  s5["Step 5 ⏳ PENDING<br/>Write src/specs/control_flow.md<br/>(anchored on headings; points at verdict_schema.md)"]
-  s6["Step 6 ⏳ PENDING (gate)<br/>12-check smoke suite<br/>manifest sanity, discovery + behavioral, vendoring,<br/>fresh-clone readlink, sweep, history, settings"]
-  s7["Step 7 ⏳ PENDING<br/>Light brevity audit on paper-trail.md<br/>(plus subagent-context side-check)"]
-  done(["Ship — repo-org complete"])
+  fallback["Fallback (RD-4 alt) — NOT taken<br/>gitignore .claude/(subdir) plus make sync<br/>(pre-drafted patch held in reserve)"]
+  s4a["Step 4a ✅ SHIPPED<br/>Migrate paths in shipped runtime artifacts<br/>(per RD-2; OQ-D dispatch-prompt cwd contract)"]
+  s4b["Step 4b ✅ SHIPPED<br/>Migrate paths in docs and plans<br/>(per RD-2 + RD-9 README rewrite)<br/>OQ-B: src/skills carveouts"]
+  s5["Step 5 ✅ SHIPPED<br/>Write src/specs/control_flow.md<br/>(anchored on headings; links to verdict_schema.md)"]
+  s5b["Post-review ✅ SHIPPED<br/>Codex impl audit fixes<br/>(dotted slots, real links, verifier_results.md)"]
+  s6["Step 6 ⚠️ PARTIAL (gate)<br/>structural smokes PASS;<br/>behavioral: discovery + path-resolution PASS,<br/>grounding loop environment-blocked"]
+  s7["Step 7 ✅ SHIPPED<br/>Light brevity audit on paper-trail.md<br/>(698 to 670; subagent side-check done)"]
+  done(["Implemented — merge not reorg-blocked"])
 
   start --> s0
   s0 --> s1
@@ -603,27 +623,118 @@ flowchart TD
   fallback --> s4a
   s4a --> s4b
   s4b --> s5
-  s5 --> s6
-  s6 -->|all gates pass| s7
-  s6 -->|gate fails| s4a
+  s5 --> s5b
+  s5b --> s6
+  s6 -->|gates pass| s7
   s7 --> done
 
-  classDef pending fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
-  classDef gate fill:#86efac,stroke:#15803d,stroke-width:2px,color:#052e16
+  classDef shipped fill:#86efac,stroke:#15803d,stroke-width:2px,color:#052e16
+  classDef partial fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
   classDef decision fill:#fde68a,stroke:#b45309,stroke-width:2px,color:#451a03
   classDef fallbackcls stroke-dasharray: 5 5,fill:#fecaca,stroke:#dc2626,color:#7f1d1d
   classDef terminal fill:#e5e7eb,stroke:#6b7280,color:#1f2937
 
-  class s0,s1,s2,s3,s4a,s4b,s5,s7 pending
-  class s6 gate
+  class s0,s1,s2,s3,s4a,s4b,s5,s5b,s7 shipped
+  class s6 partial
   class rd4 decision
   class fallback fallbackcls
   class start,done terminal
   </pre>
 </div>
 
+<h2 id="impl-results">Implementation &amp; smoke results</h2>
+<p>The plan is implemented on branch <code>repo-organization</code> (off <code>feature/paperclip-primary-workflow</code>). The mechanical move landed as its own commit so <code>git mv</code> rename detection stays clean of content edits. Below: the 2026-06-09 implementation pass, the Codex post-review fixes, and the 2026-06-24 headless behavioral smokes.</p>
+
+<details data-section="impl-manifest" open>
+  <summary><span>Manifest sanity check (gate)</span><span class="chip done">✅ PASS</span></summary>
+  <div class="details-body">
+    <p><code>git grep -nE '\.claude/|(^|[^[:alnum:]_])templates/' -- ':!docs/journal/*' ':!docs/plans/reviews/*'</code> on the pre-move tree returned <strong>306 hits, 48 <code>templates/</code> hits</strong> (threshold ≥ 30), with all five sentinel files covered: <code>README.md</code> (1), <code>CLAUDE.md</code> (16), <code>docs/claude_ops.md</code> (5), <code>.claude/commands/paper-trail.md</code> (13), <code>.claude/commands/init-writing-tools.md</code> (2).</p>
+  </div>
+</details>
+
+<details data-section="impl-brevity">
+  <summary><span>Brevity audit deliverable (RD-5)</span><span class="chip done">✅ SHIPPED</span></summary>
+  <div class="details-body">
+    <p>Per-prompt line counts (before → after; "before" includes the +~20 lines the RD-9 arg contract and <code>{{spec_root}}</code> payload added to <code>paper-trail.md</code> during this same implementation):</p>
+    <table>
+      <tr><th>Prompt</th><th>Before</th><th>After</th><th>Change</th></tr>
+      <tr><td><code>paper-trail.md</code></td><td>698 (+~20 RD-9/OQ-D)</td><td>670</td><td>trace-log block → <code>src/specs/trace_log.md</code>; "why two passes" → Provenance footer; verifier handling rules → <code>src/specs/verifier_results.md</code> (post-review)</td></tr>
+      <tr><td><code>ground-claim.md</code></td><td>172</td><td>172</td><td>unchanged (no spec-duplicating blocks; revisit after a real-workflow run)</td></tr>
+      <tr><td><code>paper-trail-init.md</code></td><td>146</td><td>146</td><td>unchanged</td></tr>
+      <tr><td><code>verify-bib.md</code></td><td>121</td><td>121</td><td>unchanged</td></tr>
+      <tr><td><code>init-writing-tools.md</code></td><td>87</td><td>87</td><td>&lt; 100 lines — skipped per RD-5</td></tr>
+      <tr><td><code>fetch-paper.md</code></td><td>70</td><td>70</td><td>&lt; 100 lines — skipped</td></tr>
+      <tr><td><code>extractor-dispatch.md</code></td><td>87</td><td>87</td><td>&lt; 100 lines — skipped</td></tr>
+      <tr><td><code>adjudicator-dispatch.md</code></td><td>102</td><td>102</td><td>dispatch prompt — slot lists out of audit scope</td></tr>
+      <tr><td><code>verifier-dispatch.md</code></td><td>90</td><td>88</td><td>orchestrator-notes bullets later moved to <code>verifier_results.md</code> (post-review)</td></tr>
+    </table>
+    <p>Subagent-reader side-check for each moved block:</p>
+    <table>
+      <tr><th>Moved block</th><th>Source</th><th>Destination</th><th>Who reads it</th><th>Net</th></tr>
+      <tr><td>Trace-log schema + event list + jq recipes (~40 lines)</td><td><code>paper-trail.md</code> § Trace log</td><td><code>src/specs/trace_log.md</code> (new)</td><td>orchestrator only — no dispatch prompt references it</td><td>net-positive</td></tr>
+      <tr><td>"Why two passes" rationale (5 lines)</td><td><code>paper-trail.md</code> § Step 3.2</td><td><code>paper-trail.md</code> § Provenance (bottom)</td><td>human reviewers</td><td>net-positive</td></tr>
+    </table>
+  </div>
+</details>
+
+<details data-section="impl-fallback">
+  <summary><span>Pre-drafted RD-4 fallback patch (prepared, NOT applied)</span><span class="chip done">✅ READY</span></summary>
+  <div class="details-body">
+    <p>Prepared before smoke tests per RD-4; kept in reserve in case a future behavioral smoke fails for a symlink-related reason. Symlinks passed structural checks, so it was never applied.</p>
+    <ul class="tight">
+      <li><code>docs/claude_ops.md</code> — replace "There is no build step, no runtime, and no test suite." with "One build step: <code>make sync</code> keeps <code>.claude/&lt;dir&gt;/</code> in sync with <code>src/&lt;dir&gt;/</code> between sessions. No runtime, no test suite."</li>
+      <li>New <code>Makefile</code> with <code>sync</code> (<code>rm -rf .claude/$$d &amp;&amp; rsync -a --delete src/$$d/ .claude/$$d/</code>) and <code>check-sync</code> (<code>diff -r</code>) targets over <code>commands prompts specs skills scripts</code>.</li>
+      <li>Gate <code>make check-sync</code> in a pre-commit hook (and CI when it exists) so session-start divergence fails loudly.</li>
+    </ul>
+  </div>
+</details>
+
+<details data-section="impl-structural">
+  <summary><span>Structural smoke results (2026-06-09)</span><span class="chip done">✅ PASS</span></summary>
+  <div class="details-body">
+    <p>All run 2026-06-09 on the <code>repo-organization</code> branch:</p>
+    <ul class="tight">
+      <li><strong>Path-policy sweep (<code>.claude/</code>)</strong> — PASS. Residual hits all annotated/intentional: <code>.gitignore</code> comments, the out-of-repo user-global memory path in <code>CLAUDE.md</code>, <code>src/skills/plan-check.md</code>'s pre-vs-post-repo-org guidance, and symlink-explaining prose. The plan doc itself is exempt via its top-of-file annotation; generated <code>*.html</code> companions are excluded.</li>
+      <li><strong>Path-policy sweep (<code>templates/</code>)</strong> — PASS, zero hits.</li>
+      <li><strong>Git history continuity</strong> — PASS. <code>git log --follow src/commands/paper-trail.md</code> reaches the original orchestrator commit; <code>--follow src/skills/plan-check.md</code> reaches its <code>plan-doc-readiness-check</code> origin. (Checked a tracked skill, not <code>paperclip/SKILL.md</code>, whose history legitimately starts at the move commit.)</li>
+      <li><strong><code>settings.local.json</code> stays put</strong> — PASS in the implementation worktree (<code>src/settings.local.json</code> absent); the <code>test -f .claude/settings.local.json</code> half holds in the user's main checkout.</li>
+      <li><strong>Read-through-symlink</strong> — PASS. <code>.claude/commands</code> → <code>../src/commands</code> (relative target); file reads resolve.</li>
+      <li><strong>Fresh-clone symlink resolution</strong> — PASS. Clean clone of the branch: <code>readlink .claude/commands</code> → <code>../src/commands</code>, file reads resolve, and <code>git ls-files src/skills/</code> shows all three shipped skills including <code>paperclip/SKILL.md</code>.</li>
+    </ul>
+    <p><strong>iCloud gotcha (worth knowing):</strong> the repo lives under iCloud-synced <code>Documents/</code>; iCloud renamed the five freshly-created symlinks to <code>&lt;name&gt; 2</code> mid-creation (sync-conflict suffix) on the first attempt. Fixed by <code>mv</code>-ing back. If symlinks ever show a trailing <code> 2</code> after a checkout, that's iCloud, not git.</p>
+  </div>
+</details>
+
+<details data-section="impl-postreview">
+  <summary><span>Post-review fixes (Codex implementation audit, 2026-06-09)</span><span class="chip done">✅ APPLIED</span></summary>
+  <div class="details-body">
+    <p><code>/review-implementation</code> ran after the initial commits (verdict: Revise before commit) — feedback + adjudication log at <a href="reviews/repo-organization-implementation-feedback.md"><code>reviews/repo-organization-implementation-feedback.md</code></a>. Applied:</p>
+    <ul class="tight">
+      <li>Dotted <code>{{claim_type_hint.*}}</code> slots added to the <code>control_flow.md</code> slot map (the original enumeration grep missed dotted placeholders — command fixed in-file).</li>
+      <li>Validation cells converted to real Markdown links per the no-drift constraint.</li>
+      <li>Verifier result semantics extracted to a new <code>src/specs/verifier_results.md</code> (user's call), with <code>verifier-dispatch.md</code> / <code>paper-trail.md</code> / <code>control_flow.md</code> pointing at it.</li>
+    </ul>
+    <p><strong>Open:</strong> whether the documented author-mode default-output set includes <code>claims_ledger.md</code> (currently documented). The 2026-06-24 author-mode smoke used <code>--output-dir</code> overrides, so the <em>default</em> path was not exercised — still requires a default-output run to settle.</p>
+  </div>
+</details>
+
+<details data-section="impl-behavioral">
+  <summary><span>Behavioral smoke results (2026-06-24, headless Claude Code sessions)</span><span class="chip">⚠️ PARTIAL</span></summary>
+  <div class="details-body">
+    <p>Run by a background agent via <code>claude -p</code> sessions rooted in the <code>repo-organization</code> worktree (not the post-merge main checkout, but the symlink layout under test is byte-identical). <strong>Discovery + execution-time path resolution PASS; end-to-end grounding was environment-blocked</strong> — orthogonal to the reorg (see caveat).</p>
+    <ol>
+      <li><strong><code>/paper-trail</code> reader-mode end-to-end</strong> (<code>examples/paper-trail-adamson-2025/input-paper.pdf</code>, scratch <code>--output-dir</code>) — <strong>execution path PASS, grounding blocked.</strong> Extracted 86 claims, fetched 15 reference PDFs, wrote <code>ledger/claims/*.json</code> + <code>refs.bib</code> + <code>parse_report.md</code> through the symlinks with <strong>zero path-resolution errors</strong>. Did not reach the Phase-5 <code>demo.html</code> render — the run died on a transient <code>API Error: Overloaded</code> (infra flake, retryable). All claims <code>PENDING/NEEDS_PDF</code> (ingest unavailable — see caveat).</li>
+      <li><strong>Per-command + skill discovery</strong> — <strong>PASS.</strong> A headless session discovered all six slash commands (<code>/fetch-paper</code>, <code>/ground-claim</code>, <code>/init-writing-tools</code>, <code>/paper-trail</code>, <code>/paper-trail-init</code>, <code>/verify-bib</code>) and all three skills through the symlinks — both shapes: single-file (<code>plan-check</code>, <code>doc-split-check</code>) AND directory-shaped (<code>paperclip/SKILL.md</code>). Closes the structural half of smokes 2–3.</li>
+      <li><strong>Author-mode two-cwd (RD-9)</strong> — <strong>path/routing contract PASS.</strong> Run A (cwd = paper-trail dir) and Run B (cwd = <code>/tmp</code> via <code>claude --add-dir</code>) both resolved paper-trail's repo root to the <strong>identical canonical path</strong> via <code>git rev-parse --show-toplevel</code>, validated the absolute manuscript path, invoked the real <code>src/scripts/*.py</code>, wrote only under <code>--output-dir</code>, and left the manuscript untouched. <strong><code>--add-dir</code> does register the slash command</strong> (the open half of RD-9's two-cwd discovery question). Outputs were <strong>not</strong> byte-identical (A: 6 refs fetched / 100 surviving claims / 3 FLAG; B: 0 fetched / 103 claims / 5 FLAG) — pure LLM nondeterminism, not cwd-dependent; this is why the smoke's pass criterion was revised (path resolution + output routing are cwd-independent, NOT byte-identical artifacts).</li>
+    </ol>
+    <p><strong>Environment caveat (blocks grounding everywhere, independent of the reorg).</strong> This Mac has no reference-fetch path (paperclip CLI absent; <code>paper-search</code>/<code>papersflow</code> MCP absent) and no ingest tooling (<code>pdftotext</code>, GROBID, <code>lxml</code> all missing), so Phase 2.5 ingest cannot build a source handle and every claim lands <code>PENDING/NEEDS_PDF</code>. The extractor → adjudicator → verifier grounding loop is therefore <strong>not exercised</strong> by these runs; it needs a machine with the ingest stack and a fetch path, can be smoked separately, and <strong>does not gate the merge</strong>.</p>
+    <p><strong>Still open (needs a fuller environment, not merge-blocking):</strong> a clean reader-mode run through the Phase-5 render (retry past the API overload), and a <em>default-output</em> author run (no <code>--output-dir</code>) to settle whether the default set includes <code>claims_ledger.md</code>.</p>
+    <textarea class="section-feedback" data-section="impl-behavioral" placeholder="Inline feedback on the behavioral smoke results..."></textarea>
+  </div>
+</details>
+
 <h2>Resolved decisions</h2>
-<p>Eight design forks resolved across two reviewer passes. <strong>RD-1..RD-3</strong> came out of the 2026-05-18 Codex review. <strong>RD-4..RD-8</strong> came out of the 2026-05-20 user resolution of the five formerly-open questions. Each pin is load-bearing for the diagrams above.</p>
+<p>Nine design forks resolved across three reviewer passes and the user's same-day resolutions. <strong>RD-1..RD-3</strong> came out of the 2026-05-18 Codex review; <strong>RD-4..RD-8</strong> out of the 2026-05-20 user resolution of the five formerly-open questions; <strong>RD-9</strong> from the same-day architectural pivot (supersedes RD-1). Each pin is load-bearing for the diagrams above.</p>
 
 <div class="rd-card" data-section="rd-1" style="opacity:0.7">
   <div class="rd-id">RD-1 — Author-mode vendoring <span style="background:#fee2e2;border:1px solid #ef4444;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px">SUPERSEDED by RD-9</span></div>
@@ -642,13 +753,14 @@ flowchart TD
   <p><strong>Slash-command contract:</strong> required positional arg (absolute path to <code>.tex</code> or dir containing one); optional <code>--output-dir &lt;path&gt;</code> (default: alongside manuscript). Reject relative manuscript paths with a clear error. Validate path exists before dispatch.</p>
   <p><strong>What this eliminates:</strong> the cross-repo vendoring contract; the six-step <code>/tmp/vendor-smoke</code> procedure; the <code>readlink</code> relative-target invariant; the <code>core.symlinks</code> portability concern; the OQ-C "local-copy vs commit-and-distribute" fork (moot — nothing to commit).</p>
   <p><strong>What this adds:</strong> explicit-path arg validation in the slash-command prompt; the <code>--output-dir</code> knob with a sensible default; the README "Use paper-trail on an external manuscript" section; the two-cwd smoke (from inside paper-trail's dir AND via <code>--add-dir</code>) to isolate that the slash command resolves its own references via paper-trail's canonical path, not the user's cwd.</p>
+  <p style="color:var(--muted);font-size:12.5px"><em>Verified 2026-06-24: the two-cwd smoke confirmed both invocations resolve the same canonical repo root and <code>--add-dir</code> registers the slash command. See <a href="#impl-results">Implementation &amp; smoke results</a>.</em></p>
   <textarea class="section-feedback" data-section="rd-9" placeholder="Inline feedback on RD-9..."></textarea>
 </div>
 
 <div class="rd-card" data-section="rd-2">
   <div class="rd-id">RD-2 — Path policy</div>
   <p><strong>Decision:</strong> migrate every shipped runtime reference to <code>src/...</code>. <code>.claude/</code> is publication-only — never edit through it, never reference it from a shipped prompt/spec. Symlinks keep execution working; the migration buys single source of truth.</p>
-  <p><strong>Enforcement:</strong> repo-wide grep sweep (<code>git grep -nE '\.claude/' -- 'src/' 'README.md' 'docs/' ':!docs/journal/*' ':!docs/plans/reviews/*'</code>) must return empty or every hit has an inline annotation explaining why it stays as <code>.claude/</code>.</p>
+  <p><strong>Enforcement:</strong> repo-wide grep sweep (<code>git grep -nE '\.claude/' -- 'src/' 'README.md' 'docs/' ':!docs/journal/*' ':!docs/plans/reviews/*'</code>) must return empty or every hit has an inline annotation explaining why it stays as <code>.claude/</code>. <em>(2026-06-09 sweep PASS — residual hits all annotated.)</em></p>
   <textarea class="section-feedback" data-section="rd-2" placeholder="Inline feedback on RD-2..."></textarea>
 </div>
 
@@ -656,16 +768,16 @@ flowchart TD
   <div class="rd-id">RD-3 — Directory-shaped skills</div>
   <p><strong>Decision:</strong> nested skills like <code>paperclip/SKILL.md</code> are part of the mirrored ship surface. Move spec is directory-aware: an entry under <code>.claude/skills/</code> is either a single <code>&lt;name&gt;.md</code> or a directory of shape <code>&lt;name&gt;/SKILL.md</code>. Discovery smoke test must explicitly load one of each shape.</p>
   <p><strong>Why it matters:</strong> the <code>feature-paperclip-first-architecture.md</code> workflow depends on the paperclip skill. A move spec using only <code>*.md</code> globs would silently leave <code>paperclip/</code> at the old location and break that workflow on day one.</p>
-  <p><strong>Caveat (fresh-Claude review):</strong> <code>paperclip/SKILL.md</code> is currently untracked (<code>.gitignore</code> matches it without a carveout). After the move + <code>.gitignore</code> rewrite, it becomes tracked at <code>src/skills/paperclip/SKILL.md</code>. <strong>This is a behavior change — see OQ-A below.</strong></p>
+  <p><strong>Caveat (fresh-Claude review):</strong> <code>paperclip/SKILL.md</code> was untracked (<code>.gitignore</code> matched it without a carveout). After the move + <code>.gitignore</code> rewrite, it becomes tracked at <code>src/skills/paperclip/SKILL.md</code>. This is a behavior change — see OQ-A. <em>(2026-06-24 smoke: directory-shaped <code>paperclip</code> discovery PASS.)</em></p>
   <textarea class="section-feedback" data-section="rd-3" placeholder="Inline feedback on RD-3..."></textarea>
 </div>
 
 <div class="rd-card" data-section="rd-4">
   <div class="rd-id">RD-4 — Symlinks first; defined fallback with pre-drafted patch</div>
-  <p><strong>Decision:</strong> try subdirectory-level symlinks as v1. Fallback only applies if Claude Code's slash-command/skill <em>discovery</em> fails OR a behavioral smoke (<code>/paper-trail examples/paper-trail-adamson-2025/</code>) fails for a symlink-or-path-resolution reason.</p>
+  <p><strong>Decision:</strong> try subdirectory-level symlinks as v1. Fallback only applies if Claude Code's slash-command/skill <em>discovery</em> fails OR a behavioral smoke (<code>/paper-trail examples/paper-trail-adamson-2025/</code>) fails for a symlink-or-path-resolution reason. <em>(Symlinks passed structural + behavioral discovery checks; fallback NOT taken.)</em></p>
   <p><strong>Pre-drafted fallback patch</strong> (must be ready before smoke tests run; the Codex second-pass review called out that "design fallback under pressure" wasn't concrete enough):</p>
   <ul class="tight">
-    <li><strong>(i)</strong> <code>docs/claude_ops.md:22</code> edit replacing "no build step" with "one build step: <code>make sync</code> keeps <code>.claude/&lt;dir&gt;/</code> in sync with <code>src/&lt;dir&gt;/</code> between sessions."</li>
+    <li><strong>(i)</strong> <code>docs/claude_ops.md</code> edit replacing "no build step" with "one build step: <code>make sync</code> keeps <code>.claude/&lt;dir&gt;/</code> in sync with <code>src/&lt;dir&gt;/</code> between sessions."</li>
     <li><strong>(ii)</strong> <code>Makefile</code> <code>sync</code> target: <code>for d in commands prompts specs skills scripts; do rsync -a --delete src/$$d/ .claude/$$d/; done</code></li>
     <li><strong>(iii)</strong> <code>make check-sync</code> target: runs <code>diff -r src/&lt;dir&gt;/ .claude/&lt;dir&gt;/</code> for each content-bearing directory and exits non-zero on divergence. Gate in CI and a pre-commit hook so session-start divergence is caught loudly.</li>
   </ul>
@@ -677,6 +789,7 @@ flowchart TD
   <div class="rd-id">RD-5 — Brevity audit</div>
   <p><strong>Decision:</strong> content-driven on the 698-line <code>paper-trail.md</code>; skip prompts under 100 lines this round. Move reference material to specs regardless of line count on the orchestrator; revisit smaller prompts after one real-workflow run. Avoids pre-optimizing prompts that haven't shown up as a problem.</p>
   <p><strong>Subagent-context audit (mandatory side-check):</strong> for each block moved out of <code>paper-trail.md</code> into a spec, name which subagents read that spec. A block irrelevant to a subagent that already reads the destination is a net-loss for that subagent's context — prefer a Provenance section or a journal entry in that case.</p>
+  <p style="color:var(--muted);font-size:12.5px"><em>Done 2026-06-09: <code>paper-trail.md</code> 698 → 670 lines (trace-log block → <code>src/specs/trace_log.md</code>; "why two passes" → Provenance footer; verifier rules → <code>verifier_results.md</code>). Per-block reader side-check recorded both moves as net-positive. See <a href="#impl-results">Implementation results</a>.</em></p>
   <textarea class="section-feedback" data-section="rd-5" placeholder="Inline feedback on RD-5..."></textarea>
 </div>
 
@@ -770,7 +883,7 @@ flowchart TD
 <h2>Implementation steps</h2>
 
 <details data-section="step-1">
-  <summary><span>Step 1 — Build migration manifest</span><span class="chip">⏳ PENDING</span></summary>
+  <summary><span>Step 1 — Build migration manifest</span><span class="chip done">✅ SHIPPED</span></summary>
   <div class="details-body">
     <p>The canonical migration manifest is generated, not hand-curated. Run from the repo root:</p>
     <pre>git grep -nE '\.claude/|(^|[^[:alnum:]_])templates/' -- ':!docs/journal/*' ':!docs/plans/reviews/*'</pre>
@@ -790,13 +903,13 @@ flowchart TD
       <li>(c) <code>.gitignore</code> rule → update carveout pattern</li>
       <li>(d) Intentional reference to publication-target <code>.claude/</code> (rare; annotate inline)</li>
     </ul>
-    <p><strong>Verify gate:</strong> manifest is reviewed (and hit count sanity-checked) before any <code>git mv</code> runs.</p>
+    <p><strong>Result (2026-06-09):</strong> the pre-move tree returned <strong>306 hits, 48 <code>templates/</code> hits</strong>, all five sentinel files covered. Gate PASS.</p>
     <textarea class="section-feedback" data-section="step-1" placeholder="Inline feedback on Step 1..."></textarea>
   </div>
 </details>
 
 <details data-section="step-2">
-  <summary><span>Step 2 — git mv shipped artifacts to src/</span><span class="chip">⏳ PENDING</span></summary>
+  <summary><span>Step 2 — git mv shipped artifacts to src/</span><span class="chip done">✅ SHIPPED</span></summary>
   <div class="details-body">
     <p>Preserve git history with <code>git mv</code>. Inventory:</p>
     <ul class="tight">
@@ -808,13 +921,13 @@ flowchart TD
       <li><code>templates/*.md</code> → <code>src/templates/*.md</code></li>
     </ul>
     <p><strong>paperclip transition (OQ-A):</strong> today <code>paperclip/SKILL.md</code> is untracked (matched by <code>.claude/skills/*</code> ignore without a carveout). After the move + <code>.gitignore</code> rewrite the file becomes tracked at <code>src/skills/paperclip/SKILL.md</code>. Confirm with user whether the 208-line file is intended to ship before committing.</p>
-    <p><strong>Verify gate:</strong> <code>git log --follow src/commands/paper-trail.md</code> shows full history through the <code>.claude/commands/paper-trail.md</code> era; for a single-file skill use a <em>tracked</em> file (<code>git log --follow src/skills/plan-check.md</code> or <code>src/skills/doc-split-check.md</code>) — not <code>paperclip/SKILL.md</code> since it's untracked today and the check would pass coincidentally.</p>
+    <p><strong>Verify gate (PASS 2026-06-09):</strong> <code>git log --follow src/commands/paper-trail.md</code> shows full history through the <code>.claude/commands/paper-trail.md</code> era; for a single-file skill use a <em>tracked</em> file (<code>git log --follow src/skills/plan-check.md</code> or <code>src/skills/doc-split-check.md</code>) — not <code>paperclip/SKILL.md</code> since it's untracked today.</p>
     <textarea class="section-feedback" data-section="step-2" placeholder="Inline feedback on Step 2..."></textarea>
   </div>
 </details>
 
 <details data-section="step-3">
-  <summary><span>Step 3 — Create .claude/ subdirectory symlinks</span><span class="chip">⏳ PENDING</span></summary>
+  <summary><span>Step 3 — Create .claude/ subdirectory symlinks</span><span class="chip done">✅ SHIPPED</span></summary>
   <div class="details-body">
     <p>One <code>ln -s</code> per content-bearing subdirectory:</p>
     <ul class="tight">
@@ -825,13 +938,13 @@ flowchart TD
       <li><code>.claude/scripts/</code> → <code>src/scripts/</code></li>
     </ul>
     <p><code>.claude/settings.local.json</code> stays canonical at <code>.claude/</code> root (not part of the ship surface; required by Claude Code).</p>
-    <p><strong>Verify gate (OQ1):</strong> <code>/paper-trail</code>, <code>/ground-claim</code>, and the project-owned skills all resolve. If discovery fails → fall back to <code>make sync</code>, but that path requires a follow-up commit updating <code>docs/claude_ops.md</code>'s "no build step" assumption.</p>
+    <p><strong>Verify gate (PASS):</strong> <code>/paper-trail</code>, <code>/ground-claim</code>, and the project-owned skills all resolve through the symlinks (confirmed structurally 2026-06-09 and behaviorally 2026-06-24). If discovery had failed → fall back to <code>make sync</code> (not taken). <strong>iCloud gotcha:</strong> the first <code>ln -s</code> pass got the five symlinks renamed to <code>&lt;name&gt; 2</code> by iCloud sync; <code>mv</code> back.</p>
     <textarea class="section-feedback" data-section="step-3" placeholder="Inline feedback on Step 3..."></textarea>
   </div>
 </details>
 
 <details data-section="step-4">
-  <summary><span>Step 4 — Migrate path references per RD-2 (a: runtime, b: docs)</span><span class="chip">⏳ PENDING</span></summary>
+  <summary><span>Step 4 — Migrate path references per RD-2 (a: runtime, b: docs)</span><span class="chip done">✅ SHIPPED</span></summary>
   <div class="details-body">
     <p><strong>4a — Shipped runtime artifacts</strong> (the path-policy heart of the plan):</p>
     <ul class="tight">
@@ -840,22 +953,22 @@ flowchart TD
       <li><code>src/specs/ingest.md</code>, <code>verdict_schema.md</code></li>
       <li><code>src/commands/ground-claim.md</code>, <code>init-writing-tools.md</code></li>
     </ul>
-    <p><strong>4b — Doc and plan surfaces</strong> (RD-1 vendoring + RD-2 paths):</p>
+    <p><strong>4b — Doc and plan surfaces</strong> (RD-9 README rewrite + RD-2 paths):</p>
     <ul class="tight">
-      <li><code>README.md</code> — vendoring instructions per RD-1 plus any path examples per RD-2</li>
+      <li><code>README.md</code> — vendoring section deleted per RD-9; replaced with "Use paper-trail on an external manuscript" + path examples migrated per RD-2</li>
       <li><code>docs/internals.md</code>, <code>docs/output.md</code></li>
       <li><code>CLAUDE.md</code> — "Where things live" section</li>
-      <li><code>.gitignore</code> — drop the <code>.claude/skills/*</code> carveout (no longer needed)</li>
+      <li><code>.gitignore</code> — drop the <code>.claude/skills/*</code> block; re-establish <code>src/skills/*</code> with per-shipped-skill carveouts (OQ-B)</li>
       <li>10+ plan docs in <code>docs/plans/</code> — except <code>docs/plans/reviews/</code> (frozen)</li>
       <li><code>docs/NEXT.md</code></li>
     </ul>
-    <p><strong>Verify gate:</strong> repo-wide grep sweep across <code>src/</code>, <code>README.md</code>, <code>CLAUDE.md</code>, <code>.gitignore</code>, and <code>docs/</code> (excluding <code>docs/journal/</code> and <code>docs/plans/reviews/</code>) returns empty or annotated hits only. Equivalent <code>templates/</code> sweep catches stale top-level template references.</p>
+    <p><strong>Verify gate (PASS 2026-06-09):</strong> repo-wide grep sweep across <code>src/</code>, <code>README.md</code>, <code>CLAUDE.md</code>, <code>.gitignore</code>, and <code>docs/</code> (excluding <code>docs/journal/</code> and <code>docs/plans/reviews/</code>) returned annotated hits only; <code>templates/</code> sweep returned zero.</p>
     <textarea class="section-feedback" data-section="step-4" placeholder="Inline feedback on Step 4..."></textarea>
   </div>
 </details>
 
 <details data-section="step-5">
-  <summary><span>Step 5 — Write src/specs/control_flow.md</span><span class="chip">⏳ PENDING</span></summary>
+  <summary><span>Step 5 — Write src/specs/control_flow.md</span><span class="chip done">✅ SHIPPED</span></summary>
   <div class="details-body">
     <p>The new traceability spec maps the orchestrator-to-dispatch-to-subagent-to-exit-validation graph. Per the Codex review correction, anchors are <strong>stable section headings, not raw line numbers</strong>, and the validators are correctly attributed:</p>
     <table>
@@ -865,68 +978,53 @@ flowchart TD
       <tr><td>3.2 Extractor</td><td>"Step 3.2 — Two-pass dispatch"</td><td><code>src/prompts/extractor-dispatch.md</code></td><td><code>ledger/evidence/&lt;cid&gt;.json</code></td><td>per <code>verdict_schema.md</code> §Validation rules</td></tr>
       <tr><td>3.2 Adjudicator</td><td>same subsection, post-extractor</td><td><code>src/prompts/adjudicator-dispatch.md</code></td><td><code>ledger/claims/&lt;cid&gt;.json</code></td><td>per <code>verdict_schema.md</code> §Validation rules + rollup invariant</td></tr>
       <tr><td>3.3 Ledger render</td><td>"Step 3.3 — Ledger rendering"</td><td>derived-view re-render</td><td><code>ledger.md</code></td><td>(re-render is idempotent)</td></tr>
-      <tr><td>3.5 Verifier</td><td>"Phase 3.5 — Attestation verification"</td><td><code>src/prompts/verifier-dispatch.md</code></td><td><code>ledger/verifications/&lt;cid&gt;__&lt;sub&gt;.json</code></td><td>result enum check; two-bounce ceiling</td></tr>
+      <tr><td>3.5 Verifier</td><td>"Phase 3.5 — Attestation verification"</td><td><code>src/prompts/verifier-dispatch.md</code></td><td><code>ledger/verifications/&lt;cid&gt;__&lt;sub&gt;.json</code></td><td>result enum check; two-bounce ceiling (semantics in <code>verifier_results.md</code>)</td></tr>
       <tr><td>5 HTML render</td><td>"Phase 5 — Render HTML viewer"</td><td><code>src/scripts/render_html_demo.py</code></td><td><code>demo.html</code></td><td>non-fatal warning on failure</td></tr>
     </table>
-    <p><strong>Codex review correction (Critical C1):</strong> <code>validate_claims.py</code> is the <strong>pre-dispatch</strong> manuscript validator, not an exit-schema validator. The exit-schema rules (<code>JSON parses</code> / <code>required fields present</code> / <code>claim_id matches dispatch</code> / <code>sub_claims non-empty</code> / <code>valid verdict enums</code> / <code>rollup consistent</code>) live in <code>src/specs/verdict_schema.md</code> §"Validation rules" and are orchestrator-enforced inline on each subagent return. The plan's original draft conflated these; <code>control_flow.md</code> must keep them distinct.</p>
-    <p><strong>Verify gate:</strong> a fresh agent reads <code>src/specs/control_flow.md</code> and can trace a Phase-3 dispatch in their own words: "Phase 3.2 dispatches the extractor at the 'Step 3.2 — Two-pass dispatch' heading of <code>src/commands/paper-trail.md</code> using <code>src/prompts/extractor-dispatch.md</code>; the extractor populates <code>evidence</code>; the adjudicator reads the evidence and emits the verdict; the orchestrator validates per <code>verdict_schema.md</code> §Validation rules."</p>
+    <p><strong>Codex review correction (Critical C1):</strong> <code>validate_claims.py</code> is the <strong>pre-dispatch</strong> manuscript validator, not an exit-schema validator. The exit-schema rules (<code>JSON parses</code> / <code>required fields present</code> / <code>claim_id matches dispatch</code> / <code>sub_claims non-empty</code> / <code>valid verdict enums</code> / <code>rollup consistent</code>) live in <code>src/specs/verdict_schema.md</code> §"Validation rules" and are orchestrator-enforced inline on each subagent return. <code>control_flow.md</code> keeps them distinct.</p>
+    <p><strong>Post-review (2026-06-09):</strong> the slot map gained the dotted <code>{{claim_type_hint.*}}</code> placeholders, validation cells became real Markdown links, and verifier result semantics were extracted to <code>src/specs/verifier_results.md</code>.</p>
     <textarea class="section-feedback" data-section="step-5" placeholder="Inline feedback on Step 5..."></textarea>
   </div>
 </details>
 
 <details data-section="step-6">
-  <summary><span>Step 6 — Smoke test suite (the gate)</span><span class="chip gate">⏳ GATE</span></summary>
+  <summary><span>Step 6 — Smoke test suite (the gate)</span><span class="chip">⚠️ PARTIAL</span></summary>
   <div class="details-body">
-    <p>Twelve required checks before the reorg is considered shipped:</p>
+    <p>Twelve required checks before the reorg is considered shipped. Structural checks ran 2026-06-09 (PASS); behavioral discovery + path resolution ran 2026-06-24 (PASS); the end-to-end grounding loop is environment-blocked (orthogonal to the reorg, not merge-blocking — see <a href="#impl-results">Implementation &amp; smoke results</a>).</p>
     <ol>
-      <li><strong>Manifest sanity-check</strong> (gates everything below) — Step 1 manifest returns ~45 <code>templates/</code> hits AND includes at least one hit in each sentinel file (<code>README.md</code>, <code>CLAUDE.md</code>, <code>docs/claude_ops.md</code>, <code>.claude/commands/paper-trail.md</code>, <code>.claude/commands/init-writing-tools.md</code>). Count-only is insufficient (the regex can return nonzero but miss the most important files).</li>
-      <li><strong>Slash-command discovery (structural)</strong> — <code>/paper-trail</code> resolves through the symlink.</li>
-      <li><strong>Slash-command execution (behavioral)</strong> — concrete invocation <code>/paper-trail examples/paper-trail-adamson-2025/</code> from a clean working tree (move pre-existing <code>ledger/</code> aside first). Expected artifacts: <code>examples/paper-trail-adamson-2025/ledger/claims/*.json</code>, <code>ledger.md</code>, <code>demo.html</code>. Discovery passing while execution fails (runtime path-resolution error through the symlink chain) also triggers the RD-4 fallback.</li>
-      <li><strong>Per-command coverage</strong> — explicit per-command test scope for all six slash commands:
-        <ul class="tight">
-          <li><code>/paper-trail</code> — full behavioral run (previous item).</li>
-          <li><code>/ground-claim</code> — discover + run on a single claim from the canonical fixture; expect refreshed <code>ledger/claims/&lt;cid&gt;.json</code>.</li>
-          <li><code>/init-writing-tools</code> — discover + run against <code>examples/DFD_authormode/</code>.</li>
-          <li><code>/paper-trail-init</code> — discover + run against a clean temp dir.</li>
-          <li><code>/fetch-paper</code> — discover only (behavioral test hits the network; out of scope).</li>
-          <li><code>/verify-bib</code> — discover + run against the canonical fixture; expect a verify-bib report.</li>
-        </ul>
-      </li>
-      <li><strong>Single-file skill discovery</strong> — <code>doc-split-check</code>, <code>plan-check</code> auto-load.</li>
-      <li><strong>Directory-shaped skill discovery</strong> (closes Codex C3) — <code>paperclip</code> auto-loads via trigger or explicit invocation. Single-file discovery passing does <em>not</em> imply directory-shape passing.</li>
-      <li><strong>Author-mode invocation smoke (RD-9)</strong> — five-step procedure with no vendoring: invoke <code>/paper-trail --author /Users/.../paper-trail/examples/DFD_authormode/main.tex</code> once from inside paper-trail's dir, once via <code>claude --add-dir</code> from <code>/tmp</code>; assert both produce identical outputs at <code>&lt;manuscript-dir&gt;/ledger/</code> and <code>&lt;manuscript-dir&gt;/demo.html</code>. Replaces the prior six-step vendoring procedure.</li>
-      <li><strong>Fresh-clone symlink resolution</strong> — <code>git clone</code> the repo into a clean dir; assert <code>readlink .claude/commands</code> resolves correctly so internal Claude-Code discovery still works. (Post-RD-9 this only gates the repo's own internal consistency; the prior cross-repo vendoring portability concern is retired.)</li>
-      <li><strong>Repo-wide path-policy sweep</strong> — <code>git grep -nE '\.claude/' -- 'src/' 'README.md' 'CLAUDE.md' '.gitignore' 'docs/' ':!docs/journal/*' ':!docs/plans/reviews/*'</code> returns empty or annotated only. Plus an equivalent <code>templates/</code> sweep.</li>
-      <li><strong>Git history continuity</strong> — <code>git log --follow</code> works through the move on at least one file per directory. Use <em>tracked</em> files only — <code>src/skills/plan-check.md</code> or <code>doc-split-check.md</code> for the skills directory; NOT <code>paperclip/SKILL.md</code>.</li>
-      <li><strong>settings.local.json stays put</strong> — <code>test -f .claude/settings.local.json && test ! -e src/settings.local.json</code>.</li>
-      <li><strong>Clean working tree</strong> — <code>git status</code> shows no spurious symlink diffs.</li>
+      <li><strong>Manifest sanity-check</strong> (gates everything below) — <strong>PASS</strong>. Step 1 manifest returned 306 hits / 48 <code>templates/</code> hits AND covered all five sentinel files. Count-only is insufficient (the regex can return nonzero but miss the most important files).</li>
+      <li><strong>Slash-command discovery (structural)</strong> — <strong>PASS</strong>. <code>/paper-trail</code> resolves through the symlink.</li>
+      <li><strong>Slash-command execution (behavioral)</strong> — <strong>execution-path PASS, grounding blocked</strong>. <code>/paper-trail</code> reader-mode extracted 86 claims, fetched 15 ref PDFs, wrote <code>ledger/claims/*.json</code> + <code>refs.bib</code> + <code>parse_report.md</code> through the symlinks with zero path-resolution errors; did not reach the Phase-5 <code>demo.html</code> render (died on a transient <code>API Error: Overloaded</code>). Grounding loop not exercised — ingest stack absent on this Mac.</li>
+      <li><strong>Per-command coverage</strong> — <strong>discovery PASS for all six</strong> (<code>/paper-trail</code>, <code>/ground-claim</code>, <code>/init-writing-tools</code>, <code>/paper-trail-init</code>, <code>/fetch-paper</code>, <code>/verify-bib</code>). Per-command behavioral runs beyond <code>/paper-trail</code> reader-mode await a fuller environment.</li>
+      <li><strong>Single-file skill discovery</strong> — <strong>PASS</strong>. <code>doc-split-check</code>, <code>plan-check</code> auto-load.</li>
+      <li><strong>Directory-shaped skill discovery</strong> (closes Codex C3) — <strong>PASS</strong>. <code>paperclip</code> auto-loads through the symlink. Single-file discovery passing does not imply directory-shape passing — this is a separate must-pass and it passed.</li>
+      <li><strong>Author-mode invocation smoke (RD-9)</strong> — <strong>path/routing contract PASS</strong>. Two-cwd: from inside paper-trail's dir AND via <code>claude --add-dir</code> from <code>/tmp</code>; both resolved paper-trail's repo root to the identical canonical path, validated the absolute manuscript path, wrote only under <code>--output-dir</code>, left the manuscript untouched. <strong>Pass criterion is cwd-independent path resolution + output routing, NOT byte-identical artifacts</strong> (the pipeline is LLM-driven and legitimately nondeterministic — see the gotcha below and the results section).</li>
+      <li><strong>Fresh-clone symlink resolution</strong> — <strong>PASS</strong>. <code>git clone</code> into a clean dir; <code>readlink .claude/commands</code> → <code>../src/commands</code>; file reads resolve. (Post-RD-9 this only gates internal consistency.)</li>
+      <li><strong>Repo-wide path-policy sweep</strong> — <strong>PASS</strong>. <code>git grep -nE '\.claude/' -- 'src/' 'README.md' 'CLAUDE.md' '.gitignore' 'docs/' ':!docs/journal/*' ':!docs/plans/reviews/*'</code> returned annotated hits only; <code>templates/</code> sweep returned zero.</li>
+      <li><strong>Git history continuity</strong> — <strong>PASS</strong>. <code>git log --follow</code> reaches origin on <code>src/commands/paper-trail.md</code> and <code>src/skills/plan-check.md</code> (tracked files only — NOT <code>paperclip/SKILL.md</code>).</li>
+      <li><strong>settings.local.json stays put</strong> — <strong>PASS</strong>. <code>src/settings.local.json</code> absent in the worktree.</li>
+      <li><strong>Clean working tree</strong> — <strong>PASS</strong>. <code>git status</code> shows no spurious symlink diffs.</li>
     </ol>
-    <p><strong>RD-4 fallback gate:</strong> triggers if discovery OR behavioral execution fails for a symlink-related reason. Apply the pre-drafted patch (concrete Makefile <code>sync</code>/<code>check-sync</code> targets + the <code>docs/claude_ops.md:22</code> edit; see RD-4 card above).</p>
+    <p><strong>RD-4 fallback gate:</strong> would trigger if discovery OR behavioral execution failed for a symlink-related reason. It did not — the pre-drafted patch (concrete Makefile <code>sync</code>/<code>check-sync</code> targets + the <code>docs/claude_ops.md</code> edit) stays in reserve.</p>
+    <p><strong>Still open (not merge-blocking):</strong> a clean reader-mode run through the Phase-5 render (retry past the API overload), and a <em>default-output</em> author run (no <code>--output-dir</code>) to settle whether the default set includes <code>claims_ledger.md</code>.</p>
     <textarea class="section-feedback" data-section="step-6" placeholder="Inline feedback on Step 6..."></textarea>
   </div>
 </details>
 
 <details data-section="step-7">
-  <summary><span>Step 7 — Light brevity audit</span><span class="chip">⏳ PENDING</span></summary>
+  <summary><span>Step 7 — Light brevity audit</span><span class="chip done">✅ SHIPPED</span></summary>
   <div class="details-body">
     <p>Content-driven on the 698-line <code>paper-trail.md</code>; skipped on prompts under 100 lines. Looks for two patterns only:</p>
     <ol>
       <li><strong>Reference material that duplicates a spec</strong> — collapse a 50-line schema explainer in <code>paper-trail.md</code> to a 1-line pointer to <code>src/specs/verdict_schema.md</code>. The orchestrator agent reads the spec on demand; the schema isn't loaded into context every turn.</li>
       <li><strong>Human-orientation-only content</strong> — "this phase exists because of the April reversal..." kind of context. Useful for a code reviewer; not load-bearing for the agent. Move to a Provenance section at the bottom or to a journal entry.</li>
     </ol>
-    <p><strong>Out of scope for this audit:</strong> rewriting prompt prose, touching slot lists, deciding whether a <code>{{slot}}</code> is underspecified. Audit deliverable: per-prompt before/after line count + a one-paragraph summary.</p>
+    <p><strong>Out of scope for this audit:</strong> rewriting prompt prose, touching slot lists, deciding whether a <code>{{slot}}</code> is underspecified. <strong>Deliverable (done 2026-06-09):</strong> <code>paper-trail.md</code> 698 → 670 lines; trace-log block → new <code>src/specs/trace_log.md</code>, "why two passes" → Provenance footer, verifier handling rules → <code>verifier_results.md</code>. Per-block subagent-reader side-check recorded both moves net-positive. See the <a href="#impl-results">brevity audit deliverable table</a>.</p>
     <textarea class="section-feedback" data-section="step-7" placeholder="Inline feedback on Step 7..."></textarea>
   </div>
 </details>
 
 <h2>Gotchas</h2>
-
-<details data-section="gotcha-vendoring">
-  <summary><span>Vendoring contract is a cross-repo API surface</span><span class="chip">⚠️ WATCH</span></summary>
-  <div class="details-body">
-    <p>The README's "Install into a writing repo" section is effectively a public API. The original symlink plan would have silently broken it (cp -R preserves symlinks; the target dangles unless <code>src/</code> is copied alongside). RD-1 settled this by vendoring <code>src/</code> + <code>.claude/</code> together, but any future symlink layout change must update README + re-run the vendoring smoke in the same commit.</p>
-  </div>
-</details>
 
 <details data-section="gotcha-validator-conflation">
   <summary><span>Don't conflate validate_claims.py with exit-schema validation</span><span class="chip">⚠️ WATCH</span></summary>
@@ -945,7 +1043,7 @@ flowchart TD
 <details data-section="gotcha-skills-directory">
   <summary><span>Skills inventory must enumerate directories, not just *.md</span><span class="chip">⚠️ WATCH</span></summary>
   <div class="details-body">
-    <p>The original move spec used <code>*.md</code> globs and silently omitted <code>.claude/skills/paperclip/SKILL.md</code> (the only directory-shaped skill today). Fix: enumerate <code>.claude/skills/&lt;entry&gt;</code> at implementation time, where an entry is either a single <code>*.md</code> or a directory containing <code>SKILL.md</code>. Discovery smoke test must cover both shapes — one passing does not imply the other.</p>
+    <p>The original move spec used <code>*.md</code> globs and silently omitted <code>.claude/skills/paperclip/SKILL.md</code> (the only directory-shaped skill today). Fix: enumerate <code>.claude/skills/&lt;entry&gt;</code> at implementation time, where an entry is either a single <code>*.md</code> or a directory containing <code>SKILL.md</code>. Discovery smoke test must cover both shapes — one passing does not imply the other. <em>(Both shapes confirmed discoverable 2026-06-24.)</em></p>
   </div>
 </details>
 
@@ -956,16 +1054,23 @@ flowchart TD
     <ul class="tight">
       <li><code>'\.claude/|^\s*templates/'</code> — <code>^\s*</code> anchor matches zero <code>templates/</code> hits (none of the references begin with leading whitespace).</li>
       <li><code>'templates/(?!claims_ledger\.md$)'</code> — PCRE negative-lookahead. <code>git grep -E</code> is POSIX ERE; rejects with <code>fatal: repetition-operator operand invalid</code>. Semantically wrong too: <code>templates/claims_ledger.md</code> IS being moved.</li>
-      <li><code>'\.claude/|(\b|/)templates/'</code> — <strong>looks correct, isn't.</strong> <code>git grep -E</code> treats <code>\b</code> as the literal character <code>b</code>, not a word boundary (POSIX ERE doesn't define <code>\b</code>; only GNU regex does, but <code>git grep -E</code> doesn't honor it). Returns 12 hits instead of the correct 45 and misses every sentinel doc (<code>README.md</code>, <code>CLAUDE.md</code>, <code>docs/claude_ops.md</code>, <code>.claude/commands/paper-trail.md</code>, <code>.claude/commands/init-writing-tools.md</code>). A count-only sanity check passes coincidentally.</li>
+      <li><code>'\.claude/|(\b|/)templates/'</code> — <strong>looks correct, isn't.</strong> <code>git grep -E</code> treats <code>\b</code> as the literal character <code>b</code>, not a word boundary. Returns 12 hits instead of the correct 45 and misses every sentinel doc. A count-only sanity check passes coincidentally.</li>
     </ul>
-    <p><strong>Use instead:</strong> <code>git grep -nE '\.claude/|(^|[^[:alnum:]_])templates/' -- ':!docs/journal/*' ':!docs/plans/reviews/*'</code>. POSIX-character-class negation handles the boundary correctly. <strong>Sanity-check by both count AND sentinel files</strong> — manifest under 30 <code>templates/</code> hits is suspect, and it must include hits in each of: <code>README.md</code>, <code>CLAUDE.md</code>, <code>docs/claude_ops.md</code>, <code>.claude/commands/paper-trail.md</code>, <code>.claude/commands/init-writing-tools.md</code>.</p>
+    <p><strong>Use instead:</strong> <code>git grep -nE '\.claude/|(^|[^[:alnum:]_])templates/' -- ':!docs/journal/*' ':!docs/plans/reviews/*'</code>. POSIX-character-class negation handles the boundary correctly. <strong>Sanity-check by both count AND sentinel files.</strong> <em>(2026-06-09 the correct regex returned 306 hits / 48 <code>templates/</code> hits with all five sentinels — confirming the boundary fix.)</em></p>
   </div>
 </details>
 
 <details data-section="gotcha-paperclip-tracked">
   <summary><span>paperclip/SKILL.md flips from untracked to tracked silently</span><span class="chip">⚠️ WATCH</span></summary>
   <div class="details-body">
-    <p>Today: <code>.gitignore</code>'s <code>.claude/skills/*</code> rule matches <code>paperclip/SKILL.md</code> with no carveout — the 208-line file is local-only. After the move + <code>.gitignore</code> rewrite (drop the <code>.claude/skills/*</code> block), <code>src/skills/paperclip/SKILL.md</code> is tracked by default. <strong>This must be flagged to the user explicitly</strong> — see OQ-A. Otherwise the reorg silently ships a file that was previously private.</p>
+    <p>Today: <code>.gitignore</code>'s <code>.claude/skills/*</code> rule matches <code>paperclip/SKILL.md</code> with no carveout — the 208-line file is local-only. After the move + <code>.gitignore</code> rewrite (drop the <code>.claude/skills/*</code> block, add <code>src/skills/*</code> with carveouts), <code>src/skills/paperclip/SKILL.md</code> is tracked. <strong>This must be flagged to the user explicitly</strong> — see OQ-A (resolved: ship). Otherwise the reorg silently ships a file that was previously private.</p>
+  </div>
+</details>
+
+<details data-section="gotcha-icloud-symlink">
+  <summary><span>iCloud renames freshly-created symlinks to "&lt;name&gt; 2" mid-creation</span><span class="chip">⚠️ WATCH</span></summary>
+  <div class="details-body">
+    <p>The repo lives under iCloud-synced <code>Documents/</code>. On the first <code>ln -s</code> pass (2026-06-09) iCloud appended a sync-conflict <code> 2</code> suffix to all five freshly-created symlinks. Fixed by <code>mv</code>-ing them back to the bare name. If symlinks ever show a trailing <code> 2</code> after a checkout, that's iCloud, not git — rename, don't re-create from scratch.</p>
   </div>
 </details>
 
@@ -987,21 +1092,35 @@ flowchart TD
 <details data-section="gotcha-runtime-path-resolution">
   <summary><span>RD-2 paths in dispatch prompts have runtime cwd implications</span><span class="chip">⚠️ WATCH</span></summary>
   <div class="details-body">
-    <p>Dispatch prompts at <code>.claude/prompts/extractor-dispatch.md:58</code> and <code>adjudicator-dispatch.md:20, :75</code> contain literal path strings (currently <code>.claude/specs/verdict_schema.md</code>). After RD-2 they reference <code>src/specs/verdict_schema.md</code>. A subagent that opens that path at runtime gets different behavior depending on cwd (reader mode: <code>&lt;output-dir&gt;</code>; author mode: writing repo). <strong>See OQ-D for the contract choice</strong> — documentation-only vs runtime-resolvable vs orchestrator-passed-absolute.</p>
+    <p>Dispatch prompts contain literal path strings (currently <code>.claude/specs/verdict_schema.md</code>). After RD-2 they reference <code>src/specs/verdict_schema.md</code>. A subagent that opens that path at runtime gets different behavior depending on cwd (reader mode: <code>&lt;output-dir&gt;</code>; author mode: writing repo). <strong>OQ-D resolves this</strong> — orchestrator passes a <code>{{spec_root}}</code> slot so dispatch prompts construct <code>{{spec_root}}/src/specs/&lt;file&gt;</code> that resolves regardless of subagent cwd.</p>
+  </div>
+</details>
+
+<details data-section="gotcha-author-nondeterminism">
+  <summary><span>Author-mode smoke compares path resolution, NOT byte-identical artifacts</span><span class="chip">⚠️ WATCH</span></summary>
+  <div class="details-body">
+    <p>The original author-mode smoke framing asked the two-cwd runs to "produce identical outputs." That is <strong>not</strong> a valid pass criterion: the extraction → fetch → grounding pipeline is LLM-driven and stochastic, so two independent runs legitimately differ in claim_text phrasing, fetch strategy, validator FLAG counts, and stub-schema population — all observed in the 2026-06-24 run (A: 6 refs / 100 claims / 3 FLAG vs B: 0 refs / 103 claims / 5 FLAG), none cwd-related. <strong>Revised criterion:</strong> both invocations must resolve paper-trail's repo root (<code>git rev-parse --show-toplevel</code>) to the same canonical path, write only under the resolved output dir, and leave the manuscript untouched. Path/output-routing cwd-independence — not artifact equality — is what the smoke gates.</p>
   </div>
 </details>
 
 <details data-section="gotcha-auto-installed-skills">
   <summary><span>Auto-installed skills behavior changes after the symlink</span><span class="chip">⚠️ WATCH</span></summary>
   <div class="details-body">
-    <p>Today, when Claude Code creates <code>.claude/skills/foo.md</code> as a local auto-install, the <code>.claude/skills/*</code> ignore rule keeps it untracked. After the symlink rewire that path resolves to <code>src/skills/foo.md</code>, which is tracked by default. <strong>See OQ-B</strong> — accept the default-tracked behavior, or re-establish a <code>src/skills/*</code> ignore with carveouts.</p>
+    <p>Today, when Claude Code creates <code>.claude/skills/foo.md</code> as a local auto-install, the <code>.claude/skills/*</code> ignore rule keeps it untracked. After the symlink rewire that path resolves to <code>src/skills/foo.md</code>, which is tracked by default. <strong>OQ-B resolves this</strong> — re-establish a <code>src/skills/*</code> ignore with explicit per-shipped-skill carveouts, preserving today's "auto-installed skills don't accidentally ship" guarantee.</p>
   </div>
 </details>
 
 <details data-section="gotcha-settings-stays">
   <summary><span>settings.local.json must stay at .claude/ root</span><span class="chip">⚠️ WATCH</span></summary>
   <div class="details-body">
-    <p><code>.claude/settings.local.json</code> is Claude-Code-required and is NOT part of the ship surface. The move must not sweep it into <code>src/</code>. Smoke test asserts <code>test -f .claude/settings.local.json && test ! -e src/settings.local.json</code>.</p>
+    <p><code>.claude/settings.local.json</code> is Claude-Code-required and is NOT part of the ship surface. The move must not sweep it into <code>src/</code>. Smoke test asserts <code>test -f .claude/settings.local.json &amp;&amp; test ! -e src/settings.local.json</code>.</p>
+  </div>
+</details>
+
+<details data-section="gotcha-grounding-env">
+  <summary><span>Grounding loop needs an ingest + fetch environment (blocked on this Mac)</span><span class="chip">⚠️ WATCH</span></summary>
+  <div class="details-body">
+    <p>The 2026-06-24 behavioral smokes ran on a Mac with no reference-fetch path (paperclip CLI absent; <code>paper-search</code>/<code>papersflow</code> MCP absent) and no ingest tooling (<code>pdftotext</code>, GROBID, <code>lxml</code> all missing), so Phase 2.5 ingest can't build a source handle and every claim lands <code>PENDING/NEEDS_PDF</code>. The extractor → adjudicator → verifier grounding loop is therefore not exercised by these runs. This is <strong>independent of the reorg</strong> — it needs a machine with the ingest stack, can be smoked separately, and <strong>does not gate the merge</strong>.</p>
   </div>
 </details>
 
@@ -1049,7 +1168,7 @@ flowchart TD
     <span>Do shipped-prompt src/specs/ references need to resolve at runtime?</span>
     <select data-oq="D"><option value="Pending">Pending</option><option value="Resolved" selected>Resolved</option><option value="Deferred">Deferred</option></select>
   </div>
-  <p><strong>Resolved 2026-05-20: option (3) — orchestrator passes <code>{{spec_root}}</code> slot.</strong> Orchestrator knows paper-trail's canonical path (via <code>git rev-parse --show-toplevel</code> at dispatch time) and passes it as a <code>{{spec_root}}</code> slot. Dispatch prompts construct <code>{{spec_root}}/src/specs/&lt;file&gt;</code> and resolve correctly regardless of subagent cwd. Path-policy sweep gets a carveout: <code>{{spec_root}}/src/...</code> occurrences are valid; bare <code>src/specs/&lt;file&gt;</code> literals (no slot prefix) are stale. Cross-checks against RD-9: subagent cwd is whatever Claude Code was launched from; the slot makes that irrelevant.</p>
+  <p><strong>Resolved 2026-05-20: option (3) — orchestrator passes <code>{{spec_root}}</code> slot.</strong> Orchestrator knows paper-trail's canonical path (via <code>git rev-parse --show-toplevel</code> at dispatch time) and passes it as a <code>{{spec_root}}</code> slot. Dispatch prompts construct <code>{{spec_root}}/src/specs/&lt;file&gt;</code> and resolve correctly regardless of subagent cwd. Path-policy sweep gets a carveout: <code>{{spec_root}}/src/...</code> occurrences are valid; bare <code>src/specs/&lt;file&gt;</code> literals (no slot prefix) are stale. Cross-checks against RD-9: subagent cwd is whatever Claude Code was launched from; the slot makes that irrelevant. <em>(2026-06-24 author smoke confirmed the orchestrator resolves <code>{{spec_root}}</code> identically across both cwds.)</em></p>
   <textarea class="section-feedback" data-section="oq-d" placeholder="Notes on OQ-D..."></textarea>
 </div>
 
@@ -1072,8 +1191,8 @@ flowchart TD
 <div class="toast" id="toast"></div>
 
 <script>
-const PLAN_SHA = "966ab48007d0713cdc78f632611310a3dfad9a029798b1e79d3f6fe5590b4b9b";
-const PLAN_SHA_SHORT = "966ab48007d0";
+const PLAN_SHA = "358a75b726ca0187d5eba2f9f273c5dab913219a27d1aa836394574e09b3a661";
+const PLAN_SHA_SHORT = "358a75b726ca";
 const PLAN_PATH = "docs/plans/repo-organization.md";
 const STORAGE_PREFIX = "repo-org::";
 

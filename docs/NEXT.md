@@ -2,7 +2,7 @@
 
 Pointer-style index of plan docs in `docs/plans/` that are scoped but not yet implemented. Each item is 1-3 lines + a link to the plan doc for substance.
 
-**Last updated:** 2026-06-09
+**Last updated:** 2026-06-24
 
 ---
 
@@ -18,11 +18,11 @@ Plans coordinated by sequence rather than scope (the earlier ones reshuffle path
 
 ## Repo-org close-out items (before or at merge)
 
-- **Behavioral smokes** — user-run interactive sessions; exact list in [repo-organization.md § Deferred to user](plans/repo-organization.md). Before checking out the branch in the main checkout, move aside the untracked `.claude/skills/paperclip/` (now tracked at `src/skills/paperclip/`).
-- **Merge `repo-organization` → `main`**, then rebase `feature/paperclip-primary-workflow` per RD-8.
-- **Regenerate `plans/repo-organization.html`** via `/explain-plan` (stale — plan gained Implementation-results + post-review sections).
+- **Behavioral smokes — discovery + execution-path resolution DONE 2026-06-24** (headless `claude -p` sessions in the worktree): all 6 commands + both skill shapes discovered through the symlinks; reader + author-mode runs executed with **zero path-resolution errors**; RD-9 two-cwd contract holds (`--add-dir` registers the slash command; repo root resolves to the canonical path regardless of cwd). **Grounding is environment-blocked** (no fetch path / no `pdftotext`·GROBID·`lxml`) — orthogonal to the reorg, does **not** gate merge. Full results in [repo-organization.md § Behavioral smoke results](plans/repo-organization.md). Still open (non-blocking): a clean reader run through the Phase-5 render + a default-output author run. (Main-checkout note: before checking out this branch in the main checkout, move aside the untracked `.claude/skills/paperclip/`, now tracked at `src/skills/paperclip/`.)
+- **Merge `repo-organization` → `main`**, then rebase `feature/paperclip-primary-workflow` per RD-8. **Smoke gate satisfied** (discovery + execution-path); remaining gates are user-side (SHIP_SURFACE headline, default-output OQ).
+- **Regenerate `plans/repo-organization.html`** via `/explain-plan` — **DONE 2026-06-24** (picked up Implementation-results + post-review + behavioral-smoke-results sections).
 - **Workshop the `docs/SHIP_SURFACE.md` headline** with the user per RD-7 / memory `feedback_short_headline_copy.md`.
-- **Open question:** does the documented author-mode default-output set include `claims_ledger.md`? Settle at the author-mode behavioral smoke; see the adjudication log in [reviews/repo-organization-implementation-feedback.md](plans/reviews/repo-organization-implementation-feedback.md).
+- **Open question (still open):** does the documented author-mode default-output set include `claims_ledger.md`? The 2026-06-24 author smoke used `--output-dir` overrides, so the default path wasn't exercised — needs a default-output run. See the adjudication log in [reviews/repo-organization-implementation-feedback.md](plans/reviews/repo-organization-implementation-feedback.md).
 
 ## Status conventions
 
@@ -32,7 +32,7 @@ Plans coordinated by sequence rather than scope (the earlier ones reshuffle path
 
 | Plan | Status | Reviewed | Branch |
 |---|---|---|---|
-| repo-organization | Implemented on `repo-organization` branch 2026-06-09, 4 commits incl. Codex `/review-implementation` fixes (structural smokes pass; behavioral smokes + merge to main pending; HTML companion stale — regenerate via `/explain-plan`) | Stale (visual companion read 2026-06-09 pre-implementation; Implementation-results + post-review sections added after) | `repo-organization` (off `feature/paperclip-primary-workflow`) |
+| repo-organization | Implemented on `repo-organization` branch 2026-06-09 + behavioral smokes run 2026-06-24 (discovery + execution-path resolution PASS; grounding env-blocked, non-merge-blocking; HTML regenerated). **Merge to main pending** (smoke gate satisfied; user-side: SHIP_SURFACE headline + default-output OQ) | Stale (visual companion read 2026-06-09 pre-implementation; Implementation-results + post-review + smoke-results sections added after) | `repo-organization` (off `feature/paperclip-primary-workflow`) |
 | run-isolation-framework | Queued | No | none yet |
 | feature-paperclip-first-architecture | In flight (plan-only) | No | `feature/paperclip-primary-workflow` |
 | feature-multi-cite-joint-verdict + feature-neighbor-claim-attribution | In flight (plan-only) | No | `feature/multi-cite-and-neighbor-claims` |
