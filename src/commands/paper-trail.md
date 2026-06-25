@@ -27,6 +27,7 @@ Reader mode (default when a PDF path is given):
 - `/paper-trail <path-to-pdf> --recheck` — re-verify all existing ledger entries in the target output-dir.
 - `/paper-trail <path-to-pdf> --triage` — run interactive triage on `AMBIGUOUS` entries in an existing output-dir (no re-grounding).
 - `/paper-trail <path-to-pdf> --fetch-substitute=<never|ask|always>` — policy for Phase 2 when a target paper's primary URL is paywalled but a related-but-not-identical paper (e.g., an arXiv preprint of the same work, an earlier arXiv version, a workshop paper vs. a later journal version) is available. Default: `ask`.
+- `/paper-trail <path-to-pdf> --paperclip=<prefer|only|never|off>` — grounding-corpus mode. `prefer` (default): ground against the paperclip full-text corpus when a reference is in it (no PDF fetch), fall back to the PDF path otherwise. `only`: require corpus coverage — abort on any out-of-corpus reference instead of fetching (pure-corpus audits). `never` / `off`: ignore paperclip entirely; ground every reference against a fetched PDF, as today. Auto-set to `off` when the `paperclip` CLI is missing or unauthenticated (see Preflight).
 - `/paper-trail <path-to-pdf> --skip-preflight` — bypass the dependency check in Preflight; assume the caller has already staged `pdftotext` / GROBID / MCPs (CI / headless contexts).
 
 Author mode (the manuscript path is a required argument — an **absolute** path to a `.tex` file or a directory containing one):
@@ -35,7 +36,7 @@ Author mode (the manuscript path is a required argument — an **absolute** path
 - `/paper-trail --author /abs/path/to/writing-repo/` — author mode against the single `.tex` in that directory (if zero or multiple `.tex` files match, ask which via `AskUserQuestion`).
 - `/paper-trail --author <abs-path> --output-dir <path>` — override the output location. Default: alongside the manuscript — `<manuscript-dir>/claims_ledger.md`, `<manuscript-dir>/ledger/`, `<manuscript-dir>/demo.html`.
 - `/paper-trail --author <abs-path> --scope=single` — ground one specific claim (prompts for claim description).
-- All the `--skip-paywalled` / `--sequential` / `--batch-size` / `--recheck` / `--triage` / `--fetch-substitute` flags apply in author mode too.
+- All the `--skip-paywalled` / `--sequential` / `--batch-size` / `--recheck` / `--triage` / `--fetch-substitute` / `--paperclip` flags apply in author mode too.
 
 Author-mode path validation (before any dispatch fires):
 
@@ -237,12 +238,22 @@ Run `/verify-bib` logic against `<output-dir>/refs.bib` (the PDF-parsed bib from
 
 ## Phase 2 — Fetch PDFs
 
-For each unique citekey in `refs.bib`:
+For each unique citekey, branch on the `coverage` value Phase 1 recorded in `refs.verified.bib` (prefer `refs.verified.bib` over `refs.bib`; fall back to `refs.bib` only if Phase 1 produced no verified bib). Coverage decides whether a PDF is needed at all — an `--paperclip=off` run still writes `coverage` here, so every reference always carries one of the three values:
 
-- If `<output-dir>/pdfs/<citekey>.pdf` already exists → mark "already present" and skip.
-- Else spawn a subagent invoking `/fetch-paper <citekey>` logic (batched per the configured batch size).
-- The subagent follows the existing download-order fallback: `paper-search` MCP → `papersflow` → CrossRef open-access → direct arXiv.
-- Save to `<output-dir>/pdfs/<citekey>.pdf`.
+- **`coverage: paperclip`** → **skip the download entirely.** The paper never hits disk; it is grounded server-side in Phase 3 against `/papers/<paperclip_handle>/`. Carry the `paperclip_handle` forward, mark the ref "covered (paperclip)", and spawn **no** fetch subagent.
+- **`coverage: external`** → run the existing fetch path:
+  - If `<output-dir>/pdfs/<citekey>.pdf` already exists → mark "already present" and skip.
+  - Else spawn a subagent invoking `/fetch-paper <citekey>` logic (batched per the configured batch size). The subagent follows the existing download-order fallback: `paper-search` MCP → `papersflow` → CrossRef open-access → direct arXiv. Save to `<output-dir>/pdfs/<citekey>.pdf`.
+  - On paywall, apply the substitution policy and post-fetch handling below, exactly as today.
+- **`coverage: unresolved`** → no source resolved the reference; skip the fetch, mark the ref `NEEDS_PDF`, and add it to the end-of-run triage list. Spawn no subagent.
+
+Only the `external` slice reaches the fetch subagents and Phase 2.5 ingest below; `paperclip`-covered refs flow straight to Phase 3 carrying their handle, and `unresolved` refs are parked as `NEEDS_PDF`.
+
+### `--paperclip=only` gate
+
+`only` is the mode for pure-corpus audits — the user is asserting "everything I cite is groundable in the paperclip corpus." Phase 1 merely *flagged* `external` references; **Phase 2 is where `only` enforces.** When invoked with `--paperclip=only`, any reference that lands on `coverage: external` is a corpus-coverage failure: do **not** fall back to a PDF fetch. Stop after classification and surface the out-of-corpus refs to the user (citekey + title + why it missed the corpus), offering the same two options as the post-fetch paywall handling below — drop a PDF in and resume under a different mode, or re-run with `--paperclip=prefer` to allow the PDF path. Silently fetching an `external` ref under `only` would break the assertion the mode exists to make.
+
+`unresolved` references do **not** trip the `only` gate: they are a *resolvability* failure (no source ever identified the paper), not a corpus-coverage one — the tool can't claim a paper it never identified is "out of corpus." They flow to the normal end-of-run `NEEDS_PDF` triage in `only` exactly as in every other mode.
 
 ### Fetch substitution policy
 
@@ -274,15 +285,18 @@ The orchestrator applies the configured `--fetch-substitute` policy:
 
 ### Post-fetch paywall handling
 
-After all fetch subagents return, print a structured paywalled/failed list:
+After all fetch subagents return, print a coverage-aware fetch summary. Paperclip-covered refs are reported as "no download needed", not as failures, so the headline reflects what actually needed fetching:
 
 ```
-N refs could not be retrieved:
+Coverage: <P> paperclip (grounded in corpus, no download) · <E> external · <U> unresolved   [sums to N]
+
+External PDFs:  <D + A> / <E> available   (downloaded <D>, already present <A>)
+Could not retrieve (<E> − D − A):
   <citekey>  (DOI: <doi>)  — paywalled
   <citekey>  — retrieval failed: <reason>
   ...
-
-Total fetched: M / (M+N)
+Unresolved (skipped → NEEDS_PDF):
+  <citekey>  ...
 ```
 
 - If `--skip-paywalled` was passed → mark those refs' eventual claim entries as `PENDING` with `NEEDS_PDF`, and continue to Phase 3.

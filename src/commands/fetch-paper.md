@@ -19,6 +19,16 @@ Read `pdf_dir`, `pdf_naming`, `bib_files`, and `institutional_access` from `clai
 - **arXiv-id input**: query arXiv API (`https://export.arxiv.org/api/query?id_list=<id>`).
 - **title input**: search to resolve to a DOI and, if possible, an existing citekey.
 
+## Coverage pre-check (paperclip-aware)
+
+If the resolved reference carries a `coverage` field (Phase 1 of `/paper-trail` records it in `refs.verified.bib`), honor it **before** downloading:
+
+- **`coverage: paperclip`** → **do not download.** The reference's full text is grounded server-side against `/papers/<paperclip_handle>/` (figures included, via paperclip's image primitives), so a local PDF is redundant. Return a "covered by paperclip — no download needed" result carrying the `paperclip_handle`.
+- **`coverage: external`** → proceed with the download order below, as today.
+- **`coverage: unresolved`** → no source resolved this reference; skip the download and report it as pending manual retrieval (`NEEDS_PDF`).
+
+When the reference has no `coverage` field — standalone `/fetch-paper` use outside a paper-trail run, or a bib that predates Phase 1 — fall through to the download order below unchanged.
+
 ## Download order (first hit wins)
 
 Try these in order, stopping as soon as a PDF is retrieved:
@@ -58,6 +68,7 @@ To proceed:
 - De-dupe by citekey.
 - For each key whose target PDF path doesn't already exist, run single-paper logic above.
 - At the end, report:
+  - **Covered by paperclip (no download)**: J keys (list)
   - **Downloaded**: N keys (list)
   - **Already present**: M keys (list)
   - **Pending manual retrieval**: K keys (list with DOIs and target save paths)
