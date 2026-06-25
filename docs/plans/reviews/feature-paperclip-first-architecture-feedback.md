@@ -1,0 +1,83 @@
+Reference: docs/claude_ops.md
+
+# Feedback: Paperclip-first architecture (Codex review)
+
+## Verdict
+Revise. Phase 1/2 coverage and the 1.0 -> 1.1 schema-version direction check out, but Phase 3's `paperclip map` design is not yet coherent with the live paperclip skill's `map --from RESULTS_ID` contract, and the shared evidence/schema contract is underspecified across dispatch, verifier, validator, renderer, and ledger surfaces.
+
+## Critical Gaps
+- High | `paperclip map` is described as fanning across sibling handles, but the live skill says `map --from ID` consumes a saved search-results ID, not bare `/papers/<id>/` handles | Phase 3 dispatch is per `(claim,citekey)` and carries `paperclip_handle`; without an explicit search-results construction step for the current citekey + siblings, the paperclip extractor cannot actually run the planned multi-cite `map` call | Evidence: docs/plans/feature-paperclip-first-architecture.md:52; docs/plans/feature-paperclip-first-architecture.md:127; src/skills/paperclip/SKILL.md:25; src/skills/paperclip/SKILL.md:79 | Required fix: revise Phase 3 to say exactly how the extractor turns `paperclip_handle` + sibling handles into a `RESULTS_ID` acceptable to `map --from`, or downgrade `map` to optional search-result recall and keep handle-direct `grep`/`scan`/`cat` as the required path.
+- High | The plan simultaneously commits to `map` as primary recall and says `paperclip map` is out of scope / not committed in v1 | This leaves implementers with contradictory architecture: one section says use `map` for primary recall, while the scope section says the opposite | Evidence: docs/plans/feature-paperclip-first-architecture.md:127; docs/plans/feature-paperclip-first-architecture.md:176; docs/plans/feature-paperclip-first-architecture.md:188 | Required fix: remove or rewrite the out-of-scope bullet; if `map` stays in v1, add the concrete `RESULTS_ID` recipe and smoke gate.
+- High | Evidence JSON shape for paperclip mode conflicts with the live schema's actual evidence/attestation model | The plan says to reuse `attestation.hits[]` with `paperclip_snippet`, `location`, and `figures_checked[]`, but the current schema has `sub_claims[*].evidence[]` as `{section,line,snippet}`, `figures_checked[]` as `{figure,question,vision_response}`, and no `attestation.hits[]`; implementers would create fields the validator/prompts do not understand | Evidence: docs/plans/feature-paperclip-first-architecture.md:157; src/specs/verdict_schema.md:127; src/specs/verdict_schema.md:128; src/specs/verdict_schema.md:162 | Required fix: define the exact 1.1 evidence item shape once in `verdict_schema.md`: either generalize `{section,line,snippet}` to include `location/source_locator/source_mode`, or explicitly add a backwards-incompatible `attestation.hits[]` model and update both extractors/adjudicator/verifier/renderers to it.
+- High | The plan assigns schema/output validation to `src/scripts/validate_claims.py`, but that script is only a manuscript-side claim-extraction validator | Adding `SOURCE_MODE_MISSING` there will not validate subagent exit JSONs unless the orchestrator separately invokes it for that purpose; the current control-flow spec explicitly says exit-schema validation is orchestrator-inline, not this Python script | Evidence: docs/plans/feature-paperclip-first-architecture.md:45; docs/plans/feature-paperclip-first-architecture.md:166; src/scripts/validate_claims.py:3; src/specs/control_flow.md:27 | Required fix: move `SOURCE_MODE_MISSING` / `PAPERCLIP_HANDLE_MISMATCH` to `src/specs/verdict_schema.md` validation rules and the orchestrator validation step, or explicitly broaden `validate_claims.py` into a schema validator and update `control_flow.md`.
+- Medium | `source_mode` derivation from `coverage`/`ingest_mode` is named but not specified at the dispatch boundary | Phase 2 emits `coverage`; Phase 2.5 emits `ingest_mode`; Phase 3 needs `source_mode`, `handle`, and `paperclip_handle`, but the live dispatch payload is still PDF-only and the plan does not specify the exact mapping for `pdftotext_fallback` or missing handles | Evidence: src/commands/paper-trail.md:421; src/commands/paper-trail.md:429; src/commands/paper-trail.md:430; docs/plans/feature-paperclip-first-architecture.md:56; docs/plans/feature-paperclip-first-architecture.md:121 | Required fix: add an explicit Phase 3 mapping table: `coverage=paperclip -> source_mode=paperclip, handle=/papers/<paperclip_handle>/`; `coverage=external + ingest_mode=grobid|pdftotext_fallback -> source_mode=pdf`; `coverage=external + ingest_mode=ocr_fallback -> source_mode=pdf_ocr_fallback`; unresolved/error -> stub `NEEDS_PDF`.
+- Medium | Phase 3 verifier is declared mode-aware, but the live verifier prompt forbids re-search and allows only local `cat`/`rg`/`sed` | The plan's `paperclip grep` verifier path cannot be implemented by lightly slotting `source_mode`; the prompt needs a separate command allowance and locator model for `/papers/<id>/content.lines` | Evidence: docs/plans/feature-paperclip-first-architecture.md:136; src/prompts/verifier-dispatch.md:31; src/prompts/verifier-dispatch.md:75 | Required fix: update the verifier plan to add `source_mode` + `paperclip_handle`/`handle` to the verifier payload and define paperclip verification commands against the sampled evidence locator.
+- Medium | `docs/NEXT.md` still says paperclip-first is a 1.1 -> 1.2 bump | The plan itself has the corrected 1.0 -> 1.1 decision, and the live schema is still 1.0; cross-doc drift will mislead sequencing | Evidence: docs/plans/feature-paperclip-first-architecture.md:69; src/specs/verdict_schema.md:109; docs/NEXT.md:15 | Required fix: update `docs/NEXT.md` in the implementation plan's docs-touch list or note it explicitly as a required follow-up.
+
+## Failure Modes
+- Multi-cite paperclip extractor receives `co_citekeys` and sibling `paperclip_handle`s but cannot call `map` because no search-results ID exists | The plan assumes `map` accepts sibling handles directly; the skill's examples are `search ...` then `map --from s_...` | Add a smoke for a real multi-cite claim that first constructs/obtains a search-results ID containing the target + siblings, then proves `map --from <id> --output_schema <schema>` returns per-paper passage locations for all intended handles.
+- `map` proposes a passage but no deterministic attestation can be replayed | The plan says adjudicator owns verdict and grep confirms passages, but does not require a `grep`/`scan` replay hit for every `map`-derived evidence item | Add a rule: evidence may originate from `map`, but every persisted evidence item must include a replayable line locator and snippet obtained by `paperclip grep`, `scan`, or `cat` against `/papers/<id>/content.lines`; otherwise it is only a lead and cannot enter evidence JSON.
+- Paperclip-mode JSON passes extractor intent but fails downstream consumers | The plan introduces `paperclip_snippet`, `location`, and `paperclip_handle`, while the renderer and verifier currently read `snippet`, section/line, `source_ref_urls`, and PDF handles | Add consumer-by-consumer examples for one `paperclip` claim JSON and one `pdf` claim JSON, then validate that adjudicator, verifier, `render_html_demo.py`, ledger markdown render, and HTML popup can all display the same fields.
+- `paperclip lookup` reappears in runtime checks despite being documented broken | Step 0 still tells implementers to resolve a fixture ref by `lookup`, while the same plan later says lookup is broken server-side | Replace Step 0's lookup command with the working `search -s pmc` / `search -s arxiv` title workflow and a direct `cat /papers/<paperclip_handle>/content.lines` read from `refs.verified.bib`.
+
+## Contract Checks
+- In-repo contracts (dispatch payload / slots / schema / validator / renderer / ledger) needing explicit coverage.
+- `src/commands/paper-trail.md` dispatch payload must add `source_mode` and `paperclip_handle` while preserving `handle` semantics for PDF mode; current payload only has `handle` and `ingest_mode` at src/commands/paper-trail.md:429.
+- Prompt slots must be kept in `src/specs/control_flow.md`; it currently lists only `extractor-dispatch.md` and notes `{{handle}}` may become `paperclip_handle` later, but has no slots for `extractor-dispatch-paperclip.md`, `extractor-dispatch-pdf.md`, `{{source_mode}}`, or `{{paperclip_handle}}` (src/specs/control_flow.md:31; src/specs/control_flow.md:43).
+- `src/specs/verdict_schema.md` is correctly still `schema_version` 1.0 (src/specs/verdict_schema.md:109), so the plan's 1.0 -> 1.1 bump is correct; no contradictory 1.2 reference remains inside the plan except the intentional coordination note at docs/plans/feature-paperclip-first-architecture.md:69.
+- `src/specs/verifier_results.md` matches the verdict-ownership boundary: verifier checks existence/integrity and never rewrites verdicts (src/specs/verifier_results.md:31; src/specs/verifier_results.md:43). The adjudicator prompt is also mode-blind by design and reads only evidence JSON + rubric (src/prompts/adjudicator-dispatch.md:5; src/prompts/adjudicator-dispatch.md:11).
+- `src/scripts/validate_claims.py` currently validates manuscript anchors and citekey-marker proximity, not verdict schema fields (src/scripts/validate_claims.py:3; src/scripts/validate_claims.py:414). The plan must not rely on this script for `SOURCE_MODE_MISSING` unless its purpose is expanded.
+- `src/scripts/render_html_demo.py` currently builds claim summaries without `source_mode` and has verdict-only colors (src/scripts/render_html_demo.py:260; src/scripts/render_html_demo.py:273). The plan correctly names a badge addition but should require data plumbing in `build_claim_summary`, JS rendering, and CSS.
+- `src/templates/claims_ledger.md` still has no `source_mode` column or enum docs (src/templates/claims_ledger.md:27). The plan correctly lists this consumer, but should also mention the renderer in `paper-trail.md` Step 3.3, whose summary columns are still PDF-era (src/commands/paper-trail.md:462).
+- Phase 1/2 producer/consumer contracts are consistent and already shipped: `/verify-bib` emits `coverage = {paperclip|external|unresolved}` and `paperclip_handle` for corpus refs (src/commands/verify-bib.md:132), `/paper-trail` consumes them in Phase 2 (src/commands/paper-trail.md:241), `/fetch-paper` honors them before download (src/commands/fetch-paper.md:24), and the fixture contains both fields (examples/paper-trail-adamson-2025/refs.verified.bib:32).
+
+## Modularity vs. YAGNI
+- Decision point | Plan's choice | Modular alternative + realistic use case | Recommendation or "raise to user".
+- Extractor split | Two prompts, paperclip and PDF, one shared evidence schema | Keep two prompts but define a shared "evidence item" schema and a small common required-output block included verbatim in both; realistic use case is preventing paperclip-only `location` fields from drifting away from PDF `section,line,snippet` consumers | Recommendation: keep the split, but make the shared schema concrete before writing either prompt.
+- `map` as recall | Make `map` primary for conceptual and multi-cite recall | Treat `map` as optional recall accelerator only after direct-handle `grep`/`scan`/`cat` can produce replayable line attestations; realistic use case is single paperclip handle grounding where no search-results ID exists | Recommendation: raise to user if they specifically want `map` as a product bet; otherwise use it as non-authoritative lead generation in v1.
+- Mode-blind adjudicator | Adjudicator reads evidence JSON and rubric only | Same, with a schema field that carries provenance but not verdict instructions; realistic use case is adjudicator seeing `source_mode` only as metadata while applying identical rubric | Recommendation: keep mode-blind verdict ownership; ensure provenance fields are preserved unchanged rather than hidden.
+- Verifier split | One verifier prompt with a branch on `source_mode` | Two verifier prompts mirroring extractor split; realistic use case is avoiding local `sed`/`rg` instructions leaking into paperclip virtual paths | Recommendation: either is acceptable, but if one prompt stays, explicitly list the allowed command set per mode.
+
+## Verification Gaps
+- Phase 3 smoke is too generic: "Run C001 in paperclip mode" does not prove paperclip mode unless C001 cites a reference whose fixture entry has `coverage={paperclip}` and `paperclip_handle`. Add the exact claim ID + citekey + handle from `examples/paper-trail-adamson-2025/refs.verified.bib`, and require the output JSON to contain `schema_version: "1.1"`, `source_mode: "paperclip"`, `paperclip_handle`, and at least one replayable line locator.
+- Add a multi-cite smoke that exercises the load-bearing `map` decision: select a sentence with at least two paperclip-covered sibling citekeys, run the extractor, and assert `co_cite_context.sibling_citekeys` is populated plus every persisted evidence item has a deterministic `grep`/`scan`/`cat` attestation.
+- Add a verifier smoke for paperclip mode: sample one paperclip evidence entry, rerun `paperclip grep` or `cat` against `/papers/<paperclip_handle>/content.lines`, and require `ledger/verifications/<claim_id>__<sub_claim_id>.json` to return PASS with `verdict_impact: none`.
+- Add a PDF-mode regression smoke after the schema bump: one external/PDF claim should still validate with `source_mode: "pdf"` and no `paperclip_handle`; one OCR/fallback fixture or synthetic ingest report should validate as `pdf_ocr_fallback`.
+- Add an HTML/ledger render check that inspects parsed JSON or DOM state for a `source_mode` badge, not just a substring in rendered HTML. Behavioral checks should verify output semantics from input JSONs, not only text fragments in generated source.
+- The end-to-end Adamson diff is correct but underspecified. Add the command/recipe for comparing `overall_verdict` across `examples/paper-trail-adamson-2025/data/claims/*.json` and the new run, ignoring only `schema_version`, `source_mode`, `paperclip_handle`, timing, and source locator differences.
+
+## Suggested Revisions
+- Replace every "map fans across sibling handles" statement with an exact `map --from RESULTS_ID` workflow, or explicitly state that v1 does not require `map` and uses handle-direct primitives for required evidence.
+- Remove the stale out-of-scope bullet that says `paperclip map` is not committed in v1 if the resolved OQ2 decision stands.
+- Rewrite "Schema changes" around the actual current schema: specify how `sub_claims[*].evidence[]`, `source_ref_urls`, `attestation`, and `figures_checked[]` change for 1.1.
+- Move schema-validation additions out of `validate_claims.py` unless that script is intentionally becoming a verdict-schema validator; update `src/specs/control_flow.md` as part of the plan.
+- Add a dispatch payload mapping table covering `coverage`, `ingest_mode`, `source_mode`, `handle`, and `paperclip_handle`.
+- Add `src/specs/control_flow.md` and `docs/NEXT.md` to the affected-files list.
+- Replace Step 0's `paperclip lookup` fixture check with the already-shipped `search -s` workflow plus direct handle read.
+- Pin exact Phase 3 runtime smoke fixtures: one paperclip single-cite claim, one paperclip multi-cite claim, one PDF claim, and the full Adamson M1 verdict diff.
+
+## Questions For The Author
+- Should `paperclip map` be a hard v1 dependency, given the live skill's `map --from` contract, or is it acceptable as a recall-only accelerator whose outputs must be converted into deterministic line attestations before persistence?
+- What is the intended 1.1 evidence item shape: preserve `{section,line,snippet}` with a generalized `location`, or introduce a new `attestation.hits[]` structure and migrate all consumers?
+- Should `source_mode` be visible to the adjudicator as provenance metadata in the evidence JSON, or should the adjudicator be strictly blind with the orchestrator adding/preserving that field outside adjudication?
+
+## Audit Trail
+- Files inspected (paths only).
+- docs/claude_ops.md
+- docs/plans/feature-paperclip-first-architecture.md
+- docs/NEXT.md
+- src/commands/paper-trail.md
+- src/commands/ground-claim.md
+- src/commands/verify-bib.md
+- src/commands/fetch-paper.md
+- src/specs/verdict_schema.md
+- src/specs/verifier_results.md
+- src/specs/control_flow.md
+- src/prompts/extractor-dispatch.md
+- src/prompts/adjudicator-dispatch.md
+- src/prompts/verifier-dispatch.md
+- src/skills/paperclip/SKILL.md
+- src/scripts/validate_claims.py
+- src/scripts/render_html_demo.py
+- src/templates/claims_ledger.md
+- examples/paper-trail-adamson-2025/refs.verified.bib
