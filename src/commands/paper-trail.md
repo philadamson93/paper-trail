@@ -115,6 +115,7 @@ Before Phase 0, probe the host for the tools `/paper-trail` needs. All probes ar
 - **`pdftotext`** (required) — `command -v pdftotext`. If missing, the orchestrator cannot read the input PDF or run fallback ingest.
 - **GROBID** (optional, strongly recommended) — 3-second GET against `http://localhost:8070/api/isalive`. If unreachable, Phase 2.5 will use `pdftotext_fallback` (flat text, no per-section structure).
 - **`papersflow` MCP** (optional) — grep `claude mcp list` for `papersflow`. If absent, Phase 1 falls back to CrossRef + arXiv REST.
+- **`paperclip` CLI** (optional, the grounding corpus) — `command -v paperclip`, then `paperclip config` and check for the `Auth: ✓` line. If the CLI is missing or unauthenticated, Phase 1 cannot classify references as `coverage: paperclip`; the run continues in `--paperclip=off` mode (every reference treated as `external` and grounded against a fetched PDF, as today). Authentication failure is **non-fatal** — paper-trail stays useful without paperclip.
 
 Act on the probe:
 
@@ -129,6 +130,8 @@ Act on the probe:
   Options: `Start GROBID via docker` | `Continue with fallback`. If the user picks start, invoke the GROBID step from `/paper-trail-init` inline (run the container, poll `/api/isalive`, proceed). If they pick fallback, record the decision in `parse_report.md` and move on.
 
 - **`papersflow` MCP absent** → informational only. Log to `parse_report.md`; do not prompt. The user can add it any time via `/paper-trail-init`.
+
+- **`paperclip` CLI missing or unauthenticated** → non-blocking, but **surface the state** (per the always-ask-don't-silently-probe principle): print a one-line warning at the start of the run — `paperclip unavailable (not installed / not signed in) → running in --paperclip=off mode; references will be grounded via fetched PDFs` — and record it in `parse_report.md`. Do not prompt for interactive `paperclip login` mid-run; the user can authenticate and re-invoke. An explicit `--paperclip=off` or `--paperclip=never` flag suppresses the probe and the warning.
 
 Preflight runs **only on fresh invocations**. On resumes (output-dir already populated), skip preflight and trust the prior decisions — re-probing mid-run is confusing and the user can always re-run `/paper-trail-init` independently.
 
@@ -210,11 +213,12 @@ If more than 200 references are parsed, print the count and confirm before conti
 
 ## Phase 1 — Verify bib
 
-Run `/verify-bib` logic against `<output-dir>/refs.bib` (the PDF-parsed bib from Phase 0). Phase 1 is where printed-vs-authoritative disagreements become **findings** the user can see.
+Run `/verify-bib` logic against `<output-dir>/refs.bib` (the PDF-parsed bib from Phase 0). Phase 1 is where printed-vs-authoritative disagreements become **findings** the user can see, and where each reference's grounding **coverage** (`paperclip` / `external` / `unresolved`) is classified for Phases 2–3.
 
 - Spawn one subagent per reference, batched per the configured batch size.
 - Each subagent follows the `/verify-bib` per-entry workflow (existence, author match, bibliographic fields, preprint upgrades, duplicates) and returns a severity-classified result.
-- For every disagreement between the PDF-parsed entry and the authoritative source (CrossRef / arXiv / PapersFlow), raise an explicit finding:
+- Each subagent also classifies the reference's `coverage` per `/verify-bib`'s **Coverage classification** section — paperclip title-search across `-s pmc` + `-s arxiv` for *every* reference (journal/conference refs included — their arXiv preprint is what makes them groundable, e.g. paywalled IEEE/MRM refs that have a preprint), then `abstracts` identity check, then the CrossRef/arXiv/Semantic-Scholar chain — applying the ≥0.6-title-overlap + ±2-year match gate over the full top-N results (paperclip `search` is fuzzy and always returns results — a non-empty hit list is not a match, and the real match usually sits at result #2–#3, not #1, so scan the top-N with `-n 4`). Returns `coverage` plus, when `paperclip`, the `paperclip_handle`. Honor the `--paperclip` mode: `prefer` (default) runs the full order; `never` / `off` (set by preflight when the CLI is missing or unauthenticated) skips the paperclip steps and classifies via the metadata chain alone; `only` runs the full order but flags every `external` reference for the user (pure-biomed audits expect full corpus coverage — Phase 2 is where `only` actually gates on it).
+- For every disagreement between the PDF-parsed entry and the authoritative source (paperclip corpus metadata for in-corpus references / CrossRef / arXiv / PapersFlow), raise an explicit finding:
   - **Author-list mismatch** — e.g., printed authors `Florian K, Jure Z, Anuroop S` but CrossRef returns `Knoll F, Zbontar J, Sriram A, …` with 23 authors total. Severity `CRITICAL` for chimeric entries (first/last names swapped, names invented, author count wrong by more than ±1).
   - **Title truncation / fabrication** — printed title differs from authoritative title by more than a subtitle or trailing punctuation. Severity `MODERATE`.
   - **Wrong year / venue** — printed year off by more than 1 from the authoritative issued date; wrong journal / conference. Severity `MODERATE`.
@@ -225,8 +229,10 @@ Run `/verify-bib` logic against `<output-dir>/refs.bib` (the PDF-parsed bib from
 - **Emit a corrected bib for downstream phases.** After all subagents return, write `<output-dir>/refs.verified.bib`:
   - Start from `refs.bib` (the PDF-parsed version).
   - For each entry with a non-CRITICAL authoritative correction available, apply the correction to `refs.verified.bib` (not to `refs.bib`) and record the change in the entry's BibTeX as `audit_corrected: "<field>=<printed> -> <authoritative>"`.
+  - Record each entry's coverage on the verified-bib entry: `coverage: {paperclip | external | unresolved}`, and for `coverage: paperclip` also `paperclip_handle: <doc_id>`. Phase 2 reads `coverage` to skip the PDF fetch for in-corpus references; Phase 3 reads `paperclip_handle` to ground against `/papers/<doc_id>/`.
   - For CRITICAL entries (chimeric author lists etc.), *do not* silently replace — keep the printed entry in `refs.verified.bib` with the original fields, and add an `audit_flag: CRITICAL` annotation plus a comment pointing to the ledger finding. The user must decide whether to accept the correction.
   - Phases 2 and 3 **must read `refs.verified.bib` if it exists**, falling back to `refs.bib`. This is how the authoritative metadata reaches fetch / grounding without silently overwriting the audit surface.
+- **Emit the Phase-1 summary line** once all subagents return: `verified: <N>/<N> (paperclip:<a>, external:<b>, unresolved:<c>)`, where the three coverage counts sum to N. This is the headline the user sees for Phase 1; record it in `parse_report.md` alongside the bib-audit findings. (When `--paperclip=off`, the `paperclip` count is 0 by construction — note the off-mode reason on the same line.)
 - Do **not** auto-apply `--fix` corrections to `refs.bib` in reader mode. Raise, don't fix. (The user is not the author — they don't get to correct the input paper's bib.) `refs.verified.bib` is an internal tool artifact for Phases 2–3, not a corrected copy of the input paper's bibliography — this distinction matters for audit traceability.
 
 ## Phase 2 — Fetch PDFs
