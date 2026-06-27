@@ -426,7 +426,9 @@ For each claim, the orchestrator computes the dispatch payload:
   "claim_text": "...",
   "manuscript_section": "2.2.3",
   "claim_type_hint": {"type": "PARAPHRASED", "confidence": "medium"},
+  "source_mode": "pdf",
   "handle": "pdfs/hammernik2021/",
+  "paperclip_handle": null,
   "ingest_mode": "grobid",
   "co_citekeys": ["chen2022", "sandino2020"],
   "run_output_dir": "<absolute path>",
@@ -434,7 +436,7 @@ For each claim, the orchestrator computes the dispatch payload:
 }
 ```
 
-— then substitutes each `{{slot}}` in `src/prompts/extractor-dispatch.md` with the matching value and sends the filled prompt to the extractor subagent. The `spec_root` slot is how dispatch prompts reference specs (`{{spec_root}}/src/specs/<file>`) so the path resolves regardless of the subagent's cwd — the orchestrator computes it once per run from paper-trail's own clone, never from the user's cwd. After validation of its `ledger/evidence/<claim_id>.json`, the orchestrator fills `src/prompts/adjudicator-dispatch.md` the same way and dispatches the adjudicator.
+The orchestrator derives `source_mode` at the Phase-2.5 → Phase-3 boundary: `coverage=paperclip` → `source_mode=paperclip`, `paperclip_handle=/papers/<handle>/`, with `handle` and `ingest_mode` `null`; `coverage=external` + `ingest_mode` `grobid`/`pdftotext_fallback` → `source_mode=pdf`; + `ocr_fallback` → `source_mode=pdf_ocr_fallback`. It then **selects the extractor prompt by `source_mode`** — `src/prompts/extractor-dispatch-paperclip.md` for `paperclip`, `src/prompts/extractor-dispatch-pdf.md` for `pdf` / `pdf_ocr_fallback` — substitutes each `{{slot}}` with the matching payload value, and sends the filled prompt to the extractor subagent. (The paperclip variant reads `{{paperclip_handle}}`/`{{source_mode}}` and ignores `{{handle}}`/`{{ingest_mode}}`; the PDF variant the reverse.) The `spec_root` slot is how dispatch prompts reference specs (`{{spec_root}}/src/specs/<file>`) so the path resolves regardless of the subagent's cwd — the orchestrator computes it once per run from paper-trail's own clone, never from the user's cwd. After validation of its `ledger/evidence/<claim_id>.json`, the orchestrator fills `src/prompts/adjudicator-dispatch.md` (**mode-blind** — one prompt for both source modes) the same way and dispatches the adjudicator.
 
 #### Grouping
 
@@ -486,12 +488,14 @@ For each `ledger/claims/<claim_id>.json`:
   "claim_id": "C042",
   "run_id": "...",
   "sampled_evidence": { ... one evidence entry ... },
+  "source_mode": "pdf",
   "handle": "pdfs/hammernik2021/",
+  "paperclip_handle": null,
   "run_output_dir": "<absolute path>"
 }
 ```
 
-Orchestrator fills `src/prompts/verifier-dispatch.md` with these slots.
+Orchestrator fills `src/prompts/verifier-dispatch.md` with these payload keys, plus `{{sub_claim_id}}`, `{{section}}`, and `{{line}}` **derived from `sampled_evidence`** (they are not separate payload keys — the orchestrator extracts them from the sampled entry before substitution). For paperclip-mode samples, `{{section}}` / `{{line}}` come from the evidence item's `locator`.
 
 ### Handling results
 

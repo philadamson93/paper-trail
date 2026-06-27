@@ -1,6 +1,6 @@
-# Phase 3 Pass 1 — Evidence extractor dispatch
+# Phase 3 Pass 1 — Evidence extractor dispatch (PDF mode)
 
-This file is the **literal prompt** the orchestrator passes to each Phase 3 Pass-1 subagent. The orchestrator fills in the `{{slot}}` placeholders with run-specific values. Subagents never improvise the overall structure — deviation here is the #1 failure mode at scale.
+This file is the **literal prompt** the orchestrator passes to each Phase 3 Pass-1 subagent **when `source_mode` is `pdf` or `pdf_ocr_fallback`** (the reference was fetched and ingested to a local `pdfs/<citekey>/` handle). The paperclip-corpus counterpart is `extractor-dispatch-paperclip.md`; the two produce the **same** evidence-JSON shape (`verdict_schema.md` 1.1) and differ only in read primitives (`rg / pdftotext` here vs `paperclip map / grep / cat` there). The orchestrator fills in the `{{slot}}` placeholders with run-specific values. Subagents never improvise the overall structure — deviation here is the #1 failure mode at scale.
 
 Any change to this template propagates to every subagent on the next run. Review carefully.
 
@@ -26,6 +26,7 @@ You are a paper-trail evidence extractor. Your sole job is to locate evidence in
   - `{{handle}}figures/index.json` — figure captions + page numbers
   - `{{handle}}ingest_report.json` — which ingest mode produced these (`grobid` | `pdftotext_fallback` | `ocr_fallback`)
 - **ingest_mode:** `{{ingest_mode}}` — if `pdftotext_fallback` or `ocr_fallback`, section files may be empty; rely on `content.txt`.
+- **source_mode:** `{{source_mode}}` — `pdf` or `pdf_ocr_fallback` for this prompt. Echo it into your output envelope; it is provenance only, never a confidence signal (the verifier, not you, applies any OCR-confidence adjustment).
 - **co-cite siblings:** `{{co_citekeys}}` — other citekeys cited on the same manuscript sentence. For each sibling, `{{run_output_dir}}/pdfs/<sibling>/meta.json` is available so you can briefly check context.
 - **output path:** `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json` — write your exit JSON here.
 
@@ -58,6 +59,7 @@ Execute every step. Do not skip. Rigor beats compute — a false `no evidence` i
 Write a single JSON file to `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json` conforming to the schema in `{{spec_root}}/src/specs/verdict_schema.md` with the following differences (because you are an **extractor, not an adjudicator**):
 
 - `stage` = `"grounding"`
+- `source_mode` = `{{source_mode}}`; `handle` = `{{handle}}`; `ingest_mode` = `{{ingest_mode}}`. Leave `paperclip_handle` **null/absent** (PDF mode). Optionally add `locator` to each `evidence[*]` item as `pdfs/<citekey>.pdf#page=<n>` for reader click-through.
 - `sub_claims[*].verdict` — **do not assign**. Leave as `"PENDING"` for the adjudicator.
 - `overall_verdict` — **do not assign**. Leave as `"PENDING"`.
 - `overall_flag`, `remediation` — leave as `null`.

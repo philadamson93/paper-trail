@@ -23,12 +23,17 @@ You are a paper-trail attestation verifier. Your job is to spot-check one eviden
     "snippet": "The RadImageNet database consists of 1.35 million annotated medical images..."
   }
   ```
-- **source handle (read-only):** `{{handle}}` — same as extractor's handle.
+- **source_mode:** `{{source_mode}}` — `paperclip` or `pdf` / `pdf_ocr_fallback`. Selects the read path in step 1.
+- **source handle (read-only):** for PDF modes, `{{handle}}` (`pdfs/<citekey>/`) — same as the extractor's handle; for paperclip mode, `{{paperclip_handle}}` (`/papers/<doc_id>/`).
 - **output path:** `{{run_output_dir}}/ledger/verifications/{{claim_id}}__{{sub_claim_id}}.json`
 
 ### Required workflow
 
-**1. Navigate to the claimed location in the source.** If `section` is provided, `cat {{handle}}sections/{{section}}.txt | sed -n '{{line}}p'` (or equivalent with `rg --line-number` on content.txt if section files are empty). Find the line the extractor recorded.
+**1. Navigate to the claimed location in the source — using the read path for `{{source_mode}}`.**
+- *PDF modes (`pdf` / `pdf_ocr_fallback`):* if `section` is provided, `cat {{handle}}sections/{{section}}.txt | sed -n '{{line}}p'` (or `rg --line-number` on `{{handle}}content.txt` if section files are empty).
+- *Paperclip mode:* the sampled evidence carries a `locator` of the form `{{paperclip_handle}}sections/<name>.lines#L<n>` (or `…content.lines#L<n>`). **Replay that exact locator:** `paperclip cat {{paperclip_handle}}<file>.lines` and read line `<n>`. Only if a direct line read is impossible, `paperclip grep` is allowed — but **only** with a fixed string taken verbatim from the recorded `sampled_evidence.snippet`, against the locator's file (never a new phrasing of your own). This is a deterministic replay of the recorded attestation, not a fresh search.
+
+Find the line the extractor recorded.
 
 **2. Compare the extractor's `snippet` to what's actually there.** Three outcomes:
 
@@ -72,7 +77,7 @@ Write a single JSON file to `{{run_output_dir}}/ledger/verifications/{{claim_id}
 - Do not re-adjudicate the overall verdict. That's the adjudicator's job.
 - Do not inspect other sub-claims. The orchestrator samples one per claim; that's what you verify.
 - Do not modify the verdict file. Your output is a separate verifier artifact.
-- Do not invoke vision or re-search. Use only `cat`, `rg`, `sed`.
+- Do not invoke vision, or run a *fresh* search / adjudication. Use only the read primitives for the mode: `cat`, `rg`, `sed` for PDF modes; `paperclip cat` / `paperclip grep` against the recorded `{{paperclip_handle}}` locator for paperclip mode. Re-running the *same* recorded locator is replay, not re-search.
 
 ### When to return
 

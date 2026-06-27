@@ -4,7 +4,7 @@ Verify that a cited claim in the manuscript is supported by its source paper. Ma
 
 - **Rigor beats compute.** A false verdict — a `CONFIRMED` that should have been `OVERSTATED`, or an `UNSUPPORTED` that should have been `CONFIRMED` — is materially worse than spending extra tokens to prevent it. Prefer thorough reads, more phrasings, and figure inspection over any shortcut.
 - **Raise, don't fix.** This command never edits the manuscript. Every issue is surfaced as a remediation proposal for the user to accept, modify, or reject.
-- **Two-pass, structured output.** A Phase-3 subagent no longer "reads a PDF and narrates evidence" open-endedly. It runs two bounded passes against a pre-ingested source handle (`pdfs/<citekey>/`): an extractor that gathers evidence, then an adjudicator that picks a verdict from the rubric. Both emit JSON conforming to `src/specs/verdict_schema.md`.
+- **Two-pass, structured output.** A Phase-3 subagent no longer "reads a PDF and narrates evidence" open-endedly. It runs two bounded passes against the cited source — a local PDF handle (`pdfs/<citekey>/`, PDF mode) or an in-corpus paperclip handle (`/papers/<doc_id>/`, paperclip mode) — an extractor that gathers evidence, then an adjudicator that picks a verdict from the rubric. Both emit JSON conforming to `src/specs/verdict_schema.md`.
 
 ## Invocation forms
 
@@ -45,13 +45,22 @@ For every unique citekey in scope:
 
 **Never hard-fail** on missing PDFs or failed ingest — the run processes whatever can be processed.
 
+## Source mode (paperclip vs PDF)
+
+Every claim carries a `source_mode` derived at the Phase-2.5 → Phase-3 boundary. It selects the **read path**, not the workflow — Pass 1 / Pass 2 / Pass 3 and the exit JSON (`verdict_schema.md` 1.1) are identical across modes.
+
+- **`paperclip`** — the cited paper is in the paperclip corpus and was never fetched to disk. The extractor reads `/papers/<doc_id>/` (`{{paperclip_handle}}`) via `paperclip cat / grep / scan / map / ask-image`; every persisted evidence item carries a replayable `paperclip` `locator`. Dispatch prompt: `extractor-dispatch-paperclip.md`. `handle` / `ingest_mode` are null.
+- **`pdf` / `pdf_ocr_fallback`** — the cited paper was fetched and ingested to `pdfs/<citekey>/` (`{{handle}}`). The extractor reads it via `rg` / vision. Dispatch prompt: `extractor-dispatch-pdf.md`.
+
+The Pass-2 adjudicator and the rubric are **mode-blind** — the verdict never depends on how evidence was retrieved. The Pass-3 verifier replays the recorded `locator` in the matching mode.
+
 ## Per-claim workflow (two-pass dispatch)
 
 For each claim, the orchestrator dispatches three subagents in sequence. Each has its own bounded contract; none improvises.
 
 ### Pass 1 — Evidence extractor
 
-Dispatches the prompt in `src/prompts/extractor-dispatch.md`, filling `{{slots}}` with run values. The subagent:
+Dispatches the mode-selected extractor prompt — `src/prompts/extractor-dispatch-paperclip.md` (paperclip) or `src/prompts/extractor-dispatch-pdf.md` (pdf / pdf_ocr_fallback) — filling `{{slots}}` with run values. The subagent (PDF-mode steps shown; the paperclip path runs the same steps over `/papers/<doc_id>/` via `paperclip` primitives):
 
 - Reads `pdfs/<citekey>/meta.json`, `sections/*.txt`, `content.txt`, `figures/index.json`
 - Decomposes the claim into atomic sub-claims
