@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="plan-sha256" content="6f38402e4926263bffe92058a5eb61301f87b815aa04d8f23aad2b54c473cc5c">
+<meta name="plan-sha256" content="45e617623fc1bf51cb54f82735bacc34c3bfb2f4832f1e5e543f8f9c1abf98e9">
 <title>Paperclip-first architecture — visual companion</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -71,6 +71,19 @@ textarea.section-feedback{width:100%;min-height:54px;margin-top:8px;background:v
 .note{font-size:12.5px;color:var(--muted);}
 .legend-inline{font-size:12px;color:var(--muted);}
 .warnbox{background:rgba(190,24,93,.08);border:1px solid var(--pending);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13.5px;}
+.decisions{border:2px solid #8b5cf6;background:rgba(139,92,246,.07);border-radius:12px;padding:14px 20px 18px;margin:22px 0 8px;}
+.decisions>.dhead{font-size:20px;font-weight:700;color:#8b5cf6;margin:0 0 4px;display:flex;align-items:center;gap:8px;}
+.decisions>.dintro{font-size:13.5px;color:var(--fg);margin:0 0 6px;}
+.decision-card{background:var(--bg);border:1px solid var(--border);border-left:5px solid #8b5cf6;border-radius:0 9px 9px 0;padding:12px 16px;margin:14px 0 0;}
+.decision-card .dh{font-size:15.5px;font-weight:700;margin-bottom:6px;}
+.dbadge{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:2px 8px;border-radius:999px;background:#8b5cf6;color:#fff;margin-right:8px;vertical-align:middle;}
+.decision-card .thecall{font-size:14px;margin:4px 0 8px;}
+.decision-card table{margin:8px 0;font-size:13px;}
+.decision-card .rec{border-left:3px solid var(--done);background:rgba(22,163,74,.10);border-radius:0 6px 6px 0;padding:7px 11px;margin:9px 0;font-size:13.5px;}
+.decision-card .why{font-size:12.5px;color:var(--muted);margin:8px 0 2px;}
+.decision-card .ctx{font-size:12px;margin-top:9px;}
+.optrec{font-weight:700;color:var(--done);}
+.chip.decide{background:rgba(139,92,246,.16);border-color:#8b5cf6;color:#8b5cf6;}
 </style>
 </head>
 <body>
@@ -81,21 +94,56 @@ textarea.section-feedback{width:100%;min-height:54px;margin-top:8px;background:v
 
 <div class="header-card">
 <dl class="kv">
-<dt>Status</dt><dd><span class="chip done">Phases 0-2 SHIPPED</span> &nbsp;<span class="chip pending">Phase 3 + schema bump NEXT</span></dd>
+<dt>Status</dt><dd><span class="chip done">Phases 0-2 SHIPPED</span> &nbsp;<span class="chip partial">Phase 3 in progress, schema 1.1 done</span></dd>
 <dt>Goal</dt><dd>Make paperclip the default read path (full-text corpus grep) with PDF fallback for the paywalled / out-of-corpus slice.</dd>
 <dt>Branch</dt><dd><code>feat/paperclip-first-smoke-gate</code> (built on repo-org'd <code>main</code>; ahead of the older <code>feature/paperclip-primary-workflow</code>)</dd>
 <dt>Source plan</dt><dd><a href="feature-paperclip-first-architecture.md">feature-paperclip-first-architecture.md</a></dd>
-<dt>Plan SHA-256</dt><dd><code>6f38402e4926</code></dd>
-<dt>Generated</dt><dd>2026-06-24 20:46 PDT</dd>
+<dt>Plan SHA-256</dt><dd><code>45e617623fc1</code></dd>
+<dt>Generated</dt><dd>2026-06-27 (schema 1.1 slice + Codex /review-implementation applied)</dd>
 </dl>
 </div>
 
 <div class="warnbox">
-<strong>Heads-up — the plan's own status line is stale.</strong> Line 3 still reads "Plan-only. No code yet," but the Smoke-test section (lines 196-218) records Steps 0-2 as implemented and smoke-passed. This companion shows the <em>actual</em> per-step status. Decided 2026-06-24: the live <code>verdict_schema.md</code> is at <code>1.0</code> and the predecessor <code>1.1</code> (Features 1+2) never landed, so <strong>paperclip-first takes the <code>1.0 to 1.1</code> bump</strong> (all earlier "1.2" references renumbered to "1.1"). Evidence retrieval resolved to <strong>map-for-recall</strong>: paperclip <code>map</code> (semantic) finds evidence, <code>grep</code> audits it, and our adjudicator owns the verdict.
+<strong>Heads-up — where the work actually stands.</strong> Phases 0&ndash;2 are implemented and smoke-passed; <strong>Phase 3 is next and now unblocked</strong> &mdash; both gating decisions were made 2026-06-27 (<a href="#decisions-card">Option A on each, see the card below &darr;</a>), and its first increment &mdash; the schema 1.0&rarr;1.1 bump in <code>verdict_schema.md</code> &mdash; is now <strong>implemented (2026-06-27)</strong>. Remaining Phase-3 work: the mode-aware extractor-prompt split and the orchestrator dispatch branch. (The source plan's line-3 status has been corrected to match.) Decided 2026-06-24: the live <code>verdict_schema.md</code> was at <code>1.0</code> and the predecessor <code>1.1</code> (Features 1+2) never landed, so <strong>paperclip-first takes the <code>1.0 to 1.1</code> bump</strong> (all earlier "1.2" references renumbered to "1.1"). Evidence retrieval resolved to <strong>map-for-recall</strong>: paperclip <code>map</code> (semantic) finds evidence, <code>grep</code> audits it, and our adjudicator owns the verdict.
 </div>
 
 <div class="tldr">
-<strong>TL;DR.</strong> The April-2026 reversal rejected paperclip on ~15% greppable coverage. A May-1 re-probe on the same worst-case fixture measured <strong>27/56 (48%) greppable full text</strong> — ~4x — flipping the math. The plan makes <code>--paperclip=prefer</code> the shipped default: in-corpus refs are grepped server-side (no fetch, no GROBID), the <code>external</code> slice keeps the existing PDF path. Phase 1 (coverage-aware verify-bib) and Phase 2 (coverage-aware fetch) are <strong>implemented and smoke-passed</strong>. The remaining work is <strong>Phase 3</strong>: split the extractor prompt into paperclip-mode and PDF-mode variants, branch the orchestrator on <code>source_mode</code>, and bump the verdict schema to add <code>source_mode</code> + <code>paperclip_handle</code> (the adjudicator stays mode-blind).
+<strong>TL;DR.</strong> The April-2026 reversal rejected paperclip on ~15% greppable coverage. A May-1 re-probe on the same worst-case fixture measured <strong>27/56 (48%) greppable full text</strong> — ~4x — flipping the math. The plan makes <code>--paperclip=prefer</code> the shipped default: in-corpus refs are grepped server-side (no fetch, no GROBID), the <code>external</code> slice keeps the existing PDF path. Phase 1 (coverage-aware verify-bib) and Phase 2 (coverage-aware fetch) are <strong>implemented and smoke-passed</strong>. The remaining work is <strong>Phase 3</strong>: split the extractor prompt into paperclip-mode and PDF-mode variants, branch the orchestrator on <code>source_mode</code>, and bump the verdict schema to add <code>source_mode</code> + <code>paperclip_handle</code> (the adjudicator applies the same rubric and treats <code>source_mode</code> as inert metadata).
+</div>
+
+<div class="decisions" id="decisions-card">
+<div class="dhead">&#9755; Decisions &mdash; now made (Option A on both)</div>
+<p class="dintro"><strong>Both approved 2026-06-27 &mdash; Option A on each</strong>, now recorded in the plan (OQ6 + OQ7). They fix the <strong>evidence contract</strong> every downstream consumer reads, which is why they gated Phase 3; with them settled the schema 1.0&rarr;1.1 slice is unblocked. The original options are kept below for the record.</p>
+
+<div class="decision-card">
+<div class="dh"><span class="dbadge">DECISION 1 &middot; OQ6</span>Evidence-item shape for schema 1.0 &rarr; 1.1</div>
+<p class="thecall"><strong>The call:</strong> how does one evidence item carry paperclip-vs-PDF provenance <em>and</em> a replayable locator? <span class="note">(Today an evidence item is <code>{section, line, snippet}</code>; the separate <code>attestation</code> object is a section-checklist, <em>not</em> a hits array &mdash; so it can't just be reused as a per-hit container.)</span></p>
+<table>
+<thead><tr><th>Option</th><th>What it means</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td><span class="optrec">A &mdash; generalize (recommended)</span></td><td>Add two optional fields: <code>{section, line, snippet, source_mode?, locator?}</code>. <code>locator</code> = <code>/papers/(handle)/sections/(name).lines#L(n)</code> for paperclip, <code>pdfs/(citekey).pdf#page=(n)</code> for PDF.</td><td><strong>Additive &mdash; zero migration.</strong> Every existing consumer keeps reading <code>{section, line, snippet}</code>; new fields are ignored until a consumer opts in.</td></tr>
+<tr><td>B &mdash; new hits model</td><td>Introduce a distinct attestation/hits object as the per-evidence container.</td><td>Migrates <strong>4 consumers</strong>: adjudicator + verifier + renderer + ledger. Heavier, reversible only with churn.</td></tr>
+</tbody>
+</table>
+<div class="rec"><strong>Decided 2026-06-27: Option A.</strong> Lighter touch, no consumer migration, and it still satisfies the Codex constraint that every persisted evidence item carries a deterministic replayable locator (so grounding never rests on <code>map</code>'s opaque output).</div>
+<p class="why"><strong>Blast radius / why it gates Phase 3:</strong> this is the exact JSON both the new <code>extractor-dispatch-paperclip.md</code> and the renamed <code>extractor-dispatch-pdf.md</code> emit, and what the adjudicator/verifier/renderer/ledger consume. Choosing it after the prompts are written forces a rewrite of both prompts.</p>
+<p class="ctx"><strong>Context:</strong> <a href="#oq6">full OQ6 card &darr;</a> &nbsp;&middot;&nbsp; <a href="#step-3">Step 3 (first increment) &darr;</a> &nbsp;&middot;&nbsp; Knobs &amp; contracts section</p>
+</div>
+
+<div class="decision-card">
+<div class="dh"><span class="dbadge">DECISION 2 &middot; OQ7</span>Does the adjudicator see <code>source_mode</code>?</div>
+<p class="thecall"><strong>The call:</strong> should <code>source_mode</code> (<code>paperclip</code> / <code>pdf</code> / <code>pdf_ocr_fallback</code>) ride along in the evidence JSON the adjudicator reads, or be stripped before adjudication?</p>
+<table>
+<thead><tr><th>Option</th><th>What it means</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td><span class="optrec">A &mdash; inert metadata (default lean)</span></td><td>Carry <code>source_mode</code> in the evidence the adjudicator sees; it applies the identical rubric regardless of provenance.</td><td>Simplest &mdash; the adjudicator already ignores provenance. <strong>One guardrail:</strong> confirm the adjudicator prompt can't be biased by the field.</td></tr>
+<tr><td>B &mdash; strictly blind</td><td>Orchestrator adds/preserves <code>source_mode</code> <em>outside</em> the adjudication payload; the adjudicator never sees it.</td><td>Stronger isolation, but the orchestrator must thread the field around the adjudicator call.</td></tr>
+</tbody>
+</table>
+<div class="rec"><strong>Decided 2026-06-27: Option A</strong> &mdash; carry it as inert metadata, with a one-line check in the adjudicator prompt that provenance must not affect the verdict.</div>
+<p class="why"><strong>Blast radius / why it gates Phase 3:</strong> determines whether <code>source_mode</code> goes <em>into</em> the per-claim dispatch payload (<code>paper-trail.md</code> ~L396) or is stripped first &mdash; and it couples with Decision&nbsp;1: if <code>locator</code>/<code>source_mode</code> live on the evidence item, the adjudicator sees them unless explicitly stripped.</p>
+<p class="ctx"><strong>Context:</strong> <a href="#oq7">full OQ7 card &darr;</a> &nbsp;&middot;&nbsp; <a href="#step-3">Step 3 &darr;</a> &nbsp;&middot;&nbsp; Phase 3 dispatch before/after diagram</p>
+</div>
 </div>
 
 <h2>Implementation &amp; review history</h2>
@@ -298,7 +346,7 @@ flowchart LR
 <h3>Schema 1.0 to 1.1 (additive, no back-compat)</h3>
 <ul>
 <li>New top-level envelope fields: <code>source_mode</code> (required), <code>paperclip_handle</code> (present iff paperclip).</li>
-<li><strong>Corrected (Codex):</strong> the live schema has no <code>attestation.hits[]</code>. Evidence items are <code>{section, line, snippet}</code>; <code>attestation</code> is a separate section-checklist. The 1.1 shape is <strong>open (OQ6)</strong> — recommended: generalize to <code>{section, line, snippet, source_mode?, locator?}</code> (<code>locator</code> = <code>papers/(handle)/sections/(name).lines#L(n)</code> vs <code>pdfs/(citekey).pdf#page=(n)</code>), additive so existing consumers keep reading <code>{section, line, snippet}</code>.</li>
+<li><strong>Corrected (Codex):</strong> the live schema has no <code>attestation.hits[]</code>. Evidence items are <code>{section, line, snippet}</code>; <code>attestation</code> is a separate section-checklist. The 1.1 shape is <strong>open (OQ6)</strong> — recommended: generalize to <code>{section, line, snippet, source_mode?, locator?}</code> (<code>locator</code> = <code>/papers/(handle)/sections/(name).lines#L(n)</code> vs <code>pdfs/(citekey).pdf#page=(n)</code>), additive so existing consumers keep reading <code>{section, line, snippet}</code>.</li>
 <li>New validation rules <code>SOURCE_MODE_MISSING</code>, <code>PAPERCLIP_HANDLE_MISMATCH</code> live in <code>verdict_schema.md</code> § Validation rules + the orchestrator's Phase-3.2 inline check — <strong>not</strong> <code>validate_claims.py</code> (that's the pre-dispatch manuscript validator, untouched).</li>
 <li>No migration shim — old verdict files without <code>source_mode</code> fail validation; users re-run to regenerate (per <code>feedback_rework_for_quality</code>).</li>
 </ul>
@@ -326,11 +374,11 @@ flowchart LR
 <textarea class="section-feedback" data-section="step-2" placeholder="Notes on Step 2..."></textarea>
 </details>
 
-<details data-section="step-3"><summary>Step 3 — Phase 3 mode-aware dispatch + schema 1.1 <span class="chip pending">NEXT</span></summary>
+<details id="step-3" data-section="step-3"><summary>Step 3 — Phase 3 mode-aware dispatch + schema 1.1 <span class="chip partial">SCHEMA SLICE DONE</span></summary>
 <p>Branch extractor selection on <code>source_mode</code>: paperclip-mode uses the new <code>extractor-dispatch-paperclip.md</code> with <strong>LLM-driven retrieval</strong> — <code>paperclip map</code> (semantic "does this paper support the claim?") as primary recall, <code>grep</code>/<code>scan</code> for quantitative/exact claims, <code>cat</code>/<code>ask-image</code> for full-text/figures; PDF-mode uses <code>extractor-dispatch-pdf.md</code> (renamed current). Both emit the same evidence JSON; the <strong>adjudicator owns the verdict</strong> (mode-blind, not <code>map</code>). <strong>⚠ Codex:</strong> <code>map --from RESULTS_ID</code> needs a search-results id (not bare handles) — multi-cite builds/reuses one over the cited+sibling papers; single-cite reads the handle directly. <strong>Hard rule: every persisted evidence item carries a replayable <code>grep</code>/<code>scan</code>/<code>cat</code> locator</strong> — a <code>map</code> passage without one is a lead, not evidence. Validation rules go to <code>verdict_schema.md</code>+orchestrator (not <code>validate_claims.py</code>); the verifier prompt needs a paperclip command allowance (it currently forbids re-search); add the dispatch derivation table, slot placeholders, render badge, ledger column.</p>
 <div class="files">Touches: <code>src/specs/verdict_schema.md</code> (1.1 + validation rules), <code>src/specs/control_flow.md</code> (slots + Phase-3.2 validation cell), <code>src/prompts/extractor-dispatch.md</code> (split), new <code>src/prompts/extractor-dispatch-paperclip.md</code>, <code>src/prompts/verifier-dispatch.md</code> (paperclip command allowance), <code>src/commands/paper-trail.md</code> (Phase 3 branch + dispatch payload ~line 396), <code>src/commands/ground-claim.md</code> (Mode section), <code>src/scripts/render_html_demo.py</code>, <code>src/templates/claims_ledger.md</code>. <em>Not</em> <code>validate_claims.py</code> (unchanged).</div>
 <div class="gate">Gate (pinned fixtures): paperclip single-cite (validates schema 1.1 with <code>source_mode</code>+<code>paperclip_handle</code>+replayable locator), paperclip multi-cite (siblings populated + every item has a deterministic attestation), verifier PASS via <code>paperclip grep</code>/<code>cat</code>, and a PDF/OCR regression.</div>
-<div class="resp"><span class="lbl">Re: starting point</span>Recommended first increment (per "one thing at a time"): the <strong>schema + validator slice</strong> — bump <code>verdict_schema.md</code> 1.0→1.1, decide the evidence-item shape (<strong>OQ6</strong>), and add the two validation rules (in <code>verdict_schema.md</code> + orchestrator-inline, <em>not</em> <code>validate_claims.py</code>). Foundation both extractors + the renderer consume, testable in isolation. <strong>Version decided 2026-06-24: 1.1.</strong></div>
+<div class="resp"><span class="lbl">Re: starting point</span>Recommended first increment (per "one thing at a time"): the <strong>schema + validator slice</strong> — bump <code>verdict_schema.md</code> 1.0→1.1, decide the evidence-item shape (<strong>OQ6</strong>), and add the two validation rules (in <code>verdict_schema.md</code> + orchestrator-inline, <em>not</em> <code>validate_claims.py</code>). Foundation both extractors + the renderer consume, testable in isolation. <strong>Version decided 2026-06-24: 1.1.</strong> <strong>Schema slice LANDED 2026-06-27:</strong> <code>verdict_schema.md</code> bumped to 1.1 (additive &mdash; <code>source_mode</code> + <code>paperclip_handle</code> envelope fields, optional <code>source_mode</code>/<code>locator</code> on evidence, <code>figure_path</code> on figures) with the <code>SOURCE_MODE_MISSING</code> + <code>PAPERCLIP_HANDLE_MISMATCH</code> validation rules; <code>control_flow.md</code> inherits them by anchor (no-drift constraint). Remaining Phase-3: extractor-prompt split + orchestrator dispatch branch. <strong>Codex /review-implementation applied 2026-06-27:</strong> relaxed required <code>handle</code> to PDF-only (paperclip uses <code>paperclip_handle</code>; handle fork &rarr; Option A) and removed an OCR-confidence phrase that contradicted OQ7. Audit: <code>reviews/feature-paperclip-first-architecture-implementation-feedback.md</code>.</div>
 <textarea class="section-feedback" data-section="step-3" placeholder="Notes on Step 3..."></textarea>
 </details>
 
@@ -408,7 +456,7 @@ flowchart LR
 
 <script>
 const PLAN_STEM = "feature-paperclip-first-architecture";
-const PLAN_SHA = "6f38402e4926263bffe92058a5eb61301f87b815aa04d8f23aad2b54c473cc5c";
+const PLAN_SHA = "45e617623fc1bf51cb54f82735bacc34c3bfb2f4832f1e5e543f8f9c1abf98e9";
 const LS = (id) => PLAN_STEM + "::" + id;
 
 const OQS = [
@@ -417,8 +465,8 @@ const OQS = [
   {n:3, title:"Verifier — re-grep or LLM-based check?", body:"The Phase-3.5 verifier is an attestation-integrity check: it re-checks that the extractor's quoted snippet actually exists at the claimed location (PASS / PARTIAL / FAIL → stand / flag UNVERIFIED_ATTESTATION / bounce-to-re-ground). It does NOT re-judge whether the claim is supported (the adjudicator owns that). paperclip grep re-run is deterministic, making it near-trivial.", resolved:"Deterministic re-grep in v1; an LLM 'does the snippet really support the claim' layer stays a separate orthogonal change."},
   {n:4, title:"Authentication startup probe", body:"Phase 0 checks paperclip config for the auth state.", resolved:"Accepted — one-line warning + auto-fall-back to --paperclip=off, no interactive login prompt."},
   {n:5, title:"abstracts source in Phase 1 — opt-in or default?", body:"Identity resolution via abstracts could surface wrong-paper citations the CrossRef chain misses.", resolved:"Default-on for identity resolution, but NEVER ground on an abstract alone. An abstracts hit marks coverage:external (never paperclip) and routes to the Phase-2 full-PDF fetch — abstract-only availability falls back to the full PDF."},
-  {n:6, title:"1.1 evidence-item shape (OPEN — Codex)", body:"The live schema has evidence items as {section, line, snippet} plus a separate section-checklist attestation (no hits array). How should 1.1 carry paperclip provenance? Recommended (lighter touch): generalize to {section, line, snippet, source_mode?, locator?} — additive, every existing consumer keeps reading {section,line,snippet}. Alternative: a new attestation/hits model migrating adjudicator + verifier + renderer + ledger. Decide before writing either extractor prompt."},
-  {n:7, title:"source_mode visible to the adjudicator? (OPEN — Codex)", body:"Should the adjudicator see source_mode as inert provenance metadata (it applies the identical rubric either way), or stay strictly blind with the orchestrator preserving source_mode outside adjudication? Default lean: inert metadata (simplest; the adjudicator already ignores provenance), but confirm the adjudicator prompt cannot be biased by it."}
+  {n:6, title:"1.1 evidence-item shape (DECIDED, Option A)", body:"The live schema has evidence items as {section, line, snippet} plus a separate section-checklist attestation (no hits array). How should 1.1 carry paperclip provenance? Recommended (lighter touch): generalize to {section, line, snippet, source_mode?, locator?} — additive, every existing consumer keeps reading {section,line,snippet}. Alternative: a new attestation/hits model migrating adjudicator + verifier + renderer + ledger. Decide before writing either extractor prompt.", resolved:"Option A (approved 2026-06-27): generalize the evidence item additively to {section, line, snippet, source_mode?, locator?} — no new hits model; every existing consumer keeps reading {section, line, snippet}. locator = /papers/(handle)/sections/(name).lines#L(n) for paperclip, pdfs/(citekey).pdf#page=(n) for PDF."},
+  {n:7, title:"source_mode visible to the adjudicator? (DECIDED, Option A)", body:"Should the adjudicator see source_mode as inert provenance metadata (it applies the identical rubric either way), or stay strictly blind with the orchestrator preserving source_mode outside adjudication? Default lean: inert metadata (simplest; the adjudicator already ignores provenance), but confirm the adjudicator prompt cannot be biased by it.", resolved:"Option A (approved 2026-06-27): carry source_mode as inert provenance metadata in the evidence the adjudicator reads; add one line to the adjudicator prompt stating provenance must not affect the verdict."}
 ];
 
 function renderOQs(){
@@ -426,7 +474,11 @@ function renderOQs(){
   OQS.forEach(function(oq){
     const card = document.createElement("div");
     card.className = "oq-card";
-    card.innerHTML = "<strong>OQ" + oq.n + ". " + oq.title + "</strong>" +
+    card.id = "oq" + oq.n;
+    const statusChip = oq.resolved
+      ? " <span class=\"chip done\">RESOLVED</span>"
+      : " <span class=\"chip decide\">DECISION NEEDED</span>";
+    card.innerHTML = "<strong>OQ" + oq.n + ". " + oq.title + "</strong>" + statusChip +
       "<select data-oq=\"" + oq.n + "\"><option>Pending</option><option>Resolved</option><option>Deferred</option></select>" +
       "<p class=\"note\">" + oq.body + "</p>" +
       (oq.resolved ? "<div class=\"resp\"><span class=\"lbl\">Resolved 2026-06-24, folded into plan</span>" + oq.resolved + "</div>" : "") +

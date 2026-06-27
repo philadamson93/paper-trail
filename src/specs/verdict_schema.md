@@ -29,10 +29,12 @@ For backwards compatibility with the current `.inflight/` convention used by the
 ```json
 {
   "claim_id": "C042",
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "run_id": "run_20260418T1234Z",
   "citekey": "hammernik2021",
   "handle": "pdfs/hammernik2021/",
+  "source_mode": "pdf",
+  "paperclip_handle": null,
   "ingest_mode": "grobid",
   "source_ref_urls": [
     "file:///absolute/path/to/pdfs/hammernik2021.pdf#page=5"
@@ -50,10 +52,10 @@ For backwards compatibility with the current `.inflight/` convention used by the
       "sub_claim_id": "C042.a",
       "text": "<the atomic factual assertion this sub-claim encodes>",
       "evidence": [
-        {"section": "Results", "line": 47, "snippet": "<verbatim excerpt>"}
+        {"section": "Results", "line": 47, "snippet": "<verbatim excerpt>", "source_mode": "pdf", "locator": "pdfs/hammernik2021.pdf#page=5"}
       ],
       "figures_checked": [
-        {"figure": "fig2_p3.png", "question": "<question asked>", "vision_response": "<verbatim vision response>"}
+        {"figure": "fig2_p3.png", "question": "<question asked>", "vision_response": "<verbatim vision response>", "figure_path": "pdfs/hammernik2021/figures/fig2_p3.png"}
       ],
       "verdict": "CONFIRMED",
       "paper_value": null,
@@ -106,11 +108,13 @@ For backwards compatibility with the current `.inflight/` convention used by the
 ### Identity
 
 - **`claim_id`** — string, required. Format `C<NNN>`. Allocated by orchestrator before dispatch; subagents never mint IDs.
-- **`schema_version`** — string, required. Current `"1.0"`.
+- **`schema_version`** — string, required. Current `"1.1"`. The 1.0 → 1.1 bump is additive (see Version history): every 1.0 consumer keeps working unchanged.
 - **`run_id`** — string, required. Format `run_<YYYYMMDDTHHMMZ>`. Allows joining across JSON files from the same run.
 - **`citekey`** — string, required. The bibtex key for the cited source.
-- **`handle`** — string, required. Path prefix to the ingested source artifacts (`pdfs/<citekey>/`). Relative to the run's output-dir.
-- **`ingest_mode`** — enum: `"grobid"` | `"ocr_fallback"` | `"pdftotext_fallback"` | `"error"`. Emitted by `scripts/ingest_pdf.py`; confidence-modulates subagent behavior and the verifier's threshold.
+- **`handle`** — string. Path prefix to the ingested PDF artifacts (`pdfs/<citekey>/`), relative to the run's output-dir. **Required for `source_mode` `pdf` / `pdf_ocr_fallback`; `null` / absent for `paperclip`** — paperclip-covered papers are never fetched to disk, so `paperclip_handle` (`/papers/<doc_id>/`) is the artifact base in that mode (schema 1.1, OQ-handle → relax).
+- **`ingest_mode`** — enum: `"grobid"` | `"ocr_fallback"` | `"pdftotext_fallback"` | `"error"`. Emitted by `scripts/ingest_pdf.py`; confidence-modulates subagent behavior and the verifier's threshold. PDF-mode only; `null` for `source_mode == "paperclip"` (no local ingest).
+- **`source_mode`** — enum, required (schema 1.1): `"paperclip"` | `"pdf"` | `"pdf_ocr_fallback"`. Which read-path produced the grounding evidence: `paperclip` = in-corpus full text via the paperclip CLI; `pdf` = GROBID / `pdftotext` over a fetched PDF; `pdf_ocr_fallback` = OCR over an image-only PDF (the verifier applies a stricter attestation threshold for OCR'd text — see `ingest_mode`; this confidence handling never feeds the adjudicator). Derived at the Phase-2.5 → Phase-3 boundary from `coverage` + `ingest_mode`. The adjudicator treats `source_mode` as **inert provenance metadata and must not let it bias the verdict** (OQ7 → Option A).
+- **`paperclip_handle`** — string, present iff `source_mode == "paperclip"` (otherwise `null` / absent). The `/papers/<doc_id>/` directory name the paperclip CLI returned; the locator base for paperclip-mode evidence.
 - **`source_ref_urls`** — array of strings. Canonical click-through refs for a reader. Usually `file://...pdf#page=N` for local PDFs. Empty array if none.
 
 ### Claim
@@ -124,8 +128,8 @@ For backwards compatibility with the current `.inflight/` convention used by the
 - **`sub_claims`** — array, required (≥1). Each atomic factual assertion within the sentence gets one entry. For simple claims, one sub-claim is fine; for composite claims (e.g., "ResNet50 pretrained on 1.4M images including 670k MRI"), split into multiple.
   - **`sub_claim_id`** — string, required. Format `<claim_id>.<letter>` (e.g., `C042.a`, `C042.b`).
   - **`text`** — string, required. The atomic assertion.
-  - **`evidence`** — array of `{section, line, snippet}`. Evidence retrieved from the source. `line` refers to the line in `handle/content.txt` if available, otherwise null.
-  - **`figures_checked`** — array of `{figure, question, vision_response}`. Empty if no figures consulted.
+  - **`evidence`** — array of `{section, line, snippet, source_mode?, locator?}` (schema 1.1; `source_mode` and `locator` are optional and additive — existing consumers keep reading `{section, line, snippet}`, OQ6 → Option A). Evidence retrieved from the source. `line` refers to the line in `handle/content.txt` if available, otherwise null. `source_mode` echoes the envelope value for this item. `locator` is a deterministic, replayable pointer — `/papers/<handle>/sections/<name>.lines#L<n>` for paperclip evidence, `pdfs/<citekey>.pdf#page=<n>` for PDF — so grounding always rests on a re-checkable attestation even when `paperclip map` proposed the passage.
+  - **`figures_checked`** — array of `{figure, question, vision_response, figure_path?}` (schema 1.1; `figure_path` optional). Empty if no figures consulted. `figure_path` points at the figure file: `/papers/<handle>/figures/<file>` for paperclip mode, the PDF-derived path otherwise.
   - **`verdict`** — enum, required:
     - `CONFIRMED` — evidence directly supports the sub-claim
     - `OVERSTATED_MILD` — true in paper but the manuscript's wording is moderately stronger
@@ -189,8 +193,15 @@ On subagent exit, orchestrator checks:
 7. `phrasings_tried` count meets the floor for the claim_type (≥3 for DIRECT/PARAPHRASED).
 8. If any sub-claim is UNSUPPORTED / CONTRADICTED, `closest_adjacent` is non-empty.
 9. If any sub-claim has `paper_value` ≠ `claim_value`, the sub-claim verdict is one of {OVERSTATED_MILD, OVERSTATED, OVERGENERAL} (not CONFIRMED).
+10. **`SOURCE_MODE_MISSING`** (schema 1.1) — the verdict envelope lacks `source_mode`, which is required, or its value is outside `{paperclip, pdf, pdf_ocr_fallback}`.
+11. **`PAPERCLIP_HANDLE_MISMATCH`** (schema 1.1) — `source_mode == "paperclip"` but `paperclip_handle` is missing/null, **or** `paperclip_handle` is present (non-null) while `source_mode != "paperclip"`.
 
 Validation failure → one retry with a pointed failure message appended to the dispatch. Second failure → escalate to user as a `SCHEMA_VIOLATION` flag and keep the malformed output for inspection.
+
+## Version history
+
+- **1.1** (2026-06-27, `feature-paperclip-first-architecture`) — paperclip-first read-path support. **Additive over 1.0**: required `source_mode` + conditional `paperclip_handle` envelope fields; optional `source_mode` + `locator` on evidence items (OQ6 → Option A); optional `figure_path` on `figures_checked`; `SOURCE_MODE_MISSING` + `PAPERCLIP_HANDLE_MISMATCH` validation rules. `handle` and `ingest_mode` relax from always-required to required-unless-`paperclip` (paperclip verdicts carry their artifact base in `paperclip_handle`). Every 1.0 consumer (adjudicator, verifier, renderer, ledger) keeps reading `{section, line, snippet}` unchanged. `source_mode` is inert provenance for the adjudicator (must not bias the verdict, OQ7 → Option A); OCR confidence handling lives in the verifier threshold, never the adjudicator.
+- **1.0** — initial Phase-3 subagent exit contract.
 
 ## Non-goals
 
