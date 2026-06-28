@@ -268,6 +268,7 @@ def build_claim_summary(claim: dict) -> dict:
     return {
         "claim_id": claim.get("claim_id", ""),
         "citekey": claim.get("citekey", ""),
+        "source_mode": claim.get("source_mode") or "",
         "verdict": overall,
         "verdict_label": VERDICT_LABEL.get(overall, overall),
         "verdict_color": VERDICT_COLOR.get(overall, "#9ca3af"),
@@ -626,6 +627,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     font-size: 0.65rem;
     font-weight: 600;
   }}
+  .source-mode-badge {{
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: white;
+    white-space: nowrap;
+  }}
   .claim-meta {{
     font-size: 0.7rem;
     color: var(--text-muted);
@@ -971,6 +983,20 @@ const claimsById = DATA.claimsById;
 const COLORS = DATA.verdictColors;
 const LABELS = DATA.verdictLabels;
 
+// source_mode (schema 1.1) — which read-path grounded the claim. Inert provenance:
+// color-keyed badge only, never affects the verdict. Unknown/empty (legacy 1.0
+// verdicts) renders nothing.
+const SOURCE_MODE = {{
+  paperclip:        {{ label: 'paperclip', color: '#16a34a', title: 'Grounded via the paperclip in-corpus full text' }},
+  pdf:              {{ label: 'PDF',       color: '#2563eb', title: 'Grounded via GROBID / pdftotext over a fetched PDF' }},
+  pdf_ocr_fallback: {{ label: 'PDF·OCR',   color: '#d97706', title: 'Grounded via OCR over an image-only PDF (stricter verifier threshold)' }},
+}};
+function sourceModeBadge(mode) {{
+  const m = SOURCE_MODE[mode];
+  if (!m) return "";
+  return `<span class="source-mode-badge" style="background:${{m.color}}" title="${{escapeHtml(m.title)}}">${{escapeHtml(m.label)}}</span>`;
+}}
+
 // Per-page indexes used for citation-marker detection and claim-sentence highlight.
 // citeMarkersByPage: pageNum -> [marker entries]
 // claimPageIndex:    claimId -> page+charStart info
@@ -1046,6 +1072,7 @@ function renderSidebar() {{
     const refnum = citekeyToRefnum[s.citekey];
     const refnumHtml = refnum != null ? `<span class="claim-refnum">[${{refnum}}]</span>` : "";
     const flagHtml = s.flag && s.flag !== '—' ? `<span class="flag-pill">${{escapeHtml(s.flag)}}</span>` : "";
+    const sourceModeHtml = sourceModeBadge(s.source_mode);
     const sectionHtml = s.section ? `<div class="claim-section">${{escapeHtml(s.section)}}</div>` : "";
     const diagHtml = s.diagnosis_brief
       ? `<div class="claim-diagnosis" style="--diag-color:${{s.verdict_color}}">${{escapeHtml(s.diagnosis_brief)}}</div>`
@@ -1054,6 +1081,7 @@ function renderSidebar() {{
       <div class="claim-row-top">
         <span class="verdict-pill" style="background:${{s.verdict_color}}">${{escapeHtml(s.verdict_label)}}</span>
         ${{flagHtml}}
+        ${{sourceModeHtml}}
         <span class="claim-meta">${{escapeHtml(s.claim_id)}} · ${{refnumHtml}} <code>${{escapeHtml(s.citekey)}}</code></span>
         <button class="details-btn" title="details" aria-label="details">ⓘ</button>
       </div>
@@ -1181,6 +1209,7 @@ function renderPopupContent(claim, ref, refnum, summary) {{
     <div class="popup-head">
       <span class="verdict-pill big" style="background:${{color}}">${{escapeHtml(label)}}</span>
       ${{flag && flag !== '—' ? `<span class="flag-pill">${{escapeHtml(flag)}}</span>` : ''}}
+      ${{sourceModeBadge(claim.source_mode)}}
       <span class="claim-meta">${{escapeHtml(claim.claim_id)}} · <code>${{escapeHtml(claim.citekey)}}</code>${{claim.manuscript_section ? ' · ' + escapeHtml(claim.manuscript_section) : ''}}</span>
       <span class="spacer"></span>
       <button class="popup-close" aria-label="close">×</button>
