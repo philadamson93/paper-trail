@@ -4,7 +4,7 @@ This file is the **literal prompt** the orchestrator passes to each Phase 3 Pass
 
 > **Wiring.** Selected by the orchestrator when `source_mode == "paperclip"` (Phase 3.2 — see `src/commands/paper-trail.md` § "Step 3.2 — Two-pass dispatch" and the dispatch graph in `src/specs/control_flow.md`). The PDF counterpart is `extractor-dispatch-pdf.md`; the Pass-2 adjudicator is mode-blind.
 
-Any change to this template propagates to every paperclip-mode subagent on the next run. Review carefully. Subagents learn the paperclip CLI surface from `{{spec_root}}/src/skills/paperclip/SKILL.md` — read it if unsure of a command's flags.
+Any change to this template propagates to every paperclip-mode subagent on the next run. Review carefully. Subagents learn the paperclip CLI surface by running `paperclip skill` — the CLI's own live, version-matched command reference (filesystem layout, commands, flags, citation format, examples). Run it once at the start if unsure of a command. The in-repo `{{spec_root}}/src/skills/paperclip/SKILL.md` is only a thin stub that points to `paperclip skill`; it does not itself carry the command reference.
 
 ---
 
@@ -29,7 +29,7 @@ You are a paper-trail evidence extractor working in **paperclip mode**. Your sol
   - `paperclip map --from <RESULTS_ID> "<question>" --output_schema <schema>` — semantic recall across one or more papers (see workflow step 4).
   - `paperclip ask-image {{paperclip_handle}}figures/<file>` — vision over a figure; `paperclip ls {{paperclip_handle}}figures/` to find candidates.
 - **co-cite siblings:** `{{co_citekeys}}` — other citekeys cited on the same manuscript sentence. Resolve each sibling's title/handle from `{{run_output_dir}}/refs.verified.bib` (the `coverage` + `paperclip_handle` fields Phase 1 wrote).
-- **spec root:** `{{spec_root}}` — exit schema at `{{spec_root}}/src/specs/verdict_schema.md`; paperclip CLI reference at `{{spec_root}}/src/skills/paperclip/SKILL.md`.
+- **spec root:** `{{spec_root}}` — exit schema at `{{spec_root}}/src/specs/verdict_schema.md`. For the paperclip CLI reference run `paperclip skill` (the in-repo `{{spec_root}}/src/skills/paperclip/SKILL.md` is a thin stub that points to it).
 - **output path:** `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json` — write your exit JSON here.
 
 ### Required workflow
@@ -99,5 +99,5 @@ Exit after writing `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json`. Your 
 
 - Dispatched **only** when `source_mode == "paperclip"` (derived at the Phase-2.5 → Phase-3 boundary: `coverage=paperclip` → `source_mode=paperclip`, `paperclip_handle=/papers/<handle>/`). PDF / OCR claims use `extractor-dispatch-pdf.md`.
 - `{{claim_text}}` and `{{claim_type_hint.type}}` come from Phase 3.1 claim extraction.
-- The paperclip CLI must be installed and authenticated, and `src/skills/paperclip/SKILL.md` refreshed (`paperclip install --dir .`), before dispatch — subagents read the skill, not memory. If the CLI is unavailable the run falls back to `--paperclip=off` and no claim takes `source_mode=paperclip`.
+- The paperclip CLI must be installed and authenticated before dispatch, and each subagent loads the command reference by running `paperclip skill` at run time — not from memory. (As of paperclip v0.5.11 the in-repo `src/skills/paperclip/SKILL.md` is a thin stub maintained by `paperclip install`/`update`; the full reference lives behind `paperclip skill`, so there is no full-doc copy to keep refreshed in the repo.) If the CLI is unavailable the run falls back to `--paperclip=off` and no claim takes `source_mode=paperclip`.
 - Validate the extractor's exit JSON against the schema before passing to the adjudicator. Schema violations (incl. `SOURCE_MODE_MISSING`, `PAPERCLIP_HANDLE_MISMATCH`) → one retry with a pointed message → escalation.
