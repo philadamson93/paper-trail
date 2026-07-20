@@ -2,7 +2,9 @@
 
 **Always-current.** Edit this file when state changes. Fresh agents picking up work should read this *first*, then follow the reading path in `CLAUDE.md`.
 
-**Last updated:** 2026-04-22
+**Last updated:** 2026-07-20
+
+> **Paused 2026-04-29** (see `docs/journal/2026-04-29-pause-sarol-pivot-to-features.md`) — prioritized paper-trail-the-tool feature work over this experiment. **Narrowly resumed 2026-07-20**, not as a return to the paper-writing track: a new plan, `docs/plans/papertrail-optimizer-requirements.md`, makes paper-trail the 3rd consumer of an external, cross-repo shared agentic-optimization engine (`agentic-label-opt` — see that plan's header for the sibling-repo pointer). Reviewed (`/review-plan`, findings applied) and iterated via `/explain-plan` feedback, UNCOMMITTED. Its own Open Questions §4 confirms scope: the value already delivered is the generalization insight this framework's design gave that external effort; actually building/running paper-trail's optimizer to a real curve stays real, unstarted work, secondary to that — Phases 3-5 below (paper writing) stay paused. Everything below this line predates the pause and is historical design context, not live status.
 
 > **Major reframe 2026-04-21: experiment is agent-only; infrastructure is the contribution.** Human decision: the optimizer is an agent (not human-in-the-loop). Paper-trail + Sarol is the case study; the framework is the primary contribution. See `docs/plans/agentic-pipeline-optimization-framework.md` for the authoritative plan (tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses). Everything downstream — contributions list, Task 5 eval-arm deliverables, hygiene rules — has been updated below.
 
