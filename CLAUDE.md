@@ -62,9 +62,10 @@ Always read in this order:
 9. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
 10. (If needed) `docs/plans/experiment-sarol-benchmark.md` — the original strategy doc; `docs/plans/experiment-sarol-runbook.md` — the pipeline execution runbook; `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase map of what Sarol variants do and don't test.
 
-## Doc landscape (current, 2026-04-21)
+## Doc landscape (current, 2026-04-21; one entry added 2026-07-20 below)
 
 **Stable authoritative references (edit in place):**
+- `docs/plans/papertrail-optimizer-requirements.md` — **active as of 2026-07-20**: paper-trail as consumer #3 of the shared cross-repo `agentic-label-opt` optimization engine. `Status: Draft`, `Reviewed: No`. Passed one `/review-plan` (Codex) round + has a sibling `/explain-plan` HTML companion (`papertrail-optimizer-requirements.html`, not committed) open for Phil's read. Feedback trail: `docs/plans/reviews/papertrail-optimizer-requirements-feedback.md`.
 - `docs/plans/NEXT.md` — status + next steps
 - **`docs/plans/agentic-pipeline-optimization-framework.md` — framework plan (authoritative post-2026-04-21 reframe): tiered leakage discipline + optimizer/dispatcher/subagent architecture**
 - `docs/plans/experiment-sarol-benchmark.md` — strategy (Sarol-specific)
