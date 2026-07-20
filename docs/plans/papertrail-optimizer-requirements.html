@@ -1,0 +1,674 @@
+<meta name="plan-sha256" content="a5bb0ce2d8c8e1584ff31e6cfab8a1566135c8913a804109c1fb116bce0f7875">
+<title>papertrail-optimizer-requirements — plan review</title>
+<style>
+  :root {
+    --bg: #f7f6f3; --panel: #ffffff; --border: #ddd8d0; --text: #1c1a17; --muted: #6b6459;
+    --accent: #b3184f; --accent-soft: #f6e3ea; --amber: #a5690a; --amber-soft: #f6ecd9;
+    --green: #2c7a4b; --green-soft: #e2f2e8; --grey: #8a8478; --grey-soft: #ece9e3;
+    --code-bg: #efeae2; --link: #7a1240; --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17151a; --panel: #201d24; --border: #3a3540; --text: #eae6f0; --muted: #a39cae;
+      --accent: #ff6fa0; --accent-soft: #3a1f2c; --amber: #e0a94a; --amber-soft: #3a2e18;
+      --green: #6fce9c; --green-soft: #16302250; --grey: #8f8a9c; --grey-soft: #2a2632;
+      --code-bg: #2a2632; --link: #ff9fc0; --shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17151a; --panel: #201d24; --border: #3a3540; --text: #eae6f0; --muted: #a39cae;
+    --accent: #ff6fa0; --accent-soft: #3a1f2c; --amber: #e0a94a; --amber-soft: #3a2e18;
+    --green: #6fce9c; --green-soft: #16302250; --grey: #8f8a9c; --grey-soft: #2a2632;
+    --code-bg: #2a2632; --link: #ff9fc0; --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f6f3; --panel: #ffffff; --border: #ddd8d0; --text: #1c1a17; --muted: #6b6459;
+    --accent: #b3184f; --accent-soft: #f6e3ea; --amber: #a5690a; --amber-soft: #f6ecd9;
+    --green: #2c7a4b; --green-soft: #e2f2e8; --grey: #8a8478; --grey-soft: #ece9e3;
+    --code-bg: #efeae2; --link: #7a1240; --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5; max-width: 1000px; margin: 0 auto; padding: 24px 20px 120px;
+  }
+  h1, h2, h3 { line-height: 1.25; }
+  h2 { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 42px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+  pre code { background: none; padding: 0; }
+  a { color: var(--link); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; margin: 14px 0; box-shadow: var(--shadow);
+  }
+  .header-card { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline; }
+  .header-card .title { font-size: 1.4rem; font-weight: 700; flex-basis: 100%; }
+  .meta { font-size: 0.85rem; color: var(--muted); }
+  .meta b { color: var(--text); }
+  .chip {
+    display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .chip.draft { background: var(--amber-soft); color: var(--amber); }
+  .chip.pending { background: var(--grey-soft); color: var(--grey); }
+  .chip.resolved { background: var(--green-soft); color: var(--green); }
+  .banner {
+    background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 10px 14px; font-size: 0.9rem; margin: 16px 0;
+  }
+  .diagram-wrap { position: relative; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); margin: 14px 0; }
+  .diagram-hint { font-size: 0.75rem; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--border); }
+  .diagram-controls { position: absolute; top: 6px; right: 8px; z-index: 5; display: flex; gap: 6px; }
+  .diagram-controls button {
+    font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  .diagram-container { height: 480px; overflow: hidden; }
+  pre.mermaid { margin: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--grey-soft); }
+  details {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; padding: 4px 14px;
+  }
+  details[open] { padding-bottom: 12px; }
+  summary { cursor: pointer; padding: 10px 0; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+  summary .status { margin-left: auto; }
+  .body-text { font-size: 0.92rem; }
+  textarea.section-feedback {
+    width: 100%; min-height: 54px; margin-top: 8px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-family: inherit; font-size: 0.85rem; padding: 6px 8px;
+  }
+  .oq-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .oq-card select {
+    border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 3px 6px; font-size: 0.82rem;
+  }
+  .knob-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 12px; }
+  .knob { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .knob .name { font-weight: 700; font-size: 0.88rem; }
+  .knob .type { color: var(--muted); font-size: 0.78rem; }
+  footer.feedback-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--border);
+    padding: 10px 20px; display: flex; gap: 10px; align-items: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.08); z-index: 20;
+  }
+  footer.feedback-bar textarea {
+    flex: 1; min-height: 34px; max-height: 90px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-family: inherit; padding: 6px 8px; font-size: 0.85rem;
+  }
+  footer.feedback-bar button {
+    background: var(--accent); color: white; border: none; border-radius: 7px; padding: 9px 14px;
+    font-weight: 600; cursor: pointer; font-size: 0.85rem; white-space: nowrap;
+  }
+  .toast {
+    position: fixed; bottom: 64px; right: 20px; background: var(--text); color: var(--bg);
+    padding: 8px 14px; border-radius: 8px; font-size: 0.82rem; opacity: 0; transition: opacity 0.25s; z-index: 30;
+  }
+  .toast.show { opacity: 0.95; }
+  .fs-active .diagram-container { position: fixed; inset: 0; height: 100vh; z-index: 100; background: var(--panel); }
+  .review-verdict-revise { color: var(--amber); font-weight: 700; }
+</style>
+
+<div class="card header-card">
+  <div class="title">papertrail-optimizer-requirements</div>
+  <span class="chip draft">Status: Draft</span>
+  <span class="chip pending">Reviewed: No</span>
+  <div class="meta"><b>Repo:</b> paper-trail (personal, PolyForm-NC)</div>
+  <div class="meta"><b>Branch:</b> sarol</div>
+  <div class="meta"><b>Source:</b> <code>docs/plans/papertrail-optimizer-requirements.md</code></div>
+  <div class="meta"><b>SHA-256:</b> <code id="sha-display">a5bb0ce2d8c8</code>…</div>
+  <div class="meta"><b>Generated:</b> 2026-07-20</div>
+</div>
+
+<div class="banner" id="first-review-banner">
+  <b>First review round.</b> No prior HTML existed for this plan — the change-since-last-review layer activates on the next regeneration, once you've reviewed this pass.
+</div>
+
+<h2>TL;DR</h2>
+<div class="card body-text">
+  Paper-trail becomes <b>consumer #3</b> of the shared <code>agentic-label-opt</code> optimization engine (rad-eval = #1, crc-extraction-agent = #2) — the first fully external, non-VISTA consumer. The plan pins <code>program-v0</code> (paper-trail's optimizable prompt bundle), ports the <code>sarol</code> branch's substantial paused prior-art forward into the engine's <code>context/*.md</code> shape, and enumerates the per-iteration release / mistake-corpus / sealed-split contracts the engine's <code>TaskAdapter</code> will implement. The crux open call is <b>which adjudicator to optimize</b> (mainline's shipped prompt vs. the paused Sarol-specific variant) — recommended: mainline, with a new scorer-side collapse. Everything runs locally; no PHI, no VM handoff.
+</div>
+
+<h2>Review history</h2>
+<table>
+  <tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>Key findings surfaced</th><th>Applied to plan</th></tr>
+  <tr>
+    <td>1</td>
+    <td>Codex (<code>/review-plan</code>)</td>
+    <td class="review-verdict-revise">Revise</td>
+    <td>Missing <code>Reference:</code> header; <code>sarol</code> worktree lacks the <code>src/</code> tree the plan assumes (git-verified real gap); no consolidated Files-to-create section; release-payload field naming loose; several findings already addressed elsewhere in the plan and dismissed with cited evidence</td>
+    <td>7 findings applied directly; 1 modularity call raised to Phil (kept as-is); 9 dismissed, rationale logged in <a href="reviews/papertrail-optimizer-requirements-feedback.md">reviews/papertrail-optimizer-requirements-feedback.md</a></td>
+  </tr>
+</table>
+
+<h2>Repo map</h2>
+<div class="diagram-wrap" id="dw-repomap">
+  <div class="diagram-hint">scroll to zoom • drag to pan</div>
+  <div class="diagram-controls"><button data-reset="dw-repomap">Reset</button><button data-fullscreen="dw-repomap">Fullscreen</button></div>
+  <div class="diagram-container">
+<pre class="mermaid">
+flowchart LR
+  subgraph ptRepo["paper-trail repo"]
+    ptMain["main<br/>src/ tree, paperclip-first"]
+    ptSarol["sarol branch<br/>this plan lives here"]
+  end
+  subgraph crcRepo["crc-extraction-agent repo, VISTA"]
+    engPlan["agentic-label-opt<br/>engine-extraction plan"]
+    crcPlan["crc-optimizer-requirements.md<br/>consumer #2 spec"]
+  end
+  radEval["rad-eval repo<br/>consumer #1, engine origin"]
+  pkg["agentic-label-opt package<br/>engine Phase 0, not yet built"]
+
+  ptSarol -->|"this plan: consumer #3 spec"| engPlan
+  crcPlan -.->|"sibling pattern this plan mirrors"| ptSarol
+  crcRepo -->|"consumer #2"| engPlan
+  radEval -.->|"consumer #1, origin"| engPlan
+  engPlan -.->|"Phase 0 extracts, future"| pkg
+  ptMain -.->|"repo-organization / paperclip-first landed since sarol paused"| ptSarol
+
+  subgraph legend["Color legend"]
+    lgThis["THIS PLAN, consumer #3 (rose)"]
+    lgSibling["Sibling repo / plan, referenced (amber)"]
+    lgFuture["Not yet built (grey dashed)"]
+  end
+
+  class ptSarol thisplan
+  class crcPlan,crcRepo,engPlan,ptMain sibling
+  class radEval,pkg future
+  class lgThis thisplan
+  class lgSibling sibling
+  class lgFuture future
+
+  classDef thisplan fill:#ff6fa0,stroke:#7a1240,stroke-width:3px,color:#1c1a17
+  classDef sibling fill:#f6ecd9,stroke:#a5690a,stroke-width:1.5px,color:#1c1a17
+  classDef future fill:#ece9e3,stroke:#8a8478,stroke-width:1px,color:#4a473f,stroke-dasharray: 4 3
+</pre>
+  </div>
+</div>
+
+<h2>Blast radius</h2>
+<div class="diagram-wrap" id="dw-blast">
+  <div class="diagram-hint">scroll to zoom • drag to pan</div>
+  <div class="diagram-controls"><button data-reset="dw-blast">Reset</button><button data-fullscreen="dw-blast">Fullscreen</button></div>
+  <div class="diagram-container">
+<pre class="mermaid">
+flowchart LR
+  subgraph mainSrc["main branch, source of truth"]
+    extPaperclip["src/prompts/extractor-dispatch-paperclip.md"]
+    extPdf["src/prompts/extractor-dispatch-pdf.md"]
+    adjMain["src/prompts/adjudicator-dispatch.md"]
+    verifierPrompt["src/prompts/verifier-dispatch.md"]
+    schemaFile["src/specs/verdict_schema.md, v1.1"]
+  end
+
+  subgraph sarolNew["sarol branch, new artifacts, this plan"]
+    manifest["program-v0/manifest.json"]
+    collapse["scripts/collapse_native_to_sarol3.py"]
+    playbook["optimizer/context/playbook.md"]
+    taskscoring["optimizer/context/task-and-scoring.md"]
+    releaseformat["optimizer/context/release-format.md"]
+    hotprompt["optimizer/prompt/, agent_instructions"]
+    metalearn["optimizer/meta-learnings.md"]
+  end
+
+  subgraph sarolExisting["sarol branch, existing, reused"]
+    parseverdict["scripts/parse_verdict.py<br/>PRICING + estimate_cost_usd only"]
+    sarolAdj["prompts/adjudicator-dispatch-sarol.md<br/>A2 alternate path"]
+  end
+
+  subgraph engineExternal["engine repo, Phase 0 or 2c, not authored here"]
+    programManifestType["ProgramManifest / RunInputs / RunArtifacts types"]
+    releasePayloadType["ReleasePayload contract"]
+  end
+
+  extPaperclip -->|"frozen via git show main colon path"| manifest
+  extPdf -->|"frozen via git show main colon path"| manifest
+  adjMain -->|"frozen, if A2 resolves to mainline"| manifest
+  verifierPrompt -->|"frozen via git show main colon path"| manifest
+  schemaFile -->|"threaded as task_config"| taskscoring
+
+  manifest -->|"EDIT scope"| hotprompt
+  playbook --> hotprompt
+  taskscoring --> hotprompt
+  releaseformat --> hotprompt
+  collapse -->|"scores"| releaseformat
+  parseverdict -->|"cost reused, single source of truth"| releaseformat
+  hotprompt -->|"populates"| releasePayloadType
+  manifest -.->|"typed once Phase 0 lands"| programManifestType
+  sarolAdj -.->|"A2 alternate, not the recommended path"| collapse
+
+  subgraph legend["Color legend"]
+    lgNew["New, this plan (rose)"]
+    lgExisting["Existing, reused (amber)"]
+    lgExternal["Owned by sibling engine plan (grey dashed)"]
+  end
+
+  class manifest,collapse,playbook,taskscoring,releaseformat,hotprompt,metalearn newnode
+  class extPaperclip,extPdf,adjMain,verifierPrompt,schemaFile,parseverdict,sarolAdj existingnode
+  class programManifestType,releasePayloadType externalnode
+  class lgNew newnode
+  class lgExisting existingnode
+  class lgExternal externalnode
+
+  classDef newnode fill:#ff6fa0,stroke:#7a1240,stroke-width:2.5px,color:#1c1a17
+  classDef existingnode fill:#f6ecd9,stroke:#a5690a,stroke-width:1.5px,color:#1c1a17
+  classDef externalnode fill:#ece9e3,stroke:#8a8478,stroke-width:1px,color:#4a473f,stroke-dasharray: 4 3
+</pre>
+  </div>
+</div>
+
+<h2>Order of operations</h2>
+<div class="diagram-wrap" id="dw-order">
+  <div class="diagram-hint">scroll to zoom • drag to pan</div>
+  <div class="diagram-controls"><button data-reset="dw-order">Reset</button><button data-fullscreen="dw-order">Fullscreen</button></div>
+  <div class="diagram-container">
+<pre class="mermaid">
+flowchart TD
+  oq1{{"OQ1: adjudicator variant<br/>decision gate, Phil's call"}}
+  a3["A3: branch reconciliation<br/>freeze from main, not sarol ⏳ PENDING"]
+  a1a2["A1/A2: program-v0 freeze + tag ⏳ PENDING"]
+  b1["B1: context/ docs ⏳ PENDING"]
+  b2["B2: hot-path prompt ⏳ PENDING"]
+  b3["B3: continuity docs ⏳ PENDING"]
+  c1c2c3["C1/C2/C3: requirements enumeration ⏳ PENDING"]
+  vcost["Verify: cost/runtime preflight ⏳ PENDING"]
+  vcollapse["Verify: collapse-table checks, OQ2 ⏳ PENDING"]
+  vsmoke["Verify: adapter smoke, engine Phase 2c ⏳ PENDING"]
+  vbudget["Verify: budget invariant ⏳ PENDING"]
+  vscore["Verify: first real scoring run ⏳ PENDING"]
+  landing["Landing: Status to Completed ⏳ PENDING"]
+
+  oq1 -->|"resolves A2, gates freeze"| a3
+  a3 --> a1a2
+  a1a2 --> b1
+  b1 --> b2
+  b2 --> b3
+  b3 --> c1c2c3
+  c1c2c3 --> vcost
+  vcost --> vcollapse
+  vcollapse --> vsmoke
+  vsmoke --> vbudget
+  vbudget --> vscore
+  vscore --> landing
+
+  class oq1 gate
+  class a3,a1a2,b1,b2,b3,c1c2c3,vcost,vcollapse,vsmoke,vbudget,vscore,landing pending
+
+  classDef gate fill:#f6ecd9,stroke:#a5690a,stroke-width:2px,color:#1c1a17
+  classDef pending fill:#ece9e3,stroke:#8a8478,stroke-width:1px,color:#1c1a17
+</pre>
+  </div>
+</div>
+
+<h2>Knobs / contracts</h2>
+<div class="knob-grid">
+  <div class="knob">
+    <div class="name">A2 — adjudicator variant</div>
+    <div class="type">decision, not a runtime knob</div>
+    <p class="body-text">Mainline <code>adjudicator-dispatch.md</code> (native 12-value <code>overall_verdict</code>) vs. the paused Sarol-specific 9-class variant. Recommended: mainline + new scorer-side collapse. Phil's call — Open Question §1.</p>
+  </div>
+  <div class="knob">
+    <div class="name">Native → Sarol-3-way collapse</div>
+    <div class="type"><code>experiments/sarol-2024/scripts/collapse_native_to_sarol3.py</code> (proposed)</div>
+    <pre><code>CONFIRMED, CONFIRMED_WITH_MINOR      -> ACCURATE
+OVERSTATED_MILD, OVERSTATED,
+OVERGENERAL, PARTIALLY_SUPPORTED,
+UNSUPPORTED, CONTRADICTED,
+MISATTRIBUTED, INDIRECT_SOURCE       -> NOT_ACCURATE
+CITED_OUT_OF_CONTEXT                 -> IRRELEVANT
+AMBIGUOUS                            -> excluded (abstention)</code></pre>
+  </div>
+  <div class="knob">
+    <div class="name">primary_metric / breakdown naming</div>
+    <div class="type">C1 release payload field</div>
+    <p class="body-text"><code>primary_metric</code> = abstention-adjusted macro-F1. <code>breakdown.macro_f1_misses_included</code> = the comparable-to-published-baselines variant. Both required whenever a MultiVerS/GPT-4 comparison is drawn.</p>
+  </div>
+  <div class="knob">
+    <div class="name">Per-claim budget ceiling (D45)</div>
+    <div class="type">1.5&times; v1 default, model-call-count primary</div>
+    <p class="body-text">Ported from <code>sarol</code>'s existing design. Verification requires confirming it's actually wired into whichever dispatcher script the engine's <code>Runner</code> calls, not just cited as reused.</p>
+  </div>
+  <div class="knob">
+    <div class="name">Graduated-N ramp</div>
+    <div class="type">10 / 25 / 50 / 100 / 200 / 2,141 (full TRAIN)</div>
+    <p class="body-text">Nested TRAIN subsets already locked (D13/D24). A per-landmark cost estimate is now a Verification gate before any run beyond the single-claim smoke test.</p>
+  </div>
+</div>
+
+<h2>Steps</h2>
+
+<details data-section="part-a1">
+  <summary>Part A1 — the <code>program-v0</code> fileset <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>Pure Markdown — no code in the optimized loop. Five artifacts: two extractor prompts (paperclip/pdf), one adjudicator prompt (variant = A2), one verifier prompt, one rubric spec. All committed on <code>main</code>, all PHI-clean (public benchmark). Structurally the simplest freeze of the three engine consumers — plain globset, no scratch-first <code>/phi-vet</code>, no hash-only reconstruction.</p>
+    <p><b>Files:</b> <code>src/prompts/extractor-dispatch-{paperclip,pdf}.md</code>, <code>src/prompts/adjudicator-dispatch.md</code> (or the Sarol variant), <code>src/prompts/verifier-dispatch.md</code>, <code>src/specs/verdict_schema.md</code>.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part A1..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-a2">
+  <summary>Part A2 — adjudicator variant, the crux decision <span class="status chip pending">PENDING — Phil's call</span></summary>
+  <div class="body-text">
+    <p>Two real, unmeasured candidates. Recommendation: freeze mainline, build a new native&rarr;Sarol-3-way collapse as scorer-side logic (not a competing prompt) — keeps <code>program-v0</code> to one prompt, mirrors how the engine plan required crc's <code>event_f1_at_W</code> to be net-new scorer code rather than a straight port.</p>
+    <p>New collapse module proposed as a sibling to <code>parse_verdict.py</code>: <code>experiments/sarol-2024/scripts/collapse_native_to_sarol3.py</code>. If Phil picks the Sarol-variant path instead, Part B1's <code>task-and-scoring.md</code> and Part C1's <code>error_class_counts</code> naming need re-deriving against the existing 9-way rubric.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part A2..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-a3" open>
+  <summary>Part A3 — branch reconciliation <span class="status chip pending">PENDING — confirmed gap</span></summary>
+  <div class="body-text">
+    <p><b>Git-verified 2026-07-20:</b> <code>sarol</code>'s checked-out worktree does <b>not</b> have the <code>src/</code> tree at all. <code>repo-organization</code> and <code>feature-paperclip-first-architecture</code> landed on <code>main</code> only. <code>sarol</code> still has the pre-restructure layout — real files at <code>.claude/prompts/{extractor-dispatch.md (single, pre-split), adjudicator-dispatch.md, verifier-dispatch.md}</code>, pre-1.1 schema. On <code>main</code>, <code>.claude/prompts</code> etc. are symlinks into <code>src/</code>.</p>
+    <p><b>Action:</b> freeze <code>program-v0</code> by reading the A1 files directly from <code>main</code> (<code>git show main:&lt;path&gt;</code>). Do not merge/rebase <code>sarol</code> onto <code>main</code>. Do not treat <code>sarol</code>'s existing single-file <code>extractor-dispatch.md</code> as a base — it's superseded, not a predecessor.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part A3..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-b1">
+  <summary>Part B1 — <code>context/</code> reference docs <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>Mostly reconciling/porting forward what <code>sarol</code>'s paused plan-of-record already speclos, not fresh authorship. <code>playbook.md</code> reuses D22/D26/D27/D28 directly. <code>task-and-scoring.md</code> reuses the already-decided macro-F1-over-3-way-collapse frontier (D1/D36) plus <code>sarol</code>'s named error taxonomy (INDIRECT-detection, severity-under-commitment). <code>release-format.md</code> is the per-iteration data contract (Part C1).</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part B1..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-b2">
+  <summary>Part B2 — hot-path prompt <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>The adapter's <code>agent_instructions</code>. EDIT = <code>program-v0</code> globset; READ = release + mistake-corpus sample + continuity docs; SEALED = Val/Test, already physically outside the repo tree — the strongest sealing guarantee of the three engine consumers. Reuses D45 (per-claim budget) and D46 (round-trip sanity canary) directly.</p>
+    <p><b>Unresolved cost risk:</b> 3 nested Claude-Code subagent sessions per claim, ramp goes to 2,141 claims. A per-landmark $ estimate is now a Verification gate (see Steps below) before any run beyond the smoke test.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part B2..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-b3">
+  <summary>Part B3 — continuity docs <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p><code>sarol</code>'s <code>NEXT.md</code> + committed results table + analysis notebook already cover most of this. One genuine new file: a <code>meta-learnings.md</code>-equivalent (confirmed/pending/reverted fixes across iterations).</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part B3..."></textarea>
+  </div>
+</details>
+
+<details data-section="files-to-create">
+  <summary>Files to create <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>Consolidated table added during review — previously scattered across Parts A–C. See the plan doc for the full table (10 rows: manifest, collapse script, three context docs, hot-path prompt dir, meta-learnings, plus existing files reused/frozen).</p>
+    <textarea class="section-feedback" placeholder="Feedback on Files to create..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-c1">
+  <summary>Part C1 — the per-iteration release <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p><code>metrics</code> (<code>primary_metric</code> + <code>breakdown</code>), <code>error_class_counts</code>, <code>followups</code>, <code>frontier</code>, <code>budget</code> (reuses <code>parse_verdict.py</code>'s <code>PRICING</code>/<code>estimate_cost_usd</code> as single source of truth), <code>prior_change_note</code>, on-demand mistake corpus, Val aggregate-only. The exact typed <code>ReleasePayload</code> dataclass is owned by the engine's Phase 0, which hasn't landed as code yet — this is the field-level content paper-trail populates into it.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part C1..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-c2">
+  <summary>Part C2 — the mistake corpus <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>Per-claim adjudicator reasoning + extractor evidence quotes + verifier bounce history. No PHI — sealing reason here is leakage-of-gold-labels, not privacy. TRAIN-side mistakes fully open to the optimizer (D24 Tier 1).</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part C2..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-c3">
+  <summary>Part C3 — sealed TRAIN/VAL/TEST split <span class="status chip pending">PENDING — mostly confirms, doesn't design</span></summary>
+  <div class="body-text">
+    <p>Already fully specified by <code>sarol</code>'s D13/D24: graduated-N nested TRAIN, fixed VAL (316), sealed TEST (606, unsealed once via <code>--confirm-unseal</code>). Data lives outside the repo by construction — the strongest sealing guarantee of the three consumers. One open item: reconciling the split's provenance format against current claim/citekey identifiers.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part C3..."></textarea>
+  </div>
+</details>
+
+<details data-section="part-d">
+  <summary>Part D — interface feedback to the engine plan <span class="status chip resolved">Mostly confirms, one NEW item</span></summary>
+  <div class="body-text">
+    <p>Items 1–4 confirm existing engine-plan patterns (pure-prompt <code>ProgramManifest</code>, nested-subagent <code>Runner</code> shape, <code>task_config</code> carrying the rubric, opaque <code>MistakeCorpus</code>). Item 5 is genuinely new: <b>warm-start needs a third taxonomy case</b> — <code>program-v0</code> is a real working pipeline never scored against gold, so iteration 1 must first establish a baseline empirically, then characterize it. Non-blocking documentation refinement to the engine plan.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Part D..."></textarea>
+  </div>
+</details>
+
+<details data-section="verification">
+  <summary>Verification (local machine, no PHI, no VM handoff) <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>Seven gates, in order: A3 branch reconciliation &rarr; A1/A2 freeze &rarr; cost/runtime preflight (new) &rarr; collapse-table frequency cross-check + hand-sample spot-check (OQ2) &rarr; adapter smoke (exact-match gate) &rarr; budget invariant check &rarr; first real scoring run (the actual v0 baseline, reported against MultiVerS 0.59/0.52 and GPT-4 0.65/0.45 with the abstention caveat stated).</p>
+    <textarea class="section-feedback" placeholder="Feedback on Verification..."></textarea>
+  </div>
+</details>
+
+<details data-section="landing">
+  <summary>Landing &amp; cleanup <span class="status chip pending">PENDING</span></summary>
+  <div class="body-text">
+    <p>Lands on <code>sarol</code> directly (already checked out, no separate feature branch). Landing gate: local <code>plan-check</code> skill at minimum, optionally <code>/review-plan</code> (this pass). Cross-repo gating signal is precise: the engine plan's Phase 2c is satisfied once this plan's <code>**Status.**</code> header reads <code>Completed</code>. Cleanup updates <code>docs/plans/NEXT.md</code> (sarol-branch) and <code>CLAUDE.md</code>'s doc-landscape list.</p>
+    <textarea class="section-feedback" placeholder="Feedback on Landing..."></textarea>
+  </div>
+</details>
+
+<h2>Gotchas</h2>
+
+<details data-section="gotcha-branch-mismatch" open>
+  <summary>⚠️ <code>sarol</code> worktree lacks the <code>src/</code> tree entirely</summary>
+  <div class="body-text">
+    <p>Confirmed by direct git inspection during review, not just plan prose: <code>git ls-tree sarol -- src/prompts/</code> returns nothing; the same paths on <code>main</code> are populated (added by <code>repo-organization</code>, which also turned <code>.claude/prompts</code> etc. into symlinks pointing at <code>src/</code>). A fresh agent trying to open <code>src/prompts/extractor-dispatch-paperclip.md</code> on a naive <code>sarol</code> checkout will get a file-not-found. Part A3 now states the fix: freeze from <code>main</code> directly, never merge.</p>
+    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
+  </div>
+</details>
+
+<details data-section="gotcha-d42-collision">
+  <summary>⚠️ "D42" decision-number collision in the source plan-of-record</summary>
+  <div class="body-text">
+    <p><code>experimental-plan-of-record.md</code> reuses the label "D42" for two different decisions (the <code>program.md</code>-equivalent optimizer doc, and a separate "Autoresearch direct-lifts adopted" decision). Flagged in Part B as a pre-existing collision in the source doc, not this plan's error — whoever maintains that log should renumber, but it doesn't block this plan.</p>
+    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
+  </div>
+</details>
+
+<details data-section="gotcha-abstention">
+  <summary>⚠️ Abstention (<code>AMBIGUOUS</code>) breaks direct baseline comparability</summary>
+  <div class="body-text">
+    <p>Sarol's own published 3-way collapse has no abstention concept. Excluding <code>AMBIGUOUS</code> makes the computed macro-F1 not directly comparable to MultiVerS/GPT-4 baselines unless abstentions are also scored as misses. Now pinned as two named fields: <code>primary_metric</code> (abstention-adjusted) and <code>breakdown.macro_f1_misses_included</code>.</p>
+    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
+  </div>
+</details>
+
+<details data-section="gotcha-no-migration">
+  <summary>⚠️ The new native collapse is not a migration of <code>parse_verdict.py</code>'s Sarol-9-class logic</summary>
+  <div class="body-text">
+    <p>Easy to misread Part A2 as "reuse the existing Sarol collapse for mainline output." It doesn't — <code>parse_verdict.py</code>'s 9-class collapse stays untouched for the Sarol-variant path; the recommended mainline path gets entirely new collapse code operating on the current 12-value <code>overall_verdict</code>.</p>
+    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
+  </div>
+</details>
+
+<details data-section="gotcha-cost">
+  <summary>⚠️ Cost/runtime risk is real and was previously unestimated</summary>
+  <div class="body-text">
+    <p>Each claim triggers 3 full nested Claude-Code subagent sessions; the ramp goes to 2,141 claims. Review added a Verification gate requiring a per-landmark $ estimate before any run beyond the single-claim smoke test — previously this was only prose ("needed before a real run"), not a gate.</p>
+    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
+  </div>
+</details>
+
+<h2>Open questions</h2>
+<div id="oq-panel"></div>
+
+<h2>Out of scope</h2>
+<div class="card body-text">
+  <ul>
+    <li>Phases 3–5 of <code>experimental-plan-of-record.md</code> (the paper-writing effort) — RESOLVED out of scope.</li>
+    <li>A full training curve across the graduated-N ramp — only a first real scoring run is required.</li>
+    <li>Fine-grained native <code>overall_verdict</code> evaluation as its own optimization frontier (reported breakdown only, unless OQ5 resolves otherwise).</li>
+    <li>Building the graduated-N split infrastructure or the Docker isolation substrate — both are engine-plan Phase 2c/3 work.</li>
+  </ul>
+</div>
+
+<footer class="feedback-bar">
+  <textarea id="global-feedback" placeholder="Overall feedback..."></textarea>
+  <button id="copy-feedback-btn">Copy feedback (0 pending)</button>
+</footer>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<script>
+(function () {
+  const PLAN_STEM = "papertrail-optimizer-requirements";
+  const PLAN_SHA = "a5bb0ce2d8c8e1584ff31e6cfab8a1566135c8913a804109c1fb116bce0f7875";
+  const PLAN_PATH = "docs/plans/papertrail-optimizer-requirements.md";
+  const BRANCH = "sarol";
+  const LS_SHA_KEY = `explain-plan::${PLAN_STEM}::sha`;
+  const storedSha = localStorage.getItem(LS_SHA_KEY);
+  if (storedSha && storedSha !== PLAN_SHA) {
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith(`explain-plan::${PLAN_STEM}::`)) localStorage.removeItem(k);
+    });
+  }
+  localStorage.setItem(LS_SHA_KEY, PLAN_SHA);
+
+  function lsKey(id) { return `explain-plan::${PLAN_STEM}::${id}`; }
+
+  // ---- Section feedback textareas: persist + restore ----
+  document.querySelectorAll("[data-section]").forEach(el => {
+    const id = el.getAttribute("data-section");
+    const ta = el.querySelector("textarea.section-feedback");
+    if (!ta) return;
+    const key = lsKey(`section::${id}`);
+    const saved = localStorage.getItem(key);
+    if (saved) ta.value = saved;
+    ta.addEventListener("input", () => {
+      localStorage.setItem(key, ta.value);
+      updatePendingCount();
+    });
+  });
+  document.querySelectorAll("details[data-section] textarea.section-feedback").forEach(ta => {});
+  // gotchas without wrapping [data-section] attr on the detail itself already covered above (they have data-section on <details>)
+
+  const globalTa = document.getElementById("global-feedback");
+  const globalKey = lsKey("global");
+  const savedGlobal = localStorage.getItem(globalKey);
+  if (savedGlobal) globalTa.value = savedGlobal;
+  globalTa.addEventListener("input", () => {
+    localStorage.setItem(globalKey, globalTa.value);
+    updatePendingCount();
+  });
+
+  // ---- Open Questions panel ----
+  const OQS = [
+    { n: 1, status: "Pending", text: "Adjudicator variant (Part A2). Freeze mainline's adjudicator-dispatch.md + build a new Scorer-side native→Sarol-3-way collapse (recommended), or freeze the existing adjudicator-dispatch-sarol.md variant instead? This plan's most consequential open call." },
+    { n: 2, status: "Pending", text: "Collapse-table correctness. The native-11-way → Sarol-3-way mapping is a first-pass proposal, not checked against real scored examples yet. Worth a small manual spot-check against Sarol dev-split claims before locking release-format.md." },
+    { n: 3, status: "Pending", text: "Topology-fixed vs. topology-free program-v0 (engine plan's #18). Recommend fixed-topology for v0 (YAGNI, smaller blast radius), topology-freedom revisited once a v0 curve exists — but this is Phil's call; the paused plan-of-record intended the freer version." },
+    { n: 4, status: "Resolved", text: "RESOLVED 2026-07-20 (Phil, via /explain-plan feedback) — scoped narrowly to engine-validation. The primary value of Phase 2c is the generalization insight it already produced; actually building/running paper-trail's optimizer to a real curve is real, unstarted work, secondary to that insight. Phases 3–5 of experimental-plan-of-record.md stay paused." },
+    { n: 5, status: "Pending", text: "Is the 3-way collapse the permanent optimization objective, or just the near-term one? paper-tool-validation.md frames native-granularity evaluation as the headline experiment, while C1 pins the frontier scalar to the lossy 3-way collapse. Confirm: reported/breakdown only, or its own frontier metric once a v0 curve exists?" }
+  ];
+  const panel = document.getElementById("oq-panel");
+  OQS.forEach(oq => {
+    const card = document.createElement("div");
+    card.className = "oq-card";
+    card.id = `oq-${oq.n}`;
+    const statusKey = lsKey(`oq-status::${oq.n}`);
+    const notesKey = lsKey(`oq-notes::${oq.n}`);
+    const savedStatus = localStorage.getItem(statusKey) || oq.status;
+    const savedNotes = localStorage.getItem(notesKey) || "";
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <b>OQ${oq.n}</b>
+        <select data-oq="${oq.n}">
+          <option value="Pending"${savedStatus === "Pending" ? " selected" : ""}>Pending</option>
+          <option value="Resolved"${savedStatus === "Resolved" ? " selected" : ""}>Resolved</option>
+          <option value="Deferred"${savedStatus === "Deferred" ? " selected" : ""}>Deferred</option>
+        </select>
+      </div>
+      <p class="body-text">${oq.text}</p>
+      <textarea class="section-feedback" data-oq-notes="${oq.n}" placeholder="Notes on OQ${oq.n}...">${savedNotes}</textarea>
+    `;
+    panel.appendChild(card);
+    const sel = card.querySelector("select");
+    sel.addEventListener("change", () => {
+      localStorage.setItem(statusKey, sel.value);
+      updatePendingCount();
+    });
+    const notesTa = card.querySelector("textarea");
+    notesTa.addEventListener("input", () => {
+      localStorage.setItem(notesKey, notesTa.value);
+      updatePendingCount();
+    });
+  });
+
+  // ---- Mermaid + pan/zoom ----
+  mermaid.initialize({ startOnLoad: false, theme: "neutral", flowchart: { useMaxWidth: false } });
+  const instances = {};
+  mermaid.run({ querySelector: "pre.mermaid" }).then(() => {
+    document.querySelectorAll(".diagram-wrap").forEach(wrap => {
+      const svg = wrap.querySelector("svg");
+      if (!svg) return;
+      svg.removeAttribute("style");
+      svg.style.width = "100%";
+      svg.style.height = "100%";
+      try {
+        instances[wrap.id] = svgPanZoom(svg, { minZoom: 0.3, maxZoom: 8, fit: true, center: true, controlIconsEnabled: false });
+      } catch (e) { /* non-fatal */ }
+    });
+  });
+
+  document.querySelectorAll("[data-reset]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const inst = instances[btn.getAttribute("data-reset")];
+      if (inst) { inst.reset(); inst.fit(); inst.center(); }
+    });
+  });
+  document.querySelectorAll("[data-fullscreen]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-fullscreen");
+      const wrap = document.getElementById(id);
+      wrap.classList.toggle("fs-active");
+      setTimeout(() => {
+        const inst = instances[id];
+        if (inst) { inst.resize(); inst.fit(); inst.center(); }
+      }, 60);
+    });
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      document.querySelectorAll(".diagram-wrap.fs-active").forEach(w => {
+        w.classList.remove("fs-active");
+        const inst = instances[w.id];
+        if (inst) setTimeout(() => { inst.resize(); inst.fit(); inst.center(); }, 60);
+      });
+    }
+  });
+
+  // ---- Feedback export ----
+  function updatePendingCount() {
+    let count = 0;
+    document.querySelectorAll("textarea.section-feedback").forEach(ta => { if (ta.value.trim()) count++; });
+    if (globalTa.value.trim()) count++;
+    document.getElementById("copy-feedback-btn").textContent = `Copy feedback (${count} pending)`;
+  }
+  updatePendingCount();
+
+  function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  document.getElementById("copy-feedback-btn").addEventListener("click", () => {
+    let out = `# Resume: apply explain-plan feedback\n`;
+    out += `Plan: ${PLAN_PATH} · branch: ${BRANCH} · plan-sha: ${PLAN_SHA.slice(0, 12)}\n`;
+    out += `→ If you're picking this up in a fresh session, read the plan doc above (plus any related docs / memory it points to) first. Then apply the feedback below.\n\n`;
+    out += `# Feedback on ${PLAN_STEM}\n\n`;
+    document.querySelectorAll("[data-section]").forEach(el => {
+      const id = el.getAttribute("data-section");
+      const ta = el.querySelector("textarea.section-feedback");
+      if (ta && ta.value.trim()) out += `## ${id}\n${ta.value.trim()}\n\n`;
+    });
+    OQS.forEach(oq => {
+      const sel = document.querySelector(`select[data-oq="${oq.n}"]`);
+      const notes = document.querySelector(`textarea[data-oq-notes="${oq.n}"]`);
+      if (notes && notes.value.trim()) {
+        out += `## OQ${oq.n}\nStatus: ${sel.value}\n${notes.value.trim()}\n\n`;
+      }
+    });
+    if (globalTa.value.trim()) out += `## Overall\n${globalTa.value.trim()}\n\n`;
+    navigator.clipboard.writeText(out).then(() => showToast("Feedback copied — paste into Claude")).catch(() => showToast("Copy failed — select and copy manually"));
+  });
+})();
+</script>
