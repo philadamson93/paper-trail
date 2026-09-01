@@ -1,16 +1,23 @@
 {
   "program_version": "program-v0",
   "frozen_at_utc": "2026-09-01",
-  "source_ref": {
-    "branch": "main",
-    "commit": "4997e067c3a74af5e7fdf4c6db56349dcd857c9e",
-    "note": "Files are read from `main` per Part A3; `sarol` has no src/ tree."
+  "rubric_variant": "sarol_2024_9class",
+  "source_refs": {
+    "main": {
+      "commit": "4997e067c3a74af5e7fdf4c6db56349dcd857c9e",
+      "note": "mainline extractors + verifier + native schema/verifier contracts"
+    },
+    "sarol": {
+      "commit": "ba7a5308832bc424867a73f221f494a3e6a2ff2a",
+      "note": "Sarol-variant adjudicator + 9-class rubric (OQ1 resolved 2026-09-01)"
+    }
   },
-  "combined_hash": "006c36dc46dbaa2deef7136e9ea540530749a2ea6fa35eecdcf53bdca15353a9",
-  "combined_hash_recipe": "sha256 over the concatenation, in ascending path order, of '<path>\\0<sha256>\\n' for every entry. Each entry sha256 is over the raw bytes of `git show <source_ref.commit>:<path>`.",
+  "combined_hash": "be2eb8070ae1271a28b079d9e10aaeabc15ea837dc4e0b1e06e450a2696e6839",
+  "combined_hash_recipe": "sha256 over the concatenation, in ascending path order, of '<path>\\0<sha256>\\n' for every entry. Each entry sha256 is over the raw bytes of `git show <source_refs[entry.source].commit>:<entry.path>`.",
   "entries": [
     {
       "path": "src/prompts/extractor-dispatch-paperclip.md",
+      "source": "main",
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
@@ -18,20 +25,23 @@
     },
     {
       "path": "src/prompts/extractor-dispatch-pdf.md",
+      "source": "main",
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
       "sha256": "393ca0e4a85a602bb47680b2f8e45ec997721a7b01be3870c0d1544a3328ff0e"
     },
     {
-      "path": "src/prompts/adjudicator-dispatch.md",
+      "path": "experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md",
+      "source": "sarol",
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
-      "sha256": "de1f6eb09f2935bd9aa64228aa783f3886857e51eda1439385cb3ace5a285d1e"
+      "sha256": "9bbde76cdabab8132894c46c345ba53722d5fc10977bc0a45eb5c579e56b96a6"
     },
     {
       "path": "src/prompts/verifier-dispatch.md",
+      "source": "main",
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
@@ -39,26 +49,52 @@
     },
     {
       "path": "src/specs/verdict_schema.md",
+      "source": "main",
       "freeze_policy": "committed",
       "contract_file": true,
       "optional": false,
       "sha256": "6995c7ec0288e32666b918f5ad0accae6a4ecffa0e127d54e846425579a9a094"
     },
     {
+      "path": "experiments/sarol-2024/specs/verdict_schema_sarol.md",
+      "source": "sarol",
+      "freeze_policy": "committed",
+      "contract_file": true,
+      "optional": false,
+      "sha256": "c0b0cb37608a95bd82916dea3fe53f5f759fb0237e60a727dbb6554ef8510580"
+    },
+    {
       "path": "src/specs/verifier_results.md",
+      "source": "main",
       "freeze_policy": "committed",
       "contract_file": true,
       "optional": false,
       "sha256": "1656d1d206c6f28ee9fb9540a27035306f47ded2dee9740b8aee5d4b35535b53"
     }
   ],
+  "output_vocabulary": {
+    "enum": [
+      "ACCURATE",
+      "OVERSIMPLIFY",
+      "NOT_SUBSTANTIATE",
+      "CONTRADICT",
+      "MISQUOTE",
+      "INDIRECT",
+      "INDIRECT_NOT_REVIEW",
+      "ETIQUETTE",
+      "IRRELEVANT"
+    ],
+    "contract": "FIXED. The optimizer may edit every part of the rubric that makes it good -- definitions, boundaries, worked examples, tie-breaks, the worst-wins ordering -- but NOT the set of emittable labels, because the benchmark defines it and the scorer consumes it. The optimizer prompt must state this enum explicitly. A prediction outside it is an invalid output: scored as a miss and counted in error_class_counts, never a crash and never silently re-bucketed.",
+    "why_no_collapse_needed": "This variant emits Sarol's gold vocabulary directly, so every gold label is reachable and 3-way macro-F1 is directly comparable to the published baselines. The mainline-plus-collapse alternative left 17 of IRRELEVANT's 34 instances structurally unreachable -- see the plan's Part A2."
+  },
   "runtime_pins": {
     "paperclip_cli": "paperclip, version 0.5.11",
-    "why": "The extractor prompt tells each subagent to load the paperclip command reference at run time via `paperclip skill`; the in-repo src/skills/paperclip/SKILL.md is a 10-line stub only. That reference is therefore OUTSIDE the frozen fileset, so without this pin two runs of the same program version could behave differently with no manifest diff. Assert this version before any scored run."
+    "why": "The extractor prompt loads the paperclip command reference at run time via `paperclip skill`; the in-repo SKILL.md is a 10-line stub. That reference is outside the frozen fileset, so without this pin two runs of one program version could diverge with no manifest diff."
   },
   "deliberately_excluded": {
-    "src/commands/paper-trail.md": "orchestrator = fixed runner code, not editable program (Part A1)",
-    "src/specs/control_flow.md": "derived topology map; self-describes as 'the cross-cut, not the source'. Topology is fixed for v0 (OQ3)",
-    "src/skills/paperclip/SKILL.md": "10-line stub pointing at `paperclip skill`; pinned via runtime_pins instead"
+    "src/prompts/adjudicator-dispatch.md": "superseded by the Sarol variant for this experiment (OQ1)",
+    "src/commands/paper-trail.md": "orchestrator = fixed runner code, not editable program",
+    "src/specs/control_flow.md": "derived topology map; topology fixed for v0 (OQ3)",
+    "src/skills/paperclip/SKILL.md": "10-line stub; pinned via runtime_pins instead"
   }
 }
