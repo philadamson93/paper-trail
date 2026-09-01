@@ -1,696 +1,657 @@
-<meta name="plan-sha256" content="7423438aeafe3ab74b07a93b15246c32109c08f69fd110fd5f1b0fedf1c7e1bc">
+<meta name="plan-sha256" content="9e078632a462b63f5fa14d861a05616eed4c45dc9fd704f257099e84a6bee6e6">
+<meta charset="utf-8">
 <title>papertrail-optimizer-requirements — plan review</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <style>
   :root {
-    --bg: #f7f6f3; --panel: #ffffff; --border: #ddd8d0; --text: #1c1a17; --muted: #6b6459;
-    --accent: #b3184f; --accent-soft: #f6e3ea; --amber: #a5690a; --amber-soft: #f6ecd9;
-    --green: #2c7a4b; --green-soft: #e2f2e8; --grey: #8a8478; --grey-soft: #ece9e3;
-    --code-bg: #efeae2; --link: #7a1240; --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --bg:#fbfbfa; --panel:#fff; --ink:#1c1c1a; --muted:#63635e; --line:#e3e2dd;
+    --accent:#1f6f8b; --accent-soft:#e8f2f6; --amber:#b7791f; --amber-soft:#fdf6e7;
+    --rose:#a33; --rose-soft:#fbeaea; --green:#2f7d4f; --green-soft:#e9f5ee;
+    --code:#f4f4f1;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17151a; --panel: #201d24; --border: #3a3540; --text: #eae6f0; --muted: #a39cae;
-      --accent: #ff6fa0; --accent-soft: #3a1f2c; --amber: #e0a94a; --amber-soft: #3a2e18;
-      --green: #6fce9c; --green-soft: #16302250; --grey: #8f8a9c; --grey-soft: #2a2632;
-      --code-bg: #2a2632; --link: #ff9fc0; --shadow: 0 1px 3px rgba(0,0,0,0.4);
+      --bg:#16171a; --panel:#1e2024; --ink:#e8e8e4; --muted:#9a9a94; --line:#31343a;
+      --accent:#5fb3d4; --accent-soft:#16303a; --amber:#e0a94a; --amber-soft:#33290f;
+      --rose:#e08585; --rose-soft:#3a1f1f; --green:#7fc99b; --green-soft:#17301f;
+      --code:#24262b;
     }
   }
-  :root[data-theme="dark"] {
-    --bg: #17151a; --panel: #201d24; --border: #3a3540; --text: #eae6f0; --muted: #a39cae;
-    --accent: #ff6fa0; --accent-soft: #3a1f2c; --amber: #e0a94a; --amber-soft: #3a2e18;
-    --green: #6fce9c; --green-soft: #16302250; --grey: #8f8a9c; --grey-soft: #2a2632;
-    --code-bg: #2a2632; --link: #ff9fc0; --shadow: 0 1px 3px rgba(0,0,0,0.4);
-  }
-  :root[data-theme="light"] {
-    --bg: #f7f6f3; --panel: #ffffff; --border: #ddd8d0; --text: #1c1a17; --muted: #6b6459;
-    --accent: #b3184f; --accent-soft: #f6e3ea; --amber: #a5690a; --amber-soft: #f6ecd9;
-    --green: #2c7a4b; --green-soft: #e2f2e8; --grey: #8a8478; --grey-soft: #ece9e3;
-    --code-bg: #efeae2; --link: #7a1240; --shadow: 0 1px 3px rgba(0,0,0,0.08);
-  }
-  * { box-sizing: border-box; }
-  body {
-    background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    line-height: 1.5; max-width: 1000px; margin: 0 auto; padding: 24px 20px 120px;
-  }
-  h1, h2, h3 { line-height: 1.25; }
-  h2 { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 42px; }
-  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
-  pre code { background: none; padding: 0; }
-  a { color: var(--link); }
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px 18px; margin: 14px 0; box-shadow: var(--shadow);
-  }
-  .header-card { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline; }
-  .header-card .title { font-size: 1.4rem; font-weight: 700; flex-basis: 100%; }
-  .meta { font-size: 0.85rem; color: var(--muted); }
-  .meta b { color: var(--text); }
-  .chip {
-    display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
-    text-transform: uppercase; letter-spacing: 0.03em;
-  }
-  .chip.draft { background: var(--amber-soft); color: var(--amber); }
-  .chip.pending { background: var(--grey-soft); color: var(--grey); }
-  .chip.resolved { background: var(--green-soft); color: var(--green); }
-  .banner {
-    background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px;
-    padding: 10px 14px; font-size: 0.9rem; margin: 16px 0;
-  }
-  .diagram-wrap { position: relative; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); margin: 14px 0; }
-  .diagram-hint { font-size: 0.75rem; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--border); }
-  .diagram-controls { position: absolute; top: 6px; right: 8px; z-index: 5; display: flex; gap: 6px; }
-  .diagram-controls button {
-    font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--panel); color: var(--text); cursor: pointer;
-  }
-  .diagram-container { height: 480px; overflow: hidden; }
-  pre.mermaid { margin: 0; }
-  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 0.9rem; }
-  th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
-  th { background: var(--grey-soft); }
-  details {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; padding: 4px 14px;
-  }
-  details[open] { padding-bottom: 12px; }
-  summary { cursor: pointer; padding: 10px 0; font-weight: 600; display: flex; gap: 10px; align-items: center; }
-  summary .status { margin-left: auto; }
-  .body-text { font-size: 0.92rem; }
-  textarea.section-feedback {
-    width: 100%; min-height: 54px; margin-top: 8px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text); font-family: inherit; font-size: 0.85rem; padding: 6px 8px;
-  }
-  .oq-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
-  .oq-card select {
-    border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 3px 6px; font-size: 0.82rem;
-  }
-  .knob-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 12px; }
-  .knob { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-  .knob .name { font-weight: 700; font-size: 0.88rem; }
-  .knob .type { color: var(--muted); font-size: 0.78rem; }
-  footer.feedback-bar {
-    position: fixed; bottom: 0; left: 0; right: 0; background: var(--panel); border-top: 1px solid var(--border);
-    padding: 10px 20px; display: flex; gap: 10px; align-items: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.08); z-index: 20;
-  }
-  footer.feedback-bar textarea {
-    flex: 1; min-height: 34px; max-height: 90px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text); font-family: inherit; padding: 6px 8px; font-size: 0.85rem;
-  }
-  footer.feedback-bar button {
-    background: var(--accent); color: white; border: none; border-radius: 7px; padding: 9px 14px;
-    font-weight: 600; cursor: pointer; font-size: 0.85rem; white-space: nowrap;
-  }
-  .toast {
-    position: fixed; bottom: 64px; right: 20px; background: var(--text); color: var(--bg);
-    padding: 8px 14px; border-radius: 8px; font-size: 0.82rem; opacity: 0; transition: opacity 0.25s; z-index: 30;
-  }
-  .toast.show { opacity: 0.95; }
-  .fs-active .diagram-container { position: fixed; inset: 0; height: 100vh; z-index: 100; background: var(--panel); }
-  .review-verdict-revise { color: var(--amber); font-weight: 700; }
-  .resp {
-    background: var(--accent-soft); border: 1px solid var(--accent); border-left: 4px solid var(--accent);
-    border-radius: 8px; padding: 12px 16px; margin: 14px 0;
-  }
-  .resp-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--accent); margin-bottom: 6px; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px 22px 90px; background:var(--bg); color:var(--ink);
+         font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+         max-width:1180px; margin-inline:auto; }
+  h1 { font-size:1.5rem; line-height:1.3; margin:0 0 4px; }
+  h2 { font-size:1.12rem; margin:34px 0 12px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+  h3 { font-size:1rem; margin:20px 0 8px; }
+  code { background:var(--code); padding:1px 5px; border-radius:4px; font-size:0.87em;
+         font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  pre code { background:none; padding:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:14px 0; }
+  .header-card { border-left:4px solid var(--accent); }
+  .meta { font-size:0.85rem; color:var(--muted); margin:3px 0; }
+  .body-text { margin:8px 0; }
+  table { border-collapse:collapse; width:100%; font-size:0.88rem; margin:10px 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  th { background:var(--code); font-weight:600; }
+  details { background:var(--panel); border:1px solid var(--line); border-radius:9px; margin:9px 0; padding:0; }
+  details > summary { cursor:pointer; padding:11px 15px; font-weight:600; list-style:none; }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary::before { content:"\25B8"; display:inline-block; width:15px; color:var(--muted); }
+  details[open] > summary::before { content:"\25BE"; }
+  details > div.inner { padding:2px 15px 15px 30px; }
+  .chip { display:inline-block; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:20px;
+          text-transform:uppercase; letter-spacing:0.04em; margin-left:7px; vertical-align:middle; }
+  .chip-done { background:var(--green-soft); color:var(--green); }
+  .chip-pending { background:var(--amber-soft); color:var(--amber); }
+  .chip-blocked { background:var(--rose-soft); color:var(--rose); }
+  .chip-new { background:var(--accent-soft); color:var(--accent); }
+  .chip-changed { background:var(--amber-soft); color:var(--amber); }
+  .diagram-container { position:relative; height:520px; overflow:hidden; border:1px solid var(--line);
+                       border-radius:9px; background:var(--panel); margin:10px 0; }
+  .diagram-container pre.mermaid { margin:0; height:100%; }
+  .diag-controls { position:absolute; top:8px; right:8px; z-index:5; display:flex; gap:6px; }
+  .diag-controls button { font-size:0.72rem; padding:4px 9px; border:1px solid var(--line);
+                          background:var(--panel); color:var(--ink); border-radius:5px; cursor:pointer; }
+  .diag-hint { position:absolute; bottom:7px; left:11px; z-index:5; font-size:0.7rem; color:var(--muted); }
+  .fs-active .diagram-container { position:fixed; inset:0; height:100vh; z-index:100; background:var(--panel); }
+  textarea { width:100%; min-height:66px; margin-top:8px; padding:8px; border:1px solid var(--line);
+             border-radius:6px; background:var(--bg); color:var(--ink); font:inherit; font-size:0.87rem; resize:vertical; }
+  select { padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); font:inherit; }
+  .fb-label { font-size:0.73rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-top:12px; }
+  .resp { background:var(--accent-soft); border:1px solid var(--accent); border-left:4px solid var(--accent);
+          border-radius:8px; padding:12px 16px; margin:14px 0; }
+  .resp-label { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em;
+                color:var(--accent); margin-bottom:6px; }
+  .banner { background:var(--amber-soft); border:1px solid var(--amber); border-radius:9px;
+            padding:12px 16px; margin:14px 0; font-size:0.9rem; }
+  .warn { background:var(--rose-soft); border:1px solid var(--rose); border-left:4px solid var(--rose);
+          border-radius:8px; padding:12px 16px; margin:12px 0; }
+  .changebar { position:sticky; top:0; z-index:50; background:var(--panel); border:1px solid var(--line);
+               border-radius:9px; padding:9px 14px; margin:12px 0; display:flex; gap:14px; align-items:center;
+               flex-wrap:wrap; font-size:0.84rem; }
+  .changebar button { font-size:0.78rem; padding:4px 10px; border:1px solid var(--line); background:var(--bg);
+                      color:var(--ink); border-radius:5px; cursor:pointer; }
+  .recede { opacity:0.5; }
+  body.changes-only details:not([data-changed]) { display:none; }
+  .change-note { font-size:0.83rem; color:var(--accent); background:var(--accent-soft);
+                 border-radius:6px; padding:6px 10px; margin:0 0 10px; }
+  #copybar { position:fixed; bottom:0; left:0; right:0; background:var(--panel); border-top:1px solid var(--line);
+             padding:10px 20px; display:flex; gap:12px; align-items:center; z-index:60; }
+  #copybar button { font-size:0.86rem; font-weight:600; padding:8px 16px; border:1px solid var(--accent);
+                    background:var(--accent); color:#fff; border-radius:6px; cursor:pointer; }
+  .toast { position:fixed; bottom:66px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+           padding:9px 18px; border-radius:7px; font-size:0.85rem; opacity:0; transition:opacity .25s; z-index:70; }
+  .toast.show { opacity:0.95; }
+  ul { padding-left:22px; } li { margin:5px 0; }
 </style>
 
 <div class="card header-card">
-  <div class="title">papertrail-optimizer-requirements</div>
-  <span class="chip draft">Status: Draft</span>
-  <span class="chip pending">Reviewed: No</span>
-  <div class="meta"><b>Repo:</b> paper-trail (personal, PolyForm-NC)</div>
-  <div class="meta"><b>Branch:</b> sarol</div>
-  <div class="meta"><b>Source:</b> <code>docs/plans/papertrail-optimizer-requirements.md</code></div>
-  <div class="meta"><b>SHA-256:</b> <code id="sha-display">7423438aeafe</code>…</div>
-  <div class="meta"><b>Generated:</b> 2026-07-20 · <b>cross-repo status refreshed</b> 2026-09-01</div>
+  <h1>papertrail-optimizer-requirements</h1>
+  <div class="meta">Pin <code>program-v0</code>, author the optimizer-prompt, and spec paper-trail as consumer #3 of <code>agentic-label-opt</code></div>
+  <div class="meta"><b>Status:</b> Draft &middot; <b>Reviewed:</b> No &middot; 9 open questions</div>
+  <div class="meta"><b>Repo:</b> paper-trail (personal, PolyForm-NC, <b>public</b>) &middot; <b>Branch:</b> <code>sarol</code></div>
+  <div class="meta"><b>Source:</b> <code>docs/plans/papertrail-optimizer-requirements.md</code> (268 lines)</div>
+  <div class="meta"><b>SHA-256:</b> <code id="sha-display">9e078632a462</code>&hellip;</div>
+  <div class="meta"><b>Generated:</b> 2026-09-01</div>
 </div>
 
-<div class="resp" data-section="resp-sequencing">
-  <div class="resp-label">Claude — re: your feedback question</div>
-  <p class="body-text"><b>Q: MedVAL is consumer #4 — should we wait on more agentic-label-opt/rad-eval maturity before working on this plan in isolation? Is the handoff/IO contract clear enough?</b></p>
-  <p class="body-text"><b>Refreshed 2026-09-01 against the real repos.</b> The July answer said the engine was "not yet battle-tested against a real consumer" — that is no longer true. <code>agentic-label-opt</code> is <code>main</code> @ <code>6d621ac</code> (2026-08-24), and two consumers have run real adapters against it: <b>rad-eval</b> landed Phase B/C plus the Docker cutover and ran one armed end-to-end iteration through Vertex on 2026-08-05 (<code>program-v0 → program-v1</code>, micro-F1 0.375, $4.13), and <b>MedVAL</b> (consumer #4) took its Part B/C VM readback GREEN on all four steps. The contract held: 50 commits past this plan's pin (<code>5973dbc407e9</code>), <code>schemas.py</code> moved +10/−2 and <code>loop.py</code> +42/−7, all additive, and every field Part C1 names is still present and unrenamed. Two landings since even moved <i>toward</i> this consumer — the <code>"open"</code> network policy (the third egress point the umbrella plan named for paper-trail) and <code>EditAgentMounts.editable_files</code>, whose own docstring reads "5 for paper-trail's Markdown globset." <b>Revised tiering:</b> Part A zero-risk, Part B low-risk, Part C now low-to-moderate — re-pin <code>5973dbc407e9</code> → <code>6d621ac</code> and build. Full answer in the plan's Goal section ("Sequencing — is this safe to build in isolation?").</p>
+<div class="changebar" id="changebar">
+  <b>Since you last reviewed</b>
+  <span id="change-counts"></span>
+  <button id="btn-only">Show changed only</button>
+  <button id="btn-prev">&uarr; Prev</button>
+  <button id="btn-next">&darr; Next</button>
+  <span class="meta" id="baseline-note"></span>
 </div>
 
-<div class="banner" id="first-review-banner">
-  <b>⚠ STALE — the source plan has moved substantially past this rendering, including a reversed decision.</b>
-  Body rendered against <code>7423438aeafe</code>; the markdown is now <code>c9aeec4f56c8</code>. The SHA above is
-  deliberately left un-bumped so the next <code>/explain-plan</code> regeneration diffs against the last reviewed
-  state. <b>Most important divergence:</b> this page still shows OQ1 resolved as "mainline + a new scorer-side
-  collapse" and names <code>collapse_native_to_sarol3.py</code>, <b>both of which are obsolete</b> — that file was
-  deleted and OQ1 was reversed on 2026-09-01 to the <b>Sarol 9-class rubric variant</b>, because the native collapse
-  left 17 of the IRRELEVANT bucket's 34 gold instances structurally unreachable. Scoring now lives in
-  <code>score_sarol3.py</code> and the frontier scalar is 3-way macro-F1. Also not rendered: Part A4 (reference
-  closure + the unpinned paperclip-CLI hole), Part C4 (six engine-contract blockers), the fixed
-  <code>output_vocabulary</code> contract, and OQ1/2/3 resolutions. <b>Read the markdown; regenerate with
-  <code>/explain-plan</code> before any visual review.</b>
-</div>
+<div class="card" id="change-summary"></div>
 
 <h2>TL;DR</h2>
 <div class="card body-text">
-  Paper-trail becomes <b>consumer #3</b> of the shared <code>agentic-label-opt</code> optimization engine (rad-eval = #1, crc-extraction-agent = #2) — the first fully external, non-VISTA consumer. The plan pins <code>program-v0</code> (paper-trail's optimizable prompt bundle), ports the <code>sarol</code> branch's substantial paused prior-art forward into the engine's <code>context/*.md</code> shape, and enumerates the per-iteration release / mistake-corpus / sealed-split contracts the engine's <code>TaskAdapter</code> will implement. The crux open call is <b>which adjudicator to optimize</b> (mainline's shipped prompt vs. the paused Sarol-specific variant) — recommended: mainline, with a new scorer-side collapse. Everything runs locally; no PHI, no VM handoff.
+  paper-trail becomes <b>consumer #3</b> of the shared <code>agentic-label-opt</code> optimization engine (rad-eval #1, crc #2, MedVAL #4) &mdash; the first fully external one. The optimized program is <b>pure Markdown</b>: four dispatch prompts plus three contract files, with no code in the loop at all. It is scored against the Sarol&nbsp;2024 citation-integrity benchmark.
+  <p class="body-text">Two decisions dominate the current shape. <b>The program emits Sarol's own 9-class vocabulary</b> rather than paper-trail's native 11-way enum, because bridging the two with a collapse left 17 gold instances structurally unpredictable. And <b>the native taxonomy is being retired outright</b> &mdash; git-trace showed it landed unsourced in a single commit three days before the repo's literature review, while Sarol's is human-annotated with reported &kappa;. That retirement lands on <code>main</code> only after this optimizer work finishes.</p>
+  <p class="body-text">Part A is done: <code>program-v0</code> is frozen and self-verifying. Part B is unblocked. Part C is specified but gated on three open questions.</p>
 </div>
 
 <h2>Review history</h2>
 <table>
-  <tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>Key findings surfaced</th><th>Applied to plan</th></tr>
-  <tr>
-    <td>1</td>
-    <td>Codex (<code>/review-plan</code>)</td>
-    <td class="review-verdict-revise">Revise</td>
-    <td>Missing <code>Reference:</code> header; <code>sarol</code> worktree lacks the <code>src/</code> tree the plan assumes (git-verified real gap); no consolidated Files-to-create section; release-payload field naming loose; several findings already addressed elsewhere in the plan and dismissed with cited evidence</td>
-    <td>7 findings applied directly; 1 modularity call raised to Phil (kept as-is); 9 dismissed, rationale logged in <a href="reviews/papertrail-optimizer-requirements-feedback.md">reviews/papertrail-optimizer-requirements-feedback.md</a></td>
-  </tr>
+<tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>Key findings surfaced</th><th>Applied</th></tr>
+<tr><td>1</td><td>Codex (2026-07-20)</td><td>Revise</td><td><code>sarol</code> worktree lacks the <code>src/</code> tree the plan assumed</td><td>Yes &mdash; Part A3</td></tr>
+<tr><td>1b</td><td>Fresh Claude (2026-07-20)</td><td>Revise</td><td>Second-reviewer pass, same round</td><td>Yes</td></tr>
+<tr><td>&mdash;</td><td><b>Phil (2026-09-01)</b></td><td><b>Pivot</b></td><td>OQ1 reversed to the Sarol-rubric variant after the collapse proved non-injective</td><td>Yes &mdash; A2 rewritten</td></tr>
+<tr><td>&mdash;</td><td><b>Phil (2026-09-01)</b></td><td><b>Pivot</b></td><td>Native taxonomy retired; "if not sarol, then remove"</td><td>Yes &mdash; A2, Landing</td></tr>
+<tr><td>2</td><td>Codex (2026-09-01)</td><td><b>Blocked</b> &rarr; applied</td><td>Two-source manifest is not an engine materialization contract; Sarol verdicts fail the frozen native validator; paperclip pin unenforceable</td><td>Yes &mdash; A4, C5, OQ6&ndash;9</td></tr>
 </table>
 
-<h2>Repo map</h2>
-<div class="diagram-wrap" id="dw-repomap">
-  <div class="diagram-hint">scroll to zoom • drag to pan</div>
-  <div class="diagram-controls"><button data-reset="dw-repomap">Reset</button><button data-fullscreen="dw-repomap">Fullscreen</button></div>
-  <div class="diagram-container">
+<h2>Repo map &mdash; where this sits</h2>
+<div class="diagram-container" data-diag="repo">
+  <div class="diag-controls"><button data-act="reset">Reset</button><button data-act="fs">Fullscreen</button></div>
+  <div class="diag-hint">scroll to zoom &bull; drag to pan</div>
 <pre class="mermaid">
 flowchart LR
-  subgraph ptRepo["paper-trail repo"]
-    ptMain["main<br/>src/ tree, paperclip-first"]
-    ptSarol["sarol branch<br/>this plan lives here"]
+  subgraph ext["External, outside this repo"]
+    sarolBench["Sarol 2024 benchmark<br/>2141 train, 316 val, 606 test<br/>gold lives OUTSIDE the repo tree"]
+    engine["agentic-label-opt engine<br/>main at 6d621ac"]
+    pcli["paperclip CLI v0.5.11<br/>unpinned external reference"]
   end
-  subgraph crcRepo["crc-extraction-agent repo, VISTA"]
-    engPlan["agentic-label-opt<br/>engine-extraction plan"]
-    crcPlan["crc-optimizer-requirements.md<br/>consumer #2 spec"]
+  subgraph mainline["paper-trail main, fixed runner code"]
+    orch["src/commands/paper-trail.md<br/>orchestrator, 694 lines"]
+    gclaim["src/commands/ground-claim.md<br/>per-claim workflow"]
   end
-  radEval["rad-eval repo<br/>consumer #1, engine origin"]
-  pkg["agentic-label-opt package<br/>engine Phase 0, not yet built"]
-
-  ptSarol -->|"this plan: consumer #3 spec"| engPlan
-  crcPlan -.->|"sibling pattern this plan mirrors"| ptSarol
-  crcRepo -->|"consumer #2"| engPlan
-  radEval -.->|"consumer #1, origin"| engPlan
-  engPlan -.->|"Phase 0 extracts, future"| pkg
-  ptMain -.->|"repo-organization / paperclip-first landed since sarol paused"| ptSarol
-
+  subgraph prog["program-v0, the optimized program, 7 files"]
+    extP["extractor-dispatch-paperclip.md"]
+    extD["extractor-dispatch-pdf.md"]
+    adjS["adjudicator-dispatch-sarol.md<br/>Sarol 9-class"]
+    verP["verifier-dispatch.md"]
+    schemaN["verdict_schema.md<br/>structure contract"]
+    schemaS["verdict_schema_sarol.md<br/>the 9-class enum"]
+    verR["verifier_results.md"]
+  end
+  subgraph optim["Optimizer code, to build"]
+    adapt["adapter.py<br/>4 TaskAdapter protocols"]
+    disp["dispatcher.py<br/>drives run_loop, owns cost bound"]
+    valS["validate_sarol.py<br/>rubric_variant gate"]
+  end
+  subgraph scoring["Scoring, exists"]
+    pv["parse_verdict.py<br/>SAROL_9 + to_3way + gold boundary"]
+    sc["score_sarol3.py<br/>metrics layer"]
+  end
+  sarolBench -->|"gold labels"| pv
+  pv -->|"imported by"| sc
+  orch -->|"dispatches"| extP
+  orch -->|"dispatches"| adjS
+  prog -->|"frozen into"| adapt
+  pcli -.->|"loaded at run time, pinned in manifest"| extP
+  adapt -->|"implements protocols for"| engine
+  disp -->|"calls run_loop"| engine
+  adapt -->|"exit validation"| valS
+  sc -->|"primary_metric"| adapt
   subgraph legend["Color legend"]
-    lgThis["THIS PLAN, consumer #3 (rose)"]
-    lgSibling["Sibling repo / plan, referenced (amber)"]
-    lgFuture["Not yet built (grey dashed)"]
+    lg1["THIS PLAN builds (cyan)"]
+    lg2["Frozen as program-v0 (green)"]
+    lg3["Existing, reused (amber)"]
+    lg4["External, untouched (grey)"]
   end
-
-  class ptSarol thisplan
-  class crcPlan,crcRepo,engPlan,ptMain sibling
-  class radEval,pkg future
-  class lgThis thisplan
-  class lgSibling sibling
-  class lgFuture future
-
-  classDef thisplan fill:#ff6fa0,stroke:#7a1240,stroke-width:3px,color:#1c1a17
-  classDef sibling fill:#f6ecd9,stroke:#a5690a,stroke-width:1.5px,color:#1c1a17
-  classDef future fill:#ece9e3,stroke:#8a8478,stroke-width:1px,color:#4a473f,stroke-dasharray: 4 3
+  classDef add fill:#22d3ee,stroke:#0e7490,stroke-width:3px,color:#06373f
+  classDef frozen fill:#bbf7d0,stroke:#2f7d4f,color:#14351f
+  classDef reuse fill:#fde68a,stroke:#b7791f,color:#3d2c07
+  classDef extn fill:#e5e7eb,stroke:#9ca3af,color:#374151,stroke-dasharray:4 3
+  class adapt,disp,valS,lg1 add
+  class extP,extD,adjS,verP,schemaN,schemaS,verR,lg2 frozen
+  class pv,sc,lg3 reuse
+  class sarolBench,engine,pcli,orch,gclaim,lg4 extn
 </pre>
-  </div>
 </div>
 
-<h2>Blast radius</h2>
-<div class="diagram-wrap" id="dw-blast">
-  <div class="diagram-hint">scroll to zoom • drag to pan</div>
-  <div class="diagram-controls"><button data-reset="dw-blast">Reset</button><button data-fullscreen="dw-blast">Fullscreen</button></div>
-  <div class="diagram-container">
+<h2>Blast radius &mdash; the engine seam in detail</h2>
+<div class="diagram-container" data-diag="blast">
+  <div class="diag-controls"><button data-act="reset">Reset</button><button data-act="fs">Fullscreen</button></div>
+  <div class="diag-hint">scroll to zoom &bull; drag to pan</div>
 <pre class="mermaid">
 flowchart LR
-  subgraph mainSrc["main branch, source of truth"]
-    extPaperclip["src/prompts/extractor-dispatch-paperclip.md"]
-    extPdf["src/prompts/extractor-dispatch-pdf.md"]
-    adjMain["src/prompts/adjudicator-dispatch.md"]
-    verifierPrompt["src/prompts/verifier-dispatch.md"]
-    schemaFile["src/specs/verdict_schema.md, v1.1"]
+  subgraph freeze["Freeze, Part A, done"]
+    mfst["manifest.json<br/>7 entries, combined_hash be2eb807<br/>TWO source refs"]
+    srcM["5 files from main at 4997e067"]
+    srcS["2 files from sarol at ba7a5308"]
   end
-
-  subgraph sarolNew["sarol branch, new artifacts, this plan"]
-    manifest["program-v0/manifest.json"]
-    collapse["scripts/collapse_native_to_sarol3.py"]
-    playbook["optimizer/context/playbook.md"]
-    taskscoring["optimizer/context/task-and-scoring.md"]
-    releaseformat["optimizer/context/release-format.md"]
-    hotprompt["optimizer/prompt/, agent_instructions"]
-    metalearn["optimizer/meta-learnings.md"]
+  subgraph gapNode["Open decision, OQ6"]
+    recon["Reconstruction pre-step<br/>compose 2 refs into ONE tree<br/>materialize takes a single version_sha"]
   end
-
-  subgraph sarolExisting["sarol branch, existing, reused"]
-    parseverdict["scripts/parse_verdict.py<br/>PRICING + estimate_cost_usd only"]
-    sarolAdj["prompts/adjudicator-dispatch-sarol.md<br/>A2 alternate path"]
+  subgraph engineAPI["Engine surfaces consumed"]
+    matz["materialize()"]
+    rloop["run_loop()"]
+    pol["PolicyConfig<br/>repo_root must be pre-resolved"]
   end
-
-  subgraph engineExternal["engine repo, landed schema, not authored here"]
-    programManifestType["ProgramManifest / RunInputs / RunArtifacts types"]
-    releasePayloadType["ReleasePayload contract"]
+  subgraph adapterBox["adapter.py, Part C"]
+    psto["ProgramStore"]
+    rnr["Runner<br/>nested claude -p, 3 sessions per claim"]
+    scr["Scorer<br/>must stash _split"]
+    rbld["ReleaseBuilder"]
   end
-
-  extPaperclip -->|"frozen via git show main colon path"| manifest
-  extPdf -->|"frozen via git show main colon path"| manifest
-  adjMain -->|"frozen, if A2 resolves to mainline"| manifest
-  verifierPrompt -->|"frozen via git show main colon path"| manifest
-  schemaFile -->|"threaded as task_config"| taskscoring
-
-  manifest -->|"EDIT scope"| hotprompt
-  playbook --> hotprompt
-  taskscoring --> hotprompt
-  releaseformat --> hotprompt
-  collapse -->|"scores"| releaseformat
-  parseverdict -->|"cost reused, single source of truth"| releaseformat
-  hotprompt -->|"populates"| releasePayloadType
-  manifest -.->|"typed per engine schemas.py, landed"| programManifestType
-  sarolAdj -.->|"A2 alternate, not the recommended path"| collapse
-
-  subgraph legend["Color legend"]
-    lgNew["New, this plan (rose)"]
-    lgExisting["Existing, reused (amber)"]
-    lgExternal["Owned by sibling engine plan (grey dashed)"]
+  subgraph outs["Per-iteration outputs"]
+    relT["ReleasePayloadTrain"]
+    relV["ReleasePayloadVal<br/>aggregate only, no per-claim gold"]
+    front["frontier: best-vs-current<br/>3-way macro-F1"]
   end
-
-  class manifest,collapse,playbook,taskscoring,releaseformat,hotprompt,metalearn newnode
-  class extPaperclip,extPdf,adjMain,verifierPrompt,schemaFile,parseverdict,sarolAdj existingnode
-  class programManifestType,releasePayloadType externalnode
-  class lgNew newnode
-  class lgExisting existingnode
-  class lgExternal externalnode
-
-  classDef newnode fill:#ff6fa0,stroke:#7a1240,stroke-width:2.5px,color:#1c1a17
-  classDef existingnode fill:#f6ecd9,stroke:#a5690a,stroke-width:1.5px,color:#1c1a17
-  classDef externalnode fill:#ece9e3,stroke:#8a8478,stroke-width:1px,color:#4a473f,stroke-dasharray: 4 3
+  srcM --> mfst
+  srcS --> mfst
+  mfst -->|"cannot feed engine directly"| recon
+  recon --> psto
+  psto --> matz
+  rnr -->|"RunArtifacts"| scr
+  scr -->|"ScoreResult"| rbld
+  rbld --> relT
+  rbld --> relV
+  scr --> front
+  rloop -->|"calls 3x per iteration"| rnr
+  pol -.->|"gates optimizer reads"| rnr
+  subgraph deferred["Deferred, not this plan"]
+    nativeAdopt["Adopt Sarol rubric on main<br/>after optimizer work"]
+  end
+  subgraph legend2["Color legend"]
+    m1["Built here (cyan)"]
+    m2["Done (green)"]
+    m3["Open decision (rose)"]
+    m4["Engine, external (grey)"]
+    m5["Deferred (dashed amber)"]
+  end
+  classDef add2 fill:#22d3ee,stroke:#0e7490,stroke-width:3px,color:#06373f
+  classDef done2 fill:#bbf7d0,stroke:#2f7d4f,color:#14351f
+  classDef open2 fill:#fecaca,stroke:#a33,stroke-width:3px,color:#4a1010
+  classDef ext2 fill:#e5e7eb,stroke:#9ca3af,color:#374151,stroke-dasharray:4 3
+  classDef defr fill:#fdf6e7,stroke:#b7791f,color:#3d2c07,stroke-dasharray:5 4
+  class psto,rnr,scr,rbld,m1 add2
+  class mfst,srcM,srcS,m2 done2
+  class recon,m3 open2
+  class matz,rloop,pol,relT,relV,front,m4 ext2
+  class nativeAdopt,m5 defr
 </pre>
-  </div>
 </div>
 
 <h2>Order of operations</h2>
-<div class="diagram-wrap" id="dw-order">
-  <div class="diagram-hint">scroll to zoom • drag to pan</div>
-  <div class="diagram-controls"><button data-reset="dw-order">Reset</button><button data-fullscreen="dw-order">Fullscreen</button></div>
-  <div class="diagram-container">
+<div class="diagram-container" data-diag="order">
+  <div class="diag-controls"><button data-act="reset">Reset</button><button data-act="fs">Fullscreen</button></div>
+  <div class="diag-hint">scroll to zoom &bull; drag to pan</div>
 <pre class="mermaid">
 flowchart TD
-  oq1{{"OQ1: adjudicator variant<br/>decision gate, Phil's call"}}
-  a3["A3: branch reconciliation<br/>freeze from main, not sarol ⏳ PENDING"]
-  a1a2["A1/A2: program-v0 freeze + tag ⏳ PENDING"]
-  b1["B1: context/ docs ⏳ PENDING"]
-  b2["B2: hot-path prompt ⏳ PENDING"]
-  b3["B3: continuity docs ⏳ PENDING"]
-  c1c2c3["C1/C2/C3: requirements enumeration ⏳ PENDING"]
-  vcost["Verify: cost/runtime preflight ⏳ PENDING"]
-  vcollapse["Verify: collapse-table checks, OQ2 ⏳ PENDING"]
-  vsmoke["Verify: adapter smoke, engine Phase 2c ⏳ PENDING"]
-  vbudget["Verify: budget invariant ⏳ PENDING"]
-  vscore["Verify: first real scoring run ⏳ PENDING"]
-  landing["Landing: Status to Completed ⏳ PENDING"]
-
-  oq1 -->|"resolves A2, gates freeze"| a3
-  a3 --> a1a2
-  a1a2 --> b1
-  b1 --> b2
-  b2 --> b3
-  b3 --> c1c2c3
-  c1c2c3 --> vcost
-  vcost --> vcollapse
-  vcollapse --> vsmoke
-  vsmoke --> vbudget
-  vbudget --> vscore
-  vscore --> landing
-
-  class oq1 gate
-  class a3,a1a2,b1,b2,b3,c1c2c3,vcost,vcollapse,vsmoke,vbudget,vscore,landing pending
-
-  classDef gate fill:#f6ecd9,stroke:#a5690a,stroke-width:2px,color:#1c1a17
-  classDef pending fill:#ece9e3,stroke:#8a8478,stroke-width:1px,color:#1c1a17
+  a1["Part A1/A2: choose the fileset<br/>Sarol 9-class variant"]
+  a4["Part A4: close the reference closure<br/>repair paths, pin paperclip CLI"]
+  afr["program-v0 frozen<br/>manifest self-verifying 7/7"]
+  oq6["OQ6: reconstruction into ONE tree<br/>tag it, or compose at run time"]
+  b1["Part B1: context docs<br/>playbook, task-and-scoring, release-format"]
+  b2["Part B2: hot-path prompt<br/>MUST state the 9-class enum"]
+  oq2b["OQ2 pass 2: hand-sample<br/>adjudicator judgement on dev split"]
+  c5["Part C5: Sarol exit validator<br/>3 fixtures"]
+  cad["Part C: adapter + dispatcher<br/>preflight, timeout, budget bound"]
+  smoke["Adapter smoke, EXACT verdicts"]
+  base["First real scoring run<br/>3-way macro-F1 baseline"]
+  defer["Deferred: adopt Sarol rubric on main"]
+  a1 --> a4 --> afr
+  afr --> oq6
+  afr --> b1 --> b2
+  oq6 -->|"blocks"| cad
+  c5 -->|"blocks"| smoke
+  b2 --> cad --> smoke --> base
+  oq2b -.-> base
+  base -.->|"then"| defer
+  subgraph legend3["Status legend"]
+    s1["Done (green)"]
+    s2["Ready to start (cyan)"]
+    s3["Blocked on a decision (rose)"]
+    s4["Deferred (dashed amber)"]
+  end
+  classDef dn fill:#bbf7d0,stroke:#2f7d4f,color:#14351f
+  classDef rdy fill:#22d3ee,stroke:#0e7490,stroke-width:3px,color:#06373f
+  classDef blk fill:#fecaca,stroke:#a33,stroke-width:3px,color:#4a1010
+  classDef dfr fill:#fdf6e7,stroke:#b7791f,color:#3d2c07,stroke-dasharray:5 4
+  class a1,a4,afr,s1 dn
+  class b1,b2,oq2b,c5,s2 rdy
+  class oq6,cad,smoke,base,s3 blk
+  class defer,s4 dfr
 </pre>
-  </div>
 </div>
 
-<h2>Knobs / contracts</h2>
-<div class="knob-grid">
-  <div class="knob">
-    <div class="name">A2 — adjudicator variant</div>
-    <div class="type">decision, not a runtime knob</div>
-    <p class="body-text">Mainline <code>adjudicator-dispatch.md</code> (native 12-value <code>overall_verdict</code>) vs. the paused Sarol-specific 9-class variant. Recommended: mainline + new scorer-side collapse. Phil's call — Open Question §1.</p>
-  </div>
-  <div class="knob">
-    <div class="name">Native → Sarol-3-way collapse</div>
-    <div class="type"><code>experiments/sarol-2024/scripts/collapse_native_to_sarol3.py</code> (proposed)</div>
-    <pre><code>CONFIRMED, CONFIRMED_WITH_MINOR      -> ACCURATE
-OVERSTATED_MILD, OVERSTATED,
-OVERGENERAL, PARTIALLY_SUPPORTED,
-UNSUPPORTED, CONTRADICTED,
-MISATTRIBUTED, INDIRECT_SOURCE       -> NOT_ACCURATE
-CITED_OUT_OF_CONTEXT                 -> IRRELEVANT
-AMBIGUOUS                            -> excluded (abstention)</code></pre>
-  </div>
-  <div class="knob">
-    <div class="name">primary_metric / breakdown naming</div>
-    <div class="type">C1 release payload field</div>
-    <p class="body-text"><code>primary_metric</code> = abstention-adjusted macro-F1. <code>breakdown.macro_f1_misses_included</code> = the comparable-to-published-baselines variant. Both required whenever a MultiVerS/GPT-4 comparison is drawn.</p>
-  </div>
-  <div class="knob">
-    <div class="name">Per-claim budget ceiling (D45)</div>
-    <div class="type">1.5&times; v1 default, model-call-count primary</div>
-    <p class="body-text">Ported from <code>sarol</code>'s existing design. Verification requires confirming it's actually wired into whichever dispatcher script the engine's <code>Runner</code> calls, not just cited as reused.</p>
-  </div>
-  <div class="knob">
-    <div class="name">Graduated-N ramp</div>
-    <div class="type">10 / 25 / 50 / 100 / 200 / 2,141 (full TRAIN)</div>
-    <p class="body-text">Nested TRAIN subsets already locked (D13/D24). A per-landmark cost estimate is now a Verification gate before any run beyond the single-claim smoke test.</p>
-  </div>
+<h2>Contracts &mdash; what is fixed and what the optimizer may edit</h2>
+<div class="card">
+  <h3>The output vocabulary is a fixed contract</h3>
+  <p class="body-text">The optimizer may edit everything that makes the rubric <i>good</i> &mdash; class definitions, boundaries, worked examples, tie-breaks, the worst-wins ordering, and all four dispatch prompts. It may <b>not</b> change the set of emittable labels, because the benchmark defines it and the Scorer consumes it.</p>
+  <pre><code>ACCURATE  OVERSIMPLIFY  NOT_SUBSTANTIATE  CONTRADICT  MISQUOTE
+INDIRECT  INDIRECT_NOT_REVIEW  ETIQUETTE  IRRELEVANT</code></pre>
+  <p class="body-text">A label outside the enum is an <b>ordinary invalid output</b> &mdash; charged as a miss against its gold class and counted in <code>error_class_counts</code>. Never a crash, never silently re-bucketed. A bad edit simply scores worse and the loop rejects it, exactly as it handles every other bad edit.</p>
 </div>
 
-<h2>Steps</h2>
+<div class="warn">
+  <b>&#9888; The frontier scalar is 3-way MACRO-F1. Micro-F1 is a trap.</b>
+  <p class="body-text">For single-label multiclass, micro-P = micro-R = micro-F1 = accuracy, and ACCURATE is 78.1% of gold &mdash; so a do-nothing program that always answers <code>ACCURATE</code> scores <b>micro-F1 0.781</b>, beating both published baselines (MultiVerS 0.59, GPT-4 0.65) while doing nothing, and rewarding precisely the behaviour a citation-integrity tool must not have. The same program scores <b>macro-F1 0.292</b>, which is the correct verdict on it. <code>score_sarol3.py --selftest</code> pins both numbers so this cannot be re-adopted silently.</p>
+</div>
 
-<details data-section="part-a1">
-  <summary>Part A1 — the <code>program-v0</code> fileset <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>Pure Markdown — no code in the optimized loop. Five artifacts: two extractor prompts (paperclip/pdf), one adjudicator prompt (variant = A2), one verifier prompt, one rubric spec. All committed on <code>main</code>, all PHI-clean (public benchmark). Structurally the simplest freeze of the three engine consumers — plain globset, no scratch-first <code>/phi-vet</code>, no hash-only reconstruction.</p>
-    <p><b>Files:</b> <code>src/prompts/extractor-dispatch-{paperclip,pdf}.md</code>, <code>src/prompts/adjudicator-dispatch.md</code> (or the Sarol variant), <code>src/prompts/verifier-dispatch.md</code>, <code>src/specs/verdict_schema.md</code>.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part A1..."></textarea>
+<div class="card">
+  <h3><code>program-v0</code> &mdash; 7 entries, two source refs</h3>
+  <table>
+  <tr><th>File</th><th>Role</th><th>Source</th><th>Contract file</th></tr>
+  <tr><td><code>extractor-dispatch-paperclip.md</code></td><td>Pass 1, in-corpus</td><td><code>main</code></td><td></td></tr>
+  <tr><td><code>extractor-dispatch-pdf.md</code></td><td>Pass 1, fetched PDF</td><td><code>main</code></td><td></td></tr>
+  <tr><td><code>adjudicator-dispatch-sarol.md</code></td><td>Pass 2, Sarol 9-class</td><td><code>sarol</code></td><td></td></tr>
+  <tr><td><code>verifier-dispatch.md</code></td><td>Pass 3, attestation</td><td><code>main</code></td><td></td></tr>
+  <tr><td><code>verdict_schema.md</code></td><td>output structure</td><td><code>main</code></td><td>yes</td></tr>
+  <tr><td><code>verdict_schema_sarol.md</code></td><td>the 9-class enum</td><td><code>sarol</code></td><td>yes</td></tr>
+  <tr><td><code>verifier_results.md</code></td><td>attestation contract</td><td><code>main</code></td><td>yes</td></tr>
+  </table>
+  <p class="body-text"><code>combined_hash</code> <code>be2eb8070ae1</code>, verified 7/7 on write. Recomputable from the JSON alone &mdash; the recipe is recorded in the file. <code>runtime_pins.paperclip_cli</code> pins <code>paperclip, version 0.5.11</code>, because the extractor loads its real command reference at run time from that CLI, outside the frozen fileset.</p>
+</div>
+
+<h2>Parts</h2>
+
+<details data-section="part-a" open>
+  <summary>Part A &mdash; Pin <code>program-v0</code> <span class="chip chip-done">Done</span></summary>
+  <div class="inner">
+    <p class="body-text"><b>A1/A2 fileset</b> &mdash; the Sarol 9-class variant, resolved after one reversal. The mainline-plus-collapse alternative was rejected because the bridge is <b>not injective</b>: <code>INDIRECT_SOURCE</code> covers both <code>INDIRECT</code> (&rarr; NOT_ACCURATE) and <code>INDIRECT_NOT_REVIEW</code> (&rarr; IRRELEVANT), leaving <b>17 of IRRELEVANT's 34</b> gold instances structurally unpredictable and 16 more ambiguous &mdash; capping that class at ~50% recall while it carried a third of the macro-F1.</p>
+    <p class="body-text"><b>A4 closure</b> &mdash; the fileset was not closed over its own <code>spec_root</code> references. Computed mechanically, not spot-checked: all 7 members resolve; three referenced paths sit outside and are excluded with recorded reasons. The Sarol variant's four stale <code>.claude/</code> paths were repaired first, of which only one (<code>:80</code>, the output-schema pointer) was operational.</p>
+    <p class="body-text"><b>The paperclip hole</b> &mdash; the real command reference loads at run time via <code>paperclip skill</code>, so it lives outside the freeze and two runs of one program version could diverge with no manifest diff. Closed by a version pin, enforced by a Runner preflight that returns <code>infra_error</code> before any claim dispatches.</p>
+    <div class="fb-label">Feedback on Part A</div>
+    <textarea class="section-feedback" data-fb="part-a" placeholder="Notes on Part A..."></textarea>
   </div>
 </details>
 
-<details data-section="part-a2">
-  <summary>Part A2 — adjudicator variant, the crux decision <span class="status chip pending">PENDING — Phil's call</span></summary>
-  <div class="body-text">
-    <p>Two real, unmeasured candidates. Recommendation: freeze mainline, build a new native&rarr;Sarol-3-way collapse as scorer-side logic (not a competing prompt) — keeps <code>program-v0</code> to one prompt, mirrors how the engine plan required crc's <code>event_f1_at_W</code> to be net-new scorer code rather than a straight port.</p>
-    <p>New collapse module proposed as a sibling to <code>parse_verdict.py</code>: <code>experiments/sarol-2024/scripts/collapse_native_to_sarol3.py</code>. If Phil picks the Sarol-variant path instead, Part B1's <code>task-and-scoring.md</code> and Part C1's <code>error_class_counts</code> naming need re-deriving against the existing 9-way rubric.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part A2..."></textarea>
+<details data-section="part-b">
+  <summary>Part B &mdash; Author the optimizer-prompt <span class="chip chip-pending">Ready to start</span></summary>
+  <div class="inner">
+    <p class="body-text">Mostly porting forward what <code>sarol</code> already specified, not fresh authorship. Three context docs (<code>playbook.md</code>, <code>task-and-scoring.md</code>, <code>release-format.md</code>) plus the hot-path prompt.</p>
+    <p class="body-text"><b>New requirement:</b> B2 must state the 9-class enum explicitly, since the output vocabulary is a fixed contract the Scorer depends on.</p>
+    <p class="body-text">Reusable <code>sarol</code> decisions: agent-only with no HITL (D22), dispatcher-as-script (D26), per-claim budget with model-call count primary (D45), round-trip sanity canary (D46).</p>
+    <div class="fb-label">Feedback on Part B</div>
+    <textarea class="section-feedback" data-fb="part-b" placeholder="Notes on Part B..."></textarea>
   </div>
 </details>
 
-<details data-section="part-a3" open>
-  <summary>Part A3 — branch reconciliation <span class="status chip pending">PENDING — confirmed gap</span></summary>
-  <div class="body-text">
-    <p><b>Git-verified 2026-07-20:</b> <code>sarol</code>'s checked-out worktree does <b>not</b> have the <code>src/</code> tree at all. <code>repo-organization</code> and <code>feature-paperclip-first-architecture</code> landed on <code>main</code> only. <code>sarol</code> still has the pre-restructure layout — real files at <code>.claude/prompts/{extractor-dispatch.md (single, pre-split), adjudicator-dispatch.md, verifier-dispatch.md}</code>, pre-1.1 schema. On <code>main</code>, <code>.claude/prompts</code> etc. are symlinks into <code>src/</code>.</p>
-    <p><b>Action:</b> freeze <code>program-v0</code> by reading the A1 files directly from <code>main</code> (<code>git show main:&lt;path&gt;</code>). Do not merge/rebase <code>sarol</code> onto <code>main</code>. Do not treat <code>sarol</code>'s existing single-file <code>extractor-dispatch.md</code> as a base — it's superseded, not a predecessor.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part A3..."></textarea>
-  </div>
-</details>
-
-<details data-section="part-b1">
-  <summary>Part B1 — <code>context/</code> reference docs <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>Mostly reconciling/porting forward what <code>sarol</code>'s paused plan-of-record already speclos, not fresh authorship. <code>playbook.md</code> reuses D22/D26/D27/D28 directly. <code>task-and-scoring.md</code> reuses the already-decided macro-F1-over-3-way-collapse frontier (D1/D36) plus <code>sarol</code>'s named error taxonomy (INDIRECT-detection, severity-under-commitment). <code>release-format.md</code> is the per-iteration data contract (Part C1).</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part B1..."></textarea>
-  </div>
-</details>
-
-<details data-section="part-b2">
-  <summary>Part B2 — hot-path prompt <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>The adapter's <code>agent_instructions</code>. EDIT = <code>program-v0</code> globset; READ = release + mistake-corpus sample + continuity docs; SEALED = Val/Test, already physically outside the repo tree — the strongest sealing guarantee of the three engine consumers. Reuses D45 (per-claim budget) and D46 (round-trip sanity canary) directly.</p>
-    <p><b>Unresolved cost risk:</b> 3 nested Claude-Code subagent sessions per claim, ramp goes to 2,141 claims. A per-landmark $ estimate is now a Verification gate (see Steps below) before any run beyond the smoke test.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part B2..."></textarea>
-  </div>
-</details>
-
-<details data-section="part-b3">
-  <summary>Part B3 — continuity docs <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p><code>sarol</code>'s <code>NEXT.md</code> + committed results table + analysis notebook already cover most of this. One genuine new file: a <code>meta-learnings.md</code>-equivalent (confirmed/pending/reverted fixes across iterations).</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part B3..."></textarea>
-  </div>
-</details>
-
-<details data-section="files-to-create">
-  <summary>Files to create <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>Consolidated table added during review — previously scattered across Parts A–C. See the plan doc for the full table (10 rows: manifest, collapse script, three context docs, hot-path prompt dir, meta-learnings, plus existing files reused/frozen).</p>
-    <textarea class="section-feedback" placeholder="Feedback on Files to create..."></textarea>
-  </div>
-</details>
-
-<details data-section="part-c1">
-  <summary>Part C1 — the per-iteration release <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p><code>metrics</code> (<code>primary_metric</code> + <code>breakdown</code>), <code>error_class_counts</code>, <code>followups</code>, <code>frontier</code>, <code>budget</code> (reuses <code>parse_verdict.py</code>'s <code>PRICING</code>/<code>estimate_cost_usd</code> as single source of truth), <code>prior_change_note</code>, on-demand mistake corpus, Val aggregate-only.</p>
-    <p><b>Corrected against the real, landed schema</b> (<code>agentic-label-opt/engine/schemas.py</code> — Phase 0 has landed, private repo): <code>ScoreResult.primary_metric</code> is already its own typed <code>PrimaryMetric(name, value, higher_is_better)</code>; <code>breakdown</code> is opaque as designed; release payloads split into <code>ReleasePayloadTrain</code>/<code>ReleasePayloadVal</code> (plain frozen dataclasses, not a single <code>extra="forbid"</code> type). <code>RunArtifacts.sub_invocation_count</code> is literally commented in the engine's code as "cost dimension for agentic Runners (e.g. paper-trail)."</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part C1..."></textarea>
-  </div>
-</details>
-
-<details data-section="part-c2">
-  <summary>Part C2 — the mistake corpus <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>Per-claim adjudicator reasoning + extractor evidence quotes + verifier bounce history. No PHI — sealing reason here is leakage-of-gold-labels, not privacy. TRAIN-side mistakes fully open to the optimizer (D24 Tier 1).</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part C2..."></textarea>
-  </div>
-</details>
-
-<details data-section="part-c3">
-  <summary>Part C3 — sealed TRAIN/VAL/TEST split <span class="status chip pending">PENDING — mostly confirms, doesn't design</span></summary>
-  <div class="body-text">
-    <p>Already fully specified by <code>sarol</code>'s D13/D24: graduated-N nested TRAIN, fixed VAL (316), sealed TEST (606, unsealed once via <code>--confirm-unseal</code>). Data lives outside the repo by construction — the strongest sealing guarantee of the three consumers. One open item: reconciling the split's provenance format against current claim/citekey identifiers.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part C3..."></textarea>
+<details data-section="part-c">
+  <summary>Part C &mdash; The <code>TaskAdapter</code> substance <span class="chip chip-blocked">Gated on OQ6/8/9</span></summary>
+  <div class="inner">
+    <p class="body-text"><b>C1 release</b> &mdash; <code>primary_metric</code> is 3-way macro-F1; <code>micro_f1</code> reported only. Cost accounting comes from real metered spend (<code>claude_wrapper.py:244</code> reads <code>total_cost_usd</code> off the session stream), <b>not</b> from <code>parse_verdict.py</code>'s <code>PRICING</code> table, which silently contributes $0 for unlisted models and reads a ledger no committed prompt actually writes.</p>
+    <p class="body-text"><b>C2/C3</b> &mdash; mistake corpus is an adapter-owned opaque blob; the split is already fully specified, with gold physically outside the repo tree, which is the strongest sealing guarantee of the three consumers.</p>
+    <p class="body-text"><b>C5 exit validation</b> &mdash; newly identified as a missing deliverable: the frozen native schema requires every verdict to be a valid <i>native</i> enum member, so a correct Sarol run would be rejected as <code>SCHEMA_VIOLATION</code>. The Runner owns a <code>rubric_variant</code>-gated validator with three fixtures.</p>
+    <div class="fb-label">Feedback on Part C</div>
+    <textarea class="section-feedback" data-fb="part-c" placeholder="Notes on Part C..."></textarea>
   </div>
 </details>
 
 <details data-section="part-d">
-  <summary>Part D — interface feedback to the engine plan <span class="status chip resolved">Mostly confirms, one NEW item</span></summary>
-  <div class="body-text">
-    <p>Items 1–4 confirm existing engine-plan patterns (pure-prompt <code>ProgramManifest</code>, nested-subagent <code>Runner</code> shape, <code>task_config</code> carrying the rubric, opaque <code>MistakeCorpus</code>). Item 5 is genuinely new: <b>warm-start needs a third taxonomy case</b> — <code>program-v0</code> is a real working pipeline never scored against gold, so iteration 1 must first establish a baseline empirically, then characterize it. Non-blocking documentation refinement to the engine plan.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Part D..."></textarea>
+  <summary>Part D &mdash; Interface feedback to the engine plan <span class="chip chip-done">Settled</span></summary>
+  <div class="inner">
+    <p class="body-text">Items 1&ndash;4 and 6 confirm the engine seam needs no change. Item 5 is genuinely new: <b>warm-start needs a third taxonomy case</b>. rad-eval starts from empty; crc characterizes an already-measured baseline; paper-trail is neither &mdash; a real working pipeline that has <b>never been scored against any gold label</b>, so iteration 1 must first establish a baseline before it can characterize one. Documentation refinement only, no contract change forced.</p>
+    <div class="fb-label">Feedback on Part D</div>
+    <textarea class="section-feedback" data-fb="part-d" placeholder="Notes on Part D..."></textarea>
   </div>
 </details>
 
-<details data-section="verification">
-  <summary>Verification (local machine, no PHI, no VM handoff) <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>Seven gates, in order: A3 branch reconciliation &rarr; A1/A2 freeze &rarr; cost/runtime preflight (new) &rarr; collapse-table frequency cross-check + hand-sample spot-check (OQ2) &rarr; adapter smoke (exact-match gate) &rarr; budget invariant check &rarr; first real scoring run (the actual v0 baseline, reported against MultiVerS 0.59/0.52 and GPT-4 0.65/0.45 with the abstention caveat stated).</p>
-    <textarea class="section-feedback" placeholder="Feedback on Verification..."></textarea>
+<h2>Gotchas &mdash; engine-contract blockers</h2>
+
+<details data-section="c4-blockers">
+  <summary>The six Part C blockers, all consumer-side <span class="chip chip-new">New</span></summary>
+  <div class="inner">
+    <ol>
+      <li><b>Runner cost is neither accounted nor enforced, and the Runner is called <i>three</i> times per iteration, not twice</b> &mdash; TRAIN, VAL, then a post-commit probe on VAL again. Calls 2 and 3 are redundant across iteration boundaries. B2's cost table counts TRAIN only, so it is short by a fixed <b>1,896 sessions per iteration</b>. Adopt crc's consumer-side pattern; no engine change requested.</li>
+      <li><b>No timeout exists anywhere in <code>loop.py</code></b>, and TRAIN/VAL <code>status</code> is never checked, with no try/except around those calls. A partial agentic failure scores as a quietly degraded metric or kills the run.</li>
+      <li><b><code>_split</code> is never injected</b> despite the engine's own comment saying it is. The Scorer must stash it, or the ReleaseBuilder returns a train payload for the VAL call and hits <code>LoopStop</code>.</li>
+      <li><b><code>PolicyConfig.repo_root</code> must be pre-resolved</b> or every read is denied. On macOS <code>/tmp</code> resolves to <code>/private/tmp</code>; the failure is silent and ends in a <code>LoopPause</code> the engine documents as "a calibration signal, not a failure."</li>
+      <li><b>The materialized tree is not a runnable Claude Code project</b> &mdash; <code>.claude/*</code> are git symlinks that materialize as regular files containing their target string, the orchestrator is deliberately excluded, and the tree is chmod'd read-only. Also: hook config is read from inside the materialized tree, so it will not exist unless it is a manifest entry. crc hit this independently.</li>
+      <li><b>Call-shape asymmetry</b> &mdash; Runner and Scorer are called positionally; ReleaseBuilder and the agent keyword-only. Uniform signatures in either style break one pair.</li>
+    </ol>
+    <p class="body-text"><b>Verified good news:</b> the audit chain is cross-process safe under nesting, and materialize/versioning are genuinely content-agnostic, so a pure-Markdown program is fine.</p>
+    <div class="fb-label">Feedback</div>
+    <textarea class="section-feedback" data-fb="c4-blockers" placeholder="Notes..."></textarea>
   </div>
 </details>
 
-<details data-section="landing">
-  <summary>Landing &amp; cleanup <span class="status chip pending">PENDING</span></summary>
-  <div class="body-text">
-    <p>Lands on <code>sarol</code> directly (already checked out, no separate feature branch). Landing gate: local <code>plan-check</code> skill at minimum, optionally <code>/review-plan</code> (this pass). Cross-repo gating signal is precise: the engine plan's Phase 2c is satisfied once this plan's <code>**Status.**</code> header reads <code>Completed</code>. Cleanup updates <code>docs/plans/NEXT.md</code> (sarol-branch) and <code>CLAUDE.md</code>'s doc-landscape list.</p>
-    <textarea class="section-feedback" placeholder="Feedback on Landing..."></textarea>
+<details data-section="engine-asks">
+  <summary>Two things that would need an engine change &mdash; deliberately not requested <span class="chip chip-new">New</span></summary>
+  <div class="inner">
+    <p class="body-text"><b>Cost-aware budget stops</b> &mdash; superseded by crc's consumer-side pattern, which Phil resolved 2026-08-27 as explicitly NO engine edit.</p>
+    <p class="body-text"><b>An actor dimension on the audit ledger</b> &mdash; paper-trail is the first consumer whose <i>Runner</i> also spawns hooked Claude Code sessions, and ledger rows carry no session or actor field, so a nested session's legitimate reads are indistinguishable from the optimizer's and would be judged against the optimizer's policy. Related: the <code>final_eval</code> tripwire scans the whole ledger rather than the current iteration, so one TEST unseal permanently poisons every later run reusing that file.</p>
+    <div class="fb-label">Feedback</div>
+    <textarea class="section-feedback" data-fb="engine-asks" placeholder="Notes..."></textarea>
   </div>
 </details>
 
-<h2>Gotchas</h2>
-
-<details data-section="gotcha-branch-mismatch" open>
-  <summary>⚠️ <code>sarol</code> worktree lacks the <code>src/</code> tree entirely</summary>
-  <div class="body-text">
-    <p>Confirmed by direct git inspection during review, not just plan prose: <code>git ls-tree sarol -- src/prompts/</code> returns nothing; the same paths on <code>main</code> are populated (added by <code>repo-organization</code>, which also turned <code>.claude/prompts</code> etc. into symlinks pointing at <code>src/</code>). A fresh agent trying to open <code>src/prompts/extractor-dispatch-paperclip.md</code> on a naive <code>sarol</code> checkout will get a file-not-found. Part A3 now states the fix: freeze from <code>main</code> directly, never merge.</p>
-    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
+<details data-section="taxonomy">
+  <summary>The native taxonomy is being retired &mdash; provenance <span class="chip chip-new">New</span></summary>
+  <div class="inner">
+    <p class="body-text">Traced through git rather than inferred from missing docs: the <b>entire</b> native enum &mdash; all 11 sub-claim verdicts plus <code>CONFIRMED_WITH_MINOR</code> &mdash; appeared <b>fully formed in one commit</b> (<code>18b3832</code>, 2026-04-19, the commit that first created the schema). No incremental derivation, no per-value history, no design doc. The repo's literature review is dated <b>three days later</b> and never discusses the taxonomy.</p>
+    <p class="body-text">Sarol's 9 classes are human-annotated over 3,063 citation instances with reported Cohen's &kappa;. Between an invented taxonomy and a validated one with ground truth, the validated one wins &mdash; and adopting it collapses the experiment/product fork entirely.</p>
+    <div class="resp">
+      <div class="resp-label">Caveat worth your attention</div>
+      <p class="body-text">Provenance answers "was it derived?", not "is it load-bearing?" &mdash; and for one value the answer differs. <code>AMBIGUOUS</code> is not merely an enum member: it triggers <b>Phase 4 "Ambiguity triage"</b>, an entire orchestrator phase, with interactive resolution. By the same line this plan already draws (workflow states stay, taxonomy goes), it arguably sits on the <b>workflow</b> side and was misclassified. Severity has no comparable machinery, so the provenance argument stands unmodified there. This does not affect the optimizer &mdash; only the deferred <code>main</code> adoption. Carried as Open Question 7.</p>
+    </div>
+    <div class="fb-label">Feedback</div>
+    <textarea class="section-feedback" data-fb="taxonomy" placeholder="Notes..."></textarea>
   </div>
 </details>
 
-<details data-section="gotcha-d42-collision">
-  <summary>⚠️ "D42" decision-number collision in the source plan-of-record</summary>
-  <div class="body-text">
-    <p><code>experimental-plan-of-record.md</code> reuses the label "D42" for two different decisions (the <code>program.md</code>-equivalent optimizer doc, and a separate "Autoresearch direct-lifts adopted" decision). Flagged in Part B as a pre-existing collision in the source doc, not this plan's error — whoever maintains that log should renumber, but it doesn't block this plan.</p>
-    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
-  </div>
-</details>
-
-<details data-section="gotcha-abstention">
-  <summary>⚠️ Abstention (<code>AMBIGUOUS</code>) breaks direct baseline comparability</summary>
-  <div class="body-text">
-    <p>Sarol's own published 3-way collapse has no abstention concept. Excluding <code>AMBIGUOUS</code> makes the computed macro-F1 not directly comparable to MultiVerS/GPT-4 baselines unless abstentions are also scored as misses. Now pinned as two named fields: <code>primary_metric</code> (abstention-adjusted) and <code>breakdown.macro_f1_misses_included</code>.</p>
-    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
-  </div>
-</details>
-
-<details data-section="gotcha-no-migration">
-  <summary>⚠️ The new native collapse is not a migration of <code>parse_verdict.py</code>'s Sarol-9-class logic</summary>
-  <div class="body-text">
-    <p>Easy to misread Part A2 as "reuse the existing Sarol collapse for mainline output." It doesn't — <code>parse_verdict.py</code>'s 9-class collapse stays untouched for the Sarol-variant path; the recommended mainline path gets entirely new collapse code operating on the current 12-value <code>overall_verdict</code>.</p>
-    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
-  </div>
-</details>
-
-<details data-section="gotcha-cost">
-  <summary>⚠️ Cost/runtime risk is real and was previously unestimated</summary>
-  <div class="body-text">
-    <p>Each claim triggers 3 full nested Claude-Code subagent sessions; the ramp goes to 2,141 claims. Review added a Verification gate requiring a per-landmark $ estimate before any run beyond the single-claim smoke test — previously this was only prose ("needed before a real run"), not a gate.</p>
-    <textarea class="section-feedback" placeholder="Feedback..."></textarea>
-  </div>
-</details>
-
-<h2>Open questions</h2>
+<h2>Open Questions</h2>
 <div id="oq-panel"></div>
 
-<h2>Out of scope</h2>
-<div class="card body-text">
-  <ul>
-    <li>Phases 3–5 of <code>experimental-plan-of-record.md</code> (the paper-writing effort) — RESOLVED out of scope.</li>
-    <li>A full training curve across the graduated-N ramp — only a first real scoring run is required.</li>
-    <li>Fine-grained native <code>overall_verdict</code> evaluation as its own optimization frontier (reported breakdown only, unless OQ5 resolves otherwise).</li>
-    <li>Building the graduated-N split infrastructure or the Docker isolation substrate — both are engine-plan Phase 2c/3 work.</li>
-  </ul>
+<h2>Verification gates</h2>
+<div class="card">
+<table>
+<tr><th>Gate</th><th>Status</th></tr>
+<tr><td>A3 branch reconciliation</td><td><span class="chip chip-done">Done</span></td></tr>
+<tr><td><code>program-v0</code> freeze, hashes verify</td><td><span class="chip chip-done">Done 7/7</span></td></tr>
+<tr><td>OQ2 pass 1, collapse frequency cross-check</td><td><span class="chip chip-done">Ran, failed as designed, resolved</span></td></tr>
+<tr><td>OQ2 pass 2, hand-sample</td><td><span class="chip chip-pending">Owed</span></td></tr>
+<tr><td>Materialization smoke, all 7 files</td><td><span class="chip chip-blocked">Blocked on OQ6</span></td></tr>
+<tr><td>Sarol exit-validation fixtures</td><td><span class="chip chip-pending">Owed</span></td></tr>
+<tr><td>Cost preflight arithmetic, all 3 Runner calls</td><td><span class="chip chip-pending">Owed</span></td></tr>
+<tr><td>Finite-metric assertion, NaN guard</td><td><span class="chip chip-pending">Owed</span></td></tr>
+<tr><td>Coverage assertion</td><td><span class="chip chip-pending">Owed</span></td></tr>
+<tr><td>Paperclip mismatch negative control</td><td><span class="chip chip-pending">Owed</span></td></tr>
+<tr><td>Adapter smoke, EXACT verdicts</td><td><span class="chip chip-blocked">Blocked</span></td></tr>
+<tr><td>First real scoring run</td><td><span class="chip chip-blocked">Blocked</span></td></tr>
+</table>
+<p class="body-text"><b>Stop condition worth knowing:</b> macro-F1 near 0.292 with micro near 0.781 means the program has collapsed to always-ACCURATE. That is not a result.</p>
 </div>
 
-<footer class="feedback-bar">
-  <textarea id="global-feedback" placeholder="Overall feedback..."></textarea>
-  <button id="copy-feedback-btn">Copy feedback (0 pending)</button>
-</footer>
+<div id="copybar">
+  <textarea id="global-fb" style="flex:1;min-height:38px;margin:0" placeholder="Overall feedback on the plan..."></textarea>
+  <button id="copy-btn">Copy all feedback</button>
+</div>
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 <script>
-(function () {
-  const PLAN_STEM = "papertrail-optimizer-requirements";
-  const PLAN_SHA = "5a9c3fa503b0ad46ce798a805dde3a3120bfad5f25a1da3bfe5e6daa1fde3520";
-  const PLAN_PATH = "docs/plans/papertrail-optimizer-requirements.md";
-  const BRANCH = "sarol";
-  const LS_SHA_KEY = `explain-plan::${PLAN_STEM}::sha`;
-  const storedSha = localStorage.getItem(LS_SHA_KEY);
-  if (storedSha && storedSha !== PLAN_SHA) {
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith(`explain-plan::${PLAN_STEM}::`)) localStorage.removeItem(k);
-    });
+const PLAN_PATH = "docs/plans/papertrail-optimizer-requirements.md";
+const PLAN_SHA  = "9e078632a462b63f5fa14d861a05616eed4c45dc9fd704f257099e84a6bee6e6";
+const BRANCH    = "sarol";
+const STEM      = "papertrail-optimizer-requirements";
+
+const OQS = {
+ 1:{t:"Adjudicator variant",s:"resolved",b:"<b>RESOLVED after one reversal &mdash; the Sarol-rubric variant.</b> First resolved as mainline plus a scorer-side collapse; reversed the same day once OQ2 pass 1 showed the collapse leaves 17 of IRRELEVANT's 34 gold instances structurally unreachable, a cost not surfaced when the question was first put."},
+ 2:{t:"Collapse-table correctness",s:"resolved",b:"<b>Pass 1 RESOLVED &mdash; the check ran, FAILED, and changed the program rather than the metric.</b> Under the Sarol variant the collapse is <code>parse_verdict.py</code>'s existing <code>to_3way</code>, matching Sarol's published mapping exactly. <b>Pass 2 is still owed</b> and is now a check on the adjudicator's 9-class judgement, not on a mapping table."},
+ 3:{t:"Topology fixed vs free",s:"resolved",b:"<b>RESOLVED &mdash; fixed topology for v0</b>, despite crc resolving the same fork the other way under Topology Z. paper-trail has no measured baseline at all yet, so v0 buys a smaller blast radius first. A v0 scoping decision, not a rejection of topology-freedom."},
+ 4:{t:"Scope of this effort",s:"resolved",b:"<b>RESOLVED 2026-07-20 &mdash; scoped narrowly to engine-validation.</b> The primary value is the generalization insight; building the optimizer to a real curve is real, unstarted, secondary work. Phases 3&ndash;5 of the plan-of-record stay paused."},
+ 5:{t:"Permanent optimization objective",s:"pending",b:"<b>Partly answered.</b> Near-term frontier is settled: full 3-way macro-F1, with micro and 9-way per-class reported. What stays open is whether the fine-grained 9-way axis ever becomes a frontier &mdash; it has gold labels but no published baselines, since Sarol et al. abandoned that granularity because models could not learn it."},
+ 6:{t:"How is program-v0 reconstructed into one tree?",s:"pending",b:"<b>Codex round-2; supersedes the earlier 'should we tag it?' question.</b> The freeze spans two refs but <code>materialize()</code> takes a single <code>version_sha</code>. <b>(a)</b> create a real single-tree commit on <code>sarol</code> holding all seven files and tag it <code>program-v0</code>; or <b>(b)</b> keep the two-source manifest as provenance and have <code>ProgramStore</code> compose a temporary tree per call. (a) is simpler and makes it a real git object; (b) avoids duplicating <code>main</code>'s files onto a research branch. <b>No tag created pending this.</b>"},
+ 7:{t:"Does AMBIGUOUS survive as a workflow state?",s:"pending",b:"Part A2 retires it as taxonomy, but it triggers Phase 4 'Ambiguity triage' in the shipped orchestrator &mdash; which puts it on the same side of the line as PENDING/NEEDS_PDF/STALE, which this plan keeps. Removing it without replacement deletes that phase. Affects only the <b>deferred</b> main adoption, not the optimizer."},
+ 8:{t:"Can the optimizer edit a contract_file?",s:"pending",b:"A2 says the enum is fixed but the guidance is editable &mdash; yet both live in one file the manifest marks <code>contract_file=True</code>. Either split the enum into a separate non-editable contract, or state that <code>contract_file</code> governs presence-at-freeze rather than immutability."},
+ 9:{t:"Where does Sarol exit validation live?",s:"pending",b:"A new experiment-only validator, inside the Runner, or a branch-local relaxation of the mainline orchestrator's validation? The plan assumes the first; confirm before Part C."}
+};
+
+const CHANGES = {
+  round: "diff",
+  baseline: "the version you reviewed and gave feedback on: commit fd855ed, plan SHA a5bb0ce2d8c8 (2026-07-20). Everything since is new to you.",
+  sections: {
+    "part-a":      {s:"changed", note:"A2 reversed to the Sarol 9-class variant; A4 added (reference closure, paperclip pin) and Part A is no longer 'zero risk'."},
+    "part-b":      {s:"changed", note:"B2 gains a hard requirement: state the 9-class enum explicitly, since the vocabulary is now a fixed contract."},
+    "part-c":      {s:"changed", note:"C1's metric and cost source both corrected; C4 and C5 are entirely new."},
+    "part-d":      {s:"changed", note:"Item 3 re-derived for the Sarol variant (no native enum in the Scorer's path)."},
+    "c4-blockers": {s:"new",     note:"Six engine-contract blockers from a compatibility audit, all independently confirmed by Codex round-2."},
+    "engine-asks": {s:"new",     note:"Two engine changes explicitly NOT requested, with the reasoning."},
+    "taxonomy":    {s:"new",     note:"Native taxonomy retired on git-traced provenance; carries the AMBIGUOUS caveat Codex surfaced."}
+  },
+  oqs: {1:{s:"resolved"},2:{s:"resolved"},3:{s:"resolved"},5:{s:"changed"},6:{s:"new"},7:{s:"new"},8:{s:"new"},9:{s:"new"}}
+};
+
+// ---------- Open Questions panel ----------
+(function renderOQ(){
+  const host = document.getElementById('oq-panel');
+  let html = '';
+  for (const n of Object.keys(OQS)) {
+    const q = OQS[n];
+    const ch = CHANGES.oqs[n];
+    const chip = ch ? '<span class="chip chip-' + (ch.s==='new'?'new':'changed') + '">' + (ch.s==='new'?'new':ch.s) + '</span>' : '';
+    html += '<details data-section="oq-' + n + '" id="oq-' + n + '"' + (ch?' data-changed="1"':'') + '>'
+         +  '<summary>OQ' + n + ' &mdash; ' + q.t + chip + '</summary><div class="inner">'
+         +  '<p class="body-text">' + q.b + '</p>'
+         +  '<div class="fb-label">Status</div>'
+         +  '<select class="oq-status" data-oq="' + n + '">'
+         +  ['pending','resolved','deferred'].map(s => '<option value="'+s+'"'+(q.s===s?' selected':'')+'>'+s[0].toUpperCase()+s.slice(1)+'</option>').join('')
+         +  '</select>'
+         +  '<div class="fb-label">Notes</div>'
+         +  '<textarea class="section-feedback" data-fb="OQ' + n + '" placeholder="Your call on OQ' + n + '..."></textarea>'
+         +  '</div></details>';
   }
-  localStorage.setItem(LS_SHA_KEY, PLAN_SHA);
+  host.innerHTML = html;
+})();
 
-  function lsKey(id) { return `explain-plan::${PLAN_STEM}::${id}`; }
+// ---------- Mermaid + pan/zoom ----------
+mermaid.initialize({ startOnLoad:false, theme:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'default'), flowchart:{useMaxWidth:false} });
 
-  // ---- Section feedback textareas: persist + restore ----
-  document.querySelectorAll("[data-section]").forEach(el => {
-    const id = el.getAttribute("data-section");
-    const ta = el.querySelector("textarea.section-feedback");
-    if (!ta) return;
-    const key = lsKey(`section::${id}`);
-    const saved = localStorage.getItem(key);
-    if (saved) ta.value = saved;
-    ta.addEventListener("input", () => {
-      localStorage.setItem(key, ta.value);
-      updatePendingCount();
+async function initDiagrams(){
+  await mermaid.run({ querySelector:'pre.mermaid' });
+  document.querySelectorAll('.diagram-container').forEach(box => {
+    const svg = box.querySelector('svg');
+    if (!svg) return;
+    svg.removeAttribute('style');
+    svg.style.width = '100%'; svg.style.height = '100%';
+    const inst = svgPanZoom(svg, {zoomEnabled:true, controlIconsEnabled:false, fit:true, center:true, minZoom:0.3, maxZoom:8});
+    box._pz = inst;
+    box.querySelector('[data-act="reset"]').addEventListener('click', () => { inst.resize(); inst.fit(); inst.center(); });
+    box.querySelector('[data-act="fs"]').addEventListener('click', () => {
+      document.body.classList.toggle('fs-active');
+      box.classList.toggle('is-fs');
+      setTimeout(() => { inst.resize(); inst.fit(); inst.center(); }, 90);
     });
   });
-  document.querySelectorAll("details[data-section] textarea.section-feedback").forEach(ta => {});
-  // gotchas without wrapping [data-section] attr on the detail itself already covered above (they have data-section on <details>)
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('.diagram-container').forEach(b => { if (b._pz){ b._pz.resize(); b._pz.fit(); b._pz.center(); } });
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('fs-active')) {
+    document.body.classList.remove('fs-active');
+    document.querySelectorAll('.diagram-container').forEach(b => { b.classList.remove('is-fs'); if (b._pz){ b._pz.resize(); b._pz.fit(); b._pz.center(); } });
+  }
+});
 
-  const globalTa = document.getElementById("global-feedback");
-  const globalKey = lsKey("global");
-  const savedGlobal = localStorage.getItem(globalKey);
-  if (savedGlobal) globalTa.value = savedGlobal;
-  globalTa.addEventListener("input", () => {
-    localStorage.setItem(globalKey, globalTa.value);
-    updatePendingCount();
-  });
+// ---------- Change layer (runs AFTER all JS-rendered content exists) ----------
+function applyChangeLayer(){
+  document.getElementById('baseline-note').textContent = 'Baseline: ' + CHANGES.baseline;
+  let nNew = 0, nChanged = 0;
+  for (const [id, c] of Object.entries(CHANGES.sections)) {
+    const el = document.querySelector('details[data-section="' + id + '"]');
+    if (!el) { console.warn('ORPHAN_CHANGE', id); continue; }
+    el.setAttribute('data-changed', '1');
+    el.open = true;
+    const sum = el.querySelector('summary');
+    const chip = document.createElement('span');
+    chip.className = 'chip chip-' + (c.s === 'new' ? 'new' : 'changed');
+    chip.textContent = c.s === 'new' ? 'new' : 'changed';
+    sum.appendChild(chip);
+    const note = document.createElement('div');
+    note.className = 'change-note';
+    note.textContent = (c.s === 'new' ? 'New since your last review. ' : 'Changed since your last review. ') + c.note;
+    el.querySelector('.inner').prepend(note);
+    if (c.s === 'new') nNew++; else nChanged++;
+  }
+  for (const n of Object.keys(CHANGES.oqs)) {
+    const el = document.getElementById('oq-' + n);
+    if (!el) { console.warn('ORPHAN_CHANGE oq', n); continue; }
+    el.setAttribute('data-changed','1');
+    if (CHANGES.oqs[n].s === 'new') nNew++; else nChanged++;
+  }
+  document.querySelectorAll('details:not([data-changed])').forEach(d => d.classList.add('recede'));
+  document.getElementById('change-counts').innerHTML =
+    '<b>' + nNew + '</b> new &middot; <b>' + nChanged + '</b> changed';
+  document.getElementById('change-summary').innerHTML =
+    '<h3 style="margin-top:0">What moved since you last read this</h3>'
+    + '<ul>'
+    + '<li><b>OQ1 reversed</b> to the Sarol 9-class rubric variant &mdash; the mainline collapse left 17 gold instances structurally unreachable.</li>'
+    + '<li><b>The frontier metric settled at 3-way macro-F1</b>, after micro-F1 was proposed and rejected as gameable (a do-nothing program scores 0.781 on it).</li>'
+    + '<li><b>The native taxonomy is being retired</b> in favour of Sarol&apos;s, on git-traced provenance. Landing on <code>main</code> is deferred until the optimizer work finishes.</li>'
+    + '<li><b>Part A is no longer zero-risk</b> &mdash; A4 added the reference closure and the unpinned paperclip-CLI hole.</li>'
+    + '<li><b>Part C4 and C5 are new</b> &mdash; six engine-contract blockers, plus Sarol-aware exit validation without which the adapter smoke could not pass.</li>'
+    + '<li><b>Open questions grew 5 &rarr; 9.</b> Three are genuine decisions: OQ6 reconstruction, OQ7 <code>AMBIGUOUS</code>, OQ8 editable contract file.</li>'
+    + '</ul>';
+}
 
-  // ---- Open Questions panel ----
-  const OQS = [
-    { n: 1, status: "Pending", text: "Adjudicator variant (Part A2). Freeze mainline's adjudicator-dispatch.md + build a new Scorer-side native→Sarol-3-way collapse (recommended), or freeze the existing adjudicator-dispatch-sarol.md variant instead? This plan's most consequential open call." },
-    { n: 2, status: "Pending", text: "Collapse-table correctness. The native-11-way → Sarol-3-way mapping is a first-pass proposal, not checked against real scored examples yet. Worth a small manual spot-check against Sarol dev-split claims before locking release-format.md." },
-    { n: 3, status: "Pending", text: "Topology-fixed vs. topology-free program-v0 (engine plan's #18). Recommend fixed-topology for v0 (YAGNI, smaller blast radius), topology-freedom revisited once a v0 curve exists — but this is Phil's call; the paused plan-of-record intended the freer version." },
-    { n: 4, status: "Resolved", text: "RESOLVED 2026-07-20 (Phil, via /explain-plan feedback) — scoped narrowly to engine-validation. The primary value of Phase 2c is the generalization insight it already produced; actually building/running paper-trail's optimizer to a real curve is real, unstarted work, secondary to that insight. Phases 3–5 of experimental-plan-of-record.md stay paused." },
-    { n: 5, status: "Pending", text: "Is the 3-way collapse the permanent optimization objective, or just the near-term one? paper-tool-validation.md frames native-granularity evaluation as the headline experiment, while C1 pins the frontier scalar to the lossy 3-way collapse. Confirm: reported/breakdown only, or its own frontier metric once a v0 curve exists?" }
-  ];
-  const panel = document.getElementById("oq-panel");
-  OQS.forEach(oq => {
-    const card = document.createElement("div");
-    card.className = "oq-card";
-    card.id = `oq-${oq.n}`;
-    const statusKey = lsKey(`oq-status::${oq.n}`);
-    const notesKey = lsKey(`oq-notes::${oq.n}`);
-    const savedStatus = localStorage.getItem(statusKey) || oq.status;
-    const savedNotes = localStorage.getItem(notesKey) || "";
-    card.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-        <b>OQ${oq.n}</b>
-        <select data-oq="${oq.n}">
-          <option value="Pending"${savedStatus === "Pending" ? " selected" : ""}>Pending</option>
-          <option value="Resolved"${savedStatus === "Resolved" ? " selected" : ""}>Resolved</option>
-          <option value="Deferred"${savedStatus === "Deferred" ? " selected" : ""}>Deferred</option>
-        </select>
-      </div>
-      <p class="body-text">${oq.text}</p>
-      <textarea class="section-feedback" data-oq-notes="${oq.n}" placeholder="Notes on OQ${oq.n}...">${savedNotes}</textarea>
-    `;
-    panel.appendChild(card);
-    const sel = card.querySelector("select");
-    sel.addEventListener("change", () => {
-      localStorage.setItem(statusKey, sel.value);
-      updatePendingCount();
-    });
-    const notesTa = card.querySelector("textarea");
-    notesTa.addEventListener("input", () => {
-      localStorage.setItem(notesKey, notesTa.value);
-      updatePendingCount();
-    });
-  });
+// ---------- Toolbar ----------
+document.getElementById('btn-only').addEventListener('click', e => {
+  document.body.classList.toggle('changes-only');
+  e.target.textContent = document.body.classList.contains('changes-only') ? 'Show all' : 'Show changed only';
+});
+let ci = -1;
+function jump(d){
+  const els = [...document.querySelectorAll('details[data-changed]')];
+  if (!els.length) return;
+  ci = (ci + d + els.length) % els.length;
+  els[ci].open = true;
+  els[ci].scrollIntoView({behavior:'smooth', block:'center'});
+}
+document.getElementById('btn-next').addEventListener('click', () => jump(1));
+document.getElementById('btn-prev').addEventListener('click', () => jump(-1));
 
-  // ---- Mermaid + pan/zoom ----
-  mermaid.initialize({ startOnLoad: false, theme: "neutral", flowchart: { useMaxWidth: false } });
-  const instances = {};
-  mermaid.run({ querySelector: "pre.mermaid" }).then(() => {
-    document.querySelectorAll(".diagram-wrap").forEach(wrap => {
-      const svg = wrap.querySelector("svg");
-      if (!svg) return;
-      svg.removeAttribute("style");
-      svg.style.width = "100%";
-      svg.style.height = "100%";
-      try {
-        instances[wrap.id] = svgPanZoom(svg, { minZoom: 0.3, maxZoom: 8, fit: true, center: true, controlIconsEnabled: false });
-      } catch (e) { /* non-fatal */ }
-    });
+// ---------- localStorage persistence ----------
+const LSK = 'ptplan::' + STEM + '::';
+function saveKey(k, v){ try { localStorage.setItem(LSK + k, v); } catch(e){} }
+function loadAll(){
+  try {
+    if (localStorage.getItem(LSK + '__sha') !== PLAN_SHA) {
+      Object.keys(localStorage).filter(k => k.startsWith(LSK)).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem(LSK + '__sha', PLAN_SHA);
+      return;
+    }
+  } catch(e){ return; }
+  document.querySelectorAll('textarea[data-fb]').forEach(t => {
+    const v = localStorage.getItem(LSK + 'fb::' + t.dataset.fb); if (v) t.value = v;
   });
+  const g = localStorage.getItem(LSK + 'fb::__global'); if (g) document.getElementById('global-fb').value = g;
+  document.querySelectorAll('select.oq-status').forEach(s => {
+    const v = localStorage.getItem(LSK + 'oq::' + s.dataset.oq); if (v) s.value = v;
+  });
+}
+function wirePersist(){
+  document.querySelectorAll('textarea[data-fb]').forEach(t =>
+    t.addEventListener('input', () => { saveKey('fb::' + t.dataset.fb, t.value); badge(); }));
+  document.getElementById('global-fb').addEventListener('input', e => { saveKey('fb::__global', e.target.value); badge(); });
+  document.querySelectorAll('select.oq-status').forEach(s =>
+    s.addEventListener('change', () => { saveKey('oq::' + s.dataset.oq, s.value); badge(); }));
+}
+function badge(){
+  let n = 0;
+  document.querySelectorAll('textarea[data-fb]').forEach(t => { if (t.value.trim()) n++; });
+  if (document.getElementById('global-fb').value.trim()) n++;
+  document.getElementById('copy-btn').textContent = n ? 'Copy all feedback (' + n + ' pending)' : 'Copy all feedback';
+}
 
-  document.querySelectorAll("[data-reset]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const inst = instances[btn.getAttribute("data-reset")];
-      if (inst) { inst.reset(); inst.fit(); inst.center(); }
-    });
-  });
-  document.querySelectorAll("[data-fullscreen]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-fullscreen");
-      const wrap = document.getElementById(id);
-      wrap.classList.toggle("fs-active");
-      setTimeout(() => {
-        const inst = instances[id];
-        if (inst) { inst.resize(); inst.fit(); inst.center(); }
-      }, 60);
-    });
-  });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape") {
-      document.querySelectorAll(".diagram-wrap.fs-active").forEach(w => {
-        w.classList.remove("fs-active");
-        const inst = instances[w.id];
-        if (inst) setTimeout(() => { inst.resize(); inst.fit(); inst.center(); }, 60);
-      });
+// ---------- Clipboard export ----------
+document.getElementById('copy-btn').addEventListener('click', async () => {
+  let out = '# Resume: apply explain-plan feedback\n'
+          + 'Plan: ' + PLAN_PATH + ' · branch: ' + BRANCH + ' · plan-sha: ' + PLAN_SHA.slice(0,12) + '\n'
+          + '→ If you are picking this up in a fresh session, read the plan doc above (plus anything it points to) first. Then apply the feedback below.\n\n'
+          + '# Feedback on papertrail-optimizer-requirements\n\n';
+  document.querySelectorAll('textarea[data-fb]').forEach(t => {
+    if (!t.value.trim()) return;
+    const k = t.dataset.fb;
+    if (k.startsWith('OQ')) {
+      const n = k.slice(2);
+      const sel = document.querySelector('select.oq-status[data-oq="' + n + '"]');
+      out += '## ' + k + '\nStatus: ' + (sel ? sel.value : 'pending') + '\n' + t.value.trim() + '\n\n';
+    } else {
+      out += '## ' + k + '\n' + t.value.trim() + '\n\n';
     }
   });
-
-  // ---- Feedback export ----
-  function updatePendingCount() {
-    let count = 0;
-    document.querySelectorAll("textarea.section-feedback").forEach(ta => { if (ta.value.trim()) count++; });
-    if (globalTa.value.trim()) count++;
-    document.getElementById("copy-feedback-btn").textContent = `Copy feedback (${count} pending)`;
-  }
-  updatePendingCount();
-
-  function showToast(msg) {
-    const t = document.getElementById("toast");
-    t.textContent = msg;
-    t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 2200);
-  }
-
-  document.getElementById("copy-feedback-btn").addEventListener("click", () => {
-    let out = `# Resume: apply explain-plan feedback\n`;
-    out += `Plan: ${PLAN_PATH} · branch: ${BRANCH} · plan-sha: ${PLAN_SHA.slice(0, 12)}\n`;
-    out += `→ If you're picking this up in a fresh session, read the plan doc above (plus any related docs / memory it points to) first. Then apply the feedback below.\n\n`;
-    out += `# Feedback on ${PLAN_STEM}\n\n`;
-    document.querySelectorAll("[data-section]").forEach(el => {
-      const id = el.getAttribute("data-section");
-      const ta = el.querySelector("textarea.section-feedback");
-      if (ta && ta.value.trim()) out += `## ${id}\n${ta.value.trim()}\n\n`;
-    });
-    OQS.forEach(oq => {
-      const sel = document.querySelector(`select[data-oq="${oq.n}"]`);
-      const notes = document.querySelector(`textarea[data-oq-notes="${oq.n}"]`);
-      if (notes && notes.value.trim()) {
-        out += `## OQ${oq.n}\nStatus: ${sel.value}\n${notes.value.trim()}\n\n`;
-      }
-    });
-    if (globalTa.value.trim()) out += `## Overall\n${globalTa.value.trim()}\n\n`;
-    navigator.clipboard.writeText(out).then(() => showToast("Feedback copied — paste into Claude")).catch(() => showToast("Copy failed — select and copy manually"));
+  document.querySelectorAll('select.oq-status').forEach(s => {
+    const n = s.dataset.oq;
+    const ta = document.querySelector('textarea[data-fb="OQ' + n + '"]');
+    if ((!ta || !ta.value.trim()) && s.value !== OQS[n].s) out += '## OQ' + n + '\nStatus: ' + s.value + '\n\n';
   });
+  const g = document.getElementById('global-fb').value.trim();
+  if (g) out += '## Overall\n' + g + '\n\n';
+  try { await navigator.clipboard.writeText(out); toast('Feedback copied — paste into Claude'); }
+  catch(e){ toast('Copy failed — select and copy manually'); }
+});
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ---------- Boot: order matters (change layer AFTER OQ render) ----------
+(async function boot(){
+  await initDiagrams();
+  applyChangeLayer();   // OQ panel already rendered synchronously above
+  loadAll();
+  wirePersist();
+  badge();
 })();
 </script>
