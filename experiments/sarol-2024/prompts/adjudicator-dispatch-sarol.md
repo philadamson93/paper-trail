@@ -1,6 +1,6 @@
 # Phase 3 Pass 2 — Sarol-rubric verdict adjudicator dispatch (experiment variant)
 
-Literal prompt for the adjudicator subagent **when running the Sarol 2024 benchmark experiment**. Identical to `.claude/prompts/adjudicator-dispatch.md` except the rubric enum is Sarol's 9-class scheme and the rollup order follows Sarol's worst-wins ordering.
+Literal prompt for the adjudicator subagent **when running the Sarol 2024 benchmark experiment**. Identical to `src/prompts/adjudicator-dispatch.md` except the rubric enum is Sarol's 9-class scheme and the rollup order follows Sarol's worst-wins ordering.
 
 Design invariant (unchanged): the adjudicator never reads the source paper. Reads only the evidence JSON and the rubric.
 
@@ -18,7 +18,7 @@ You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment va
 - **claim-type hint:** `{{claim_type_hint.type}}` (confidence `{{claim_type_hint.confidence}}`)
 - **multi-cit context:** `{{multi_cit_context}}` — either `"single"` (the evaluated citation is the sole citation at this position) or `"grouped"` (the evaluated citation is one of a `[1,2,3]`-style cluster). When `"grouped"`, apply the multi-citation rule in the rubric: verify only the portion attributable to **this specific source**.
 - **evidence file (read-only):** `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json`
-- **rubric (read-only):** `experiments/sarol-2024/specs/verdict_schema_sarol.md`
+- **rubric (read-only):** `{{spec_root}}/experiments/sarol-2024/specs/verdict_schema_sarol.md`
 - **output path:** `{{run_output_dir}}/ledger/claims/{{claim_id}}.json`
 
 ### Required workflow
@@ -77,7 +77,7 @@ Provide a concrete `suggested_edit`. Generic ("clarify the claim") is rejected.
 
 ### Output contract
 
-Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json` conforming to `.claude/specs/verdict_schema.md` schema EXCEPT:
+Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json` conforming to `{{spec_root}}/src/specs/verdict_schema.md` schema EXCEPT:
 
 - `sub_claims[*].verdict` values come from the Sarol 9-class enum (not paper-trail native)
 - `overall_verdict` value comes from the Sarol 9-class enum
@@ -110,5 +110,5 @@ Exit after writing the verdict JSON. Final message: absolute path + one line lik
 ## Orchestrator notes (not sent to subagent)
 
 - Validate the exit JSON. `sub_claims[*].verdict` must be in the Sarol 9-class enum. `overall_verdict` same. `rubric_variant` must be exactly `"sarol_2024_9class"`.
-- Schema check: on the experiment branch, `.claude/specs/verdict_schema.md` validation is relaxed to accept either the native enum OR the Sarol enum, gated on `rubric_variant`. Main branch validator stays strict against native enum only.
+- Schema check: on the experiment branch, `src/specs/verdict_schema.md` validation is relaxed to accept either the native enum OR the Sarol enum, gated on `rubric_variant`. Main branch validator stays strict against native enum only.
 - Verifier downstream is unchanged — it spot-checks the extractor's evidence, not the adjudicator's verdict class.
