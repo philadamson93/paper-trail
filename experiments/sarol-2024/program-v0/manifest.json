@@ -1,0 +1,64 @@
+{
+  "program_version": "program-v0",
+  "frozen_at_utc": "2026-09-01",
+  "source_ref": {
+    "branch": "main",
+    "commit": "4997e067c3a74af5e7fdf4c6db56349dcd857c9e",
+    "note": "Files are read from `main` per Part A3; `sarol` has no src/ tree."
+  },
+  "combined_hash": "006c36dc46dbaa2deef7136e9ea540530749a2ea6fa35eecdcf53bdca15353a9",
+  "combined_hash_recipe": "sha256 over the concatenation, in ascending path order, of '<path>\\0<sha256>\\n' for every entry. Each entry sha256 is over the raw bytes of `git show <source_ref.commit>:<path>`.",
+  "entries": [
+    {
+      "path": "src/prompts/extractor-dispatch-paperclip.md",
+      "freeze_policy": "committed",
+      "contract_file": false,
+      "optional": false,
+      "sha256": "50d2bfa957a6a1e51c923484f214679f57807ed879bac5381c21efb9d8dacc81"
+    },
+    {
+      "path": "src/prompts/extractor-dispatch-pdf.md",
+      "freeze_policy": "committed",
+      "contract_file": false,
+      "optional": false,
+      "sha256": "393ca0e4a85a602bb47680b2f8e45ec997721a7b01be3870c0d1544a3328ff0e"
+    },
+    {
+      "path": "src/prompts/adjudicator-dispatch.md",
+      "freeze_policy": "committed",
+      "contract_file": false,
+      "optional": false,
+      "sha256": "de1f6eb09f2935bd9aa64228aa783f3886857e51eda1439385cb3ace5a285d1e"
+    },
+    {
+      "path": "src/prompts/verifier-dispatch.md",
+      "freeze_policy": "committed",
+      "contract_file": false,
+      "optional": false,
+      "sha256": "43c86c3bfd915f49ffb0d59b95d98577aab8a2ca6906053ae63f012def56122f"
+    },
+    {
+      "path": "src/specs/verdict_schema.md",
+      "freeze_policy": "committed",
+      "contract_file": true,
+      "optional": false,
+      "sha256": "6995c7ec0288e32666b918f5ad0accae6a4ecffa0e127d54e846425579a9a094"
+    },
+    {
+      "path": "src/specs/verifier_results.md",
+      "freeze_policy": "committed",
+      "contract_file": true,
+      "optional": false,
+      "sha256": "1656d1d206c6f28ee9fb9540a27035306f47ded2dee9740b8aee5d4b35535b53"
+    }
+  ],
+  "runtime_pins": {
+    "paperclip_cli": "paperclip, version 0.5.11",
+    "why": "The extractor prompt tells each subagent to load the paperclip command reference at run time via `paperclip skill`; the in-repo src/skills/paperclip/SKILL.md is a 10-line stub only. That reference is therefore OUTSIDE the frozen fileset, so without this pin two runs of the same program version could behave differently with no manifest diff. Assert this version before any scored run."
+  },
+  "deliberately_excluded": {
+    "src/commands/paper-trail.md": "orchestrator = fixed runner code, not editable program (Part A1)",
+    "src/specs/control_flow.md": "derived topology map; self-describes as 'the cross-cut, not the source'. Topology is fixed for v0 (OQ3)",
+    "src/skills/paperclip/SKILL.md": "10-line stub pointing at `paperclip skill`; pinned via runtime_pins instead"
+  }
+}

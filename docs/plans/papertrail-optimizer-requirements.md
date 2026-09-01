@@ -53,9 +53,10 @@ Risk tiering, updated:
 |---|---|---|---|---|
 | `src/prompts/extractor-dispatch-paperclip.md` | Pass-1 evidence extractor, in-corpus path | committed (`main`) | committed source | clean — no PHI ever (public papers) |
 | `src/prompts/extractor-dispatch-pdf.md` | Pass-1 evidence extractor, fetched-PDF path | committed (`main`) | committed source | clean |
-| `src/prompts/adjudicator-dispatch.md` **or** `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` | Pass-2 verdict adjudicator | committed — **variant = A2** | committed source | clean |
+| `src/prompts/adjudicator-dispatch.md` | Pass-2 verdict adjudicator | committed (`main`) — **mainline, per OQ1 resolved 2026-09-01** | committed source | clean |
 | `src/prompts/verifier-dispatch.md` | Pass-3 attestation verifier | committed (`main`) | committed source | clean |
-| `src/specs/verdict_schema.md` (+ `experiments/sarol-2024/specs/verdict_schema_sarol.md` if the Sarol variant is chosen) | the rubric — threaded to the Scorer as `task_config`, the same role crc's `task_definition.md`/`column_map.json` play | committed | committed source | clean |
+| `src/specs/verdict_schema.md` | the rubric — threaded to the Scorer as `task_config`, the same role crc's `task_definition.md`/`column_map.json` play | committed — **`contract_file=True`** | committed source | clean |
+| `src/specs/verifier_results.md` | Phase-3.5 attestation contract of record (verdict_impact semantics, flag-patch/bounce rules, two-bounce ceiling) — **added 2026-09-01 by the A4 closure**; same contract class as the rubric, and `verifier-dispatch.md` behaviour depends on it | committed — **`contract_file=True`** | committed source | clean |
 
 Everything else in the pipeline (the orchestrator `paper-trail.md`/`ground-claim.md`, ingest/render scripts, validators) is **fixed runner code, not editable program** — *unless* Part D's topology-freedom question is resolved the other way (see Open Questions §3). No PHI-clean-vs-regenerated tension exists here at all (unlike crc's `spec_*.json`): the benchmark is public, so every artifact above can simply be committed as-is. This makes paper-trail's `program-v0` freeze structurally the **simplest** of the three consumers — a plain globset freeze, no scratch-first `/phi-vet` step, no hash-only reconstruction contract.
 
@@ -107,6 +108,21 @@ Each needs a decision before the freeze: add it to the manifest, or fix the prom
 
 **Do not reuse one globset for both the manifest and the read policy.** They use different glob engines: the manifest matches with `fnmatch` (`schemas.py:130`, `materialize.py:70`) where `*` crosses `/`; the read policy matches with `PurePosixPath.match` (`policy.py:77`) where it does not and matching is right-anchored. The same string means different things in the two places — verified: `src/prompts/*.md` matches `src/prompts/sub/deep.md` under `fnmatch` but not under `pathlib.match`.
 
+
+**A4 RESOLVED 2026-09-01 — closure computed, fileset settled, manifest written.** The reference closure was computed mechanically over all five A1 files (every `src/…` path they mention, with or without the `{{spec_root}}` prefix) rather than spot-checked. Complete result — four referenced paths sat outside the fileset, and all four exist on `main`, so nothing is broken *today*; they break only once the tree is materialized elsewhere:
+
+| Referenced path | Referenced from | Disposition |
+|---|---|---|
+| `src/specs/verifier_results.md` | `verifier-dispatch.md:93` (bare) | **ADDED to the fileset**, `contract_file=True` — it is a contract of record (47 lines) in the same class as the rubric, and the verifier's behaviour depends on it |
+| `src/specs/control_flow.md` | `extractor-dispatch-paperclip.md:5` (bare) | **excluded** — a derived topology map that self-describes as "the cross-cut, not the source"; topology is fixed for v0 (OQ3) |
+| `src/commands/paper-trail.md` | `extractor-dispatch-paperclip.md:5` (bare) | **excluded** — the orchestrator, already declared fixed runner code in A1 |
+| `src/skills/paperclip/SKILL.md` | `extractor-dispatch-paperclip.md:7`, `:32`, `:102` | **excluded** — a 10-line stub; pinned via `runtime_pins` instead (below) |
+
+**The paperclip reproducibility hole is closed by a version pin, not by freezing the stub.** `program-v0`'s manifest records `paperclip_cli: "paperclip, version 0.5.11"` (the installed version, and the same one `extractor-dispatch-paperclip.md:102` already names) under a `runtime_pins` block, with the rationale inline: the real command reference is loaded at run time via `paperclip skill`, so it lives outside the frozen fileset and two runs of one program version could otherwise diverge with no manifest diff. **Assert this version before any scored run** — that assertion is owed by the Runner (Part C4 #2's preflight is the natural home).
+
+**The manifest is written and self-verifying:** `experiments/sarol-2024/program-v0/manifest.json` — 6 entries, `freeze_policy="committed"`, two `contract_file=True`, frozen from `main` @ `4997e067c3a7`, `combined_hash` `006c36dc46db…`. Each entry's `sha256` is over the raw bytes of `git show <commit>:<path>` and the combined hash is defined by a recipe recorded in the file itself, so any reader can recompute the whole thing from the JSON alone with no tooling — verified end-to-end on write (6/6 entries match, combined hash reproduces). The JSON's field names deliberately mirror the engine's `ManifestEntry`/`ProgramManifest` so Part C's `ProgramStore.manifest()` can construct from it directly; `runtime_pins` and `deliberately_excluded` are adapter-owned extras the engine never reads.
+
+**Still open before the freeze is final:** the two bare-relative references in the shipped prompts (`verifier-dispatch.md:93`, `extractor-dispatch-paperclip.md:5`) remain bare. For `verifier_results.md`, now in the fileset, that path must become `{{spec_root}}/src/specs/verifier_results.md` or it will not resolve in a materialized tree — **a one-line fix to a prompt on `main`, which is tool-feature work on a different branch, not `sarol` research work.** Tracked here, deliberately not done in this pass.
 ---
 
 ## Part B — Author the paper-trail optimizer-prompt
@@ -155,14 +171,14 @@ Consolidated from Parts A–C (this repo's own `docs/claude_ops.md` template exp
 
 | Path | New / existing | Purpose |
 |---|---|---|
-| `experiments/sarol-2024/program-v0/manifest.json` (proposed — not locked) | new | the frozen `program-v0` bundle's manifest + content hash (Part A1/A3) |
+| `experiments/sarol-2024/program-v0/manifest.json` | **written 2026-09-01** | the frozen `program-v0` bundle's manifest + content hashes + runtime pins (Part A1/A3/A4) |
 | `experiments/sarol-2024/scripts/collapse_native_to_sarol3.py` (proposed — not locked) | new | native `overall_verdict` → Sarol-3-way collapse (Part A2); sister to `parse_verdict.py` |
 | `experiments/sarol-2024/optimizer/context/playbook.md` | new | iteration procedure (Part B1) |
 | `experiments/sarol-2024/optimizer/context/task-and-scoring.md` | new | frontier scalar + error taxonomy (Part B1) |
 | `experiments/sarol-2024/optimizer/context/release-format.md` | new | per-iteration data contract (Part B1, C1) |
 | `experiments/sarol-2024/optimizer/prompt/` (filename TBD) | new | hot-path `agent_instructions` (Part B2) |
 | `experiments/sarol-2024/optimizer/meta-learnings.md` (proposed path — not locked) | new | confirmed/pending/reverted fixes across iterations (Part B3) |
-| `src/prompts/*`, `src/specs/verdict_schema.md` | existing (frozen from `main`, see A3) | `program-v0` fileset (Part A1) |
+| `src/prompts/*`, `src/specs/verdict_schema.md`, `src/specs/verifier_results.md` | existing (frozen from `main`, see A3/A4) | `program-v0` fileset (Part A1) |
 | `experiments/sarol-2024/scripts/parse_verdict.py` | existing (reused for `PRICING`/`estimate_cost_usd` only) | cost accounting (Part C1) |
 | `docs/plans/NEXT.md` (sarol-branch) | existing | status doc to update on completion (Landing & cleanup) |
 
