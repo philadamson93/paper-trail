@@ -4,9 +4,11 @@
 
 **Source:** Sarol, Schneider, Kilicoglu 2024, *"Assessing Citation Integrity in Biomedical Publications"* (Bioinformatics btae420), Table 1 (annotation scheme).
 
-## Verdict enum (9 classes)
+**The label set is not defined here.** The emittable labels and the 3-way collapse are a frozen contract in `verdict_enum_sarol.md` beside this file — that file is authoritative and is not editable. **This file is the editable half:** how to *choose* between those labels. Everything below — class definitions and boundaries, the worst-wins rollup order, multi-citation handling — is optimizer-editable, and improving it is the point of the optimization loop. What you may not do here is add, remove, or rename a label; the enum contract governs that, and the Scorer will charge an out-of-enum label as a miss.
 
-Per-sub-claim, the adjudicator picks exactly one:
+## Choosing among the 9 classes
+
+The adjudicator picks exactly one per sub-claim. The names below are the contract's; the guidance attached to each is this file's:
 
 - **ACCURATE** — cited paper directly supports the claim as stated.
 - **OVERSIMPLIFY** — source findings are oversimplified or overgeneralized in the citing claim. Narrower-in-source than claimed, or qualified-in-source but unqualified in claim.
@@ -36,13 +38,11 @@ When the citing sentence contains `<|multi_cit|>` — i.e., the evaluated citati
 
 When a citation is grouped ambiguously such that no sub-claim can clearly be attributed to a single source, prefer ETIQUETTE.
 
-## 3-way collapse (for Sarol's published metric)
+## 3-way collapse
 
-- **ACCURATE** → ACCURATE
-- **OVERSIMPLIFY / NOT_SUBSTANTIATE / CONTRADICT / MISQUOTE / INDIRECT** → NOT_ACCURATE
-- **ETIQUETTE / INDIRECT_NOT_REVIEW / IRRELEVANT** → IRRELEVANT
-
-The adapter computes both 9-way and 3-way scores from the same predictions.
+Moved to the enum contract (`verdict_enum_sarol.md`) — it is what the published metric is
+computed over, so it is fixed rather than tunable. Do not restate it here; a second copy is a
+second thing to drift.
 
 ## What this rubric does *not* have (vs paper-trail native)
 

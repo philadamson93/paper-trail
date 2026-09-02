@@ -18,12 +18,13 @@ You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment va
 - **claim-type hint:** `{{claim_type_hint.type}}` (confidence `{{claim_type_hint.confidence}}`)
 - **multi-cit context:** `{{multi_cit_context}}` — either `"single"` (the evaluated citation is the sole citation at this position) or `"grouped"` (the evaluated citation is one of a `[1,2,3]`-style cluster). When `"grouped"`, apply the multi-citation rule in the rubric: verify only the portion attributable to **this specific source**.
 - **evidence file (read-only):** `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json`
-- **rubric (read-only):** `{{spec_root}}/experiments/sarol-2024/specs/verdict_schema_sarol.md`
+- **enum contract (read-only):** `{{spec_root}}/experiments/sarol-2024/specs/verdict_enum_sarol.md` — the closed set of labels you may emit, and the only authority on it
+- **rubric (read-only):** `{{spec_root}}/experiments/sarol-2024/specs/verdict_schema_sarol.md` — how to choose among them
 - **output path:** `{{run_output_dir}}/ledger/claims/{{claim_id}}.json`
 
 ### Required workflow
 
-**1. Read the evidence file and the Sarol rubric.** Nothing else.
+**1. Read the evidence file, the enum contract, and the Sarol rubric.** Nothing else.
 
 **2. For each sub-claim, pick a verdict from Sarol's 9-class enum:**
 
@@ -110,5 +111,5 @@ Exit after writing the verdict JSON. Final message: absolute path + one line lik
 ## Orchestrator notes (not sent to subagent)
 
 - Validate the exit JSON. `sub_claims[*].verdict` must be in the Sarol 9-class enum. `overall_verdict` same. `rubric_variant` must be exactly `"sarol_2024_9class"`.
-- Schema check: on the experiment branch, `src/specs/verdict_schema.md` validation is relaxed to accept either the native enum OR the Sarol enum, gated on `rubric_variant`. Main branch validator stays strict against native enum only.
+- Schema check: exit validation is owned by `experiments/sarol-2024/optimizer/validate_sarol.py`, an experiment-only validator the Runner calls (Open Questions §9). Gated on `rubric_variant`: when it is `"sarol_2024_9class"`, verdicts are validated against the 9-class enum contract; mixed native/Sarol labels in one file are **rejected** rather than coerced. Nothing relaxes the shipped `src/specs/verdict_schema.md` validator — `main`'s stays strict against the native enum and is untouched by this experiment. (Earlier revisions of this file claimed validation "is relaxed on the experiment branch." That was never implemented and is not the design; corrected 2026-09-01.)
 - Verifier downstream is unchanged — it spot-checks the extractor's evidence, not the adjudicator's verdict class.
