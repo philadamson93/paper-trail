@@ -409,6 +409,52 @@ class OptimizerAgent:
         )
 
 
+class _FakeStore:
+    """Minimal stand-in for `SarolProgramStore` in the C6.9 negative control -- only `repo_root`
+    is read before the isolation check fires, so building a real store would be noise."""
+
+    def __init__(self, repo_root):
+        self.repo_root = pathlib.Path(repo_root)
+
+
+def _raises_valueerror(fn) -> bool:
+    try:
+        fn()
+    except ValueError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def val_isolation_problem(val_root, repo_root) -> str | None:
+    """Is the VAL output root readable by the optimizer? (C6.9). Returns a problem, or None.
+
+    The optimizer's session runs with cwd = ``repo_root`` and no ``--add-dir``, so its readable
+    scope is that tree. VAL is Tier 2 -- **scalar only** -- and the release builder already strips
+    VAL's breakdown down to the scalar plus completeness metadata. But stripping the *release* is
+    only half of it: if the VAL run manifest and its per-example outputs sit inside the repo, the
+    optimizer can simply open them and read the held-out set's per-claim behaviour directly,
+    bypassing the release boundary entirely.
+
+    So the boundary is a filesystem fact, not a payload convention, and this is what asserts it.
+    Note the earlier diagnosis in an draft of C6.9 -- that TRAIN and VAL "share one root separated
+    only by a subdirectory name" -- was wrong: ``RunInputs.batch_id`` already differs per split, so
+    the derived roots differ. The real and still-live requirement is the one checked here.
+    """
+    if val_root is None:
+        return None
+    val = pathlib.Path(val_root).resolve()
+    repo = pathlib.Path(repo_root).resolve()
+    if val == repo or repo in val.parents:
+        return (
+            f"VAL output root {val} is inside the optimizer's readable tree {repo}; "
+            "the held-out set's per-claim outputs would be directly readable, which defeats the "
+            "Tier 2 scalar-only boundary the release builder enforces on the payload"
+        )
+    return None
+
+
 def build_components(
     *,
     max_budget_usd: float,
@@ -423,6 +469,9 @@ def build_components(
     per_call_max_budget_usd: float = 2.0,
     agent_invoke=None,
     program_store: SarolProgramStore | None = None,
+    profile=None,
+    train_output_root: pathlib.Path | None = None,
+    val_output_root: pathlib.Path | None = None,
 ):
     """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
 
@@ -431,7 +480,18 @@ def build_components(
     unguarded agent was previously possible simply by forgetting.
     """
     store = program_store or SarolProgramStore()
-    cost_model = CostModel(per_session_usd=per_session_usd)
+    prof = profiles_mod.get(profile)
+    cost_model = CostModel.for_profile(prof, per_session_usd=per_session_usd)
+    # C6.9. Stated, not derived: `train_output_root` is where the per-claim mistake corpus lands
+    # and must be readable by the optimizer; `val_output_root` must not be.
+    roots = {}
+    if train_output_root is not None:
+        roots["train"] = pathlib.Path(train_output_root)
+    if val_output_root is not None:
+        roots["val"] = pathlib.Path(val_output_root)
+    leak = val_isolation_problem(val_output_root, store.repo_root)
+    if leak:
+        raise ValueError(f"VAL isolation (C6.9): {leak}")
     budget = BudgetGuard(max_budget_usd=max_budget_usd, cost_model=cost_model, train_n=train_n)
     runner = CachingRunner(
         adapter.SarolRunner(
@@ -442,6 +502,8 @@ def build_components(
             canary=canary,
             require_command=require_command,
             per_call_max_budget_usd=per_call_max_budget_usd,
+            profile=prof,
+            output_roots=roots,
         ),
         store,
         budget=budget,
@@ -454,7 +516,10 @@ def build_components(
     return {
         "program_store": store,
         "runner": runner,
-        "scorer": adapter.SarolScorer(gold_resolver=gold_resolver),
+        "scorer": adapter.SarolScorer(
+            gold_resolver=gold_resolver, mistakes_root=train_output_root
+        ),
+        "profile": prof,
         "release_builder": adapter.SarolReleaseBuilder(),
         "build_mistake_corpus": adapter.build_mistake_corpus,
         "agent": agent,
@@ -517,7 +582,18 @@ def run_optimization(
             input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train"
         ),
         val_inputs=RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val"),
-        task_config={"rubric_variant": adapter.validate_sarol.SAROL_VARIANT},
+        task_config={
+            "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
+            "profile": parts["profile"].name,
+        },
+        # C6.5: a resume whose profile differs from the recorded one must STOP, not silently
+        # continue a curve built from two different systems. The engine's frontier is a bare
+        # scalar and cannot notice this on its own.
+        hard_fields={
+            "profile": parts["profile"].name,
+            "retrieval_k": parts["profile"].retrieval_k,
+            "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
+        },
         materialize_root=pathlib.Path(materialize_root),
         build_mistake_corpus=parts["build_mistake_corpus"],
         current_tag=current_tag,
@@ -790,6 +866,32 @@ def _selftest() -> int:
         ("the cost table says which rung it is describing",
          "retrieval" in CostModel.for_profile("retrieval").render_table()),
     ]
+
+    # -- C6.9: the VAL boundary is a filesystem fact, not a payload convention ------------------
+    import tempfile as _tf
+
+    with _tf.TemporaryDirectory() as _repo, _tf.TemporaryDirectory() as _outside:
+        repo = pathlib.Path(_repo)
+        inside = repo / "runs" / "val"
+        checks += [
+            ("a VAL root inside the optimizer's readable tree is refused",
+             val_isolation_problem(inside, repo) is not None),
+            ("...naming the tree it is inside",
+             str(repo.resolve()) in (val_isolation_problem(inside, repo) or "")),
+            ("the repo root itself is refused as a VAL root",
+             val_isolation_problem(repo, repo) is not None),
+            ("a VAL root outside it passes",
+             val_isolation_problem(pathlib.Path(_outside), repo) is None),
+            ("no VAL root configured is not an error -- the derived default still separates",
+             val_isolation_problem(None, repo) is None),
+            # The negative control the plan asks for: wiring the loop up with a readable VAL root
+            # must fail loudly at construction, not quietly produce a leaky run.
+            ("build_components refuses to assemble a loop with a readable VAL root",
+             _raises_valueerror(lambda: build_components(
+                 max_budget_usd=1.0, train_n=1,
+                 program_store=_FakeStore(repo),
+                 val_output_root=inside))),
+        ]
 
     # -- budget refusal ------------------------------------------------------------------------
     tight = BudgetGuard(max_budget_usd=1.0, cost_model=cm, train_n=50)

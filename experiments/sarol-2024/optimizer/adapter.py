@@ -88,7 +88,10 @@ MANIFEST_PATH = _HERE.parent / "program-v0" / "manifest.json"
 #: Where `agentic-label-opt` is checked out. Same default as `scripts/materialize_smoke.py`.
 DEFAULT_ENGINE = pathlib.Path.home() / "Documents" / "Misc" / "Projects" / "agentic-label-opt"
 
-SCHEMA_VERSION = "0.1.0"
+#: Bumped 0.1.0 -> 0.2.0 when the `profile` key entered the release payloads (C6.5). A consumer
+#: reading a 0.1.0 release cannot tell which rung produced the number, and the engine's frontier is
+#: a bare scalar that will happily compare the two.
+SCHEMA_VERSION = "0.2.0"
 
 #: The three nested Claude Code sessions one claim costs. Named because the cost preflight has to
 #: multiply by it and because `RunArtifacts.sub_invocation_count` is the field that carries it.
@@ -401,6 +404,7 @@ class SarolRunner:
         command_name: str = "sarol-eval-item",
         require_command: bool = True,
         profile=None,
+        output_roots: "dict[str, pathlib.Path] | None" = None,
     ) -> None:
         self.program_store = program_store
         # A real checkout, not the materialized tree: that tree is chmod'd read-only, its `.claude/`
@@ -422,6 +426,10 @@ class SarolRunner:
         # Which stages this run dispatches, and therefore what it costs and what it measures.
         # Defaults to the landed three-stage pipeline, so adding profiles changed no behaviour.
         self.profile = profiles_mod.get(profile)
+        # C6.9: per-split output roots, stated rather than derived. The VAL root must lie outside
+        # the optimizer's readable mounts, and "outside" is not something a derived default can
+        # promise -- `dispatcher.val_isolation_problem` is what checks it.
+        self.output_roots = {k: pathlib.Path(v) for k, v in (output_roots or {}).items()}
 
     # -- preflight ---------------------------------------------------------------------------
 
@@ -535,8 +543,12 @@ class SarolRunner:
         except (OSError, KeyError, json.JSONDecodeError) as exc:
             return artifacts("infra_error", code="BATCH_UNREADABLE", message=str(exc)[:300])
 
-        out_root = self.output_root or (materialized_path.parent / f"runs-{inputs.batch_id}")
-        out_dir = pathlib.Path(out_root) / inputs.split
+        explicit = self.output_roots.get(inputs.split)
+        if explicit is not None:
+            out_dir = explicit
+        else:
+            out_root = self.output_root or (materialized_path.parent / f"runs-{inputs.batch_id}")
+            out_dir = pathlib.Path(out_root) / inputs.split
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Validate against the rubric the program ACTUALLY RAN UNDER -- the materialized copy, not
@@ -693,8 +705,12 @@ class SarolScorer:
         self,
         *,
         gold_resolver: Callable[[pathlib.Path], dict[str, Any]] | None = None,
+        mistakes_root: pathlib.Path | None = None,
     ) -> None:
         self._gold_resolver = gold_resolver
+        # Where the per-claim TRAIN mistake corpus is written (C6.8). None disables it, which is
+        # what every VAL call does implicitly -- see `_write_mistakes`.
+        self.mistakes_root = pathlib.Path(mistakes_root) if mistakes_root else None
 
     def _resolve(self, staging_dir: pathlib.Path) -> dict[str, Any]:
         if self._gold_resolver is not None:
@@ -702,6 +718,95 @@ class SarolScorer:
         import parse_verdict  # noqa: PLC0415 -- imported late; it reads gold
 
         return parse_verdict.parse(staging_dir)
+
+    def _write_mistakes(self, split, batch_id, joined) -> str | None:
+        """Persist the per-claim TRAIN mistake corpus (C6.8). Returns its path, or None.
+
+        **This is a repair, not an addition.** The landed corpus was `counts` plus a pointer at the
+        *run manifest*, so the optimizer could see that it scored 0.29 and which error classes
+        fired, but never which claims failed, what it answered, or what gold said. On a Tier-1-open
+        split that is close to scalar-only optimization -- the optimizer was being asked to fix
+        mistakes it could not read.
+
+        **TRAIN only, and that is a boundary, not a default.** This file contains gold labels. TRAIN
+        gold is fully open to the optimizer (that is the mechanism by which it learns, not a leak);
+        VAL gold is not, so nothing is written on a VAL call however the Scorer is configured.
+
+        Two things deliberately withheld even on TRAIN. ``parse_verdict.parse`` also returns
+        ``split``, ``claim_row_id`` and ``cited_paper_bucket`` -- raw benchmark provenance that the
+        opaque-citekey staging design exists to keep out of the run. The optimizer needs the gold
+        *label* to learn; it has no use for the row it came from. And correct claims are summarised
+        by count rather than listed: the file is the mistake corpus, and if positive examples turn
+        out to be wanted that should be a deliberate change, not a silent one.
+        """
+        if split != "train" or self.mistakes_root is None:
+            return None
+        rows = []
+        n_correct = 0
+        for record, resolved in joined:
+            if resolved.get("pred_3way") == resolved.get("gold_3way"):
+                n_correct += 1
+                continue
+            rows.append({
+                "claim_id": record.get("claim_id"),
+                "citekey": resolved.get("citekey"),
+                **self._verdict_detail(record),
+                "pred_label": resolved.get("pred_label"),
+                "gold_label": resolved.get("gold_label"),
+                "pred_3way": resolved.get("pred_3way"),
+                "gold_3way": resolved.get("gold_3way"),
+            })
+        out = self.mistakes_root / "mistakes" / f"{batch_id}.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            json.dumps(
+                {
+                    "batch_id": batch_id,
+                    "split": split,
+                    "n_scored": len(joined),
+                    "n_correct": n_correct,
+                    "n_mistakes": len(rows),
+                    "claims": rows,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return str(out)
+
+    @staticmethod
+    def _verdict_detail(record) -> dict[str, Any]:
+        """Claim text, the evidence the judge saw, and why it said what it said.
+
+        Read from the adjudicated ledger file rather than re-derived, so what the optimizer reads
+        is exactly what the judge wrote. A missing or malformed file degrades to empty fields --
+        the mistake is still worth recording without its reasoning.
+        """
+        blank = {"claim_text": None, "evidence_snippets": [], "adjudicator_reasoning": {}}
+        claim_id = record.get("claim_id")
+        try:
+            verdict = json.loads(
+                (pathlib.Path(record["staging_dir"]) / "ledger" / "claims" / f"{claim_id}.json")
+                .read_text(encoding="utf-8")
+            )
+        except (OSError, KeyError, json.JSONDecodeError):
+            return blank
+        subs = verdict.get("sub_claims") or []
+        return {
+            "claim_text": verdict.get("claim_text"),
+            "evidence_snippets": [
+                ev.get("snippet")
+                for sub in subs
+                for ev in (sub.get("evidence") or [])
+                if ev.get("snippet")
+            ],
+            "adjudicator_reasoning": {
+                "sub_claim_verdicts": [s.get("verdict") for s in subs],
+                "nuance": [s.get("nuance") for s in subs if s.get("nuance")],
+                "overall_flag": verdict.get("overall_flag"),
+                "remediation": verdict.get("remediation"),
+            },
+        }
 
     def score(self, artifacts, split, task_config):  # positional -- loop.py:336/:337
         """The ``Scorer`` protocol. ``(artifacts, split, task_config) -> ScoreResult``."""
@@ -741,6 +846,7 @@ class SarolScorer:
 
         pairs: list[tuple[str, str]] = []
         unresolved = 0
+        joined: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for record in run_manifest["claims"]:
             if record.get("status") != "ok":
                 continue
@@ -750,6 +856,8 @@ class SarolScorer:
                 unresolved += 1
                 continue
             pairs.append((resolved["pred_label"], resolved["gold_label"]))
+            # Kept, not discarded. Discarding it is what left the optimizer with counts only.
+            joined.append((record, resolved))
 
         scored = score_sarol3.score(pairs)
 
@@ -773,6 +881,10 @@ class SarolScorer:
             "requested_count": requested,
             "n_unresolved": unresolved,
             "split": split,
+            # C6.5 -- recovered from the run manifest rather than passed in, so it always
+            # describes the run that actually happened.
+            "profile": run_manifest.get("profile"),
+            "retrieval_k": run_manifest.get("retrieval_k"),
         }
         if not complete:
             breakdown["reason"] = (
@@ -780,6 +892,10 @@ class SarolScorer:
                 f"{f', {unresolved} unresolved' if unresolved else ''}"
             )
             return result(0.0, breakdown)
+
+        mistakes_ref = self._write_mistakes(split, run_manifest.get("batch_id", "batch"), joined)
+        if mistakes_ref:
+            breakdown["mistakes_ref"] = mistakes_ref
 
         value = scored["primary_metric"]
         # NaN passes PrimaryMetric's isinstance-only validation (schemas.py:80-81), and a NaN on the
@@ -811,8 +927,11 @@ class SarolScorer:
 #: outputs were malformed", never which gold classes they fell against. The plan's Verification
 #: table asks for it alongside the coverage assertion, and withholding it would mean a VAL run
 #: could be half-garbage while still reporting `scored: true`.
+#: `profile` is on this list and is not a judgement call: it says nothing about *which* held-out
+#: claims were missed or how, only which system produced the number. Withholding it would leave a
+#: VAL scalar that cannot be told apart from a scalar produced by a different experiment (C6.5).
 _VAL_BREAKDOWN_ALLOWED = (
-    "scored", "reason", "n_total", "n_invalid", "requested_count", "split",
+    "scored", "reason", "n_total", "n_invalid", "requested_count", "split", "profile",
 )
 
 
@@ -856,6 +975,8 @@ class SarolReleaseBuilder:
             corpus={
                 "ref": corpus.ref,
                 "counts": corpus.counts,
+                "profile": score.breakdown.get("profile"),
+                "retrieval_k": score.breakdown.get("retrieval_k"),
                 "metrics": {
                     "primary_metric": score.primary_metric.value,
                     "primary_metric_name": score.primary_metric.name,
@@ -879,7 +1000,16 @@ def build_mistake_corpus(artifacts, score):
     """
     schemas = _import_engine()
     counts = dict(score.breakdown.get("error_class_counts") or {})
-    ref = artifacts.artifact_refs[0].path if artifacts.artifact_refs else ""
+    # C6.8: point at the per-claim corpus the Scorer wrote, NOT at the batch run manifest. The
+    # manifest carries dispatch bookkeeping -- exit codes, costs, timings -- and no gold and no
+    # reasoning, so an optimizer following that ref learned nothing about why it was wrong.
+    # `MistakeCorpus` exposes only `ref` and `counts`, so the richer content rides behind `ref`
+    # and no engine schema changes.
+    ref = score.breakdown.get("mistakes_ref")
+    if not ref:
+        # VAL, or a Scorer with no mistakes_root. Falling back to the manifest keeps `ref`
+        # non-empty for the engine; it is deliberately the poorer artifact.
+        ref = artifacts.artifact_refs[0].path if artifacts.artifact_refs else ""
     return schemas.MistakeCorpus(ref=ref, counts=counts)
 
 
@@ -1070,6 +1200,7 @@ def _selftest() -> int:
             manifest_path = pathlib.Path(tmp) / "run_manifest.json"
             manifest_path.write_text(json.dumps({
                 "batch_id": "b1", "split": "train", "requested_count": 2,
+                "profile": "retrieval", "retrieval_k": 20,
                 "claims": [
                     {"claim_id": "C1", "citekey": "k1", "staging_dir": tmp, "status": "ok"},
                     {"claim_id": "C2", "citekey": "k2", "staging_dir": tmp, "status": "ok"},
@@ -1131,6 +1262,71 @@ def _selftest() -> int:
                 ("...and says why", "coverage" in partial.breakdown.get("reason", "")),
             ]
 
+            # -- C6.8: the per-claim mistake corpus ----------------------------------------
+            # The landed corpus was counts + a pointer at the run manifest, so the optimizer knew
+            # its score and nothing about which claims failed. These pin the repair.
+            mroot = pathlib.Path(tmp) / "trainout"
+            (pathlib.Path(tmp) / "ledger" / "claims").mkdir(parents=True, exist_ok=True)
+            (pathlib.Path(tmp) / "ledger" / "claims" / "C2.json").write_text(json.dumps({
+                "claim_id": "C2",
+                "claim_text": "the citing sentence",
+                "sub_claims": [{"verdict": "ACCURATE",
+                                "nuance": "the passage states it directly",
+                                "evidence": [{"snippet": "a fourfold acceleration"}]}],
+                "overall_flag": None,
+                "remediation": {"category": "REWORD", "suggested_edit": "narrow the scope"},
+            }), encoding="utf-8")
+
+            def scored_with(split, root):
+                g = iter([
+                    {"pred_label": "ACCURATE", "gold_label": "ACCURATE",
+                     "pred_3way": "ACCURATE", "gold_3way": "ACCURATE", "citekey": "k1",
+                     "split": "train", "claim_row_id": 417, "cited_paper_bucket": 81},
+                    {"pred_label": "ACCURATE", "gold_label": "CONTRADICT",
+                     "pred_3way": "ACCURATE", "gold_3way": "NOT_ACCURATE", "citekey": "k2",
+                     "split": "train", "claim_row_id": 418, "cited_paper_bucket": 82},
+                ])
+                return SarolScorer(gold_resolver=lambda _p: next(g),
+                                   mistakes_root=root).score(ok_artifacts, split, {"_iter": 1})
+
+            train_score = scored_with("train", mroot)
+            corpus_file = json.loads(
+                pathlib.Path(train_score.breakdown["mistakes_ref"]).read_text(encoding="utf-8")
+            )
+            row = corpus_file["claims"][0]
+            val_score = scored_with("val", mroot)
+            built = build_mistake_corpus(ok_artifacts, train_score)
+
+            checks += [
+                ("a TRAIN score writes a per-claim mistake corpus",
+                 pathlib.Path(train_score.breakdown["mistakes_ref"]).exists()),
+                ("...at mistakes/<batch_id>.json",
+                 train_score.breakdown["mistakes_ref"].endswith("mistakes/b1.json")),
+                ("...holding only the claims that were wrong",
+                 corpus_file["n_mistakes"] == 1 and corpus_file["n_correct"] == 1),
+                ("...naming which claim failed", row["claim_id"] == "C2"),
+                ("...what it answered and what gold said",
+                 row["pred_label"] == "ACCURATE" and row["gold_label"] == "CONTRADICT"),
+                ("...at the granularity the frontier is scored on",
+                 row["pred_3way"] == "ACCURATE" and row["gold_3way"] == "NOT_ACCURATE"),
+                ("...the evidence the judge actually saw",
+                 row["evidence_snippets"] == ["a fourfold acceleration"]),
+                ("...and why it said what it said",
+                 "the passage states it directly" in row["adjudicator_reasoning"]["nuance"]),
+                # Blinding hygiene: TRAIN gold is open, raw benchmark provenance is not.
+                ("raw benchmark provenance is withheld even on the open split",
+                 not ({"claim_row_id", "cited_paper_bucket", "split"} & set(row))),
+                # The boundary that matters more than any of the above.
+                ("a VAL score writes NO mistake corpus, whatever the Scorer is configured with",
+                 "mistakes_ref" not in val_score.breakdown),
+                ("...and VAL's reduced breakdown could not carry one anyway",
+                 "mistakes_ref" not in _VAL_BREAKDOWN_ALLOWED),
+                ("the corpus ref points at the per-claim file, not the run manifest",
+                 built.ref == train_score.breakdown["mistakes_ref"]),
+                ("...while still carrying the counts the engine reads",
+                 built.counts == train_score.breakdown["error_class_counts"]),
+            ]
+
             failed = scorer.score(
                 schemas.RunArtifacts(batch_id="b1", status="timeout", artifact_refs=()),
                 "train",
@@ -1179,6 +1375,20 @@ def _selftest() -> int:
                  "per_class_f1" in train_breakdown),
                 ("...and the confusion matrix -- Tier 1 is fully open",
                  "confusion_matrix" in train_breakdown),
+                # -- C6.5: a profile is part of a run's identity ---------------------------
+                # The engine's frontier is a bare scalar: `_select_best` and `_regressed` compare
+                # numbers with no idea where they came from. Two profiles measure two different
+                # systems, so both tiers have to say which one produced the number.
+                ("the TRAIN release records which profile produced it",
+                 train_payload.corpus["profile"] == "retrieval"),
+                ("...with the retrieval budget alongside it",
+                 train_payload.corpus["retrieval_k"] == 20),
+                ("the VAL release records it too, or its scalar is unattributable",
+                 val_breakdown.get("profile") == "retrieval"),
+                ("...and that is identity, not held-out error structure",
+                 "profile" in _VAL_BREAKDOWN_ALLOWED),
+                ("the schema version was bumped when the profile key landed",
+                 SCHEMA_VERSION == "0.2.0" and train_payload.schema_version == "0.2.0"),
             ]
 
         # Runner: the pin negative control fires before any claim is dispatched.
