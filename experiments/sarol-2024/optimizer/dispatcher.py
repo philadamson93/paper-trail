@@ -72,7 +72,14 @@ TEST_SIZE = 606
 #: Rough per-nested-session spend. A forecasting input, deliberately explicit rather than buried:
 #: the real number replaces it after the first metered claim, and the preflight is only as honest
 #: as this value.
-DEFAULT_PER_SESSION_USD = 0.05
+#:
+#: CALIBRATED 2026-09-02 against the first metered claim, exactly as the line above anticipated.
+#: One real `retrieval` adjudicator session on dev claim 0 (a 123-chunk, 49KB cited paper, model
+#: `opus`) cost **$1.0026** and took 98.7s. The previous placeholder was 0.05 -- understating every
+#: forecast by ~20x, which is the dangerous direction: it would have cleared a "$32/iteration" run
+#: that actually costs ~$647. One sample, so treat this as order-of-magnitude rather than precise,
+#: and re-measure when the profile, model or claim mix changes.
+DEFAULT_PER_SESSION_USD = 1.00
 
 
 # =================================================================================================
@@ -891,12 +898,22 @@ def _selftest() -> int:
         ("...so Phase 1 costs a third of Phase 2 per claim",
          round(CostModel.for_profile("retrieval").claim_cost() * 3, 9)
          == round(CostModel.for_profile("agentic").claim_cost(), 9)),
-        ("retrieval prices at the ~$32/iteration the plan names",
-         31 < CostModel.for_profile("retrieval").iteration_cost(10) < 34),
+        # These three pin the cost-model ARITHMETIC, so they name the price they are computed at
+        # rather than inheriting the module default. The plan's headline $32/$16/$96 figures were
+        # all derived at $0.05/session; once that placeholder was calibrated to real metered spend
+        # (see DEFAULT_PER_SESSION_USD) they would otherwise have failed for the right reason at
+        # the wrong layer -- the structure is still correct, only the unit price moved.
+        ("retrieval prices at the ~$32/iteration the plan names, at the $0.05 it assumed",
+         31 < CostModel.for_profile("retrieval", per_session_usd=0.05).iteration_cost(10) < 34),
         ("...and ~$16 with the probe cached, as C6.6 states",
-         15 < CostModel.for_profile("retrieval").iteration_cost(10, probe_cached=True) < 18),
-        ("agentic still prices at the ~$96 floor",
-         94 < CostModel.for_profile("agentic").iteration_cost(10) < 99),
+         15 < CostModel.for_profile("retrieval", per_session_usd=0.05)
+         .iteration_cost(10, probe_cached=True) < 18),
+        ("agentic still prices at the ~$96 floor, at that same assumed price",
+         94 < CostModel.for_profile("agentic", per_session_usd=0.05).iteration_cost(10) < 99),
+        # And the measured reality, pinned so a regression back to a toy default is visible: at the
+        # calibrated price a Phase 1 iteration is a ~$650 decision, not a ~$32 one.
+        ("at the calibrated price, a retrieval iteration is a several-hundred-dollar decision",
+         600 < CostModel.for_profile("retrieval").iteration_cost(10) < 700),
         ("the cost table says which rung it is describing",
          "retrieval" in CostModel.for_profile("retrieval").render_table()),
     ]
