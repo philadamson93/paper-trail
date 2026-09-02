@@ -457,9 +457,14 @@ class SarolRunner:
     def _stage_command(
         self, stage: str, claim: ClaimRecord, materialized_path: pathlib.Path
     ) -> list[str]:
+        # Paths are quoted. They are interpolated into a single slash-command string that the
+        # nested session parses as `--flag value`, so an unquoted path containing a space splits
+        # into two arguments and the command aborts ARGS_INVALID. Neither this checkout nor the
+        # staging tree has spaces today, which is exactly why this would be found late and in a
+        # paid run rather than here.
         prompt = (
             f"/{self.command_name} --stage {stage} --claim {claim.claim_id} "
-            f"--staging {claim.staging_dir} --spec-root {materialized_path}"
+            f'--staging "{claim.staging_dir}" --spec-root "{materialized_path}"'
         )
         return [
             "claude",
@@ -1302,8 +1307,17 @@ def _selftest() -> int:
                  pathlib.Path(train_score.breakdown["mistakes_ref"]).exists()),
                 ("...at mistakes/<batch_id>.json",
                  train_score.breakdown["mistakes_ref"].endswith("mistakes/b1.json")),
-                ("...holding only the claims that were wrong",
-                 corpus_file["n_mistakes"] == 1 and corpus_file["n_correct"] == 1),
+                ("...shaped as the C6.8 wrapper: counts plus the per-claim list",
+                 set(corpus_file) == {"batch_id", "split", "n_scored",
+                                      "n_correct", "n_mistakes", "claims"}),
+                ("...listing only the claims that were wrong, with the denominator beside them",
+                 corpus_file["n_mistakes"] == 1 and corpus_file["n_correct"] == 1
+                 and corpus_file["n_scored"] == 2),
+                ("...and `claims` carrying exactly C6.8's nine fields",
+                 set(corpus_file["claims"][0]) == {
+                     "claim_id", "citekey", "claim_text", "evidence_snippets",
+                     "pred_label", "gold_label", "pred_3way", "gold_3way",
+                     "adjudicator_reasoning"}),
                 ("...naming which claim failed", row["claim_id"] == "C2"),
                 ("...what it answered and what gold said",
                  row["pred_label"] == "ACCURATE" and row["gold_label"] == "CONTRADICT"),

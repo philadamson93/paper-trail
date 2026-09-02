@@ -537,6 +537,9 @@ def run_optimization(
     max_budget_usd: float,
     train_n: int,
     materialize_root: pathlib.Path,
+    train_output_root: pathlib.Path | None = None,
+    val_output_root: pathlib.Path | None = None,
+    profile=None,
     per_session_usd: float = DEFAULT_PER_SESSION_USD,
     current_tag: str = "program-v0",
     components: dict | None = None,
@@ -553,10 +556,41 @@ def run_optimization(
     from engine.loop import run_loop  # noqa: PLC0415
     from engine.schemas import RunInputs  # noqa: PLC0415
 
+    # A real run must SAY where its outputs go. Both roots are load-bearing and neither has a
+    # safe default: `train_output_root` is where the per-claim mistake corpus lands (C6.8 -- with
+    # no root the optimizer silently drops back to counts-only, the exact defect C6.8 repairs),
+    # and `val_output_root` must lie outside the optimizer's readable tree (C6.9), which no
+    # derived default can promise. Refused here rather than in `build_components` so selftests can
+    # still assemble components freely; this function is the real-run entrypoint.
+    if components is None:
+        missing = [
+            name
+            for name, value in (
+                ("train_output_root", train_output_root),
+                ("val_output_root", val_output_root),
+            )
+            if value is None
+        ]
+        if missing:
+            raise ValueError(
+                f"a real run must specify {', '.join(missing)}: "
+                "TRAIN's root carries the per-claim mistake corpus (C6.8) and VAL's must sit "
+                "outside the optimizer's readable tree (C6.9); neither can be safely derived"
+            )
+        # Selectable != runnable. `agentic` and `paperclip` are fully specified and correctly
+        # priced, but /sarol-eval-item implements only the adjudicator stage, so they would abort
+        # on the first claim -- after the session has been paid for. Refuse at the entrypoint.
+        blocked = profiles_mod.unrunnable_reason(profile)
+        if blocked:
+            raise ValueError(blocked)
+
     parts = components or build_components(
         max_budget_usd=max_budget_usd,
         train_n=train_n,
         per_session_usd=per_session_usd,
+        profile=profile,
+        train_output_root=train_output_root,
+        val_output_root=val_output_root,
         **component_kwargs,
     )
 
@@ -882,8 +916,28 @@ def _selftest() -> int:
              val_isolation_problem(repo, repo) is not None),
             ("a VAL root outside it passes",
              val_isolation_problem(pathlib.Path(_outside), repo) is None),
-            ("no VAL root configured is not an error -- the derived default still separates",
-             val_isolation_problem(None, repo) is None),
+        ("the helper itself treats no-root as no-problem -- it is a path predicate",
+         val_isolation_problem(None, repo) is None),
+        ("...but a REAL run refuses to start without both roots stated",
+         _raises_valueerror(lambda: run_optimization(
+             iterations=1, run_id="r", train_input_ref="t", val_input_ref="v",
+             max_budget_usd=1.0, train_n=1, materialize_root=repo))),
+        # C6.9 asks for a control against the CONCRETE path the runtime writes, not a generic
+        # directory. These are the real run-manifest and mistake-corpus locations.
+        ("the concrete VAL manifest path the runtime would write is caught",
+         val_isolation_problem(repo / "runs-r-val", repo) is not None),
+        ("...and so is a TRAIN mistake-corpus root pointed inside the tree",
+         val_isolation_problem(repo / "trainout" / "mistakes", repo) is not None),
+        # Selectable != runnable: agentic is priced and selectable, but /sarol-eval-item
+        # implements only the adjudicator stage.
+        ("only retrieval is runnable today",
+         profiles_mod.runnable_profiles() == ["retrieval"]),
+        ("a real run refuses an unrunnable profile before spending anything",
+         _raises_valueerror(lambda: run_optimization(
+             iterations=1, run_id="r", train_input_ref="t", val_input_ref="v",
+             max_budget_usd=1.0, train_n=1, materialize_root=repo,
+             train_output_root=repo / "trainout",
+             val_output_root=pathlib.Path(_outside), profile="agentic"))),
             # The negative control the plan asks for: wiring the loop up with a readable VAL root
             # must fail loudly at construction, not quietly produce a leaky run.
             ("build_components refuses to assemble a loop with a readable VAL root",
@@ -891,6 +945,43 @@ def _selftest() -> int:
                  max_budget_usd=1.0, train_n=1,
                  program_store=_FakeStore(repo),
                  val_output_root=inside))),
+        ]
+
+        # The CLI is where this broke: `--profile` was parsed, used to price the run, then dropped
+        # before `run_optimization` -- so `--profile retrieval` printed a retrieval cost table and
+        # ran `agentic`. Capture what main() actually forwards.
+        seen: dict = {}
+
+        def _recorder(**kw):
+            seen.update(kw)
+            raise BudgetExceeded("stop before doing any work")
+
+        _real = globals()["run_optimization"]
+        globals()["run_optimization"] = _recorder
+        try:
+            main([
+                "--run", "--profile", "retrieval",
+                "--run-id", "r1", "--train-n", "10", "--max-budget-usd", "1",
+                "--train-inputs", "t.json", "--val-inputs", "v.json",
+                "--materialize-root", str(repo),
+                "--train-output-root", str(repo / "trainout"),
+                "--val-output-root", _outside,
+            ])
+            no_roots = main([
+                "--run", "--run-id", "r", "--train-n", "10", "--max-budget-usd", "1",
+                "--train-inputs", "t", "--val-inputs", "v",
+                "--materialize-root", str(repo),
+            ])
+        finally:
+            globals()["run_optimization"] = _real
+
+        checks += [
+            ("the CLI forwards the selected profile to the run, not just to the estimate",
+             seen.get("profile") == "retrieval"),
+            ("...and forwards both output roots",
+             str(seen.get("train_output_root") or "").endswith("trainout")
+             and str(seen.get("val_output_root")) == _outside),
+            ("--run without the output roots is refused by argument checking", no_roots == 2),
         ]
 
     # -- budget refusal ------------------------------------------------------------------------
@@ -1015,7 +1106,7 @@ def _selftest() -> int:
     return 1 if failed else 0
 
 
-def main() -> int:
+def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--preflight", action="store_true", help="print the per-landmark cost table")
@@ -1036,7 +1127,19 @@ def main() -> int:
     ap.add_argument("--train-inputs", default=None, help="path to the TRAIN batch JSON")
     ap.add_argument("--val-inputs", default=None, help="path to the VAL batch JSON")
     ap.add_argument("--materialize-root", default=None)
-    args = ap.parse_args()
+    ap.add_argument(
+        "--train-output-root",
+        default=None,
+        help="where TRAIN run outputs and the per-claim mistake corpus land (C6.8). Must be "
+             "readable by the optimizer.",
+    )
+    ap.add_argument(
+        "--val-output-root",
+        default=None,
+        help="where VAL run outputs land (C6.9). Must lie OUTSIDE the optimizer's readable tree, "
+             "or the held-out set's per-claim outputs are directly readable.",
+    )
+    args = ap.parse_args(argv)
 
     if args.selftest:
         return _selftest()
@@ -1049,6 +1152,8 @@ def main() -> int:
             "--train-inputs": args.train_inputs,
             "--val-inputs": args.val_inputs,
             "--materialize-root": args.materialize_root,
+            "--train-output-root": args.train_output_root,
+            "--val-output-root": args.val_output_root,
         }
         missing = [flag for flag, value in required.items() if value is None]
         if missing:
@@ -1063,6 +1168,12 @@ def main() -> int:
                 max_budget_usd=args.max_budget_usd,
                 train_n=args.train_n,
                 materialize_root=pathlib.Path(args.materialize_root),
+                # Without these three the CLI printed a `retrieval` cost table and then ran
+                # `agentic`: --profile was parsed, used to price the run, and dropped before the
+                # run itself. A profile that only reaches the estimate is worse than no profile.
+                profile=args.profile,
+                train_output_root=pathlib.Path(args.train_output_root),
+                val_output_root=pathlib.Path(args.val_output_root),
                 per_session_usd=args.per_session_usd,
                 per_call_max_budget_usd=args.per_call_max_budget_usd,
             )

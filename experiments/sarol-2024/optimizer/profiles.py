@@ -33,6 +33,7 @@ of the plan (Open Questions §11), so it is restated wherever the ladder is defi
 from __future__ import annotations
 
 import dataclasses
+import re
 from dataclasses import dataclass
 
 # -- the frozen fileset, by role ------------------------------------------------------------------
@@ -53,6 +54,16 @@ JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE)
 ACQUISITION_SCOPE = (EXTRACTOR_PDF, EXTRACTOR_PAPERCLIP, VERIFIER)
 
 ALL_STAGES = ("extractor", "adjudicator", "verifier")
+
+#: Stages `.claude/commands/sarol-eval-item.md` can actually dispatch today. The command implements
+#: the Phase 1 adjudicator path and aborts `extractor` / `verifier` with `STAGE_NOT_IMPLEMENTED`,
+#: so a profile requiring them cannot complete a run however well-formed it is.
+#:
+#: This exists because a profile being *selectable* and a profile being *runnable* are different
+#: facts, and conflating them means the failure surfaces per-claim, mid-run, after money has been
+#: spent -- rather than at the preflight. Widen this tuple in the same change that implements those
+#: stages, not before.
+IMPLEMENTED_STAGES: tuple[str, ...] = ("adjudicator",)
 
 
 @dataclass(frozen=True)
@@ -152,6 +163,35 @@ def get(profile: "str | Profile | None") -> Profile:
         raise KeyError(
             f"unknown profile {profile!r}; known: {sorted(PROFILES)}"
         ) from None
+
+
+def unrunnable_reason(profile) -> str | None:
+    """Why this profile cannot complete a run today, or None if it can.
+
+    Selectable != runnable. `agentic` and `paperclip` are fully specified and correctly priced, but
+    their extractor/verifier stages have no command implementation yet, so a real run would abort on
+    the first claim. Checked at the preflight so that is a refusal, not a wasted paid run.
+    """
+    prof = get(profile)
+    missing = [s for s in prof.stages if s not in IMPLEMENTED_STAGES]
+    if not missing:
+        return None
+    return (
+        f"profile {prof.name!r} needs stage(s) {', '.join(missing)}, which "
+        f"/sarol-eval-item does not implement (it aborts them with STAGE_NOT_IMPLEMENTED). "
+        f"Runnable today: {', '.join(sorted(runnable_profiles()))}"
+    )
+
+
+def runnable_profiles() -> list[str]:
+    """Profiles that can complete a run against the command as it exists.
+
+    Computed directly from `IMPLEMENTED_STAGES` rather than by calling `unrunnable_reason`, which
+    would recurse -- that function names this list in its own message.
+    """
+    return sorted(
+        n for n, p in PROFILES.items() if set(p.stages) <= set(IMPLEMENTED_STAGES)
+    )
 
 
 def validate_against_manifest(entries: "list[dict]", profiles=None) -> list[str]:
@@ -299,6 +339,10 @@ def _selftest() -> int:
         "optimizer-instructions.md": (here / "prompt" / "optimizer-instructions.md")
         .read_text(encoding="utf-8"),
         "meta-learnings.md": (here / "meta-learnings.md").read_text(encoding="utf-8"),
+        # Added after a Codex-prompted check found this file still telling the optimizer that
+        # `corpus.ref` points at the run manifest -- false since C6.8 -- while the gate did not
+        # read it. A gate that covers three of four optimizer-facing docs gives false assurance.
+        "release-format.md": (here / "context" / "release-format.md").read_text(encoding="utf-8"),
     }
     guidance = docs["playbook.md"] + docs["optimizer-instructions.md"]
     checks += [
@@ -306,12 +350,29 @@ def _selftest() -> int:
          all(path in guidance for path in AGENTIC.editable)),
         ("...and both name the profile the scope depends on",
          "retrieval" in docs["playbook.md"] and "retrieval" in docs["optimizer-instructions.md"]),
-        ("no doc still claims a fixed five-file edit scope",
-         "five files" not in guidance),
-        ("...nor that every claim costs three sessions unconditionally",
-         "costs three nested" not in guidance),
+        # Coarse by nature -- a prose gate cannot prove a doc is right, only catch a doc asserting
+        # a scope or cost as though it were *unconditional*. The distinguishing feature of a
+        # correct statement here is that it names the profile it applies to, so a count is only
+        # flagged when its own line mentions no profile. (An earlier version keyed off the exact
+        # phrases "five files" / "costs three nested" and would have passed any reworded drift;
+        # a broader regex alone flagged the correct profile-qualified sentences instead.)
+        ("no doc asserts a count of editable files without naming the profile",
+         not _unqualified(r"\b(two|three|four|five|six)\s+files\b", guidance)),
+        ("no doc asserts a per-claim session count without naming the profile",
+         not _unqualified(r"costs?\s+(one|two|three)\s+nested", guidance)),
+        ("...and both name the mechanical producer that replaces the extractor in Phase 1",
+         "BM25" in guidance),
         ("meta-learnings warns that the P1 extractor-side fix is unreachable in Phase 1",
          "unreachable under the `retrieval` profile" in docs["meta-learnings.md"]),
+        # C6.8 made `corpus.ref` point at the mistake corpus itself. The doc that tells the
+        # optimizer where to look must say the same thing.
+        ("release-format points the optimizer at the per-claim corpus, not the run manifest",
+         "run manifest, from which" not in docs["release-format.md"]
+         and "mistakes/<batch_id>.json" in docs["release-format.md"]),
+        ("...and states the schema version the code actually emits",
+         "0.2.0" in docs["release-format.md"] and "`0.1.0`." not in docs["release-format.md"]),
+        ("...and does not promise verifier output that Phase 1 never produces",
+         "no verifier runs at all" in docs["release-format.md"]),
     ]
 
     failed = 0
@@ -320,6 +381,16 @@ def _selftest() -> int:
         failed += 0 if ok else 1
     print(f"\n{len(checks) - failed}/{len(checks)} passed")
     return 1 if failed else 0
+
+
+def _unqualified(pattern: str, text: str) -> list[str]:
+    """Lines matching `pattern` that name no profile. A count is only meaningful with a rung."""
+    names = tuple(PROFILES)
+    return [
+        line
+        for line in text.splitlines()
+        if re.search(pattern, line, re.I) and not any(n in line for n in names)
+    ]
 
 
 def _raises(fn) -> bool:
