@@ -17,11 +17,26 @@
 
 **⚠ Cost finding, decision-relevant.** The old "cheap iteration N=10 ≈ \$7" figure in the graduated-N table below is **TRAIN-only and wrong by ~13×**. An iteration costs *three* Runner calls (TRAIN + VAL + the post-commit probe), so at VAL=316 × 3 nested sessions the floor is a fixed **~\$95/iteration regardless of TRAIN size** — at N=10 that is ~\$96, of which 98% is VAL. `dispatcher.py --preflight` prints the corrected table for every landmark. Caching the redundant probe removes roughly half.
 
-**REPLANNED 2026-09-02 — phase the experiment; optimize the adjudicator alone first (Phil).** New **Part C6** in the plan. The three-stage pipeline is kept and becomes a configurable **profile**, not deleted.
+**REPLANNED 2026-09-02 — phase the experiment (Phil), then REVISED the same day after a Codex round-3 review returned Blocked.** **Part C6** in the plan. The full pipeline is kept as a **profile**, not deleted.
 
-- **Phase 1 `adjudicator-only`** — one nested session per claim. Sarol ships the cited paper's text already extracted (`stage_claim.py` writes it to `content.txt`; nothing is ever fetched), so the extractor has nothing to do that Sarol has not already done. A mechanical, no-model transform reshapes that text into the envelope the adjudicator prompt already expects — **so the frozen prompt is not touched and `program-v0` keeps its tag.** That matters: rewriting the prompt would have left Phase 1 and Phase 2 running different adjudicators, destroying the comparison the phasing exists to make.
-- **Phase 2 `full`** — extractor back in the loop, measured against Phase 1's *optimized* adjudicator. The question sharpens from "how good is paper-trail" to **"does explicit extract-then-judge beat one agent reading the whole paper?"** Phase 1 is also the same shape as Sarol's own baselines, so its number is directly comparable to MultiVerS 0.52 / GPT-4 0.45.
-- **Cost**: ~$96 → **~$32/iteration** (~$16 with the probe cache).
+The first draft of C6 was wrong in two ways the review caught, both worth knowing:
+
+- It proposed letting the adjudicator read `content.txt` itself. **The frozen adjudicator prompt forbids exactly that** — its stated design invariant is "the adjudicator never reads the source paper. Reads only the evidence JSON and the rubric." So something must always select evidence; "adjudicator-only" can never mean "adjudicator reads the paper".
+- It claimed Phase 1 would be directly comparable to MultiVerS 0.52 / GPT-4 0.45 while feeding all ~72 chunks of the cited paper. **It would not be.** Sarol's MultiVerS result used BM25 + MonoT5 **top-20** sentences and their GPT baselines top-5 — and this repo's own `paper-tool-validation.md:79` already defined the apples-to-apples condition as title + abstract.
+
+The corrected design is a **ladder of evidence producers with the judge held constant** — which is a better experiment than the original, and closer to the paper's actual thesis:
+
+| Profile | Evidence producer | LLM sessions/claim | Phase |
+|---|---|---:|---|
+| `abstract-only` | mechanical: title + abstract | 1 | 1a — matches the published setup |
+| `retrieval` | mechanical: BM25 top-*k* | 1 | 1b — matches MultiVerS's top-20 budget |
+| `agentic` | the extractor subagent + verifier | 3 | 2 — the pipeline as landed |
+| `paperclip` | extractor querying the paper conversationally (Phil, 2026-09-02) | 3 | backlog, C6.10 |
+
+The claim sharpens to **"does agentic evidence acquisition beat retrieval?"**, measured as a delta over Phase 1's *optimized* adjudicator. ⚠ With a confound the plan now records: Phase 1 also does no sub-claim decomposition and gets a null `indirect_attribution_check`, so a Phase 2 win is not attributable to agency alone.
+
+- **Cost**: ~$96 → **~$32/iteration** for a mechanical profile (~$16 with the probe cache).
+- **Blocking detail found while revising:** the envelope wants `source_mode: "sarol_corpus"`, but that field is constrained to `{paperclip, pdf, pdf_ocr_fallback}` by `verdict_schema.md` — a **frozen contract file**. Must be settled (Open Questions §13) before the envelope is built, or the exit validator rejects every claim.
 - **Two real gaps this surfaced in the landed code**, both now specified in C6.7/C6.8 and owed: (1) the mistake corpus is **counts-only**, so the optimizer sees its score but not which claims failed or what gold said — near-blind on a Tier-1-open split; (2) VAL per-example outputs share a root with TRAIN, so scalar-only is a *convention*, not a boundary. Note the three actors: the **program** never sees gold on any split, the **optimizer** sees TRAIN gold fully (that is the mechanism, not a leak), TEST stays sealed.
 - **Owed doc fix**: `meta-learnings.md` P1 and `context/playbook.md` currently point the optimizer at an **extractor-side** INDIRECT fix that Phase 1 cannot make. They must be narrowed when the profile lands, not before, or docs and code will contradict each other.
 
