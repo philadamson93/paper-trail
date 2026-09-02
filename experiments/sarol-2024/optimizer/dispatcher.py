@@ -86,6 +86,14 @@ class CostModel:
     per_session_usd: float = DEFAULT_PER_SESSION_USD
     stages_per_claim: int = len(STAGES)
     val_size: int = VAL_SIZE
+    #: Open Questions §12, resolved 2026-09-02 (Phil): the canary fires once per **Runner call**,
+    #: which is what the landed Runner already does -- three firings per iteration, so a break
+    #: between TRAIN and VAL is caught inside the iteration it happened in rather than one later.
+    #: Priced here rather than left as an untracked extra, which was the condition attached to
+    #: either answer. Set False to price the cheaper once-per-iteration reading.
+    canary_per_runner_call: bool = True
+    #: Whether a canary is configured at all. No canary, no canary sessions.
+    canary_enabled: bool = True
 
     def claim_cost(self) -> float:
         return self.stages_per_claim * self.per_session_usd
@@ -93,18 +101,33 @@ class CostModel:
     def batch_cost(self, n_claims: int) -> float:
         return n_claims * self.claim_cost()
 
+    def runner_calls(self, *, probe_cached: bool = False) -> int:
+        """TRAIN + current-VAL + probe-VAL. A cached probe is served without calling the Runner."""
+        return 2 if probe_cached else 3
+
+    def canary_sessions(self, *, probe_cached: bool = False) -> int:
+        """Sessions the canary itself costs per iteration.
+
+        One canary claim costs a full ``stages_per_claim`` -- it goes through the same dispatch
+        path as a scored claim, which is the point of it.
+        """
+        if not self.canary_enabled:
+            return 0
+        calls = self.runner_calls(probe_cached=probe_cached) if self.canary_per_runner_call else 1
+        return calls * self.stages_per_claim
+
     def iteration_cost(self, train_n: int, *, probe_cached: bool = False) -> float:
-        """TRAIN + current-VAL + probe-VAL.
+        """TRAIN + current-VAL + probe-VAL, plus the canary.
 
         ``probe_cached=True`` prices an iteration whose probe is served from
         :class:`CachingRunner` -- one VAL call instead of two.
         """
-        val_calls = 1 if probe_cached else 2
-        return self.batch_cost(train_n) + val_calls * self.batch_cost(self.val_size)
+        return self.sessions_per_iteration(train_n, probe_cached=probe_cached) * self.per_session_usd
 
     def sessions_per_iteration(self, train_n: int, *, probe_cached: bool = False) -> int:
         val_calls = 1 if probe_cached else 2
-        return (train_n + val_calls * self.val_size) * self.stages_per_claim
+        scored = (train_n + val_calls * self.val_size) * self.stages_per_claim
+        return scored + self.canary_sessions(probe_cached=probe_cached)
 
     def table(self, ladder: tuple[int, ...] = TRAIN_LADDER) -> list[dict[str, Any]]:
         rows = []
@@ -128,7 +151,13 @@ class CostModel:
         )
         lines = [
             f"per-session ${self.per_session_usd:.4f}   "
-            f"{self.stages_per_claim} sessions/claim   VAL={self.val_size}",
+            f"{self.stages_per_claim} sessions/claim   VAL={self.val_size}   "
+            + (
+                f"canary {self.canary_sessions()} sessions/iter "
+                f"({'per Runner call' if self.canary_per_runner_call else 'once per iter'})"
+                if self.canary_enabled
+                else "no canary"
+            ),
             "",
             header,
             "-" * len(header),
@@ -695,20 +724,42 @@ def _selftest() -> int:
     # -- the arithmetic the Verification table gates on ---------------------------------------
     train_only = cm.batch_cost(50)
     full = cm.iteration_cost(50)
+    # The scored-claim arithmetic is stated against a canary-free model so these keep testing the
+    # TRAIN/VAL call structure rather than silently absorbing the canary term added for OQ12.
+    bare = CostModel(canary_enabled=False)
     checks += [
         ("an iteration prices THREE runner calls, not one",
-         full == train_only + 2 * cm.batch_cost(VAL_SIZE)),
+         bare.iteration_cost(50) == bare.batch_cost(50) + 2 * bare.batch_cost(VAL_SIZE)),
         ("a TRAIN-only estimate understates by exactly 2 x VAL",
-         round(full - train_only, 6) == round(2 * cm.batch_cost(VAL_SIZE), 6)),
+         round(bare.iteration_cost(50) - bare.batch_cost(50), 6)
+         == round(2 * bare.batch_cost(VAL_SIZE), 6)),
         ("the shortfall does not shrink as TRAIN grows",
          round(cm.iteration_cost(2141) - cm.batch_cost(2141), 6)
          == round(cm.iteration_cost(10) - cm.batch_cost(10), 6)),
         ("VAL=316 x 3 sessions x 2 calls is the 1,896 sessions the plan names",
          2 * VAL_SIZE * len(STAGES) == 1896),
-        ("caching the probe removes exactly one VAL call",
+        ("caching the probe removes one VAL call, and the canary firing that went with it",
          round(cm.iteration_cost(50) - cm.iteration_cost(50, probe_cached=True), 6)
-         == round(cm.batch_cost(VAL_SIZE), 6)),
+         == round(cm.batch_cost(VAL_SIZE) + cm.stages_per_claim * cm.per_session_usd, 6)),
+        ("...which for a canary-free run is exactly the VAL call",
+         round(bare.iteration_cost(50) - bare.iteration_cost(50, probe_cached=True), 6)
+         == round(bare.batch_cost(VAL_SIZE), 6)),
         ("the ladder is sarol's D13 ramp", TRAIN_LADDER[-1] == 2141),
+        # Open Questions §12, resolved 2026-09-02 (Phil): once per Runner call, and priced.
+        ("the canary is a priced term, not an untracked extra",
+         cm.canary_sessions() == 3 * cm.stages_per_claim),
+        ("...billed once per Runner call, which is three per iteration",
+         cm.runner_calls() == 3 and cm.canary_sessions() > 0),
+        ("...two when the probe is served from cache",
+         cm.canary_sessions(probe_cached=True) == 2 * cm.stages_per_claim),
+        ("...one per iteration under the cheaper reading, had it been chosen",
+         CostModel(canary_per_runner_call=False).canary_sessions() == cm.stages_per_claim),
+        ("...and zero when no canary is configured", bare.canary_sessions() == 0),
+        ("cost and session count stay consistent with each other",
+         round(cm.iteration_cost(50), 9)
+         == round(cm.sessions_per_iteration(50) * cm.per_session_usd, 9)),
+        ("the canary is a rounding error against VAL, so it never drives the N choice",
+         cm.iteration_cost(10) - bare.iteration_cost(10) < 0.02 * bare.iteration_cost(10)),
     ]
 
     # -- budget refusal ------------------------------------------------------------------------
