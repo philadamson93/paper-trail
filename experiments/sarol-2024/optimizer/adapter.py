@@ -77,6 +77,7 @@ if str(_SCRIPTS) not in sys.path:
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import profiles as profiles_mod  # noqa: E402
 import validate_sarol  # noqa: E402
 
 #: Repo root: experiments/sarol-2024/optimizer/adapter.py -> up 3.
@@ -90,7 +91,10 @@ SCHEMA_VERSION = "0.1.0"
 
 #: The three nested Claude Code sessions one claim costs. Named because the cost preflight has to
 #: multiply by it and because `RunArtifacts.sub_invocation_count` is the field that carries it.
-STAGES: tuple[str, ...] = ("extractor", "adjudicator", "verifier")
+#: Every stage that exists. What a given run dispatches is the *profile's* subset
+#: (`profiles.Profile.stages`) -- under `retrieval` that is `("adjudicator",)` alone. Kept as the
+#: full tuple because it is the vocabulary, not the schedule.
+STAGES: tuple[str, ...] = profiles_mod.ALL_STAGES
 
 
 def engine_path() -> pathlib.Path:
@@ -182,9 +186,24 @@ class SarolProgramStore:
         """The frozen-and-immutable half: read-only to the optimizer."""
         return [e["path"] for e in self.entries if e.get("contract_file")]
 
-    def editable_paths(self) -> list[str]:
-        """The optimizer's EDIT scope: the globset minus every ``contract_file=True`` entry."""
-        return [e["path"] for e in self.entries if not e.get("contract_file")]
+    def editable_paths(self, profile=None) -> list[str]:
+        """The optimizer's EDIT scope: non-contract entries, narrowed to the profile (C6.1).
+
+        Two owners, deliberately: `profiles.py` names which paths a rung may touch, and this method
+        owns the ``contract_file`` partition. Neither duplicates the other, so widening a profile
+        can never accidentally hand over a contract file — the intersection drops it and
+        `profiles.validate_against_manifest` refuses it up front.
+
+        The default profile is `agentic`, whose scope is every non-contract entry, so an un-migrated
+        caller sees exactly the previous behaviour. Order follows the manifest, not the profile, so
+        the scope is stable regardless of how a profile happens to list its paths.
+        """
+        allowed = set(profiles_mod.get(profile).editable)
+        return [
+            e["path"]
+            for e in self.entries
+            if not e.get("contract_file") and e["path"] in allowed
+        ]
 
     # -- the re-hash (layer ii) --------------------------------------------------------------
 
@@ -380,6 +399,7 @@ class SarolRunner:
         canary: "CanarySpec | None" = None,
         command_name: str = "sarol-eval-item",
         require_command: bool = True,
+        profile=None,
     ) -> None:
         self.program_store = program_store
         # A real checkout, not the materialized tree: that tree is chmod'd read-only, its `.claude/`
@@ -398,6 +418,9 @@ class SarolRunner:
         self.canary = canary
         self.command_name = command_name
         self.require_command = require_command
+        # Which stages this run dispatches, and therefore what it costs and what it measures.
+        # Defaults to the landed three-stage pipeline, so adding profiles changed no behaviour.
+        self.profile = profiles_mod.get(profile)
 
     # -- preflight ---------------------------------------------------------------------------
 
@@ -533,7 +556,7 @@ class SarolRunner:
                 "stages": {},
                 "status": "ok",
             }
-            for stage in STAGES:
+            for stage in self.profile.stages:
                 cmd = self._stage_command(stage, claim, materialized_path)
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
                 counter["subs"] += 1
@@ -606,6 +629,12 @@ class SarolRunner:
                 {
                     "batch_id": inputs.batch_id,
                     "split": inputs.split,
+                    # C6.5: macro-F1 under two profiles measures two different systems, and the
+                    # engine's frontier is a bare scalar that cannot tell them apart. Stamping the
+                    # profile here is the consumer-side half of keeping them distinguishable.
+                    "profile": self.profile.name,
+                    "profile_stages": list(self.profile.stages),
+                    "retrieval_k": self.profile.retrieval_k,
                     # The Scorer's coverage assertion compares against what was actually ASKED of
                     # the Runner, not against however many records came back.
                     "requested_count": len(claims),
@@ -920,6 +949,25 @@ def _selftest() -> int:
          len(contracts) + len(editable) == len(store.entries)),
         ("no contract path leaks into the edit scope",
          not (set(contracts) & set(editable))),
+        # C6.1 -- the profile narrows the EDIT scope. The invariant with teeth: you may not
+        # optimize a stage you do not run.
+        ("the default edit scope is unchanged by profiles landing",
+         editable == store.editable_paths("agentic")),
+        ("retrieval narrows the scope to the judge and its rubric",
+         set(store.editable_paths("retrieval")) == {
+             "experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md",
+             "experiments/sarol-2024/specs/verdict_schema_sarol.md"}),
+        ("...so Phase 1 cannot edit the extractor it never runs",
+         "src/prompts/extractor-dispatch-pdf.md" not in store.editable_paths("retrieval")),
+        ("no profile's scope reaches a contract file",
+         all(not (set(store.editable_paths(name)) & set(contracts))
+             for name in profiles_mod.PROFILES)),
+        ("edit scope keeps manifest order regardless of how a profile lists paths",
+         store.editable_paths("retrieval")
+         == [e["path"] for e in store.entries
+             if e["path"] in set(store.editable_paths("retrieval"))]),
+        ("the profiles themselves validate against this manifest",
+         profiles_mod.validate_against_manifest(store.entries) == []),
     ]
 
     # -- contract re-hash: the gate that makes "immutable" true ------------------------------
@@ -1258,6 +1306,54 @@ def _selftest() -> int:
                  all(c == "CANARY" for c in dispatched_claims)),
                 ("...and it is not scored as a bad result, which is the whole point",
                  canary_res.status != "ok"),
+            ]
+
+            # C6.1 -- the profile decides what gets dispatched. This is the check that would have
+            # caught the landed `for stage in STAGES` loop running Phase 2 under a Phase 1 label.
+            stages_seen: list[str] = []
+
+            def stage_spy(cmd, cwd, t_):
+                joined = " ".join(cmd)
+                stages_seen.append(joined.split("--stage ")[1].split()[0])
+                return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+
+            def run_under(profile_name):
+                stages_seen.clear()
+                runner = SarolRunner(
+                    store,
+                    invoke=stage_spy,
+                    output_root=pathlib.Path(tmp) / f"out-{profile_name}",
+                    paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                    require_command=False,
+                    profile=profile_name,
+                )
+                res_ = runner.run(
+                    pathlib.Path(tmp),
+                    schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
+                )
+                return list(stages_seen), res_
+
+            retr_stages, retr_res = run_under("retrieval")
+            agentic_stages, _ = run_under("agentic")
+            retr_manifest = json.loads(
+                pathlib.Path(retr_res.artifact_refs[0].path).read_text(encoding="utf-8")
+            )
+            checks += [
+                ("under retrieval the Runner dispatches the adjudicator alone",
+                 set(retr_stages) == {"adjudicator"}),
+                ("...one session per claim, not three",
+                 len(retr_stages) == 1 and len(agentic_stages) == 3),
+                ("...and agentic still runs all three, in order",
+                 agentic_stages == list(profiles_mod.ALL_STAGES)),
+                # C6.5: the frontier is a bare scalar, so the profile has to be recoverable from
+                # the artifacts or two different experiments become indistinguishable after the
+                # fact.
+                ("the run manifest records which profile produced it",
+                 retr_manifest["profile"] == "retrieval"),
+                ("...with the retrieval budget, without which the number is unreportable",
+                 retr_manifest["retrieval_k"] == 20),
+                ("...and the stages it actually ran",
+                 retr_manifest["profile_stages"] == ["adjudicator"]),
             ]
     else:
         checks.append((f"engine not found at {engine_path()} -- engine-facing checks SKIPPED", True))

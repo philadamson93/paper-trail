@@ -58,6 +58,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 import adapter  # noqa: E402
+import profiles as profiles_mod  # noqa: E402
 from adapter import STAGES, SarolProgramStore  # noqa: E402
 
 #: `sarol`'s graduated-N TRAIN ramp (D13). Nested, so the same version is comparable across levels.
@@ -84,8 +85,14 @@ class CostModel:
     """Prices an iteration. The arithmetic the Verification table gates a paid run on."""
 
     per_session_usd: float = DEFAULT_PER_SESSION_USD
+    #: Sessions one claim costs. **Derive this from the profile** rather than passing it: under
+    #: `retrieval` a claim is one session, not three, and hard-coding 3 overstates a Phase 1
+    #: iteration by ~3x (C6.6). `for_profile()` is the way in.
     stages_per_claim: int = len(STAGES)
     val_size: int = VAL_SIZE
+    #: Display only -- which rung these numbers describe. A cost table without it is ambiguous
+    #: between two experiments that differ by 3x.
+    profile_name: str = profiles_mod.DEFAULT_PROFILE
     #: Open Questions §12, resolved 2026-09-02 (Phil): the canary fires once per **Runner call**,
     #: which is what the landed Runner already does -- three firings per iteration, so a break
     #: between TRAIN and VAL is caught inside the iteration it happened in rather than one later.
@@ -94,6 +101,12 @@ class CostModel:
     canary_per_runner_call: bool = True
     #: Whether a canary is configured at all. No canary, no canary sessions.
     canary_enabled: bool = True
+
+    @classmethod
+    def for_profile(cls, profile, **kwargs) -> "CostModel":
+        """Build a model whose per-claim session count comes from the profile (C6.6)."""
+        prof = profiles_mod.get(profile)
+        return cls(stages_per_claim=prof.sessions_per_claim, profile_name=prof.name, **kwargs)
 
     def claim_cost(self) -> float:
         return self.stages_per_claim * self.per_session_usd
@@ -150,7 +163,7 @@ class CostModel:
             f"{'$/iter cached':>14}  {'TRAIN-only $':>13}  {'understated by':>15}"
         )
         lines = [
-            f"per-session ${self.per_session_usd:.4f}   "
+            f"profile {self.profile_name}   per-session ${self.per_session_usd:.4f}   "
             f"{self.stages_per_claim} sessions/claim   VAL={self.val_size}   "
             + (
                 f"canary {self.canary_sessions()} sessions/iter "
@@ -760,6 +773,22 @@ def _selftest() -> int:
          == round(cm.sessions_per_iteration(50) * cm.per_session_usd, 9)),
         ("the canary is a rounding error against VAL, so it never drives the N choice",
          cm.iteration_cost(10) - bare.iteration_cost(10) < 0.02 * bare.iteration_cost(10)),
+        # C6.6 -- the profile drives sessions/claim. Hard-coding 3 overstates Phase 1 by ~3x, which
+        # is the difference between "$32 an iteration" and "$96 an iteration" on a paid decision.
+        ("a retrieval iteration is one session per claim",
+         CostModel.for_profile("retrieval").stages_per_claim == 1),
+        ("...and agentic is three", CostModel.for_profile("agentic").stages_per_claim == 3),
+        ("...so Phase 1 costs a third of Phase 2 per claim",
+         round(CostModel.for_profile("retrieval").claim_cost() * 3, 9)
+         == round(CostModel.for_profile("agentic").claim_cost(), 9)),
+        ("retrieval prices at the ~$32/iteration the plan names",
+         31 < CostModel.for_profile("retrieval").iteration_cost(10) < 34),
+        ("...and ~$16 with the probe cached, as C6.6 states",
+         15 < CostModel.for_profile("retrieval").iteration_cost(10, probe_cached=True) < 18),
+        ("agentic still prices at the ~$96 floor",
+         94 < CostModel.for_profile("agentic").iteration_cost(10) < 99),
+        ("the cost table says which rung it is describing",
+         "retrieval" in CostModel.for_profile("retrieval").render_table()),
     ]
 
     # -- budget refusal ------------------------------------------------------------------------
@@ -889,6 +918,13 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--preflight", action="store_true", help="print the per-landmark cost table")
     ap.add_argument("--run", action="store_true", help="drive the engine's optimization loop")
+    ap.add_argument(
+        "--profile",
+        default=profiles_mod.DEFAULT_PROFILE,
+        choices=sorted(profiles_mod.PROFILES),
+        help="evidence-acquisition profile (C6.1). 'retrieval' is Phase 1; the default is the "
+             "landed three-stage pipeline, so Phase 1 must be asked for explicitly.",
+    )
     ap.add_argument("--per-session-usd", type=float, default=DEFAULT_PER_SESSION_USD)
     ap.add_argument("--max-budget-usd", type=float, default=None)
     ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
@@ -940,7 +976,7 @@ def main() -> int:
         }, indent=2))
         return 0
 
-    cost_model = CostModel(per_session_usd=args.per_session_usd)
+    cost_model = CostModel.for_profile(args.profile, per_session_usd=args.per_session_usd)
     if args.preflight:
         print(cost_model.render_table())
         if args.max_budget_usd is not None and args.train_n is not None:
