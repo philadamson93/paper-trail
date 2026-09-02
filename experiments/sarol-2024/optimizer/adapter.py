@@ -1,0 +1,1025 @@
+"""paper-trail's ``TaskAdapter`` — the four protocols `agentic-label-opt`'s ``run_loop`` drives.
+
+paper-trail is consumer #3 of the shared engine (rad-eval #1, crc-extraction-agent #2). The engine
+abstracts the *container* — the manifest freeze, the materialize step, the audit ledger, the
+frontier bookkeeping — and never the *payload*. This module is the payload: `ProgramStore`,
+`Runner`, `Scorer`, `ReleaseBuilder`, plus the agent wrapper that enforces the one guarantee the
+engine cannot.
+
+What is genuinely load-bearing here, and why (plan Parts C1/C4, engine @ `6d621ac`):
+
+* **The contract-file re-hash is consumer-side, and it is the whole of "immutable".** The engine's
+  ``contract_file=True`` enforces **presence only** (`versioning.py:86-90`, `materialize.py:72-79`):
+  nothing in the engine stops the optimizer rewriting a contract file's bytes. So the frozen Sarol
+  enum is immutable only because :class:`SarolProgramStore` re-hashes it after every edit pass and
+  :class:`ContractGuardedAgent` turns a mismatch into a nonzero exit. That placement is deliberate:
+  `run_loop` raises ``LoopStop`` on a nonzero agent exit *before* ``commit_version``, so a mutated
+  contract fails the iteration **before any scoring or freeze** — which is exactly the gate the
+  plan's Verification table asks for. Anywhere later and a poisoned version is already tagged.
+
+* **The Runner is called three times per iteration, not twice.** `loop.py:334` (TRAIN), `:335`
+  (VAL), and `:410` (the post-commit frozen-version probe, on ``val_inputs`` again). Only the
+  probe's ``status`` is ever checked (`:413`); ``train_artifacts.status``/``val_artifacts.status``
+  are read by nothing, and there is no try/except around the current-version calls. For an agentic
+  Runner that means a partial-batch failure either scores as a silently degraded metric or takes
+  the loop down. So this Runner never raises: it catches its own failures and reports them as
+  ``status="timeout"``/``"program_error"``/``"infra_error"``, and the Scorer refuses to score
+  anything that is not ``status="ok"``.
+
+* **The engine never injects ``_split``.** `loop.py:320-321` comments that ``_iter``/``_split``
+  "ride inside `task_config`", but only ``_iter`` actually does (`:336-337`). The split arrives at
+  the Scorer as its *second positional argument* instead. :class:`SarolScorer` therefore stashes it
+  into the returned ``task_config``; without that, :class:`SarolReleaseBuilder` would return a
+  train-phase payload for the VAL call and the loop would ``LoopStop`` at `loop.py:373-377`.
+
+* **Call-shape asymmetry is real and unforgiving.** ``runner.run(...)`` and ``scorer.score(...)``
+  are called **positionally**; ``build_release(..., frontier=, budget=)`` and
+  ``agent.run(iter_n=, materialized_path=)`` are **keyword-only**. Uniform signatures in either
+  style break one pair or the other. These are copied from the engine's own `adapter.py` Protocols
+  rather than guessed.
+
+* **The materialized tree is not a runnable Claude Code project.** ``materialize`` does
+  ``git show`` + ``write_text`` (`materialize.py:81-84`), so `main`'s ``.claude/*`` symlinks would
+  land as regular files containing their target string; the orchestrator is deliberately outside
+  the fileset; and the whole tree is chmod'd read-only, directories included (`:100-113`). So the
+  Runner keeps a real working checkout as cwd and points ``{{spec_root}}`` at the materialized
+  tree, per `src/commands/paper-trail.md:439`. Everything reachable through ``{{spec_root}}`` must
+  therefore be a manifest entry (plan A4).
+
+* **NaN passes the engine's metric validation.** ``PrimaryMetric`` checks ``isinstance`` only
+  (`schemas.py:80-81`). A NaN frontier value makes ``_select_best`` order-dependent and makes
+  ``_regressed`` return ``False``, so step-back never fires. The Scorer asserts finiteness.
+
+Gold is never touched here. ``parse_verdict.py`` remains the single gold boundary and is called
+only after a batch's adjudications are complete — the Runner never imports it.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import hashlib
+import json
+import math
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Callable, Iterable, Sequence
+
+_HERE = pathlib.Path(__file__).resolve().parent
+_SCRIPTS = _HERE.parent / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+import validate_sarol  # noqa: E402
+
+#: Repo root: experiments/sarol-2024/optimizer/adapter.py -> up 3.
+REPO_ROOT = _HERE.parents[2]
+MANIFEST_PATH = _HERE.parent / "program-v0" / "manifest.json"
+
+#: Where `agentic-label-opt` is checked out. Same default as `scripts/materialize_smoke.py`.
+DEFAULT_ENGINE = pathlib.Path.home() / "Documents" / "Misc" / "Projects" / "agentic-label-opt"
+
+SCHEMA_VERSION = "0.1.0"
+
+#: The three nested Claude Code sessions one claim costs. Named because the cost preflight has to
+#: multiply by it and because `RunArtifacts.sub_invocation_count` is the field that carries it.
+STAGES: tuple[str, ...] = ("extractor", "adjudicator", "verifier")
+
+
+def engine_path() -> pathlib.Path:
+    return pathlib.Path(os.environ.get("AGENTIC_LABEL_OPT", DEFAULT_ENGINE)).expanduser()
+
+
+def _import_engine():
+    """Import the engine's schema types. Kept in a function so this module is importable (and
+    self-testable) on a machine without the engine checked out."""
+    path = engine_path()
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+    from engine import schemas  # noqa: PLC0415
+
+    return schemas
+
+
+# =================================================================================================
+# ProgramStore — the manifest, the edit scope, and the contract-file re-hash
+# =================================================================================================
+
+
+@dataclass(frozen=True)
+class ContractViolation:
+    path: str
+    expected_sha256: str
+    actual_sha256: str | None  # None when the file is missing entirely
+
+    def __str__(self) -> str:
+        actual = self.actual_sha256 or "<missing>"
+        return f"{self.path}: frozen {self.expected_sha256[:12]}, found {actual[:12] if self.actual_sha256 else actual}"
+
+
+class SarolProgramStore:
+    """Serves the frozen `program-v0` manifest to the engine, and owns the two things the engine
+    does not model: the adapter-owned extras strip, and the contract-file re-hash.
+
+    Our manifest carries two fields per entry the engine's ``ManifestEntry`` does not declare —
+    ``source`` (which of the two source refs a file was frozen from; the engine models exactly one)
+    and ``sha256`` (the frozen content hash the re-hash compares against). Splatting a raw entry
+    into ``ManifestEntry`` raises ``TypeError``, which `scripts/materialize_smoke.py` asserts on
+    purpose so nobody "simplifies" this strip away.
+    """
+
+    def __init__(
+        self,
+        manifest_path: pathlib.Path = MANIFEST_PATH,
+        *,
+        repo_root: pathlib.Path = REPO_ROOT,
+    ) -> None:
+        self.manifest_path = pathlib.Path(manifest_path)
+        # Pre-resolved: `policy.py` resolves symlinks when checking a subject (`:42-48`) but
+        # compares against the RAW repo_root (`:51-55`). On macOS -- this consumer's only machine --
+        # /tmp -> /private/tmp and iCloud-backed paths make an unresolved root deny every read, and
+        # the failure is silent and misdiagnosable: the denied threshold trips and the run ends in a
+        # LoopPause the engine documents as "a calibration signal, not a failure".
+        self.repo_root = pathlib.Path(repo_root).resolve()
+        self.raw: dict[str, Any] = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+
+    # -- manifest ---------------------------------------------------------------------------
+
+    @property
+    def entries(self) -> list[dict[str, Any]]:
+        return self.raw["entries"]
+
+    @property
+    def combined_hash(self) -> str:
+        return self.raw["combined_hash"]
+
+    @property
+    def runtime_pins(self) -> dict[str, Any]:
+        return self.raw.get("runtime_pins", {})
+
+    def manifest(self):
+        """The engine-facing ``ProgramManifest``. This is the ``ProgramStore`` protocol."""
+        schemas = _import_engine()
+        # Derived from the dataclass rather than hard-coded, so an additive engine schema change
+        # is picked up instead of silently dropped by a stale literal set.
+        declared = {f.name for f in dataclasses.fields(schemas.ManifestEntry)}
+        stripped = tuple(
+            schemas.ManifestEntry(**{k: v for k, v in e.items() if k in declared})
+            for e in self.entries
+        )
+        return schemas.ProgramManifest(entries=stripped, combined_hash=self.combined_hash)
+
+    # -- edit scope -------------------------------------------------------------------------
+
+    def contract_paths(self) -> list[str]:
+        """The frozen-and-immutable half: read-only to the optimizer."""
+        return [e["path"] for e in self.entries if e.get("contract_file")]
+
+    def editable_paths(self) -> list[str]:
+        """The optimizer's EDIT scope: the globset minus every ``contract_file=True`` entry."""
+        return [e["path"] for e in self.entries if not e.get("contract_file")]
+
+    # -- the re-hash (layer ii) --------------------------------------------------------------
+
+    def verify_contract_files(self, tree_root: pathlib.Path | None = None) -> list[ContractViolation]:
+        """Re-hash every ``contract_file=True`` entry against its frozen ``sha256``.
+
+        This is the *only* thing making those files immutable — the engine's own flag checks that a
+        contract file is present in the fileset, never that its bytes are unchanged. Returns the
+        violations rather than raising, so the caller decides the failure mode (the agent wrapper
+        turns them into a nonzero exit; the dispatcher preflight prints them).
+        """
+        root = pathlib.Path(tree_root).resolve() if tree_root is not None else self.repo_root
+        violations: list[ContractViolation] = []
+        for entry in self.entries:
+            if not entry.get("contract_file"):
+                continue
+            target = root / entry["path"]
+            if not target.exists():
+                violations.append(ContractViolation(entry["path"], entry["sha256"], None))
+                continue
+            actual = hashlib.sha256(target.read_bytes()).hexdigest()
+            if actual != entry["sha256"]:
+                violations.append(ContractViolation(entry["path"], entry["sha256"], actual))
+        return violations
+
+
+# =================================================================================================
+# Runner — nested dispatch, with the preflight and the bounds the engine does not provide
+# =================================================================================================
+
+
+@dataclass(frozen=True)
+class InvocationResult:
+    """One nested headless Claude Code session's outcome."""
+
+    exit_code: int
+    cost_usd: float
+    duration_seconds: float
+    timed_out: bool = False
+    detail: str = ""
+
+
+#: A seam, so every offline gate below can drive the Runner without spending money. The real
+#: implementation is :func:`headless_claude_invoke`.
+Invoker = Callable[[Sequence[str], pathlib.Path, float], InvocationResult]
+
+
+def _parse_cost(stdout: str) -> float:
+    """Pull real metered spend out of the CLI's own JSON output.
+
+    Deliberately NOT `parse_verdict.estimate_cost_usd`: its ``PRICING`` table covers four model ids
+    and contributes nothing for anything unlisted, it falls back to an 0.85 input/output split
+    because real ledger rows carry null token counts, and the ledger it reads is produced by a
+    hand-transcription step no committed prompt performs. Estimation stays for *forecasting*
+    (the dispatcher's preflight); accounting uses the number the CLI actually reports.
+    """
+    total = 0.0
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        value = obj.get("total_cost_usd")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            total = float(value)
+    return total
+
+
+def headless_claude_invoke(
+    cmd: Sequence[str], cwd: pathlib.Path, timeout_seconds: float
+) -> InvocationResult:
+    """Run one nested headless session under a hard timeout.
+
+    ``loop.py`` has no timeout anywhere, so the bound has to live here: an agentic Runner that
+    hangs would otherwise stall the whole optimization loop with no stop.
+    """
+    started = time.monotonic()
+    try:
+        proc = subprocess.run(
+            list(cmd),
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return InvocationResult(
+            exit_code=124,
+            cost_usd=0.0,
+            duration_seconds=time.monotonic() - started,
+            timed_out=True,
+            detail=f"timed out after {timeout_seconds}s",
+        )
+    return InvocationResult(
+        exit_code=proc.returncode,
+        cost_usd=_parse_cost(proc.stdout),
+        duration_seconds=time.monotonic() - started,
+        detail=(proc.stderr or "").strip()[:500],
+    )
+
+
+def installed_paperclip_version(
+    runner: Callable[[Sequence[str]], subprocess.CompletedProcess] | None = None,
+) -> str | None:
+    """``paperclip --version``, or None when the CLI is absent."""
+    run = runner or (lambda c: subprocess.run(list(c), capture_output=True, text=True, timeout=30))
+    try:
+        proc = run(["paperclip", "--version"])
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return (proc.stdout or "").strip()
+
+
+def _normalize_version(text: str | None) -> str | None:
+    """``"paperclip, version 0.5.11"`` -> ``"0.5.11"``, so a cosmetic banner change is not a
+    spurious mismatch while a real version drift still is."""
+    if not text:
+        return None
+    match = re.search(r"(\d+\.\d+(?:\.\d+)*)", text)
+    return match.group(1) if match else text.strip()
+
+
+@dataclass
+class ClaimRecord:
+    claim_id: str
+    citekey: str
+    staging_dir: pathlib.Path
+    source_mode: str = "pdf"
+
+    @classmethod
+    def from_dict(cls, obj: dict[str, Any]) -> "ClaimRecord":
+        return cls(
+            claim_id=obj["claim_id"],
+            citekey=obj["citekey"],
+            staging_dir=pathlib.Path(obj["staging_dir"]),
+            source_mode=obj.get("source_mode", "pdf"),
+        )
+
+
+def load_batch(input_ref: str | pathlib.Path) -> list[ClaimRecord]:
+    """Read a dispatcher-owned batch file. Never inline claim content — a path, per ``RunInputs``."""
+    obj = json.loads(pathlib.Path(input_ref).read_text(encoding="utf-8"))
+    return [ClaimRecord.from_dict(c) for c in obj["claims"]]
+
+
+class SarolRunner:
+    """Dispatches the frozen program over a batch of claims and reports what happened.
+
+    Never raises. Every failure becomes a ``RunArtifacts.status`` the Scorer can refuse, because the
+    engine checks that status on exactly one of its three calls and wraps none of them.
+    """
+
+    def __init__(
+        self,
+        program_store: SarolProgramStore,
+        *,
+        working_checkout: pathlib.Path = REPO_ROOT,
+        output_root: pathlib.Path | None = None,
+        invoke: Invoker | None = None,
+        per_call_timeout_seconds: float = 900.0,
+        paperclip_version_probe: Callable[[], str | None] | None = None,
+        model: str = "opus",
+    ) -> None:
+        self.program_store = program_store
+        # A real checkout, not the materialized tree: that tree is chmod'd read-only, its `.claude/`
+        # symlinks materialize as regular files containing their target string, and the orchestrator
+        # is deliberately not in the fileset. `{{spec_root}}` is what points at the frozen bytes.
+        self.working_checkout = pathlib.Path(working_checkout).resolve()
+        self.output_root = pathlib.Path(output_root).resolve() if output_root else None
+        self.invoke: Invoker = invoke or headless_claude_invoke
+        self.per_call_timeout_seconds = per_call_timeout_seconds
+        self.paperclip_version_probe = paperclip_version_probe or installed_paperclip_version
+        self.model = model
+
+    # -- preflight ---------------------------------------------------------------------------
+
+    def paperclip_pin_error(self) -> str | None:
+        """The pin is enforced, not merely recorded.
+
+        The extractor prompt loads the paperclip command reference at run time via ``paperclip
+        skill``, and that reference lives outside the frozen fileset — so without this check two
+        runs of one program version could diverge with no manifest diff. Returns an error string on
+        mismatch, else None.
+        """
+        pinned = self.program_store.runtime_pins.get("paperclip_cli")
+        if not pinned:
+            return None
+        installed = self.paperclip_version_probe()
+        if installed is None:
+            return f"paperclip CLI not found; program-v0 pins {pinned!r}"
+        want, got = _normalize_version(pinned), _normalize_version(installed)
+        if want != got:
+            return f"paperclip version mismatch: pinned {want!r}, installed {got!r}"
+        return None
+
+    # -- dispatch ----------------------------------------------------------------------------
+
+    def _stage_command(
+        self, stage: str, claim: ClaimRecord, materialized_path: pathlib.Path
+    ) -> list[str]:
+        prompt = (
+            f"/sarol-eval-item --stage {stage} --claim {claim.claim_id} "
+            f"--staging {claim.staging_dir} --spec-root {materialized_path}"
+        )
+        return [
+            "claude",
+            "--dangerously-skip-permissions",
+            "-p",
+            prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--model",
+            self.model,
+            # "project", not "" -- "" silently disables the whole hook stack. Note this reads
+            # .claude/settings.json from the *cwd*, which is why cwd is a real checkout.
+            "--setting-sources",
+            "project",
+            "--strict-mcp-config",
+        ]
+
+    def run(self, materialized_path, inputs):  # positional -- loop.py:334/:335/:410
+        """The ``Runner`` protocol. ``(materialized_path, inputs) -> RunArtifacts``."""
+        schemas = _import_engine()
+        materialized_path = pathlib.Path(materialized_path)
+
+        def artifacts(status: str, *, code: str = "", message: str = "", refs=(), n=0, cost=0.0):
+            return schemas.RunArtifacts(
+                batch_id=inputs.batch_id,
+                status=status,
+                artifact_refs=tuple(refs),
+                error=schemas.ErrorInfo(code=code, message_redacted=message) if code else None,
+                sub_invocation_count=n,
+                cost_usd=cost,
+            )
+
+        # Negative control: a mismatched pin fails BEFORE any claim is dispatched, so a scored batch
+        # can never be produced under the wrong CLI.
+        pin_error = self.paperclip_pin_error()
+        if pin_error is not None:
+            return artifacts("infra_error", code="PAPERCLIP_PIN_MISMATCH", message=pin_error)
+
+        try:
+            claims = load_batch(inputs.input_ref)
+        except (OSError, KeyError, json.JSONDecodeError) as exc:
+            return artifacts("infra_error", code="BATCH_UNREADABLE", message=str(exc)[:300])
+
+        out_root = self.output_root or (materialized_path.parent / f"runs-{inputs.batch_id}")
+        out_dir = pathlib.Path(out_root) / inputs.split
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        results: list[dict[str, Any]] = []
+        total_cost = 0.0
+        sub_invocations = 0
+        timed_out = False
+        errored = False
+
+        for claim in claims:
+            record: dict[str, Any] = {
+                "claim_id": claim.claim_id,
+                "citekey": claim.citekey,
+                "staging_dir": str(claim.staging_dir),
+                "stages": {},
+                "status": "ok",
+            }
+            for stage in STAGES:
+                cmd = self._stage_command(stage, claim, materialized_path)
+                res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
+                sub_invocations += 1
+                total_cost += res.cost_usd
+                record["stages"][stage] = {
+                    "exit_code": res.exit_code,
+                    "cost_usd": res.cost_usd,
+                    "duration_seconds": res.duration_seconds,
+                    "timed_out": res.timed_out,
+                }
+                if res.timed_out:
+                    record["status"] = "timeout"
+                    timed_out = True
+                    break
+                if res.exit_code != 0:
+                    record["status"] = "program_error"
+                    record["detail"] = res.detail
+                    errored = True
+                    break
+
+            # Exit validation (Part C5). The Runner calls the validator; the validator owns the rule.
+            if record["status"] == "ok":
+                verdict_path = claim.staging_dir / "ledger" / "claims" / f"{claim.claim_id}.json"
+                validation = validate_sarol.validate_file(
+                    verdict_path, expect_claim_id=claim.claim_id
+                )
+                record["validation"] = validation.as_dict()
+                if not validation.ok:
+                    record["status"] = "program_error"
+                    errored = True
+            results.append(record)
+
+        manifest_path = out_dir / "run_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "batch_id": inputs.batch_id,
+                    "split": inputs.split,
+                    # The Scorer's coverage assertion compares against what was actually ASKED of
+                    # the Runner, not against however many records came back.
+                    "requested_count": len(claims),
+                    "claims": results,
+                    "sub_invocation_count": sub_invocations,
+                    "cost_usd": total_cost,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        ref = schemas.ArtifactRef(
+            path=str(manifest_path),
+            sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        )
+
+        status = "timeout" if timed_out else ("program_error" if errored else "ok")
+        return artifacts(status, refs=(ref,), n=sub_invocations, cost=total_cost)
+
+
+# =================================================================================================
+# Scorer
+# =================================================================================================
+
+
+class SarolScorer:
+    """Turns a run's artifacts into the frontier scalar, with the two guards the engine lacks.
+
+    ``gold_resolver`` is the seam over ``parse_verdict.parse`` — the single piece of code allowed to
+    touch gold. Injecting it keeps this class testable without a gold tree present, and keeps the
+    sealed-split boundary exactly where ``parse_verdict.py`` puts it.
+    """
+
+    def __init__(
+        self,
+        *,
+        gold_resolver: Callable[[pathlib.Path], dict[str, Any]] | None = None,
+    ) -> None:
+        self._gold_resolver = gold_resolver
+
+    def _resolve(self, staging_dir: pathlib.Path) -> dict[str, Any]:
+        if self._gold_resolver is not None:
+            return self._gold_resolver(staging_dir)
+        import parse_verdict  # noqa: PLC0415 -- imported late; it reads gold
+
+        return parse_verdict.parse(staging_dir)
+
+    def score(self, artifacts, split, task_config):  # positional -- loop.py:336/:337
+        """The ``Scorer`` protocol. ``(artifacts, split, task_config) -> ScoreResult``."""
+        schemas = _import_engine()
+        import score_sarol3  # noqa: PLC0415
+
+        # `_split` is stashed here because the engine never injects it (loop.py:320-321 says it
+        # does; loop.py:336-337 shows only `_iter` is). Without this the ReleaseBuilder returns a
+        # train-phase payload for the VAL call and the loop stops at loop.py:373-377.
+        config = {**task_config, "_split": split}
+
+        def result(metric_value: float, breakdown: dict[str, Any]):
+            metric = schemas.PrimaryMetric(
+                name="sarol_3way_macro_f1", value=metric_value, higher_is_better=True
+            )
+            return schemas.ScoreResult(
+                primary_metric=metric, breakdown=breakdown, task_config=config
+            )
+
+        if artifacts.status != "ok" or not artifacts.artifact_refs:
+            # A failed batch is not a zero -- it is not a result. Reporting 0.0 would let a
+            # degraded run masquerade as a bad-but-real score and pollute the frontier.
+            return result(
+                0.0,
+                {
+                    "scored": False,
+                    "reason": f"run status={artifacts.status!r}",
+                    "n_total": 0,
+                    "n_invalid": 0,
+                },
+            )
+
+        run_manifest = json.loads(
+            pathlib.Path(artifacts.artifact_refs[0].path).read_text(encoding="utf-8")
+        )
+        requested = int(run_manifest.get("requested_count", 0))
+
+        pairs: list[tuple[str, str]] = []
+        unresolved = 0
+        for record in run_manifest["claims"]:
+            if record.get("status") != "ok":
+                continue
+            try:
+                resolved = self._resolve(pathlib.Path(record["staging_dir"]))
+            except (OSError, KeyError, RuntimeError):
+                unresolved += 1
+                continue
+            pairs.append((resolved["pred_label"], resolved["gold_label"]))
+
+        scored = score_sarol3.score(pairs)
+
+        # Coverage: guard partial or missing output, not just degenerate values. A partially-scored
+        # batch presented as complete is not a result.
+        complete = scored["n_total"] == requested and unresolved == 0
+        breakdown = {
+            **scored,
+            "scored": complete,
+            "requested_count": requested,
+            "n_unresolved": unresolved,
+            "split": split,
+        }
+        if not complete:
+            breakdown["reason"] = (
+                f"coverage: scored {scored['n_total']} of {requested} requested"
+                f"{f', {unresolved} unresolved' if unresolved else ''}"
+            )
+            return result(0.0, breakdown)
+
+        value = scored["primary_metric"]
+        # NaN passes PrimaryMetric's isinstance-only validation (schemas.py:80-81), and a NaN on the
+        # frontier makes _select_best order-dependent and _regressed always False -- so step-back
+        # would silently never fire. Catch it here, where it is still legible.
+        if not math.isfinite(value):
+            breakdown["scored"] = False
+            breakdown["reason"] = f"non-finite primary_metric: {value!r}"
+            return result(0.0, breakdown)
+
+        return result(value, breakdown)
+
+
+# =================================================================================================
+# ReleaseBuilder + mistake corpus
+# =================================================================================================
+
+
+class SarolReleaseBuilder:
+    """Builds the per-iteration release. Aggregates only — the VAL payload carries the scalar and
+    its breakdown, never per-example content."""
+
+    def __init__(self, *, optimizer_isolation_hash: str = "sarol-2024") -> None:
+        self.optimizer_isolation_hash = optimizer_isolation_hash
+
+    def build_release(self, score, corpus, *, frontier=None, budget=None):
+        """The ``ReleaseBuilder`` protocol. First two positional, ``frontier``/``budget`` keyword —
+        `run_loop` always passes the latter two as keywords, so a strict two-arg signature raises
+        ``TypeError``."""
+        schemas = _import_engine()
+        split = score.task_config.get("_split", "train")
+        iter_n = score.task_config.get("_iter", 0)
+        now = datetime.now(timezone.utc).isoformat()
+
+        if split == "val":
+            return schemas.ReleasePayloadVal(
+                schema_version=SCHEMA_VERSION,
+                phase="val",
+                metrics=score,
+                iter=iter_n,
+                produced_at_utc=now,
+                optimizer_isolation_hash=self.optimizer_isolation_hash,
+            )
+        return schemas.ReleasePayloadTrain(
+            schema_version=SCHEMA_VERSION,
+            phase="train",
+            corpus={
+                "ref": corpus.ref,
+                "counts": corpus.counts,
+                "metrics": {
+                    "primary_metric": score.primary_metric.value,
+                    "primary_metric_name": score.primary_metric.name,
+                    "breakdown": score.breakdown,
+                },
+                "frontier": frontier or {},
+                "budget": budget or {},
+            },
+            iter=iter_n,
+            produced_at_utc=now,
+            optimizer_isolation_hash=self.optimizer_isolation_hash,
+        )
+
+
+def build_mistake_corpus(artifacts, score):
+    """Per-claim adjudicator reasoning + evidence + bounce history, as an adapter-owned blob.
+
+    TRAIN-side mistakes are fully open to the optimizer (Tier 1, `sarol`'s D24). The corpus stays
+    opaque to the engine — ``ref`` + ``counts`` only — because the reason for sealing here is
+    leakage of gold labels, not privacy: the cited papers are public biomedical literature.
+    """
+    schemas = _import_engine()
+    counts = dict(score.breakdown.get("error_class_counts") or {})
+    ref = artifacts.artifact_refs[0].path if artifacts.artifact_refs else ""
+    return schemas.MistakeCorpus(ref=ref, counts=counts)
+
+
+# =================================================================================================
+# Agent wrapper — where the contract re-hash actually bites
+# =================================================================================================
+
+
+@dataclass
+class GuardedOutcome:
+    exit_code: int
+    detail: str
+    token_usage: dict[str, int] = field(default_factory=dict)
+    cost_usd: float = 0.0
+    attempting_step_back: bool = False
+
+
+class ContractGuardedAgent:
+    """Wraps the real optimizer agent and re-hashes the contract files after its edit pass.
+
+    Placement is the point. ``run_loop`` raises ``LoopStop`` on a nonzero agent exit *before*
+    ``commit_version`` (`loop.py:405-407`), so returning nonzero here fails the iteration before
+    anything is scored or frozen. A check anywhere later would be inspecting a version that had
+    already been tagged.
+    """
+
+    def __init__(
+        self,
+        inner,
+        program_store: SarolProgramStore,
+        *,
+        tree_root: pathlib.Path | None = None,
+    ) -> None:
+        self.inner = inner
+        self.program_store = program_store
+        self.tree_root = tree_root
+
+    def run(self, *, iter_n: int, materialized_path=None):  # keyword-only -- loop.py:398
+        outcome = self.inner.run(iter_n=iter_n, materialized_path=materialized_path)
+        violations = self.program_store.verify_contract_files(self.tree_root)
+        if violations:
+            detail = "; ".join(str(v) for v in violations)
+            return GuardedOutcome(
+                exit_code=91,
+                detail=(
+                    f"iter {iter_n}: contract file(s) modified -- the frozen enum is not editable. "
+                    f"{detail}"
+                ),
+                token_usage=dict(getattr(outcome, "token_usage", {}) or {}),
+                cost_usd=float(getattr(outcome, "cost_usd", 0.0) or 0.0),
+                attempting_step_back=False,
+            )
+        return outcome
+
+
+# =================================================================================================
+# Offline gates
+# =================================================================================================
+
+
+class _StubAgent:
+    def __init__(self, exit_code: int = 0) -> None:
+        self.exit_code = exit_code
+
+    def run(self, *, iter_n: int, materialized_path=None):
+        return GuardedOutcome(exit_code=self.exit_code, detail=f"stub iter {iter_n}")
+
+
+def _selftest() -> int:
+    import tempfile
+
+    store = SarolProgramStore()
+    checks: list[tuple[str, bool]] = []
+
+    # -- manifest / edit scope --------------------------------------------------------------
+    contracts = store.contract_paths()
+    editable = store.editable_paths()
+    checks += [
+        ("manifest has 8 entries", len(store.entries) == 8),
+        ("three of them are contract files", len(contracts) == 3),
+        ("the enum contract is one of them",
+         "experiments/sarol-2024/specs/verdict_enum_sarol.md" in contracts),
+        ("the rubric GUIDANCE is editable, per OQ8",
+         "experiments/sarol-2024/specs/verdict_schema_sarol.md" in editable),
+        ("edit scope and contract scope partition the globset",
+         len(contracts) + len(editable) == len(store.entries)),
+        ("no contract path leaks into the edit scope",
+         not (set(contracts) & set(editable))),
+    ]
+
+    # -- contract re-hash: the gate that makes "immutable" true ------------------------------
+    clean = store.verify_contract_files()
+    checks.append(("the working tree's contract files match the freeze", not clean))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = pathlib.Path(tmp)
+        for entry in store.entries:
+            dst = tree / entry["path"]
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes((store.repo_root / entry["path"]).read_bytes())
+        checks.append(("a faithful copy re-hashes clean", not store.verify_contract_files(tree)))
+
+        mutated = tree / "experiments/sarol-2024/specs/verdict_enum_sarol.md"
+        mutated.write_text(mutated.read_text(encoding="utf-8") + "\nIRRELEVANT_2\n", encoding="utf-8")
+        violations = store.verify_contract_files(tree)
+        checks += [
+            ("a mutated contract file is caught", len(violations) == 1),
+            ("...and named", violations and "verdict_enum_sarol.md" in violations[0].path),
+        ]
+
+        guarded = ContractGuardedAgent(_StubAgent(), store, tree_root=tree)
+        outcome = guarded.run(iter_n=1)
+        checks += [
+            ("the guarded agent fails the iteration on a mutated contract", outcome.exit_code != 0),
+            ("...before any scoring or freeze (nonzero exit stops loop.py:405 pre-commit)",
+             outcome.exit_code == 91),
+        ]
+
+        mutated.write_text(
+            (store.repo_root / "experiments/sarol-2024/specs/verdict_enum_sarol.md").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+        checks.append(
+            ("restoring the bytes clears the violation", ContractGuardedAgent(
+                _StubAgent(), store, tree_root=tree).run(iter_n=2).exit_code == 0)
+        )
+
+    # -- paperclip pin negative control ------------------------------------------------------
+    pinned_ok = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.5.11")
+    pinned_bad = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.5.10")
+    pinned_absent = SarolRunner(store, paperclip_version_probe=lambda: None)
+    checks += [
+        ("the pinned paperclip version passes preflight", pinned_ok.paperclip_pin_error() is None),
+        ("a wrong version is caught", pinned_bad.paperclip_pin_error() is not None),
+        ("a missing CLI is caught", pinned_absent.paperclip_pin_error() is not None),
+        ("a cosmetic banner change is not a spurious mismatch",
+         SarolRunner(store, paperclip_version_probe=lambda: "0.5.11").paperclip_pin_error() is None),
+    ]
+
+    # -- version normalisation ---------------------------------------------------------------
+    checks += [
+        ("version parse", _normalize_version("paperclip, version 0.5.11") == "0.5.11"),
+        ("cost parse reads the CLI's own total",
+         _parse_cost('{"type":"result","total_cost_usd":0.42}') == 0.42),
+        ("cost parse survives non-JSON noise", _parse_cost("hello\nworld") == 0.0),
+    ]
+
+    # -- engine-facing shapes ----------------------------------------------------------------
+    engine_ok = (engine_path() / "engine" / "schemas.py").exists()
+    if engine_ok:
+        schemas = _import_engine()
+        manifest = store.manifest()
+        checks += [
+            ("manifest builds against the engine's ManifestEntry", len(manifest.entries) == 8),
+            ("combined_hash is carried through",
+             manifest.combined_hash == store.combined_hash),
+        ]
+        try:
+            schemas.ManifestEntry(**store.entries[0])
+        except TypeError:
+            checks.append(("raw entries still need the adapter's strip step", True))
+        else:
+            checks.append(("raw entries still need the adapter's strip step", False))
+
+        # Scorer guards, driven without gold or an engine run.
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = pathlib.Path(tmp) / "run_manifest.json"
+            manifest_path.write_text(json.dumps({
+                "batch_id": "b1", "split": "train", "requested_count": 2,
+                "claims": [
+                    {"claim_id": "C1", "citekey": "k1", "staging_dir": tmp, "status": "ok"},
+                    {"claim_id": "C2", "citekey": "k2", "staging_dir": tmp, "status": "ok"},
+                ],
+            }), encoding="utf-8")
+            ref = schemas.ArtifactRef(
+                path=str(manifest_path),
+                sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            )
+            ok_artifacts = schemas.RunArtifacts(
+                batch_id="b1", status="ok", artifact_refs=(ref,), sub_invocation_count=6
+            )
+            gold = iter([
+                {"pred_label": "ACCURATE", "gold_label": "ACCURATE"},
+                {"pred_label": "OVERSIMPLIFY", "gold_label": "OVERSIMPLIFY"},
+            ])
+            scorer = SarolScorer(gold_resolver=lambda _p: next(gold))
+            score = scorer.score(ok_artifacts, "val", {"_iter": 1})
+            checks += [
+                ("the Scorer stashes _split, which the engine never injects",
+                 score.task_config.get("_split") == "val"),
+                ("a complete batch scores", score.breakdown["scored"] is True),
+                ("the metric is finite", math.isfinite(score.primary_metric.value)),
+                ("the frontier scalar is 3-way macro-F1",
+                 score.primary_metric.name == "sarol_3way_macro_f1"),
+            ]
+
+            # Coverage: one claim short of what was requested.
+            short = iter([{"pred_label": "ACCURATE", "gold_label": "ACCURATE"}])
+            partial_manifest = pathlib.Path(tmp) / "partial.json"
+            partial_manifest.write_text(json.dumps({
+                "batch_id": "b1", "split": "train", "requested_count": 2,
+                "claims": [{"claim_id": "C1", "citekey": "k1", "staging_dir": tmp, "status": "ok"}],
+            }), encoding="utf-8")
+            partial_ref = schemas.ArtifactRef(
+                path=str(partial_manifest),
+                sha256=hashlib.sha256(partial_manifest.read_bytes()).hexdigest(),
+            )
+            partial = SarolScorer(gold_resolver=lambda _p: next(short)).score(
+                schemas.RunArtifacts(batch_id="b1", status="ok", artifact_refs=(partial_ref,)),
+                "train",
+                {"_iter": 1},
+            )
+            checks += [
+                ("a partial batch does not score as complete", partial.breakdown["scored"] is False),
+                ("...and says why", "coverage" in partial.breakdown.get("reason", "")),
+            ]
+
+            failed = scorer.score(
+                schemas.RunArtifacts(batch_id="b1", status="timeout", artifact_refs=()),
+                "train",
+                {"_iter": 1},
+            )
+            checks.append(
+                ("a timed-out run is not scored as a zero-but-real result",
+                 failed.breakdown["scored"] is False)
+            )
+
+            # ReleaseBuilder discrimination -- the loop LoopStops if these come back crossed.
+            rb = SarolReleaseBuilder()
+            corpus = schemas.MistakeCorpus(ref="", counts={})
+            val_payload = rb.build_release(score, corpus, frontier={}, budget={})
+            train_score = schemas.ScoreResult(
+                primary_metric=schemas.PrimaryMetric(
+                    name="sarol_3way_macro_f1", value=0.5, higher_is_better=True
+                ),
+                breakdown={},
+                task_config={"_split": "train", "_iter": 1},
+            )
+            train_payload = rb.build_release(train_score, corpus, frontier={}, budget={})
+            checks += [
+                ("a val split builds a ReleasePayloadVal",
+                 isinstance(val_payload, schemas.ReleasePayloadVal)),
+                ("a train split builds a ReleasePayloadTrain",
+                 isinstance(train_payload, schemas.ReleasePayloadTrain)),
+            ]
+
+        # Runner: the pin negative control fires before any claim is dispatched.
+        dispatched: list[str] = []
+
+        def spy(cmd, cwd, timeout):
+            dispatched.append(" ".join(cmd))
+            return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+
+        bad_runner = SarolRunner(
+            store, invoke=spy, paperclip_version_probe=lambda: "paperclip, version 0.0.1"
+        )
+        art = bad_runner.run(
+            pathlib.Path("/nonexistent"),
+            schemas.RunInputs(input_ref="/nonexistent/batch.json", batch_id="b", split="train"),
+        )
+        checks += [
+            ("a mismatched pin returns infra_error", art.status == "infra_error"),
+            ("...before any claim is dispatched", not dispatched),
+            ("...naming the pin", art.error is not None and "PAPERCLIP" in art.error.code),
+        ]
+
+        # Runner: a timeout surfaces as status="timeout", never as an exception.
+        with tempfile.TemporaryDirectory() as tmp:
+            batch = pathlib.Path(tmp) / "batch.json"
+            staging = pathlib.Path(tmp) / "staging"
+            staging.mkdir()
+            batch.write_text(json.dumps({"claims": [
+                {"claim_id": "C1", "citekey": "k1", "staging_dir": str(staging)}
+            ]}), encoding="utf-8")
+
+            def timeout_invoke(cmd, cwd, t):
+                return InvocationResult(
+                    exit_code=124, cost_usd=0.0, duration_seconds=t, timed_out=True
+                )
+
+            r = SarolRunner(
+                store,
+                invoke=timeout_invoke,
+                output_root=pathlib.Path(tmp) / "out",
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+            )
+            res = r.run(
+                pathlib.Path(tmp),
+                schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
+            )
+            checks += [
+                ("a hung session surfaces as status=timeout, not an exception",
+                 res.status == "timeout"),
+                ("the engine checks this status on only 1 of its 3 calls, so we report it",
+                 res.sub_invocation_count == 1),
+            ]
+    else:
+        checks.append((f"engine not found at {engine_path()} -- engine-facing checks SKIPPED", True))
+
+    failed_n = 0
+    for name, ok in checks:
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}")
+        failed_n += 0 if ok else 1
+    print(f"\n{len(checks) - failed_n}/{len(checks)} passed")
+    return 1 if failed_n else 0
+
+
+def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--selftest", action="store_true", help="run the offline adapter gates")
+    ap.add_argument("--edit-scope", action="store_true", help="print the optimizer's EDIT globset")
+    ap.add_argument(
+        "--verify-contracts", action="store_true", help="re-hash the contract files and report"
+    )
+    args = ap.parse_args()
+
+    if args.selftest:
+        return _selftest()
+    if args.edit_scope:
+        store = SarolProgramStore()
+        print(json.dumps(
+            {"editable": store.editable_paths(), "contract_read_only": store.contract_paths()},
+            indent=2,
+        ))
+        return 0
+    if args.verify_contracts:
+        violations = SarolProgramStore().verify_contract_files()
+        if violations:
+            for v in violations:
+                print(f"MUTATED  {v}")
+            return 1
+        print("OK  all contract files match the freeze")
+        return 0
+    ap.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
