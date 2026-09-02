@@ -520,7 +520,10 @@ class SarolRunner:
         rubric_path = materialized_path / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
         rollup_order = validate_sarol.load_rollup_order(rubric_path)
 
-        self._counter = {"cost": 0.0, "subs": 0}
+        # Per-call, closed over by `process` below -- deliberately NOT instance state: the
+        # engine calls this Runner three times per iteration and a counter on `self` would
+        # carry across those calls.
+        counter = {"cost": 0.0, "subs": 0}
 
         def process(claim: ClaimRecord) -> dict[str, Any]:
             record: dict[str, Any] = {
@@ -533,8 +536,8 @@ class SarolRunner:
             for stage in STAGES:
                 cmd = self._stage_command(stage, claim, materialized_path)
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
-                self._counter["subs"] += 1
-                self._counter["cost"] += res.cost_usd
+                counter["subs"] += 1
+                counter["cost"] += res.cost_usd
                 record["stages"][stage] = {
                     "exit_code": res.exit_code,
                     "cost_usd": res.cost_usd,
@@ -578,15 +581,15 @@ class SarolRunner:
                         f"(status={canary_record['status']}) -- the scorer or pipeline moved; "
                         "numbers from this run are not comparable to earlier ones"
                     ),
-                    n=self._counter["subs"],
-                    cost=self._counter["cost"],
+                    n=counter["subs"],
+                    cost=counter["cost"],
                 )
 
         results: list[dict[str, Any]] = [process(c) for c in claims]
         timed_out = any(r["status"] == "timeout" for r in results)
         errored = any(r["status"] == "program_error" for r in results)
-        total_cost = self._counter["cost"]
-        sub_invocations = self._counter["subs"]
+        total_cost = counter["cost"]
+        sub_invocations = counter["subs"]
 
         # Roll the validator's own invalid-label counts up to the batch. The Scorer merges these
         # rather than re-deriving them, because `parse_verdict` only ever sees the OVERALL label:
