@@ -1,0 +1,67 @@
+{
+  "claim_id": "C044",
+  "schema_version": "1.1",
+  "run_id": "run_20260901T1200Z",
+  "citekey": "sandino2020",
+  "handle": null,
+  "source_mode": "paperclip",
+  "paperclip_handle": "/papers/sandino2020/",
+  "ingest_mode": null,
+  "source_ref_urls": [],
+
+  "rubric_variant": "sarol_2024_9class",
+
+  "claim_text": "Prior work has explored unrolled optimisation for accelerated imaging.",
+  "manuscript_section": "1",
+  "claim_type": {
+    "type": "FRAMING",
+    "confidence": "high"
+  },
+
+  "sub_claims": [
+    {
+      "sub_claim_id": "C044.a",
+      "text": "Prior work has explored unrolled optimisation for accelerated imaging.",
+      "evidence": [
+        {
+          "section": "Introduction",
+          "line": 12,
+          "snippet": "unrolled optimisation networks have been applied to accelerated acquisition",
+          "source_mode": "paperclip",
+          "locator": "/papers/sandino2020/sections/introduction.lines#L12"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PROBABLY_FINE",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "PROBABLY_FINE belongs to neither enum. It is an invented label -- exactly what an optimizer edit that wandered outside the frozen vocabulary would emit. The contract says charge it as a miss and count it, never crash, so the loop rejects the edit on score alone."
+    }
+  ],
+
+  "overall_verdict": "PROBABLY_FINE",
+  "overall_flag": null,
+  "remediation": {
+    "category": "—",
+    "suggested_edit": ""
+  },
+
+  "attestation": {
+    "phrasings_tried": [
+      "unrolled optimisation accelerated imaging"
+    ],
+    "section_checklist": [
+      {"section": "Introduction", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Framing citation; no onward attribution checked.",
+    "out_of_context_check": "Usage matches the source's framing."
+  },
+
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": 21,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

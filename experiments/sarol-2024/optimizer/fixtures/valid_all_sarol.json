@@ -1,0 +1,92 @@
+{
+  "claim_id": "C042",
+  "schema_version": "1.1",
+  "run_id": "run_20260901T1200Z",
+  "citekey": "hammernik2021",
+  "handle": "pdfs/hammernik2021/",
+  "source_mode": "pdf",
+  "paperclip_handle": null,
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///fixtures/hammernik2021.pdf#page=5"
+  ],
+
+  "rubric_variant": "sarol_2024_9class",
+
+  "claim_text": "Deep learning reconstruction reduces MRI acquisition time by a factor of four while preserving diagnostic quality across all anatomies.",
+  "manuscript_section": "2.2.3",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "medium"
+  },
+
+  "sub_claims": [
+    {
+      "sub_claim_id": "C042.a",
+      "text": "Deep learning reconstruction reduces MRI acquisition time by a factor of four.",
+      "evidence": [
+        {
+          "section": "Results",
+          "line": 47,
+          "snippet": "a fourfold acceleration was achieved on the knee protocol",
+          "source_mode": "pdf",
+          "locator": "pdfs/hammernik2021.pdf#page=5"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "ACCURATE",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The fourfold figure is stated directly for the knee protocol."
+    },
+    {
+      "sub_claim_id": "C042.b",
+      "text": "Diagnostic quality is preserved across all anatomies.",
+      "evidence": [
+        {
+          "section": "Discussion",
+          "line": 212,
+          "snippet": "diagnostic quality was maintained in the knee and brain cohorts studied here",
+          "source_mode": "pdf",
+          "locator": "pdfs/hammernik2021.pdf#page=11"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "OVERSIMPLIFY",
+      "paper_value": "knee and brain cohorts",
+      "claim_value": "all anatomies",
+      "nuance": "The source is scoped to two anatomies; the citing sentence generalises to all."
+    }
+  ],
+
+  "overall_verdict": "OVERSIMPLIFY",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RESCOPE",
+    "suggested_edit": "Narrow 'across all anatomies' to 'in knee and brain imaging'."
+  },
+
+  "attestation": {
+    "phrasings_tried": [
+      "fourfold acceleration diagnostic quality",
+      "acquisition time reduction all anatomies",
+      "deep learning reconstruction anatomy generalisation"
+    ],
+    "section_checklist": [
+      {"section": "Abstract", "read": true},
+      {"section": "Methods", "read": true},
+      {"section": "Results", "read": true},
+      {"section": "Discussion", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Source reports its own experiments; no onward attribution.",
+    "out_of_context_check": "Usage matches the source's framing."
+  },
+
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": 44,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

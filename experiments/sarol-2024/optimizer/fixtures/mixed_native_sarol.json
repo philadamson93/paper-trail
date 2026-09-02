@@ -1,0 +1,88 @@
+{
+  "claim_id": "C043",
+  "schema_version": "1.1",
+  "run_id": "run_20260901T1200Z",
+  "citekey": "chen2022",
+  "handle": "pdfs/chen2022/",
+  "source_mode": "pdf",
+  "paperclip_handle": null,
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+
+  "rubric_variant": "sarol_2024_9class",
+
+  "claim_text": "The network was pretrained on 1.4 million images and outperformed the compressed-sensing baseline.",
+  "manuscript_section": "3.1",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+
+  "sub_claims": [
+    {
+      "sub_claim_id": "C043.a",
+      "text": "The network was pretrained on 1.4 million images.",
+      "evidence": [
+        {
+          "section": "Methods",
+          "line": 88,
+          "snippet": "pretrained on 1.35 million images",
+          "source_mode": "pdf",
+          "locator": "pdfs/chen2022.pdf#page=4"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "MISQUOTE",
+      "paper_value": "1.35 million",
+      "claim_value": "1.4 million",
+      "nuance": "Rounded up in the citing sentence."
+    },
+    {
+      "sub_claim_id": "C043.b",
+      "text": "It outperformed the compressed-sensing baseline.",
+      "evidence": [
+        {
+          "section": "Results",
+          "line": 140,
+          "snippet": "our method exceeds the CS baseline on every metric reported",
+          "source_mode": "pdf",
+          "locator": "pdfs/chen2022.pdf#page=7"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONFIRMED",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "A paper-trail NATIVE label. Its presence here is the defect this fixture exists to catch: the wrong rubric produced this sub-claim, so the file must be rejected rather than coerced into the Sarol vocabulary."
+    }
+  ],
+
+  "overall_verdict": "MISQUOTE",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "REWORD",
+    "suggested_edit": "State 1.35 million, matching the source."
+  },
+
+  "attestation": {
+    "phrasings_tried": [
+      "pretraining corpus size",
+      "1.4 million images pretraining",
+      "compressed sensing baseline comparison"
+    ],
+    "section_checklist": [
+      {"section": "Methods", "read": true},
+      {"section": "Results", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Source reports its own pretraining corpus.",
+    "out_of_context_check": "Usage matches."
+  },
+
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": 39,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}
