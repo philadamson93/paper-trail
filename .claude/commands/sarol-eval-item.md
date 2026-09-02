@@ -17,6 +17,10 @@ letter of this file as a measurement error, not a style choice.
 Parse them from `$ARGUMENTS`. All four are required; all are `--flag value` pairs; order is not
 significant. There are no defaults and no positional forms.
 
+Path values arrive **double-quoted** (`--staging "/abs/path"`). Strip the surrounding quotes before
+use, and treat everything between them as one value — a path may legitimately contain spaces, and
+splitting on whitespace would silently truncate it.
+
 | Flag | Value |
 |---|---|
 | `--stage` | `extractor` \| `adjudicator` \| `verifier` — which frozen prompt to dispatch |
@@ -73,11 +77,12 @@ Abort if any of these is not true:
 - `<spec-root>/experiments/sarol-2024/specs/verdict_enum_sarol.md` exists
 - `<spec-root>/experiments/sarol-2024/specs/verdict_schema_sarol.md` exists
 
-A missing evidence file is the expected failure right now and deserves its own message: under the
-Phase 1 `retrieval` profile the envelope is written by a mechanical producer
-(`optimizer/evidence_producers.py`, plan C6.2) that **does not exist yet**. Abort with
-`EVIDENCE_MISSING` and say so in as many words, so the next reader does not go looking for a bug in
-this command.
+A missing evidence file gets its own message. Under the Phase 1 `retrieval` profile the envelope is
+written before you are dispatched, by the mechanical BM25 producer
+(`optimizer/evidence_producers.py`, plan C6.2) that `SarolRunner.run` calls for any profile whose
+`evidence_producer` is not the extractor. So if it is absent, the producer failed or was never
+invoked — the fault is upstream of this command. Abort with `EVIDENCE_MISSING` and say so, rather
+than letting the next reader hunt for a bug here.
 
 ### 2. Collect the slot values
 
@@ -158,12 +163,15 @@ Recognised, deliberately not built. Abort with `STAGE_NOT_IMPLEMENTED` and this 
 > mechanically, so no extractor session runs. The `extractor` and `verifier` stages belong to the
 > Phase 2 `agentic` profile (plan Part C6.1) and are not built.
 
-If you are seeing this from a real run, the cause is upstream and specific: `adapter.py:93` still
-defines `STAGES = ("extractor", "adjudicator", "verifier")` globally and `SarolRunner.run` loops
-over all three unconditionally. The profile retrofit (C6.1) that makes `STAGES` profile-dependent —
-`("adjudicator",)` for `retrieval` — has not landed. **Fix the profile, not this command.** Adding
-the two stages here would quietly run Phase 2 while the manifest, the cost model and the release
-payload all still say Phase 1.
+You should not see this from a real run. `SarolRunner.run` dispatches `self.profile.stages`, which
+is `("adjudicator",)` under `retrieval`, and `dispatcher.run_optimization` refuses any profile whose
+stages are not in `profiles.IMPLEMENTED_STAGES` before spending anything. Reaching this abort means
+one of those guards was bypassed — a Runner constructed with an `agentic` profile directly, say.
+
+**Fix the caller, not this command.** Adding the two stages here would quietly run Phase 2 while the
+manifest, the cost model and the release payload all still say Phase 1. When the extractor and
+verifier paths are genuinely implemented here, widen `profiles.IMPLEMENTED_STAGES` in the same
+change — that tuple is what makes `agentic` runnable.
 
 ## Aborting
 

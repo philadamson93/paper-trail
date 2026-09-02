@@ -8,14 +8,16 @@ shape, and the difference is the whole leakage design.
 
 ```json
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "phase": "train",
   "iter": 3,
   "produced_at_utc": "2026-09-01T18:04:11+00:00",
   "optimizer_isolation_hash": "sarol-2024",
   "corpus": {
-    "ref": "<path to the run manifest for this batch>",
+    "ref": "<path to mistakes/<batch_id>.json -- the per-claim corpus itself>",
     "counts": { "invalid_label": 0 },
+    "profile": "retrieval",
+    "retrieval_k": 20,
     "metrics": {
       "primary_metric_name": "sarol_3way_macro_f1",
       "primary_metric": 0.41,
@@ -30,7 +32,9 @@ shape, and the difference is the whole leakage design.
         "error_class_counts": { "invalid_label": 0 },
         "n_total": 50, "n_scored": 50, "n_invalid": 0,
         "requested_count": 50, "n_unresolved": 0,
-        "scored": true, "split": "train"
+        "scored": true, "split": "train",
+        "profile": "retrieval", "retrieval_k": 20,
+        "mistakes_ref": "<same path as corpus.ref>"
       }
     },
     "frontier": { "best_tag": "...", "best_metric_value": 0.44,
@@ -46,15 +50,49 @@ classes caps at 5/9 = 0.556 however perfect the predictions. **Always read `supp
 small, not that the program got worse. This is why 9-way is a breakdown and the 3-way macro-F1 is the frontier.
 A concrete calibration: the do-nothing always-ACCURATE program scores 0.097 at 9-way against 0.292 at 3-way.
 
-`corpus.ref` points at the run manifest, from which the per-claim mistake corpus is reachable:
-adjudicator reasoning, the extractor's evidence quotes, and the verifier's bounce history for
-every TRAIN claim. TRAIN is fully open — read all of it.
+**`corpus.ref` points at the per-claim mistake corpus itself** — `mistakes/<batch_id>.json` under
+the run's TRAIN output root. Not at the run manifest: the manifest carries dispatch bookkeeping
+(exit codes, costs, timings) and no gold and no reasoning, so following it taught you nothing about
+*why* you were wrong. Read the corpus; it is the point.
+
+Its shape is an object wrapping the per-claim list:
+
+```json
+{
+  "batch_id": "run_x-train", "split": "train",
+  "n_scored": 50, "n_correct": 47, "n_mistakes": 3,
+  "claims": [
+    { "claim_id": "C042", "citekey": "ref_a1b2c3",
+      "claim_text": "<the citing sentence>",
+      "evidence_snippets": ["<each passage the judge was given>"],
+      "pred_label": "ACCURATE",  "gold_label": "CONTRADICT",
+      "pred_3way": "ACCURATE",   "gold_3way": "NOT_ACCURATE",
+      "adjudicator_reasoning": {
+        "sub_claim_verdicts": ["ACCURATE"], "nuance": ["..."],
+        "overall_flag": null, "remediation": { "category": "...", "suggested_edit": "..." } } }
+  ]
+}
+```
+
+**Read `n_correct` before `n_mistakes`.** Three mistakes out of ten is a disaster; three out of
+three hundred is close to ceiling, and the same list of three looks identical either way. The
+counts are in the file precisely so you never have to reason about the numerator alone.
+
+`claims` holds **only the claims that were wrong** — correct ones are summarised by `n_correct`, not
+listed. That is a deliberate boundary: your job is to fix mistakes without breaking what already
+works, and `n_correct` is how you notice if you did.
+
+⚠ **What is NOT here, and why.** There is no verifier bounce history: under the `retrieval` profile
+no verifier runs at all (see `playbook.md`). `evidence_snippets` under that profile are the BM25
+top-*k* passages, not an extractor's chosen quotes. And TRAIN is Tier 1 — gold labels are open to
+you here, deliberately, because that is the mechanism by which you learn. Raw benchmark provenance
+(row ids, paper buckets, which split a claim came from) is withheld even so; you have no use for it.
 
 ## VAL release — Tier 2, scalar only
 
 ```json
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "phase": "val",
   "iter": 3,
   "produced_at_utc": "2026-09-01T18:19:52+00:00",
@@ -63,7 +101,8 @@ every TRAIN claim. TRAIN is fully open — read all of it.
     "primary_metric": { "name": "sarol_3way_macro_f1", "value": 0.39,
                         "higher_is_better": true },
     "breakdown": { "scored": true, "n_total": 316, "n_invalid": 0,
-                   "requested_count": 316, "split": "val" }
+                   "requested_count": 316, "split": "val",
+                   "profile": "retrieval" }
   }
 }
 ```
@@ -115,6 +154,8 @@ the practical reason the playbook asks you to.
 
 ## Schema stability
 
-`schema_version` is `0.1.0`. The engine validates that a train-phase call returns a train payload
-and a val-phase call returns a val payload, and stops the run if they are crossed — so a change to
-these shapes is a real change, not a cosmetic one.
+`schema_version` is `0.2.0` — bumped from `0.1.0` when the `profile` key entered both payloads,
+because a release that cannot say which rung produced its number is not comparable to one that can.
+The engine validates that a train-phase call returns a train payload and a val-phase call returns a
+val payload, and stops the run if they are crossed — so a change to these shapes is a real change,
+not a cosmetic one.

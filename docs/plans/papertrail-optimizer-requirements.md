@@ -274,7 +274,23 @@ That delta is the paper's actual claim — **does agentic evidence acquisition b
 
 **C6.8 — Mistake corpus: per-claim, not counts.** Part C2 specifies per-claim adjudicator reasoning plus evidence, TRAIN-side fully open. The landed implementation returns only `MistakeCorpus(ref=<run manifest path>, counts=error_class_counts)` (`adapter.py:825-835`), so the optimizer sees aggregate error classes but never which claims failed, what it answered, or what gold said. On a Tier-1-open split that is close to scalar-only optimization. **This is a repair of a wrong implementation, not a check to add.**
 
-Required, concretely: the Scorer already computes the prediction/gold join and discards it. It must persist it to `<train_output_root>/mistakes/<batch_id>.json` as a list of `{claim_id, citekey, claim_text, evidence_snippets, pred_label, gold_label, pred_3way, gold_3way, adjudicator_reasoning}`, and `build_mistake_corpus()` must point `corpus.ref` at **that** file rather than at the batch run manifest. `MistakeCorpus` exposes only `ref` and `counts`, so the richer content rides behind `ref` — no engine schema change.
+Required, concretely: the Scorer already computes the prediction/gold join and discards it. It must persist it to `<train_output_root>/mistakes/<batch_id>.json`, and `build_mistake_corpus()` must point `corpus.ref` at **that** file rather than at the batch run manifest. `MistakeCorpus` exposes only `ref` and `counts`, so the richer content rides behind `ref` — no engine schema change.
+
+**File shape (revised 2026-09-02, Phil).** An earlier draft of this Part specified the file as a bare *list* of `{claim_id, citekey, claim_text, evidence_snippets, pred_label, gold_label, pred_3way, gold_3way, adjudicator_reasoning}`. The implementation wraps that list in its own denominators, and that shape is now the contract:
+
+```json
+{ "batch_id": "...", "split": "train",
+  "n_scored": 50, "n_correct": 47, "n_mistakes": 3,
+  "claims": [ { "claim_id": "...", "citekey": "...", "claim_text": "...",
+                "evidence_snippets": ["..."],
+                "pred_label": "...", "gold_label": "...",
+                "pred_3way": "...", "gold_3way": "...",
+                "adjudicator_reasoning": { ... } } ] }
+```
+
+`claims` is exactly the specified list; the wrapper adds only counts. The reason is that a bare list has no denominator: `n_mistakes: 3` reads identically whether it is 3 of 10 (a disaster) or 3 of 300 (near ceiling), and the optimizer would otherwise have to join against `breakdown.n_total` in a different artifact to find out. `n_correct` is also the only in-file signal against the failure mode of fixing mistakes by breaking claims that already worked. Only the wrong claims are listed; correct ones are summarised by `n_correct`.
+
+⚠ Withheld even on the open split: `parse_verdict.parse` also returns `split`, `claim_row_id` and `cited_paper_bucket`. TRAIN *gold* is open to the optimizer — that is the mechanism, not a leak — but raw benchmark provenance is not, and the opaque-citekey staging design exists to keep it out of the run.
 
 **Three actors, not two** — stated because an earlier draft of this work conflated the first two:
 
