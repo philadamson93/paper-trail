@@ -1,4 +1,4 @@
-<meta name="plan-sha256" content="732e9fd3c8ea546d986f0d103809184bda0d4f11a6b6494e7c2dd14f385858f7">
+<meta name="plan-sha256" content="b871299a1f4b5633a2dfbe2bccac3bcfdfbd95725e05161375d2f6c9cec6581d">
 <meta charset="utf-8">
 <title>papertrail-optimizer-requirements — plan review</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -93,8 +93,8 @@
   <div class="meta"><b>Status:</b> Draft &middot; <b>Reviewed:</b> No &middot; 9 open questions &middot; <b>8 resolved</b>, OQ5 partly open</div>
   <div class="meta"><b>Repo:</b> paper-trail (personal, PolyForm-NC, <b>public</b>) &middot; <b>Branch:</b> <code>sarol</code></div>
   <div class="meta"><b>Source:</b> <code>docs/plans/papertrail-optimizer-requirements.md</code> (273 lines)</div>
-  <div class="meta"><b>SHA-256:</b> <code id="sha-display">732e9fd3c8ea</code>&hellip;</div>
-  <div class="meta"><b>Generated:</b> 2026-09-01 (regenerated after the OQ6&ndash;9 feedback round)</div>
+  <div class="meta"><b>SHA-256:</b> <code id="sha-display">b871299a1f4b</code>&hellip;</div>
+  <div class="meta"><b>Generated:</b> 2026-09-01 (regenerated after the OQ6&ndash;9 feedback round, then after implementing Part A's freeze)</div>
 </div>
 
 <div class="changebar" id="changebar">
@@ -113,6 +113,7 @@
   paper-trail becomes <b>consumer #3</b> of the shared <code>agentic-label-opt</code> optimization engine (rad-eval #1, crc #2, MedVAL #4) &mdash; the first fully external one. The optimized program is <b>pure Markdown</b>: four dispatch prompts plus three contract files, with no code in the loop at all. It is scored against the Sarol&nbsp;2024 citation-integrity benchmark.
   <p class="body-text">Two decisions dominate the current shape. <b>The program emits Sarol's own 9-class vocabulary</b> rather than paper-trail's native 11-way enum, because bridging the two with a collapse left 17 gold instances structurally unpredictable. And <b>the native taxonomy is being retired outright</b> &mdash; git-trace showed it landed unsourced in a single commit three days before the repo's literature review, while Sarol's is human-annotated with reported &kappa;. That retirement lands on <code>main</code> only after this optimizer work finishes.</p>
   <p class="body-text">Part A froze <code>program-v0</code> self-verifyingly, and Part B is unblocked. <b>Part C is no longer gated on a decision:</b> Phil resolved OQ6&ndash;9 on 2026-09-01, which turned three open forks into sequenced work &mdash; split the rubric so the enum contract is genuinely immutable, re-freeze the manifest to 8 entries, then compose and tag one tree so the engine can materialize it. What stays open is OQ2's hand-sample pass and OQ5's fine-grained frontier question, neither of which blocks implementation.</p>
+  <p class="body-text"><b>Part A is now actually done, not just specified.</b> The rubric is split, the manifest re-frozen to 8 entries (<code>combined_hash 391f54fae7c5</code>), and the composed tree tagged <code>program-v0</code> &mdash; and the materialization smoke <b>passes against the real engine</b>: <code>materialize()</code> writes all 8 files from that single SHA, byte-faithful to the freeze. Part B and Part C are the open work.</p>
 </div>
 
 <h2>Review history</h2>
@@ -123,6 +124,7 @@
 <tr><td>&mdash;</td><td><b>Phil (2026-09-01)</b></td><td><b>Pivot</b></td><td>OQ1 reversed to the Sarol-rubric variant after the collapse proved non-injective</td><td>Yes &mdash; A2 rewritten</td></tr>
 <tr><td>&mdash;</td><td><b>Phil (2026-09-01)</b></td><td><b>Pivot</b></td><td>Native taxonomy retired; "if not sarol, then remove"</td><td>Yes &mdash; A2, Landing</td></tr>
 <tr><td>2</td><td>Codex (2026-09-01)</td><td><b>Blocked</b> &rarr; applied</td><td>Two-source manifest is not an engine materialization contract; Sarol verdicts fail the frozen native validator; paperclip pin unenforceable</td><td>Yes &mdash; A4, C5, OQ6&ndash;9</td></tr>
+<tr><td>&mdash;</td><td><b>Implementation (2026-09-01)</b></td><td><b>Part A done</b></td><td>Rubric split, manifest re-frozen to 8 entries, tree composed and tagged <code>program-v0</code>; materialization smoke green against the engine</td><td>Yes &mdash; A1, A4, Verification</td></tr>
 <tr><td>&mdash;</td><td><b>Phil (2026-09-01)</b></td><td><b>Decisions</b></td><td>OQ6&ndash;9 answered: compose-and-tag one tree; keep <code>AMBIGUOUS</code> as a workflow flag; <b>a contract file is immutable</b>, so split the rubric; exit validation is its own experiment-only validator</td><td>Yes &mdash; A1, A2, A4, B2, C5, Part D #7</td></tr>
 </table>
 
@@ -141,7 +143,7 @@ flowchart LR
     orch["src/commands/paper-trail.md<br/>orchestrator, 694 lines"]
     gclaim["src/commands/ground-claim.md<br/>per-claim workflow"]
   end
-  subgraph prog["program-v0, the optimized program, 8 files"]
+  subgraph prog["program-v0, tagged, 8 files"]
     extP["extractor-dispatch-paperclip.md"]
     extD["extractor-dispatch-pdf.md"]
     adjS["adjudicator-dispatch-sarol.md<br/>Sarol 9-class"]
@@ -292,8 +294,8 @@ flowchart TD
   classDef rdy fill:#22d3ee,stroke:#0e7490,stroke-width:3px,color:#06373f
   classDef blk fill:#fecaca,stroke:#a33,stroke-width:3px,color:#4a1010
   classDef dfr fill:#fdf6e7,stroke:#b7791f,color:#3d2c07,stroke-dasharray:5 4
-  class a1,a4,afr,s1 dn
-  class b1,b2,oq2b,c5,split,refr,tagv,s2 rdy
+  class a1,a4,afr,split,refr,tagv,s1 dn
+  class b1,b2,oq2b,c5,s2 rdy
   class cad,smoke,base,s3 blk
   class defer,s4 dfr
 </pre>
@@ -327,13 +329,13 @@ INDIRECT  INDIRECT_NOT_REVIEW  ETIQUETTE  IRRELEVANT</code></pre>
   <tr><td><code>verdict_schema_sarol.md</code></td><td>rubric guidance &mdash; <b>optimizer-editable</b>, demoted by OQ8</td><td><code>sarol</code></td><td></td></tr>
   <tr><td><code>verifier_results.md</code></td><td>attestation contract</td><td><code>main</code></td><td>yes</td></tr>
   </table>
-  <p class="body-text"><b>&#9888; The written manifest predates the OQ8 split and is owed a re-freeze</b> &mdash; 8 entries, still three contract files, and <code>combined_hash</code> <code>be2eb8070ae1</code> is invalidated. Re-freeze <i>before</i> cutting the <code>program-v0</code> tag, or the tag pins a superseded fileset. The freeze recipe below is unchanged and still correct. <code>combined_hash</code> <code>be2eb8070ae1</code> verified 7/7 on write. Recomputable from the JSON alone &mdash; the recipe is recorded in the file. <code>runtime_pins.paperclip_cli</code> pins <code>paperclip, version 0.5.11</code>, because the extractor loads its real command reference at run time from that CLI, outside the frozen fileset.</p>
+  <p class="body-text"><b>Re-frozen 2026-09-01 after the OQ8 split</b> &mdash; 8 entries, three contract files, <code>combined_hash</code> <code>391f54fae7c5</code>, verified 8/8 against both the source refs and the <code>program-v0</code> tag. The freeze is no longer hand-written: <code>freeze_program_v0.py</code> regenerates and re-verifies it. (The previous 7-entry <code>be2eb8070ae1</code> is superseded.) Recomputable from the JSON alone &mdash; the recipe is recorded in the file. <code>runtime_pins.paperclip_cli</code> pins <code>paperclip, version 0.5.11</code>, because the extractor loads its real command reference at run time from that CLI, outside the frozen fileset.</p>
 </div>
 
 <h2>Parts</h2>
 
 <details data-section="part-a" open>
-  <summary>Part A &mdash; Pin <code>program-v0</code> <span class="chip chip-pending">Re-freeze + tag owed (OQ6/OQ8)</span></summary>
+  <summary>Part A &mdash; Pin <code>program-v0</code> <span class="chip chip-done">Done, tagged + smoke green</span></summary>
   <div class="inner">
     <p class="body-text"><b>A1/A2 fileset</b> &mdash; the Sarol 9-class variant, resolved after one reversal. The mainline-plus-collapse alternative was rejected because the bridge is <b>not injective</b>: <code>INDIRECT_SOURCE</code> covers both <code>INDIRECT</code> (&rarr; NOT_ACCURATE) and <code>INDIRECT_NOT_REVIEW</code> (&rarr; IRRELEVANT), leaving <b>17 of IRRELEVANT's 34</b> gold instances structurally unpredictable and 16 more ambiguous &mdash; capping that class at ~50% recall while it carried a third of the macro-F1.</p>
     <p class="body-text"><b>A4 closure</b> &mdash; the fileset was not closed over its own <code>spec_root</code> references. Computed mechanically, not spot-checked: all members resolve; three referenced paths sit outside and are excluded with recorded reasons. <b>OQ8 has since taken the fileset to 8</b> by splitting the enum contract out of the rubric, so the closure holds but the written manifest is owed a re-freeze. The Sarol variant's four stale <code>.claude/</code> paths were repaired first, of which only one (<code>:80</code>, the output-schema pointer) was operational.</p>
@@ -425,11 +427,11 @@ INDIRECT  INDIRECT_NOT_REVIEW  ETIQUETTE  IRRELEVANT</code></pre>
 <table>
 <tr><th>Gate</th><th>Status</th></tr>
 <tr><td>A3 branch reconciliation</td><td><span class="chip chip-done">Done</span></td></tr>
-<tr><td><code>program-v0</code> freeze, hashes verify</td><td><span class="chip chip-done">Done 7/7</span> <span class="chip chip-pending">Superseded by the OQ8 split</span></td></tr>
+<tr><td><code>program-v0</code> freeze, hashes verify</td><td><span class="chip chip-done">Done 8/8, re-frozen</span></td></tr>
 <tr><td>OQ2 pass 1, collapse frequency cross-check</td><td><span class="chip chip-done">Ran, failed as designed, resolved</span></td></tr>
 <tr><td>OQ2 pass 2, hand-sample</td><td><span class="chip chip-pending">Owed</span></td></tr>
-<tr><td>Re-freeze the manifest to 8 entries, then tag <code>program-v0</code></td><td><span class="chip chip-pending">Owed, in that order</span></td></tr>
-<tr><td>Materialization smoke, all 8 files from the tag</td><td><span class="chip chip-pending">Owed, OQ6 resolved</span></td></tr>
+<tr><td>Re-freeze the manifest to 8 entries, then tag <code>program-v0</code></td><td><span class="chip chip-done">Done in that order</span></td></tr>
+<tr><td>Materialization smoke, all 8 files from the tag</td><td><span class="chip chip-done">PASSED vs engine 6d621ac</span></td></tr>
 <tr><td>Contract-file immutability, post-edit re-hash fires</td><td><span class="chip chip-pending">Owed, new from OQ8</span></td></tr>
 <tr><td>Sarol exit-validation fixtures</td><td><span class="chip chip-pending">Owed</span></td></tr>
 <tr><td>Cost preflight arithmetic, all 3 Runner calls</td><td><span class="chip chip-pending">Owed</span></td></tr>
@@ -450,7 +452,7 @@ INDIRECT  INDIRECT_NOT_REVIEW  ETIQUETTE  IRRELEVANT</code></pre>
 
 <script>
 const PLAN_PATH = "docs/plans/papertrail-optimizer-requirements.md";
-const PLAN_SHA  = "732e9fd3c8ea546d986f0d103809184bda0d4f11a6b6494e7c2dd14f385858f7";
+const PLAN_SHA  = "b871299a1f4b5633a2dfbe2bccac3bcfdfbd95725e05161375d2f6c9cec6581d";
 const BRANCH    = "sarol";
 const STEM      = "papertrail-optimizer-requirements";
 
@@ -470,7 +472,7 @@ const CHANGES = {
   round: "diff",
   baseline: "the version you gave OQ6-9 feedback from: commit 54a1df1, plan SHA 9e078632a462 (2026-09-01). This round applies your four answers and nothing else.",
   sections: {
-    "part-a":      {s:"changed", note:"Your OQ8 answer splits the rubric into an immutable enum contract plus editable guidance, so A1 is 8 entries and the written manifest is superseded; your OQ6 answer turns A4's reconstruction pre-step into a one-time compose-and-tag build step."},
+    "part-a":      {s:"changed", note:"Your OQ8 and OQ6 answers are now IMPLEMENTED, not just recorded: rubric split into an immutable enum contract plus editable guidance, manifest re-frozen to 8 entries (combined_hash 391f54fae7c5), tree composed and tagged program-v0, and the materialization smoke passing against the real engine."},
     "part-b":      {s:"changed", note:"B2's EDIT scope now excludes every contract_file path, and names the adapter's post-edit re-hash - the engine's flag checks presence, not content."},
     "part-c":      {s:"changed", note:"OQ9 confirms C5's validator is its own experiment-only module the Runner calls; main's validator stays strict and untouched. The out-of-enum fixture now uses AMBIGUOUS."},
     "part-d":      {s:"changed", note:"New item 7: contract_file promises immutability and delivers presence. Handled consumer-side here, not requested as an engine change."},
@@ -563,6 +565,7 @@ function applyChangeLayer(){
   document.getElementById('change-summary').innerHTML =
     '<h3 style="margin-top:0">What moved since you last read this</h3>'
     + '<ul>'
+    + '<li><b>Part A is implemented and verified.</b> Rubric split, manifest re-frozen to 8 entries (<code>391f54fae7c5</code>), tree composed and tagged <code>program-v0</code>, and <code>materialize()</code> proven to write all 8 files from that one SHA byte-faithfully. The strip-the-extras requirement is now regression-guarded, not just described.</li>'
     + '<li><b>Your four answers are applied.</b> OQ6&ndash;9 are now resolved, taking the plan from <b>4 resolved to 8</b> of 9 &mdash; only OQ5 stays open, plus OQ2&apos;s owed hand-sample pass, and neither blocks implementation.</li>'
     + '<li><b>OQ8 has the widest blast radius.</b> "A contract file should be immutable" splits the rubric in two, which takes the fileset to <b>8 entries</b> and <b>invalidates <code>combined_hash</code> be2eb8070ae1</b>. The manifest is owed a re-freeze.</li>'
     + '<li><b>The engine will not enforce immutability for you.</b> <code>contract_file=True</code> is read in two places and both check <i>presence</i>, never content &mdash; so the plan now carries a consumer-side guard (EDIT-scope exclusion plus a post-edit re-hash) and a new Part D item telling the engine its flag over-promises.</li>'
