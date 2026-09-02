@@ -1,0 +1,85 @@
+{
+  "claim_id": "C045",
+  "schema_version": "1.1",
+  "run_id": "run_20260901T1200Z",
+  "citekey": "hammernik2021",
+  "handle": "pdfs/hammernik2021/",
+  "source_mode": "pdf",
+  "paperclip_handle": null,
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+
+  "rubric_variant": "sarol_2024_9class",
+
+  "claim_text": "The reconstruction method is fast and preserves fine detail.",
+  "manuscript_section": "4.2",
+  "claim_type": {
+    "type": "SUPPORTING",
+    "confidence": "medium"
+  },
+
+  "sub_claims": [
+    {
+      "sub_claim_id": "C045.a",
+      "text": "The reconstruction method is fast.",
+      "evidence": [
+        {
+          "section": "Results",
+          "line": 61,
+          "snippet": "reconstruction completed in under two seconds per slice",
+          "source_mode": "pdf",
+          "locator": "pdfs/hammernik2021.pdf#page=6"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "PROBABLY_FINE",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "An invented label on a SUB-CLAIM only, while overall_verdict below stays a legitimate ACCURATE. This is the case that slipped through an earlier version: the validator counted the invalid sub-claim, but the scorer re-derived its error counts from the OVERALL label via parse_verdict, so the claim scored clean and the invalid label vanished from error_class_counts. The Scorer must merge the validator's counts, not recompute them."
+    },
+    {
+      "sub_claim_id": "C045.b",
+      "text": "It preserves fine detail.",
+      "evidence": [
+        {
+          "section": "Results",
+          "line": 66,
+          "snippet": "fine structures were preserved at all tested acceleration factors",
+          "source_mode": "pdf",
+          "locator": "pdfs/hammernik2021.pdf#page=6"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "ACCURATE",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Supported directly."
+    }
+  ],
+
+  "overall_verdict": "ACCURATE",
+  "overall_flag": null,
+  "remediation": {
+    "category": "—",
+    "suggested_edit": ""
+  },
+
+  "attestation": {
+    "phrasings_tried": [
+      "reconstruction speed per slice"
+    ],
+    "section_checklist": [
+      {"section": "Results", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Source reports its own timings.",
+    "out_of_context_check": "Usage matches."
+  },
+
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": 30,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

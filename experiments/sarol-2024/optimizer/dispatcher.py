@@ -45,7 +45,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import pathlib
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -292,6 +295,78 @@ class CachingRunner:
 # =================================================================================================
 
 
+PROMPT_PATH = _HERE / "prompt" / "optimizer-instructions.md"
+CONTEXT_DIR = _HERE / "context"
+
+
+class OptimizerAgent:
+    """The optimizer's own headless Claude Code session — the engine's ``agent`` port.
+
+    It edits files in ``repo_root`` and exits; the harness commits and tags. Note this is the one
+    port the engine *does* budget (`loop.py:513-521` counts these tokens), which is exactly
+    backwards from where paper-trail's spend actually is — hence :class:`BudgetGuard` on the
+    Runner side.
+    """
+
+    def __init__(
+        self,
+        *,
+        repo_root: pathlib.Path,
+        prompt_path: pathlib.Path = PROMPT_PATH,
+        context_dir: pathlib.Path = CONTEXT_DIR,
+        invoke=None,
+        timeout_seconds: float = 3600.0,
+        max_budget_usd: float = 20.0,
+        model: str = "opus",
+    ) -> None:
+        self.repo_root = pathlib.Path(repo_root).resolve()
+        self.prompt_path = pathlib.Path(prompt_path)
+        self.context_dir = pathlib.Path(context_dir)
+        self.invoke = invoke or adapter.headless_claude_invoke
+        self.timeout_seconds = timeout_seconds
+        self.max_budget_usd = max_budget_usd
+        self.model = model
+
+    def agent_instructions(self) -> str:
+        return self.prompt_path.read_text(encoding="utf-8")
+
+    def command(self, iter_n: int, materialized_path) -> list[str]:
+        return [
+            "claude",
+            "--dangerously-skip-permissions",
+            "-p",
+            (
+                f"Iteration {iter_n}. The frozen program for this iteration is materialized at "
+                f"{materialized_path}. Your reference docs are in {self.context_dir}. "
+                "Follow your standing instructions."
+            ),
+            "--append-system-prompt",
+            self.agent_instructions(),
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--model",
+            self.model,
+            "--setting-sources",
+            "project",
+            "--strict-mcp-config",
+            "--max-budget-usd",
+            str(self.max_budget_usd),
+        ]
+
+    def run(self, *, iter_n: int, materialized_path=None):  # keyword-only -- loop.py:398
+        res = self.invoke(
+            self.command(iter_n, materialized_path), self.repo_root, self.timeout_seconds
+        )
+        return adapter.GuardedOutcome(
+            exit_code=124 if res.timed_out else res.exit_code,
+            detail=res.detail,
+            token_usage={},
+            cost_usd=res.cost_usd,
+            attempting_step_back=False,
+        )
+
+
 def build_components(
     *,
     max_budget_usd: float,
@@ -301,9 +376,19 @@ def build_components(
     invoke=None,
     paperclip_version_probe=None,
     gold_resolver=None,
+    canary=None,
+    require_command: bool = True,
+    per_call_max_budget_usd: float = 2.0,
+    agent_invoke=None,
+    program_store: SarolProgramStore | None = None,
 ):
-    """Assemble the four protocol objects plus the guards, without running anything."""
-    store = SarolProgramStore()
+    """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
+
+    The agent is wrapped in :class:`adapter.ContractGuardedAgent` **here**, not at the call site,
+    so there is no way to wire this loop up without the contract-file re-hash in place — an
+    unguarded agent was previously possible simply by forgetting.
+    """
+    store = program_store or SarolProgramStore()
     cost_model = CostModel(per_session_usd=per_session_usd)
     budget = BudgetGuard(max_budget_usd=max_budget_usd, cost_model=cost_model, train_n=train_n)
     runner = CachingRunner(
@@ -312,9 +397,17 @@ def build_components(
             working_checkout=working_checkout,
             invoke=invoke,
             paperclip_version_probe=paperclip_version_probe,
+            canary=canary,
+            require_command=require_command,
+            per_call_max_budget_usd=per_call_max_budget_usd,
         ),
         store,
         budget=budget,
+    )
+    agent = adapter.ContractGuardedAgent(
+        OptimizerAgent(repo_root=store.repo_root, invoke=agent_invoke),
+        store,
+        tree_root=store.repo_root,
     )
     return {
         "program_store": store,
@@ -322,9 +415,71 @@ def build_components(
         "scorer": adapter.SarolScorer(gold_resolver=gold_resolver),
         "release_builder": adapter.SarolReleaseBuilder(),
         "build_mistake_corpus": adapter.build_mistake_corpus,
+        "agent": agent,
         "budget": budget,
         "cost_model": cost_model,
     }
+
+
+def run_optimization(
+    *,
+    iterations: int,
+    run_id: str,
+    train_input_ref: str,
+    val_input_ref: str,
+    max_budget_usd: float,
+    train_n: int,
+    materialize_root: pathlib.Path,
+    per_session_usd: float = DEFAULT_PER_SESSION_USD,
+    current_tag: str = "program-v0",
+    components: dict | None = None,
+    **component_kwargs,
+):
+    """Drive the engine's ``run_loop``. This is the entrypoint the plan's Files-to-create names.
+
+    A whole-run affordability check runs before anything is dispatched; the per-iteration refusal
+    still lives in :class:`CachingRunner`, because ``run_loop`` exposes no pre-iteration hook.
+    """
+    engine_root = adapter.engine_path()
+    if str(engine_root) not in sys.path:
+        sys.path.insert(0, str(engine_root))
+    from engine.loop import run_loop  # noqa: PLC0415
+    from engine.schemas import RunInputs  # noqa: PLC0415
+
+    parts = components or build_components(
+        max_budget_usd=max_budget_usd,
+        train_n=train_n,
+        per_session_usd=per_session_usd,
+        **component_kwargs,
+    )
+
+    ok, message = preflight(
+        parts["cost_model"],
+        train_n=train_n,
+        iterations=iterations,
+        max_budget_usd=max_budget_usd,
+    )
+    if not ok:
+        raise BudgetExceeded(message)
+
+    return run_loop(
+        iterations=iterations,
+        run_id=run_id,
+        repo_root=parts["program_store"].repo_root,
+        program_store=parts["program_store"],
+        runner=parts["runner"],
+        scorer=parts["scorer"],
+        release_builder=parts["release_builder"],
+        agent=parts["agent"],
+        train_inputs=RunInputs(
+            input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train"
+        ),
+        val_inputs=RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val"),
+        task_config={"rubric_variant": adapter.validate_sarol.SAROL_VARIANT},
+        materialize_root=pathlib.Path(materialize_root),
+        build_mistake_corpus=parts["build_mistake_corpus"],
+        current_tag=current_tag,
+    )
 
 
 def preflight(cost_model: CostModel, *, train_n: int, iterations: int, max_budget_usd: float):
@@ -345,6 +500,192 @@ def preflight(cost_model: CostModel, *, train_n: int, iterations: int, max_budge
 # =================================================================================================
 # Offline gates
 # =================================================================================================
+
+
+def _seed_repo(dest: pathlib.Path, store: SarolProgramStore) -> str:
+    """Build a throwaway checkout holding exactly the frozen fileset, tagged `program-v0`."""
+    def run(*args: str) -> str:
+        proc = subprocess.run(
+            args, cwd=str(dest), capture_output=True, text=True, check=True,
+            env={"PATH": os.environ.get("PATH", ""), "HOME": str(dest),
+                 "GIT_CONFIG_NOSYSTEM": "1"},
+        )
+        return proc.stdout.strip()
+
+    run("git", "init", "-q", "-b", "main")
+    run("git", "config", "user.email", "selftest@example.invalid")
+    run("git", "config", "user.name", "selftest")
+    for entry in store.entries:
+        dst = dest / entry["path"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(store.repo_root / entry["path"], dst)
+    run("git", "add", "-A")
+    run("git", "commit", "-q", "-m", "program-v0")
+    run("git", "tag", "program-v0")
+    return run("git", "rev-parse", "HEAD")
+
+
+def _integration_checks(schemas) -> list[tuple[str, bool]]:
+    """Drive the engine's REAL ``run_loop`` and prove the contract guard stops it before commit.
+
+    This is the check the isolated `adapter.py --selftest` cannot make. That one constructs a
+    :class:`adapter.ContractGuardedAgent` by hand and asserts it returns nonzero — which proves the
+    guard works, not that the loop is actually wired to it, and not that a nonzero exit really does
+    land before ``commit_version``. Here the engine drives everything: if the wiring in
+    :func:`build_components` were removed, or if the engine committed before checking the agent's
+    exit code, this fails.
+    """
+    import tempfile
+
+    from engine.loop import LoopStop, run_loop  # noqa: PLC0415
+
+    checks: list[tuple[str, bool]] = []
+
+    class _Runner:
+        def run(self, materialized_path, inputs):
+            return schemas.RunArtifacts(
+                batch_id=inputs.batch_id, status="ok", artifact_refs=(), cost_usd=0.0
+            )
+
+    class _Scorer:
+        def score(self, artifacts, split, task_config):
+            return schemas.ScoreResult(
+                primary_metric=schemas.PrimaryMetric(
+                    name="sarol_3way_macro_f1", value=0.4, higher_is_better=True
+                ),
+                breakdown={"scored": True, "n_total": 1, "n_invalid": 0},
+                task_config={**task_config, "_split": split},
+            )
+
+    class _MutatingAgent:
+        """Stands in for an optimizer session that edits a file it must not touch."""
+
+        def __init__(self, root: pathlib.Path) -> None:
+            self.root = root
+            self.ran = 0
+
+        def run(self, *, iter_n: int, materialized_path=None):
+            self.ran += 1
+            target = self.root / "experiments/sarol-2024/specs/verdict_enum_sarol.md"
+            target.write_text(
+                target.read_text(encoding="utf-8") + "\nSNEAKY_NEW_LABEL\n", encoding="utf-8"
+            )
+            return adapter.GuardedOutcome(exit_code=0, detail=f"mutated on iter {iter_n}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = pathlib.Path(tmp) / "repo"
+        repo.mkdir()
+        real_store = SarolProgramStore()
+        _seed_repo(repo, real_store)
+
+        store = SarolProgramStore(repo_root=repo)
+        inner = _MutatingAgent(repo)
+        guarded = adapter.ContractGuardedAgent(inner, store, tree_root=repo)
+
+        checks.append(
+            ("the seeded checkout starts with contract files matching the freeze",
+             not store.verify_contract_files())
+        )
+
+        stopped = None
+        try:
+            run_loop(
+                iterations=1,
+                run_id="selftest",
+                repo_root=repo,
+                program_store=store,
+                runner=_Runner(),
+                scorer=_Scorer(),
+                release_builder=adapter.SarolReleaseBuilder(),
+                agent=guarded,
+                train_inputs=schemas.RunInputs(
+                    input_ref="unused", batch_id="t", split="train"),
+                val_inputs=schemas.RunInputs(input_ref="unused", batch_id="v", split="val"),
+                task_config={},
+                materialize_root=pathlib.Path(tmp) / "materialized",
+                current_tag="program-v0",
+            )
+        except LoopStop as exc:
+            stopped = str(exc)
+
+        tags = subprocess.run(
+            ["git", "tag"], cwd=str(repo), capture_output=True, text=True
+        ).stdout.split()
+
+        checks += [
+            ("the real run_loop STOPS when the agent mutates a contract file",
+             stopped is not None),
+            ("...because the guard returned a nonzero exit",
+             stopped is not None and "exited 91" in stopped),
+            ("...and the agent did run, so this is the guard firing, not a wiring no-op",
+             inner.ran == 1),
+            # The whole point of the placement: nothing was frozen.
+            ("...with NO new version committed or tagged", tags == ["program-v0"]),
+            ("the mutation really did land on disk, so the guard caught a real edit",
+             bool(store.verify_contract_files())),
+        ]
+
+        # And the converse: a well-behaved agent is not blocked by the guard.
+        class _CleanAgent:
+            def __init__(self, root):
+                self.root = root
+
+            def run(self, *, iter_n: int, materialized_path=None):
+                editable = self.root / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
+                editable.write_text(
+                    editable.read_text(encoding="utf-8") + f"\n<!-- iter {iter_n} -->\n",
+                    encoding="utf-8",
+                )
+                return adapter.GuardedOutcome(exit_code=0, detail="clean edit")
+
+        repo2 = pathlib.Path(tmp) / "repo2"
+        repo2.mkdir()
+        _seed_repo(repo2, real_store)
+        store2 = SarolProgramStore(repo_root=repo2)
+        guarded2 = adapter.ContractGuardedAgent(_CleanAgent(repo2), store2, tree_root=repo2)
+        completed = False
+        try:
+            run_loop(
+                iterations=1,
+                run_id="selftest2",
+                repo_root=repo2,
+                program_store=store2,
+                runner=_Runner(),
+                scorer=_Scorer(),
+                release_builder=adapter.SarolReleaseBuilder(),
+                agent=guarded2,
+                train_inputs=schemas.RunInputs(
+                    input_ref="unused", batch_id="t", split="train"),
+                val_inputs=schemas.RunInputs(input_ref="unused", batch_id="v", split="val"),
+                task_config={},
+                materialize_root=pathlib.Path(tmp) / "materialized2",
+                current_tag="program-v0",
+            )
+            completed = True
+        except LoopStop:
+            completed = False
+
+        tags2 = subprocess.run(
+            ["git", "tag"], cwd=str(repo2), capture_output=True, text=True
+        ).stdout.split()
+        checks += [
+            ("an edit inside the EDIT scope is allowed through", completed),
+            ("...and does get committed and tagged as a new version", len(tags2) > 1),
+        ]
+
+    # The wiring itself: you cannot build these components with a bare, unguarded agent.
+    parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False)
+    checks += [
+        ("build_components wraps the optimizer agent in the contract guard",
+         isinstance(parts["agent"], adapter.ContractGuardedAgent)),
+        ("...around the real OptimizerAgent", isinstance(parts["agent"].inner, OptimizerAgent)),
+        ("...which loads the hot-path prompt as its instructions",
+         "maximize 3-way macro-F1" in parts["agent"].inner.agent_instructions().lower()
+         or "Maximize 3-way macro-F1" in parts["agent"].inner.agent_instructions()),
+        ("the optimizer session also carries a hard budget cap",
+         "--max-budget-usd" in parts["agent"].inner.command(1, pathlib.Path("/tmp/m"))),
+    ]
+    return checks
 
 
 def _selftest() -> int:
@@ -479,6 +820,8 @@ def _selftest() -> int:
             digest_a = program_digest(tree, [e["path"] for e in store.entries])
             digest_b = program_digest(tree, [e["path"] for e in store.entries])
             checks.append(("the program digest is stable", digest_a == digest_b))
+
+        checks += _integration_checks(schemas)
     else:
         checks.append((f"engine not found at {adapter.engine_path()} -- engine checks SKIPPED", True))
 
@@ -494,14 +837,57 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--preflight", action="store_true", help="print the per-landmark cost table")
+    ap.add_argument("--run", action="store_true", help="drive the engine's optimization loop")
     ap.add_argument("--per-session-usd", type=float, default=DEFAULT_PER_SESSION_USD)
     ap.add_argument("--max-budget-usd", type=float, default=None)
+    ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
     ap.add_argument("--train-n", type=int, default=None)
     ap.add_argument("--iterations", type=int, default=1)
+    ap.add_argument("--run-id", default=None)
+    ap.add_argument("--train-inputs", default=None, help="path to the TRAIN batch JSON")
+    ap.add_argument("--val-inputs", default=None, help="path to the VAL batch JSON")
+    ap.add_argument("--materialize-root", default=None)
     args = ap.parse_args()
 
     if args.selftest:
         return _selftest()
+
+    if args.run:
+        required = {
+            "--max-budget-usd": args.max_budget_usd,
+            "--train-n": args.train_n,
+            "--run-id": args.run_id,
+            "--train-inputs": args.train_inputs,
+            "--val-inputs": args.val_inputs,
+            "--materialize-root": args.materialize_root,
+        }
+        missing = [flag for flag, value in required.items() if value is None]
+        if missing:
+            print(f"--run requires: {', '.join(missing)}", file=sys.stderr)
+            return 2
+        try:
+            run = run_optimization(
+                iterations=args.iterations,
+                run_id=args.run_id,
+                train_input_ref=args.train_inputs,
+                val_input_ref=args.val_inputs,
+                max_budget_usd=args.max_budget_usd,
+                train_n=args.train_n,
+                materialize_root=pathlib.Path(args.materialize_root),
+                per_session_usd=args.per_session_usd,
+                per_call_max_budget_usd=args.per_call_max_budget_usd,
+            )
+        except BudgetExceeded as exc:
+            print(f"REFUSED  {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps({
+            "run_id": run.run_id,
+            "best_tag": run.best_tag,
+            "best_metric_value": run.best_metric_value,
+            "stop_reason": run.stop_reason,
+            "spent_usd": run.spent_usd,
+        }, indent=2))
+        return 0
 
     cost_model = CostModel(per_session_usd=args.per_session_usd)
     if args.preflight:

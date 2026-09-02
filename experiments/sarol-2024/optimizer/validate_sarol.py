@@ -27,16 +27,27 @@ Three behaviours worth not re-deriving:
   That asymmetry is the whole point -- an optimizer edit that invents a label simply scores worse
   and the loop rejects it on its own, while a mis-wired run fails loudly instead of scoring.
 
-* **The rollup check is deliberately order-independent.** The native schema's rule 6 checks
-  `overall_verdict` against a fixed strictness ordering. Under this variant the worst-wins ordering
-  lives in `specs/verdict_schema_sarol.md`, which is the **optimizer-editable** half of the rubric
-  (the enum contract next to it owns only the labels and the 3-way collapse). Hard-coding the
-  ordering here would mean a legitimate optimizer edit to the rollup order made every subsequent
-  run fail validation -- a spurious `SCHEMA_VIOLATION` that reads as "the program broke". So this
-  module checks the invariant that survives any reordering: a worst-wins rollup always selects one
-  of the labels actually present among the sub-claims, and a single sub-claim rolls up to itself.
-  That still catches an `overall_verdict` invented out of thin air, without coupling the validator
-  to a file the optimizer owns.
+* **The rollup check enforces worst-wins, with the order READ from the rubric.** There is a real
+  tension here worth stating. The plan keeps the native schema's rollup-consistency rule in force
+  under the variant gate, but the worst-wins ordering lives in `specs/verdict_schema_sarol.md`,
+  which is the **optimizer-editable** half of the rubric (the enum contract beside it owns only the
+  labels and the 3-way collapse). Hard-coding the order would make a legitimate optimizer edit fail
+  every subsequent run; dropping the check -- an earlier version of this module did exactly that,
+  accepting any `overall_verdict` present among the sub-claims -- silently permits a file whose
+  sub-claims are `CONTRADICT` and `ACCURATE` to roll up to `ACCURATE`, which is the single most
+  consequential thing this validator exists to catch.
+
+  So the order is **parsed from the rubric at validation time** and then enforced strictly. The
+  optimizer may reorder the ladder; it may not produce a rollup that disagrees with whatever ladder
+  it has declared. If the ordering block cannot be parsed the file is rejected
+  (`ROLLUP_ORDER_UNPARSEABLE`) rather than silently unchecked -- fail-closed, because an
+  unparseable ladder means the rule is unenforceable, not that it does not apply.
+
+* **`AMBIGUOUS` is a counted miss, not a rubric mismatch.** It is a native verdict, so the obvious
+  reading would put it with the wrong-rubric rejections. The frozen enum contract says otherwise in
+  as many words: `AMBIGUOUS` survives in the shipped tool as a *workflow flag* (Open Questions §7),
+  and "the exit validator must reject it appearing in a verdict field exactly like any other
+  out-of-enum label". Out-of-enum labels are charged as misses, so that is what happens to it.
 
 Two native structural rules are deliberately **not** ported, because their triggers are written in
 native labels rather than in structure: rule 8 (`UNSUPPORTED`/`CONTRADICTED` require a non-empty
@@ -57,9 +68,10 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import sys
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable, Sequence
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from parse_verdict import SAROL_9  # noqa: E402  -- the owner of the enum contract
@@ -70,6 +82,9 @@ SAROL_VARIANT = "sarol_2024_9class"
 #: paper-trail's native sub-claim enum, plus the two roll-up-only values. Present here purely so a
 #: native label can be *recognised* and rejected as a wrong-rubric signal rather than silently
 #: charged as a bad prediction. This module never validates against it -- `main` owns that.
+#:
+#: `AMBIGUOUS` is deliberately NOT in this set even though it is a native verdict: the frozen enum
+#: contract requires it to be treated as an ordinary out-of-enum label (see the module docstring).
 NATIVE_VERDICTS = frozenset({
     "CONFIRMED",
     "CONFIRMED_WITH_MINOR",
@@ -82,8 +97,12 @@ NATIVE_VERDICTS = frozenset({
     "CONTRADICTED",
     "MISATTRIBUTED",
     "INDIRECT_SOURCE",
-    "AMBIGUOUS",
 })
+
+#: The editable rubric, whose fenced strictness ladder this module parses. Beside this file's
+#: package, at ../specs/. Overridable per call so the Runner can validate against the *materialized*
+#: rubric the program actually ran under, rather than the repo's current copy.
+DEFAULT_RUBRIC_PATH = pathlib.Path(__file__).resolve().parents[1] / "specs" / "verdict_schema_sarol.md"
 
 REQUIRED_TOP_LEVEL = (
     "claim_id",
@@ -108,6 +127,44 @@ VALID_SOURCE_MODES = frozenset({"paperclip", "pdf", "pdf_ocr_fallback"})
 STRICT_PHRASING_TYPES = frozenset({"DIRECT", "PARAPHRASED"})
 STRICT_PHRASING_FLOOR = 3
 DEFAULT_PHRASING_FLOOR = 1
+
+
+def parse_rollup_order(rubric_text: str) -> tuple[str, ...] | None:
+    """Pull the worst-wins strictness ladder out of the editable rubric.
+
+    The rubric declares it as a fenced block of `SAROL_9` labels separated by ``>``, strongest
+    first. Returns the ladder, or None when no fenced block contains a full permutation of the
+    enum -- which the caller must treat as a hard failure, not as "no check applies".
+
+    Parsing a file the optimizer owns is the price of letting it reorder the ladder while still
+    enforcing that its own rollups obey whatever ladder it declared.
+    """
+    for block in re.findall(r"```(.*?)```", rubric_text, flags=re.DOTALL):
+        tokens = re.findall(r"[A-Z_]{3,}", block)
+        ordered: list[str] = []
+        for token in tokens:
+            if token in SAROL_9 and token not in ordered:
+                ordered.append(token)
+        if len(ordered) == len(SAROL_9):
+            return tuple(ordered)
+    return None
+
+
+def load_rollup_order(rubric_path: pathlib.Path | None = None) -> tuple[str, ...] | None:
+    path = pathlib.Path(rubric_path) if rubric_path is not None else DEFAULT_RUBRIC_PATH
+    try:
+        return parse_rollup_order(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+
+
+def worst_wins(labels: Iterable[str], order: Sequence[str]) -> str | None:
+    """The strongest label present, per ``order`` (index 0 is strongest)."""
+    rank = {label: i for i, label in enumerate(order)}
+    ranked = [(rank[l], l) for l in labels if l in rank]
+    if not ranked:
+        return None
+    return min(ranked)[1]
 
 
 @dataclass
@@ -157,8 +214,15 @@ def validate_obj(
     expect_claim_id: str | None = None,
     expect_variant: str = SAROL_VARIANT,
     path: str | None = None,
+    rubric_path: pathlib.Path | None = None,
+    rollup_order: Sequence[str] | None = None,
 ) -> ValidationResult:
-    """Validate an already-parsed verdict envelope. Never raises on bad *content*."""
+    """Validate an already-parsed verdict envelope. Never raises on bad *content*.
+
+    ``rubric_path`` should point at the rubric the program actually ran under -- for a real run
+    that is the copy inside the materialized tree, not the repo's working copy. ``rollup_order``
+    short-circuits the parse when a caller has already loaded the ladder for a whole batch.
+    """
     violations: list[str] = []
     counts: dict[str, int] = {}
 
@@ -208,20 +272,28 @@ def validate_obj(
     overall = verdict.get("overall_verdict")
     _classify(overall, counts, "overall_verdict", violations)
 
-    # Rule 6, order-independent form. See the module docstring for why this is not the native
-    # strictness-ordered check.
+    # Rule 6, worst-wins, against the ladder the rubric currently declares. See the module
+    # docstring: the order is the optimizer's to change, the consistency is not.
     if sub_verdicts:
-        if len(sub_verdicts) == 1:
-            if overall != sub_verdicts[0]:
-                violations.append(
-                    f"ROLLUP_INCONSISTENT:single sub-claim {sub_verdicts[0]!r} "
-                    f"rolled up to {overall!r}"
-                )
-        elif overall not in set(sub_verdicts):
+        order = rollup_order if rollup_order is not None else load_rollup_order(rubric_path)
+        if order is None:
+            # Fail closed. An unparseable ladder makes the rule unenforceable, which is not the
+            # same as the rule not applying -- and silently skipping it is how a CONTRADICT
+            # sub-claim ends up rolled up to ACCURATE with nothing complaining.
             violations.append(
-                f"ROLLUP_INCONSISTENT:{overall!r} is not among the sub-claim verdicts "
-                f"{sorted(str(v) for v in set(sub_verdicts))}"
+                "ROLLUP_ORDER_UNPARSEABLE:no fenced strictness ladder covering all 9 labels in "
+                f"{rubric_path or DEFAULT_RUBRIC_PATH}"
             )
+        else:
+            valid_subs = [v for v in sub_verdicts if v in SAROL_9]
+            expected = worst_wins(valid_subs, order)
+            # When no sub-claim carries a usable label there is nothing to roll up from; the
+            # invalid labels themselves are already recorded above.
+            if expected is not None and overall != expected:
+                violations.append(
+                    f"ROLLUP_INCONSISTENT:{overall!r} is not the worst-wins rollup of "
+                    f"{[str(v) for v in sub_verdicts]}; expected {expected!r}"
+                )
 
     # Rule 7, the attestation floor.
     attestation = verdict.get("attestation") or {}
@@ -250,6 +322,8 @@ def validate_file(
     *,
     expect_claim_id: str | None = None,
     expect_variant: str = SAROL_VARIANT,
+    rubric_path: pathlib.Path | None = None,
+    rollup_order: Sequence[str] | None = None,
 ) -> ValidationResult:
     """Read and validate one verdict file. A malformed file is a violation, not a traceback."""
     try:
@@ -267,7 +341,12 @@ def validate_file(
             path=str(path),
         )
     return validate_obj(
-        obj, expect_claim_id=expect_claim_id, expect_variant=expect_variant, path=str(path)
+        obj,
+        expect_claim_id=expect_claim_id,
+        expect_variant=expect_variant,
+        path=str(path),
+        rubric_path=rubric_path,
+        rollup_order=rollup_order,
     )
 
 
@@ -283,6 +362,9 @@ def _selftest() -> int:
     valid = validate_file(FIXTURE_DIR / "valid_all_sarol.json")
     mixed = validate_file(FIXTURE_DIR / "mixed_native_sarol.json")
     unknown = validate_file(FIXTURE_DIR / "out_of_enum_label.json")
+    sub_only = validate_file(FIXTURE_DIR / "invalid_subclaim_only.json")
+    bad_rollup = validate_file(FIXTURE_DIR / "bad_rollup.json")
+    order = load_rollup_order()
 
     checks = [
         # Fixture 1 -- the gate the adapter smoke actually depends on.
@@ -302,12 +384,43 @@ def _selftest() -> int:
         ("...is counted in error_class_counts",
          unknown.error_class_counts.get("invalid_label") == 2),
         ("...under its own name too",
-         unknown.error_class_counts.get("invalid_label:PROBABLY_FINE") == 2),
+         unknown.error_class_counts.get("invalid_label:AMBIGUOUS") == 2),
         ("...and does not trip a rubric mismatch",
          not any(v.startswith("RUBRIC_MISMATCH") for v in unknown.violations)),
-        # The rollup check must not depend on the optimizer-editable strictness order.
-        ("rollup accepts any label present among sub-claims",
-         validate_obj({**_fixture("valid_all_sarol.json"), "overall_verdict": "ACCURATE"}).ok),
+        # AMBIGUOUS is a native verdict, so this is the case that is easy to get wrong: the frozen
+        # enum contract requires it be charged as an ordinary out-of-enum miss, not rejected as a
+        # wrong-rubric signal.
+        ("AMBIGUOUS is a counted miss, per the enum contract -- not a rubric mismatch",
+         "AMBIGUOUS" not in NATIVE_VERDICTS),
+        # Fixture 4 -- an invalid SUB-CLAIM under a valid overall verdict. The case that scored
+        # clean before, because the scorer re-derived counts from the overall label alone.
+        ("an invalid sub-claim is counted even when overall_verdict is valid",
+         sub_only.error_class_counts.get("invalid_label") == 1),
+        ("...named", sub_only.error_class_counts.get("invalid_label:PROBABLY_FINE") == 1),
+        ("...and the valid overall verdict is still returned for scoring",
+         sub_only.overall_verdict == "ACCURATE"),
+        # Fixture 5 -- worst-wins is enforced, not merely "overall appears somewhere".
+        ("CONTRADICT + ACCURATE must NOT roll up to ACCURATE", not bad_rollup.ok),
+        ("...specifically as a rollup inconsistency",
+         any(v.startswith("ROLLUP_INCONSISTENT") for v in bad_rollup.violations)),
+        ("...naming the label worst-wins actually requires",
+         any("CONTRADICT" in v for v in bad_rollup.violations)),
+        # The ladder is read from the rubric, so the optimizer may reorder it...
+        ("the strictness ladder parses out of the editable rubric", order is not None),
+        ("...as a full permutation of the enum", order is not None and set(order) == SAROL_9),
+        ("...strongest first", order is not None and order[0] == "CONTRADICT"),
+        ("...weakest last", order is not None and order[-1] == "ACCURATE"),
+        ("a reordered ladder changes what validates -- the order is the optimizer's to set",
+         validate_obj(_fixture("bad_rollup.json"),
+                      rollup_order=("ACCURATE",) + tuple(l for l in SAROL_9 if l != "ACCURATE")).ok),
+        # ...but an unparseable ladder fails closed rather than skipping the rule.
+        ("an unparseable ladder is a violation, not a silent skip",
+         not validate_obj(_fixture("bad_rollup.json"),
+                          rubric_path=pathlib.Path("/nonexistent/rubric.md")).ok),
+        ("...named as such",
+         any(v.startswith("ROLLUP_ORDER_UNPARSEABLE") for v in validate_obj(
+             _fixture("bad_rollup.json"),
+             rubric_path=pathlib.Path("/nonexistent/rubric.md")).violations)),
         ("rollup rejects a label absent from sub-claims",
          not validate_obj({**_fixture("valid_all_sarol.json"), "overall_verdict": "MISQUOTE"}).ok),
         # The variant gate itself.

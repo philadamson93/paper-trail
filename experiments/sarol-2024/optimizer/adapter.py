@@ -329,6 +329,30 @@ class ClaimRecord:
         )
 
 
+@dataclass
+class CanarySpec:
+    """A pinned claim with a known verdict, processed before any scored claim (`sarol`'s D46).
+
+    This guards the most expensive failure mode available here: a silently broken scorer or
+    pipeline. A metric bug of that shape does not announce itself, and it invalidates every
+    iteration after the break rather than just the current one -- so the canary's job is to turn
+    an invisible, retroactive failure into a loud, immediate one.
+
+    A canary miss returns ``infra_error`` before the first scored claim is dispatched: a run whose
+    instrument moved is not a run that produced a worse number, and must not be scored as one.
+    """
+
+    claim: ClaimRecord
+    expected_verdict: str
+
+    @classmethod
+    def from_dict(cls, obj: dict[str, Any]) -> "CanarySpec":
+        return cls(
+            claim=ClaimRecord.from_dict(obj["claim"]),
+            expected_verdict=obj["expected_verdict"],
+        )
+
+
 def load_batch(input_ref: str | pathlib.Path) -> list[ClaimRecord]:
     """Read a dispatcher-owned batch file. Never inline claim content — a path, per ``RunInputs``."""
     obj = json.loads(pathlib.Path(input_ref).read_text(encoding="utf-8"))
@@ -350,8 +374,12 @@ class SarolRunner:
         output_root: pathlib.Path | None = None,
         invoke: Invoker | None = None,
         per_call_timeout_seconds: float = 900.0,
+        per_call_max_budget_usd: float = 2.0,
         paperclip_version_probe: Callable[[], str | None] | None = None,
         model: str = "opus",
+        canary: "CanarySpec | None" = None,
+        command_name: str = "sarol-eval-item",
+        require_command: bool = True,
     ) -> None:
         self.program_store = program_store
         # A real checkout, not the materialized tree: that tree is chmod'd read-only, its `.claude/`
@@ -361,8 +389,15 @@ class SarolRunner:
         self.output_root = pathlib.Path(output_root).resolve() if output_root else None
         self.invoke: Invoker = invoke or headless_claude_invoke
         self.per_call_timeout_seconds = per_call_timeout_seconds
+        # A HARD per-call spend cap at the actual spender. The dispatcher's preflight only
+        # forecasts and refuses at batch boundaries; nothing there stops one runaway session.
+        # The engine stops neither -- its only budget check is on the optimizer agent's tokens.
+        self.per_call_max_budget_usd = per_call_max_budget_usd
         self.paperclip_version_probe = paperclip_version_probe or installed_paperclip_version
         self.model = model
+        self.canary = canary
+        self.command_name = command_name
+        self.require_command = require_command
 
     # -- preflight ---------------------------------------------------------------------------
 
@@ -391,7 +426,7 @@ class SarolRunner:
         self, stage: str, claim: ClaimRecord, materialized_path: pathlib.Path
     ) -> list[str]:
         prompt = (
-            f"/sarol-eval-item --stage {stage} --claim {claim.claim_id} "
+            f"/{self.command_name} --stage {stage} --claim {claim.claim_id} "
             f"--staging {claim.staging_dir} --spec-root {materialized_path}"
         )
         return [
@@ -409,7 +444,41 @@ class SarolRunner:
             "--setting-sources",
             "project",
             "--strict-mcp-config",
+            # The hard stop. Without it the only bound on a single nested session is the
+            # wall-clock timeout, which a cheap-but-endless session satisfies while still
+            # spending. The engine will not stop it either.
+            "--max-budget-usd",
+            str(self.per_call_max_budget_usd),
         ]
+
+    def command_path(self) -> pathlib.Path | None:
+        """Where the nested slash command is expected to live, if it exists at all."""
+        for rel in (
+            f".claude/commands/{self.command_name}.md",
+            f"src/commands/{self.command_name}.md",
+            f"experiments/sarol-2024/commands/{self.command_name}.md",
+        ):
+            candidate = self.working_checkout / rel
+            if candidate.exists():
+                return candidate
+        return None
+
+    def missing_command_error(self) -> str | None:
+        """Fail loudly when the command the Runner dispatches does not exist.
+
+        Without this the first real run burns a session per stage and fails somewhere inside
+        Claude Code with an unrelated-looking message. `/sarol-eval-item` is named as a Task 5
+        eval-arm deliverable and is not built yet, so this preflight is the honest boundary
+        between "the adapter is wired" and "the pipeline can actually run".
+        """
+        if not self.require_command:
+            return None
+        if self.command_path() is None:
+            return (
+                f"nested command /{self.command_name} not found under .claude/commands/, "
+                f"src/commands/ or experiments/sarol-2024/commands/ in {self.working_checkout}"
+            )
+        return None
 
     def run(self, materialized_path, inputs):  # positional -- loop.py:334/:335/:410
         """The ``Runner`` protocol. ``(materialized_path, inputs) -> RunArtifacts``."""
@@ -432,6 +501,11 @@ class SarolRunner:
         if pin_error is not None:
             return artifacts("infra_error", code="PAPERCLIP_PIN_MISMATCH", message=pin_error)
 
+        # The command this Runner dispatches has to exist before we spend anything looking for it.
+        command_error = self.missing_command_error()
+        if command_error is not None:
+            return artifacts("infra_error", code="NESTED_COMMAND_MISSING", message=command_error)
+
         try:
             claims = load_batch(inputs.input_ref)
         except (OSError, KeyError, json.JSONDecodeError) as exc:
@@ -441,13 +515,14 @@ class SarolRunner:
         out_dir = pathlib.Path(out_root) / inputs.split
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        results: list[dict[str, Any]] = []
-        total_cost = 0.0
-        sub_invocations = 0
-        timed_out = False
-        errored = False
+        # Validate against the rubric the program ACTUALLY RAN UNDER -- the materialized copy, not
+        # the repo's working tree, which the optimizer may already have edited past this version.
+        rubric_path = materialized_path / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
+        rollup_order = validate_sarol.load_rollup_order(rubric_path)
 
-        for claim in claims:
+        self._counter = {"cost": 0.0, "subs": 0}
+
+        def process(claim: ClaimRecord) -> dict[str, Any]:
             record: dict[str, Any] = {
                 "claim_id": claim.claim_id,
                 "citekey": claim.citekey,
@@ -458,8 +533,8 @@ class SarolRunner:
             for stage in STAGES:
                 cmd = self._stage_command(stage, claim, materialized_path)
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
-                sub_invocations += 1
-                total_cost += res.cost_usd
+                self._counter["subs"] += 1
+                self._counter["cost"] += res.cost_usd
                 record["stages"][stage] = {
                     "exit_code": res.exit_code,
                     "cost_usd": res.cost_usd,
@@ -468,25 +543,59 @@ class SarolRunner:
                 }
                 if res.timed_out:
                     record["status"] = "timeout"
-                    timed_out = True
-                    break
+                    return record
                 if res.exit_code != 0:
                     record["status"] = "program_error"
                     record["detail"] = res.detail
-                    errored = True
-                    break
+                    return record
 
             # Exit validation (Part C5). The Runner calls the validator; the validator owns the rule.
-            if record["status"] == "ok":
-                verdict_path = claim.staging_dir / "ledger" / "claims" / f"{claim.claim_id}.json"
-                validation = validate_sarol.validate_file(
-                    verdict_path, expect_claim_id=claim.claim_id
+            verdict_path = claim.staging_dir / "ledger" / "claims" / f"{claim.claim_id}.json"
+            validation = validate_sarol.validate_file(
+                verdict_path,
+                expect_claim_id=claim.claim_id,
+                rubric_path=rubric_path,
+                rollup_order=rollup_order,
+            )
+            record["validation"] = validation.as_dict()
+            if not validation.ok:
+                record["status"] = "program_error"
+            return record
+
+        # The round-trip canary, BEFORE any scored claim (D46). A run whose instrument moved is
+        # not a run that scored worse -- it is not a run at all.
+        canary_record = None
+        if self.canary is not None:
+            canary_record = process(self.canary.claim)
+            observed = (canary_record.get("validation") or {}).get("overall_verdict")
+            if canary_record["status"] != "ok" or observed != self.canary.expected_verdict:
+                return artifacts(
+                    "infra_error",
+                    code="CANARY_FAILED",
+                    message=(
+                        f"canary {self.canary.claim.claim_id} expected "
+                        f"{self.canary.expected_verdict!r}, observed {observed!r} "
+                        f"(status={canary_record['status']}) -- the scorer or pipeline moved; "
+                        "numbers from this run are not comparable to earlier ones"
+                    ),
+                    n=self._counter["subs"],
+                    cost=self._counter["cost"],
                 )
-                record["validation"] = validation.as_dict()
-                if not validation.ok:
-                    record["status"] = "program_error"
-                    errored = True
-            results.append(record)
+
+        results: list[dict[str, Any]] = [process(c) for c in claims]
+        timed_out = any(r["status"] == "timeout" for r in results)
+        errored = any(r["status"] == "program_error" for r in results)
+        total_cost = self._counter["cost"]
+        sub_invocations = self._counter["subs"]
+
+        # Roll the validator's own invalid-label counts up to the batch. The Scorer merges these
+        # rather than re-deriving them, because `parse_verdict` only ever sees the OVERALL label:
+        # an invalid SUB-CLAIM verdict under a valid overall verdict would otherwise score clean
+        # and disappear from error_class_counts entirely.
+        validator_counts: dict[str, int] = {}
+        for record in results:
+            for key, n in ((record.get("validation") or {}).get("error_class_counts") or {}).items():
+                validator_counts[key] = validator_counts.get(key, 0) + n
 
         manifest_path = out_dir / "run_manifest.json"
         manifest_path.write_text(
@@ -498,6 +607,8 @@ class SarolRunner:
                     # the Runner, not against however many records came back.
                     "requested_count": len(claims),
                     "claims": results,
+                    "validator_error_class_counts": validator_counts,
+                    "canary": canary_record,
                     "sub_invocation_count": sub_invocations,
                     "cost_usd": total_cost,
                 },
@@ -591,11 +702,22 @@ class SarolScorer:
 
         scored = score_sarol3.score(pairs)
 
+        # Merge the validator's per-file invalid-label counts on top of the scorer's own. The
+        # scorer only ever sees the OVERALL predicted label (that is what `parse_verdict` returns),
+        # so an invalid label on a SUB-CLAIM under a valid overall verdict is invisible to it. The
+        # prediction is still scored on the overall label -- that part is a real answer -- but the
+        # defective sub-claim has to reach `error_class_counts`, or an optimizer edit that corrupts
+        # sub-claim vocabulary looks clean right up until someone reads the ledger by hand.
+        merged_counts = dict(scored.get("error_class_counts") or {})
+        for key, n in (run_manifest.get("validator_error_class_counts") or {}).items():
+            merged_counts[key] = merged_counts.get(key, 0) + n
+
         # Coverage: guard partial or missing output, not just degenerate values. A partially-scored
         # batch presented as complete is not a result.
         complete = scored["n_total"] == requested and unresolved == 0
         breakdown = {
             **scored,
+            "error_class_counts": merged_counts,
             "scored": complete,
             "requested_count": requested,
             "n_unresolved": unresolved,
@@ -632,7 +754,15 @@ class SarolScorer:
 #: what makes train-vs-val divergence usable as a stopping rule. So the scalar crosses the boundary
 #: and the error structure does not. What remains is completeness metadata: enough to tell a real
 #: score from a partial batch, carrying no information about *which* claims were missed.
-_VAL_BREAKDOWN_ALLOWED = ("scored", "reason", "n_total", "requested_count", "split")
+#:
+#: `n_invalid` is included deliberately, and it is the one judgement call in this list. It is a
+#: bare count of unparseable predictions, not a distribution over classes -- it says "this many
+#: outputs were malformed", never which gold classes they fell against. The plan's Verification
+#: table asks for it alongside the coverage assertion, and withholding it would mean a VAL run
+#: could be half-garbage while still reporting `scored: true`.
+_VAL_BREAKDOWN_ALLOWED = (
+    "scored", "reason", "n_total", "n_invalid", "requested_count", "split",
+)
 
 
 class SarolReleaseBuilder:
@@ -874,6 +1004,11 @@ def _selftest() -> int:
                     {"claim_id": "C1", "citekey": "k1", "staging_dir": tmp, "status": "ok"},
                     {"claim_id": "C2", "citekey": "k2", "staging_dir": tmp, "status": "ok"},
                 ],
+                # An invalid SUB-CLAIM label under a valid overall verdict. parse_verdict only
+                # ever reports the overall label, so without the merge this vanishes.
+                "validator_error_class_counts": {
+                    "invalid_label": 1, "invalid_label:PROBABLY_FINE": 1,
+                },
             }), encoding="utf-8")
             ref = schemas.ArtifactRef(
                 path=str(manifest_path),
@@ -895,6 +1030,14 @@ def _selftest() -> int:
                 ("the metric is finite", math.isfinite(score.primary_metric.value)),
                 ("the frontier scalar is 3-way macro-F1",
                  score.primary_metric.name == "sarol_3way_macro_f1"),
+                # The scorer sees only the OVERALL label, so a bad sub-claim verdict reaches
+                # error_class_counts only because the validator's counts are merged in.
+                ("an invalid sub-claim label survives into error_class_counts",
+                 score.breakdown["error_class_counts"].get("invalid_label") == 1),
+                ("...named", score.breakdown["error_class_counts"].get(
+                    "invalid_label:PROBABLY_FINE") == 1),
+                ("...even though both scored predictions were valid",
+                 score.breakdown["n_invalid"] == 0),
             ]
 
             # Coverage: one claim short of what was requested.
@@ -956,6 +1099,10 @@ def _selftest() -> int:
                 ("...nor the error-class counts", "error_class_counts" not in val_breakdown),
                 ("...but keeps enough to tell a real score from a partial batch",
                  "scored" in val_breakdown),
+                # A bare count of malformed outputs, not a distribution over classes -- without it
+                # a VAL run could be half-garbage and still report scored: true.
+                ("...including n_invalid, per the coverage verification row",
+                 "n_invalid" in val_breakdown),
                 # Same numbers in, different tier out -- the boundary is the ReleaseBuilder's,
                 # not an artefact of the two payloads having been scored differently.
                 ("the SAME batch through the TRAIN tier keeps per-class F1",
@@ -984,6 +1131,41 @@ def _selftest() -> int:
             ("...naming the pin", art.error is not None and "PAPERCLIP" in art.error.code),
         ]
 
+        # The nested command must exist before a run spends anything looking for it.
+        ok_pin = lambda: "paperclip, version 0.5.11"  # noqa: E731
+        missing_cmd = SarolRunner(store, invoke=spy, paperclip_version_probe=ok_pin)
+        art_cmd = missing_cmd.run(
+            pathlib.Path("/nonexistent"),
+            schemas.RunInputs(input_ref="/nonexistent/batch.json", batch_id="b", split="train"),
+        )
+        checks += [
+            ("a missing nested command fails the run up front",
+             art_cmd.status == "infra_error"
+             and art_cmd.error is not None
+             and art_cmd.error.code == "NESTED_COMMAND_MISSING"),
+            ("...naming what it looked for",
+             art_cmd.error is not None and "sarol-eval-item" in art_cmd.error.message_redacted),
+            ("/sarol-eval-item genuinely does not exist yet -- Task 5 eval-arm work",
+             missing_cmd.command_path() is None),
+        ]
+
+        # The hard per-call spend cap has to be in the command vector, not just in a docstring.
+        cmd_vector = SarolRunner(
+            store, per_call_max_budget_usd=1.25, require_command=False
+        )._stage_command(
+            "adjudicator",
+            ClaimRecord(claim_id="C1", citekey="k", staging_dir=pathlib.Path("/tmp/s")),
+            pathlib.Path("/tmp/mat"),
+        )
+        checks += [
+            ("the nested command carries a hard --max-budget-usd",
+             "--max-budget-usd" in cmd_vector),
+            ("...with the configured value",
+             cmd_vector[cmd_vector.index("--max-budget-usd") + 1] == "1.25"),
+            ("...alongside the timeout, which alone would not bound spend",
+             "--max-budget-usd" in cmd_vector and "-p" in cmd_vector),
+        ]
+
         # Runner: a timeout surfaces as status="timeout", never as an exception.
         with tempfile.TemporaryDirectory() as tmp:
             batch = pathlib.Path(tmp) / "batch.json"
@@ -1003,6 +1185,7 @@ def _selftest() -> int:
                 invoke=timeout_invoke,
                 output_root=pathlib.Path(tmp) / "out",
                 paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
             )
             res = r.run(
                 pathlib.Path(tmp),
@@ -1013,6 +1196,45 @@ def _selftest() -> int:
                  res.status == "timeout"),
                 ("the engine checks this status on only 1 of its 3 calls, so we report it",
                  res.sub_invocation_count == 1),
+            ]
+
+            # The round-trip canary: a moved instrument stops the run before any scored claim.
+            canary_claim = ClaimRecord(
+                claim_id="CANARY", citekey="canary", staging_dir=staging
+            )
+            dispatched_claims: list[str] = []
+
+            def canary_invoke(cmd, cwd, t):
+                joined = " ".join(cmd)
+                for token in joined.split():
+                    if token.startswith("--claim"):
+                        pass
+                dispatched_claims.append(
+                    joined.split("--claim ")[1].split()[0] if "--claim " in joined else "?"
+                )
+                return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+
+            # No verdict file exists, so validation fails -> the canary cannot match -> stop.
+            canary_runner = SarolRunner(
+                store,
+                invoke=canary_invoke,
+                output_root=pathlib.Path(tmp) / "out2",
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+                canary=CanarySpec(claim=canary_claim, expected_verdict="ACCURATE"),
+            )
+            canary_res = canary_runner.run(
+                pathlib.Path(tmp),
+                schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
+            )
+            checks += [
+                ("a failed canary stops the run", canary_res.status == "infra_error"),
+                ("...named as a canary failure",
+                 canary_res.error is not None and canary_res.error.code == "CANARY_FAILED"),
+                ("...before any scored claim is dispatched",
+                 all(c == "CANARY" for c in dispatched_claims)),
+                ("...and it is not scored as a bad result, which is the whole point",
+                 canary_res.status != "ok"),
             ]
     else:
         checks.append((f"engine not found at {engine_path()} -- engine-facing checks SKIPPED", True))

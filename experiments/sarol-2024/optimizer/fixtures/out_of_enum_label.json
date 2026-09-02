@@ -32,14 +32,14 @@
         }
       ],
       "figures_checked": [],
-      "verdict": "PROBABLY_FINE",
+      "verdict": "AMBIGUOUS",
       "paper_value": null,
       "claim_value": null,
-      "nuance": "PROBABLY_FINE belongs to neither enum. It is an invented label -- exactly what an optimizer edit that wandered outside the frozen vocabulary would emit. The contract says charge it as a miss and count it, never crash, so the loop rejects the edit on score alone."
+      "nuance": "AMBIGUOUS is the label the frozen enum contract names for this case. It survives in the shipped tool as a workflow flag driving Phase 4 triage (Open Questions 7), but it is not an emittable verdict, and the contract says the exit validator must reject it in a verdict field exactly like any other out-of-enum label -- i.e. charged as a counted miss, never a crash, and never a wrong-rubric rejection."
     }
   ],
 
-  "overall_verdict": "PROBABLY_FINE",
+  "overall_verdict": "AMBIGUOUS",
   "overall_flag": null,
   "remediation": {
     "category": "—",

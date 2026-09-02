@@ -1,0 +1,88 @@
+{
+  "claim_id": "C046",
+  "schema_version": "1.1",
+  "run_id": "run_20260901T1200Z",
+  "citekey": "chen2022",
+  "handle": "pdfs/chen2022/",
+  "source_mode": "pdf",
+  "paperclip_handle": null,
+  "ingest_mode": "grobid",
+  "source_ref_urls": [],
+
+  "rubric_variant": "sarol_2024_9class",
+
+  "claim_text": "The method improves on the baseline and was validated prospectively.",
+  "manuscript_section": "5.1",
+  "claim_type": {
+    "type": "DIRECT",
+    "confidence": "high"
+  },
+
+  "sub_claims": [
+    {
+      "sub_claim_id": "C046.a",
+      "text": "The method improves on the baseline.",
+      "evidence": [
+        {
+          "section": "Results",
+          "line": 150,
+          "snippet": "our method did not outperform the baseline on any reported metric",
+          "source_mode": "pdf",
+          "locator": "pdfs/chen2022.pdf#page=8"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "CONTRADICT",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "The source states the opposite, verbatim."
+    },
+    {
+      "sub_claim_id": "C046.b",
+      "text": "It was validated prospectively.",
+      "evidence": [
+        {
+          "section": "Methods",
+          "line": 40,
+          "snippet": "a prospective validation cohort was enrolled",
+          "source_mode": "pdf",
+          "locator": "pdfs/chen2022.pdf#page=3"
+        }
+      ],
+      "figures_checked": [],
+      "verdict": "ACCURATE",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "Supported."
+    }
+  ],
+
+  "overall_verdict": "ACCURATE",
+  "overall_flag": null,
+  "remediation": {
+    "category": "—",
+    "suggested_edit": ""
+  },
+
+  "attestation": {
+    "phrasings_tried": [
+      "baseline comparison outcome",
+      "prospective validation cohort",
+      "method versus baseline metrics"
+    ],
+    "section_checklist": [
+      {"section": "Methods", "read": true},
+      {"section": "Results", "read": true}
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Source reports its own comparison.",
+    "out_of_context_check": "Usage matches."
+  },
+
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": 35,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}
