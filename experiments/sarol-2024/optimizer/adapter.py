@@ -625,12 +625,31 @@ class SarolScorer:
 # =================================================================================================
 
 
+#: What a VAL release is allowed to carry. TRAIN is Tier 1 (fully open); VAL is Tier 2 and the
+#: framework's rule for it is *scalar only* (`sarol`'s D24). Per-class F1 and the confusion matrix
+#: are aggregates, but they are aggregates **of the held-out set** — they describe where the
+#: program fails on VAL, which is precisely the signal an optimizer would overfit to and precisely
+#: what makes train-vs-val divergence usable as a stopping rule. So the scalar crosses the boundary
+#: and the error structure does not. What remains is completeness metadata: enough to tell a real
+#: score from a partial batch, carrying no information about *which* claims were missed.
+_VAL_BREAKDOWN_ALLOWED = ("scored", "reason", "n_total", "requested_count", "split")
+
+
 class SarolReleaseBuilder:
-    """Builds the per-iteration release. Aggregates only — the VAL payload carries the scalar and
-    its breakdown, never per-example content."""
+    """Builds the per-iteration release. Aggregates only, and for VAL, not even all of those."""
 
     def __init__(self, *, optimizer_isolation_hash: str = "sarol-2024") -> None:
         self.optimizer_isolation_hash = optimizer_isolation_hash
+
+    def _reduce_for_val(self, score):
+        """Strip a VAL ``ScoreResult`` down to the scalar plus completeness metadata."""
+        schemas = _import_engine()
+        reduced = {k: score.breakdown[k] for k in _VAL_BREAKDOWN_ALLOWED if k in score.breakdown}
+        return schemas.ScoreResult(
+            primary_metric=score.primary_metric,
+            breakdown=reduced,
+            task_config=score.task_config,
+        )
 
     def build_release(self, score, corpus, *, frontier=None, budget=None):
         """The ``ReleaseBuilder`` protocol. First two positional, ``frontier``/``budget`` keyword —
@@ -645,7 +664,7 @@ class SarolReleaseBuilder:
             return schemas.ReleasePayloadVal(
                 schema_version=SCHEMA_VERSION,
                 phase="val",
-                metrics=score,
+                metrics=self._reduce_for_val(score),
                 iter=iter_n,
                 produced_at_utc=now,
                 optimizer_isolation_hash=self.optimizer_isolation_hash,
@@ -913,19 +932,36 @@ def _selftest() -> int:
             rb = SarolReleaseBuilder()
             corpus = schemas.MistakeCorpus(ref="", counts={})
             val_payload = rb.build_release(score, corpus, frontier={}, budget={})
+            # Same scored batch, relabelled as the TRAIN call -- so the only difference between
+            # the two payloads below is the tier, not the underlying numbers.
             train_score = schemas.ScoreResult(
-                primary_metric=schemas.PrimaryMetric(
-                    name="sarol_3way_macro_f1", value=0.5, higher_is_better=True
-                ),
-                breakdown={},
-                task_config={"_split": "train", "_iter": 1},
+                primary_metric=score.primary_metric,
+                breakdown=dict(score.breakdown),
+                task_config={**score.task_config, "_split": "train"},
             )
             train_payload = rb.build_release(train_score, corpus, frontier={}, budget={})
+            train_breakdown = train_payload.corpus["metrics"]["breakdown"]
+            val_breakdown = val_payload.metrics.breakdown
             checks += [
                 ("a val split builds a ReleasePayloadVal",
                  isinstance(val_payload, schemas.ReleasePayloadVal)),
                 ("a train split builds a ReleasePayloadTrain",
                  isinstance(train_payload, schemas.ReleasePayloadTrain)),
+                # Tier 2: the scalar crosses the boundary, the held-out error structure does not.
+                ("the VAL release still carries the frontier scalar",
+                 val_payload.metrics.primary_metric.value == score.primary_metric.value),
+                ("the VAL release does NOT leak per-class F1",
+                 "per_class_f1" not in val_breakdown),
+                ("...nor the confusion matrix", "confusion_matrix" not in val_breakdown),
+                ("...nor the error-class counts", "error_class_counts" not in val_breakdown),
+                ("...but keeps enough to tell a real score from a partial batch",
+                 "scored" in val_breakdown),
+                # Same numbers in, different tier out -- the boundary is the ReleaseBuilder's,
+                # not an artefact of the two payloads having been scored differently.
+                ("the SAME batch through the TRAIN tier keeps per-class F1",
+                 "per_class_f1" in train_breakdown),
+                ("...and the confusion matrix -- Tier 1 is fully open",
+                 "confusion_matrix" in train_breakdown),
             ]
 
         # Runner: the pin negative control fires before any claim is dispatched.
