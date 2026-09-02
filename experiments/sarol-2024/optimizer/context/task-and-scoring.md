@@ -52,7 +52,12 @@ accident.
 
 - Per-class F1 for all three buckets.
 - The 3×3 confusion matrix.
-- 9-way per-class F1, as a descriptive breakdown only. There are **no published baselines** at
+- 9-way per-class F1 and `macro_f1_9way`, as a descriptive breakdown only.
+  **Read `support_9way` first.** Macro-9 always divides by nine, so a batch whose gold covers five
+  classes caps at 5/9 = 0.556 however good the predictions — a low 9-way macro on a small batch
+  usually means the batch was small. For calibration, the do-nothing always-ACCURATE program scores
+  0.097 at 9-way against 0.292 at 3-way: the 9-way axis punishes it harder, which is informative,
+  but it is still not the objective. There are **no published baselines** at
   9-way granularity — Sarol et al. abandoned that resolution because models could not learn it —
   so it is a diagnostic, not a score to chase.
 - `error_class_counts`, including `invalid_label` (see below).

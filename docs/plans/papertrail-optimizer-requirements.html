@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="plan-sha256" content="f8a03dec109bafadf13d4a18b2ef331fb03372a23883903bea3a91c7cfb257c4">
+<meta name="plan-sha256" content="18aac02ae8b2fb96960a441e616c7b15b86f3cb159bd16f6ae1b03308a4b3396">
 <meta name="plan-path" content="docs/plans/papertrail-optimizer-requirements.md">
 <title>papertrail-optimizer-requirements — plan explainer</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -103,6 +103,10 @@ li{margin:3.5px 0}
 .small{font-size:12.5px;color:var(--muted)}
 .oq{border:1px solid var(--line);border-radius:10px;padding:13px 16px;margin:10px 0;background:var(--card)}
 .oq h4{margin:0 0 7px;font-size:14px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.resp{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 13px;
+  border-radius:0 7px 7px 0;margin:12px 0;font-size:13.5px}
+.resp-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--accent);margin-right:7px}
 .warnbox{border-left:3px solid var(--warn);background:var(--warn-bg);padding:10px 13px;
   border-radius:0 7px 7px 0;margin:12px 0;font-size:13.5px}
 .okbox{border-left:3px solid var(--ok);background:var(--ok-bg);padding:10px 13px;
@@ -121,7 +125,7 @@ li{margin:3.5px 0}
     <div><span>Reviewed</span> <strong style="color:var(--warn)">No</strong></div>
     <div><span>Branch</span> <code>sarol-optimizer-impl</code></div>
     <div><span>Source</span> <a href="papertrail-optimizer-requirements.md">papertrail-optimizer-requirements.md</a></div>
-    <div><span>Plan SHA-256</span> <code>f8a03dec109b</code></div>
+    <div><span>Plan SHA-256</span> <code>18aac02ae8b2</code></div>
     <div><span>Generated</span> 2026-09-02</div>
   </div>
 </div>
@@ -247,8 +251,7 @@ phase-to-phase delta interpretable.</p>
 <pre class="mermaid">
 flowchart LR
   subgraph prods["Evidence producers, the only thing that varies"]
-    ab["abstract-only<br/>mechanical, title plus abstract<br/>1 session per claim"]:::added
-    ret["retrieval<br/>mechanical, BM25 top-k<br/>1 session per claim"]:::added
+    ret["retrieval<br/>mechanical, BM25 top-k<br/>1 session per claim<br/>the only comparable condition"]:::added
     agn["agentic<br/>extractor then verifier<br/>3 sessions per claim"]:::untouched
     pcl["paperclip<br/>conversational query<br/>BACKLOG"]:::deferred
   end
@@ -263,7 +266,6 @@ flowchart LR
   rvl["release_val.json<br/>Tier 2, scalar only"]:::mod
   opt["optimizer session<br/>edits prompts, never commits"]:::untouched
 
-  ab --> ev
   ret --> ev
   agn --> ev
   pcl -.-> ev
@@ -480,8 +482,7 @@ The profiles differ <em>only</em> in what does that selecting.</p>
 <table>
 <thead><tr><th>Profile</th><th>Evidence producer</th><th>Sessions/claim</th><th>Phase</th></tr></thead>
 <tbody>
-<tr><td><code>abstract-only</code></td><td>mechanical: title + abstract</td><td>1</td><td>1a</td></tr>
-<tr><td><code>retrieval</code></td><td>mechanical: BM25 top-<em>k</em></td><td>1</td><td>1b</td></tr>
+<tr><td><code>retrieval</code></td><td>mechanical: BM25 top-<em>k</em></td><td>1</td><td>1</td></tr>
 <tr><td><code>agentic</code></td><td>extractor subagent, then verifier</td><td>3</td><td>2</td></tr>
 <tr><td><code>paperclip</code></td><td>conversational query via the paperclip CLI</td><td>3</td><td>backlog</td></tr>
 </tbody>
@@ -496,6 +497,7 @@ BM25 + MonoT5 <strong>top-20</strong> sentences; their GPT baselines used top-5.
 <code>paper-tool-validation.md:79</code> already defined the apples-to-apples condition as title + abstract.</div>
 <p>Any Phase 1 number must be reported with its evidence condition attached. <strong>A macro-F1 without the
 <em>k</em> is not a result.</strong></p>
+<div class="resp"><span class="resp-tag">Claude</span> Re: <em>"what is the purpose of the abstract-only version?"</em> &mdash; <strong>it is gone.</strong> It was never constructible from what Sarol ships: <code>corpus.jsonl</code> is 8,515 chunks over 100 papers (~85 each), and <code>cited_doc_ids</code> is <em>all</em> chunks of one paper (mean 72). That is the whole paper, chunked. The per-chunk field is only <em>named</em> <code>abstract</code> because Sarol inherited SciFact's schema. Your deeper point stands too: an abstract-only condition exercises nothing paper-trail is <em>for</em> &mdash; no fetch, no ingest, no section-aware search, no figures. Its sole purpose was a head-to-head number, and it could not deliver one cleanly. The ladder is now <code>retrieval</code> to <code>agentic</code> to <code>paperclip</code>, all reading real paper content.</div>
 
 <h3>C6.4 — what the phases claim</h3>
 <p>Phase 1 establishes how well the frozen judge performs at a fixed, mechanical evidence budget. Phase 2 swaps the
@@ -620,6 +622,17 @@ number is saying otherwise.</p>
 </div>
 </details>
 
+<details data-section="g-canary">
+<summary>What the round-trip canary is, and why it stops the run</summary>
+<div class="body">
+<div class="resp"><span class="resp-tag">Claude</span> Re: <em>"what is the canary&hellip;"</em> &mdash; before any scored claim runs, the pipeline processes one <strong>pinned claim whose correct verdict is already known</strong>. If it comes back different, the run stops.</div>
+<p>It is a tripwire for a <em>silently broken scorer or pipeline</em> &mdash; the failure where the numbers keep looking plausible but no longer mean what they did last week. That is the expensive one: it invalidates every iteration since the break, not just the current one, and nothing about it announces itself.</p>
+<p>OQ12 is only about <em>how often</em> it fires. The landed Runner runs it once per Runner call, so three times per iteration. Cheap either way, but it should be a term in the cost model rather than an untracked extra.</p>
+<label class="fb" for="fb-g-canary">Feedback</label>
+<textarea id="fb-g-canary" class="section-feedback" data-key="g-canary"></textarea>
+</div>
+</details>
+
 <details data-section="g-nan">
 <summary>NaN passes the engine's metric validation</summary>
 <div class="body">
@@ -700,26 +713,27 @@ OQ13 are new from the round-3 review.</p>
 
 <script>
 const PLAN_PATH = "docs/plans/papertrail-optimizer-requirements.md";
-const PLAN_SHA  = "f8a03dec109bafadf13d4a18b2ef331fb03372a23883903bea3a91c7cfb257c4";
+const PLAN_SHA  = "18aac02ae8b2fb96960a441e616c7b15b86f3cb159bd16f6ae1b03308a4b3396";
 const BRANCH    = "sarol-optimizer-impl";
 const LS = "ptopt::" + PLAN_SHA.slice(0,12);
 
 /* ---------- change-since-last-review ---------- */
 const CHANGES = {
   round: "diff",
-  baseline: "Diffed against commit 0958b9d — the exact plan version the previous HTML was generated from, " +
-            "so this is what you actually last reviewed. 1 new section, 4 changed, 8 unchanged (verified by diff).",
+  baseline: "Diffed against 18aac02's predecessor f8a03dec \u2014 the version you read and sent feedback on. " +
+            "This round is that feedback applied: the abstract-only rung dropped, 9-way scoring added, and " +
+            "four questions answered inline.",
   sections: {
-    "part-b":       {s:"changed", note:"EDIT set is now profile-dependent; Phase 1 narrows it to the adjudicator prompt and rubric guidance."},
-    "part-c6":      {s:"new",     note:"Entire Part. Added on the phasing decision, then rebuilt after Codex round 3 found the first draft contradicted the frozen adjudicator prompt."},
-    "files":        {s:"changed", note:"Two new rows (profiles.py, evidence_producers.py), both scoped down per the reuse-vs-rewrite lens."},
-    "verification": {s:"changed", note:"Five rows became nine, covering profile isolation, envelope exactness, the selector-aware phrasings floor and the VAL root."}
+    "part-c6":      {s:"changed", note:"The abstract-only rung is dropped \u2014 it was not constructible from Sarol's corpus and tested nothing paper-trail is for. Ladder is now retrieval, agentic, paperclip."},
+    "files":        {s:"changed", note:"One mechanical evidence producer (retrieval), not two."},
+    "verification": {s:"changed", note:"Rows updated for the dropped rung; the phrasings-floor row is now about declaring a selector rather than resolving a contradiction."},
+    "g-canary":     {s:"new",     note:"Answers your question about what the canary is and why it stops the run."}
   },
   oqs: {
-    10:{s:"new", note:"Which condition is Phase 1's headline."},
-    11:{s:"new", note:"May the adjudicator prompt change for Phase 1."},
-    12:{s:"new", note:"Canary scope: once per run or once per Runner call."},
-    13:{s:"new", note:"source_mode for the synthetic envelope, blocked by a frozen contract file."}
+    2 :{s:"changed",  note:"Your scoring point recorded; the owed rater task stays open."},
+    5 :{s:"resolved", note:"Report 9-way, keep 3-way as the frontier. score_sarol3.py now emits it."},
+    10:{s:"resolved", note:"Dissolved by dropping the abstract-only rung."},
+    13:{s:"changed",  note:"Rewritten in plain English with the frozen-contract-file context."}
   }
 };
 
@@ -728,13 +742,13 @@ const OQS = [
  {n:1,  st:"Resolved", t:"Which rubric variant does program-v0 freeze?",
   b:"Resolved to the <b>Sarol-rubric variant</b> after one reversal. The mainline collapse left 17 of IRRELEVANT's 34 gold instances structurally unreachable, so the program changed rather than the metric."},
  {n:2,  st:"Partly",   t:"Validate the 9-to-3 collapse table",
-  b:"Pass 1 ran and <b>failed</b>, which is what drove OQ1's reversal. <b>Pass 2 is still owed</b> — a hand-sample against real dev-split claims, now a check on the adjudicator's 9-class judgement rather than on a mapping table. A rater task, not an agent task."},
+  b:"Pass 1 ran and <b>failed</b>, which is what drove OQ1's reversal. <b>Pass 2 is still owed</b> — a hand-sample against real dev-split claims, now a check on the adjudicator's 9-class judgement rather than on a mapping table. A rater task, not an agent task.<br><br><span style='font-size:12.5px'>Re: <i>"easy to emit the 9 class judgement and then score against the 3 class and 9 class variants in a single deterministic scoring script"</i> &mdash; agreed, and now done (see OQ5). But that <i>reports</i> more, it does not <i>validate</i> anything. The owed item is a human judging whether the adjudicator's 9-class calls are defensible, and it stays open.</span>"},
  {n:3,  st:"Resolved", t:"Fixed topology for v0, or optimizer-editable topology?",
   b:"Fixed for v0. Recorded because the precedent cuts the other way: crc's Topology Z lets its optimizer restructure topology. The narrower call here is deliberate — paper-trail has no measured baseline at all yet, so v0 buys a smaller blast radius first."},
  {n:4,  st:"Resolved", t:"How much of this is engine-validation versus real optimization?",
   b:"Scoped narrowly to engine-validation. Phil: <i>\"the sarol optimizer is very early stage, we'd need to build this. mostly adding as a usecase to consider what we'd need in this shared harness.\"</i>"},
- {n:5,  st:"Pending",  t:"Is the fine-grained 9-way axis a frontier or a breakdown?",
-  b:"Near-term frontier is settled at 3-way macro-F1. Still open: paper-tool-validation.md frames fine-grained evaluation as the headline experiment, but the 9-way axis is <b>unbaselined</b> — Sarol et al. abandoned that granularity because models could not learn it. Currently a reported breakdown only."},
+ {n:5,  st:"Resolved", t:"Is the fine-grained 9-way axis a frontier or a breakdown?",
+  b:"<b>Report it, do not optimize it.</b> <code>score_sarol3.py</code> now emits <code>macro_f1_9way</code>, <code>per_class_f1_9way</code> and <code>support_9way</code> from the same predictions &mdash; deterministic, no re-run, no extra model calls (17 of 17 selftests green). It stays a breakdown for a reason the selftest now pins: macro-9 always divides by nine, so a batch whose gold covers 3 classes <b>caps at 0.333</b> however perfect the predictions, and the do-nothing program scores 0.097 at 9-way against 0.292 at 3-way. At VAL of 316 with heavy skew several classes land in single-digit support where one flip swings the objective, and there is no published 9-way baseline. Revisit only at the upper rungs of the N ramp, against real support counts (not computable yet, the benchmark is not on this machine)."},
  {n:6,  st:"Resolved", t:"How to reconcile a two-source freeze with a single version_sha?",
   b:"Compose one real tree and tag it. Phil: <i>\"I think a is fine?\"</i> Copy mainline members in with <code>git show main:&lt;path&gt;</code>, never a merge, so no tool-feature history lands on a paused research branch."},
  {n:7,  st:"Resolved", t:"Does AMBIGUOUS survive the taxonomy retirement?",
@@ -743,14 +757,14 @@ const OQS = [
   b:"Yes. Phil: <i>\"umm no a contract file should be immutable.\"</i> The enum contract moved to an immutable file; the guidance kept its path and history, demoted to editable."},
  {n:9,  st:"Resolved", t:"Where does Sarol-aware exit validation live?",
   b:"A new experiment-only validator. Phil: <i>\"sure.\"</i> <code>main</code>'s validator stays strict against the native enum and untouched."},
- {n:10, st:"Pending",  t:"Which condition is Phase 1's headline — abstract-only or retrieval at k=20?",
-  b:"<code>abstract-only</code> matches this repo's stated Variant A; <code>retrieval</code>@20 matches the budget MultiVerS's best result actually used. Both defensible, different comparisons. <b>Recommendation:</b> <code>retrieval</code>@20 as the headline, <code>abstract-only</code> as a single reference point rather than a full curve."},
+ {n:10, st:"Resolved", t:"Which condition is Phase 1's headline?",
+  b:"<b>Dissolved by dropping the abstract-only rung.</b> <code>retrieval</code> at top-k is now the only comparable condition the ladder offers, so the question reduces to which k. Use <b>k of 20</b>, matching the budget MultiVerS's best result used, and report k alongside every number."},
  {n:11, st:"Pending",  t:"May the adjudicator prompt change for Phase 1?",
   b:"Keeping it frozen is what makes the phases comparable, but it also means Phase 1 does no decomposition and gets a null <code>indirect_attribution_check</code>. <b>Recommendation:</b> keep it frozen and report the confound — a changed judge makes the delta uninterpretable."},
  {n:12, st:"Pending",  t:"Does the canary run once per optimization run, or once per Runner call?",
   b:"The landed Runner does the latter when configured, so it fires three times per iteration. Cheap either way, but it must be a term in <code>CostModel</code> rather than untracked."},
  {n:13, st:"Pending",  t:"What source_mode should the synthetic envelope declare?",
-  b:"<code>\"pdf\"</code> asserts an ingest that never happened. <code>\"sarol_corpus\"</code> is not legal either — the field is constrained by <code>verdict_schema.md</code>, a <b>frozen contract file</b>. <b>Recommendation:</b> variant-gate it in the validator; a provenance field that lies is worse than one the validator must be taught about. <b>Blocks the envelope work.</b>"}
+  b:"<b>In plain terms:</b> every verdict file records where its evidence came from, in a field called <code>source_mode</code>. The allowed values are <code>paperclip</code>, <code>pdf</code>, or <code>pdf_ocr_fallback</code>. Under Phase 1 none is true, because we never fetch or ingest a PDF, we read text Sarol already extracted. Nor can we simply add a new value: the file defining that list is one of the three <b>frozen contract files</b> the optimizer may not touch.<br><br><code>\"pdf\"</code> asserts an ingest that never happened. <code>\"sarol_corpus\"</code> is not legal either — the field is constrained by <code>verdict_schema.md</code>, a <b>frozen contract file</b>. <b>Recommendation:</b> variant-gate it in the validator; a provenance field that lies is worse than one the validator must be taught about. <b>Blocks the envelope work.</b>"}
 ];
 
 /* ---------- render OQs ---------- */

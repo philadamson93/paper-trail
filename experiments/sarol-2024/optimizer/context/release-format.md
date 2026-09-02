@@ -23,6 +23,10 @@ shape, and the difference is the whole leakage design.
         "micro_f1": 0.76,
         "per_class_f1": { "ACCURATE": 0.86, "NOT_ACCURATE": 0.37, "IRRELEVANT": 0.0 },
         "confusion_matrix": { "ACCURATE": {...}, "NOT_ACCURATE": {...}, "IRRELEVANT": {...} },
+        "macro_f1_9way": 0.21,
+        "per_class_f1_9way": { "ACCURATE": 0.86, "OVERSIMPLIFY": 0.31, "...": "..." },
+        "support_9way": { "ACCURATE": 39, "OVERSIMPLIFY": 7, "MISQUOTE": 1, "...": "..." },
+        "n_classes_present_9way": 5,
         "error_class_counts": { "invalid_label": 0 },
         "n_total": 50, "n_scored": 50, "n_invalid": 0,
         "requested_count": 50, "n_unresolved": 0,
@@ -35,6 +39,12 @@ shape, and the difference is the whole leakage design.
   }
 }
 ```
+
+**Reading the 9-way fields.** `macro_f1_9way` always divides by nine, so a batch whose gold covers only five
+classes caps at 5/9 = 0.556 however perfect the predictions. **Always read `support_9way` and
+`n_classes_present_9way` before reading the F1s** — a low 9-way macro on a small batch usually means the batch was
+small, not that the program got worse. This is why 9-way is a breakdown and the 3-way macro-F1 is the frontier.
+A concrete calibration: the do-nothing always-ACCURATE program scores 0.097 at 9-way against 0.292 at 3-way.
 
 `corpus.ref` points at the run manifest, from which the per-claim mistake corpus is reachable:
 adjudicator reasoning, the extractor's evidence quotes, and the verifier's bounce history for
