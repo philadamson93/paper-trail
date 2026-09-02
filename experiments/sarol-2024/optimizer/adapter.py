@@ -1134,22 +1134,42 @@ def _selftest() -> int:
             ("...naming the pin", art.error is not None and "PAPERCLIP" in art.error.code),
         ]
 
-        # The nested command must exist before a run spends anything looking for it.
+        # The nested command must exist before a run spends anything looking for it. Tested
+        # against a checkout that genuinely lacks it -- the repo itself now ships the command, so
+        # pointing this at REPO_ROOT would assert nothing.
         ok_pin = lambda: "paperclip, version 0.5.11"  # noqa: E731
-        missing_cmd = SarolRunner(store, invoke=spy, paperclip_version_probe=ok_pin)
-        art_cmd = missing_cmd.run(
-            pathlib.Path("/nonexistent"),
-            schemas.RunInputs(input_ref="/nonexistent/batch.json", batch_id="b", split="train"),
-        )
+        with tempfile.TemporaryDirectory() as empty_checkout:
+            missing_cmd = SarolRunner(
+                store,
+                working_checkout=pathlib.Path(empty_checkout),
+                invoke=spy,
+                paperclip_version_probe=ok_pin,
+            )
+            art_cmd = missing_cmd.run(
+                pathlib.Path("/nonexistent"),
+                schemas.RunInputs(input_ref="/nonexistent/batch.json", batch_id="b", split="train"),
+            )
+            checks += [
+                ("a missing nested command fails the run up front",
+                 art_cmd.status == "infra_error"
+                 and art_cmd.error is not None
+                 and art_cmd.error.code == "NESTED_COMMAND_MISSING"),
+                ("...naming what it looked for",
+                 art_cmd.error is not None and "sarol-eval-item" in art_cmd.error.message_redacted),
+                ("...without dispatching anything", not dispatched),
+            ]
+
+        # And the converse, now that it is built: the repo ships /sarol-eval-item where a nested
+        # session can actually resolve it. `command_path()` also accepts src/commands/ and
+        # experiments/sarol-2024/commands/, but Claude Code only discovers .claude/commands/ from
+        # the session cwd -- so a copy in either of the other two would satisfy this preflight and
+        # still fail at dispatch. Pin the location that works.
+        shipped = SarolRunner(store, paperclip_version_probe=ok_pin).command_path()
         checks += [
-            ("a missing nested command fails the run up front",
-             art_cmd.status == "infra_error"
-             and art_cmd.error is not None
-             and art_cmd.error.code == "NESTED_COMMAND_MISSING"),
-            ("...naming what it looked for",
-             art_cmd.error is not None and "sarol-eval-item" in art_cmd.error.message_redacted),
-            ("/sarol-eval-item genuinely does not exist yet -- Task 5 eval-arm work",
-             missing_cmd.command_path() is None),
+            ("the repo ships /sarol-eval-item", shipped is not None),
+            ("...in .claude/commands/, the only place a nested session resolves it",
+             shipped is not None
+             and shipped.parent == REPO_ROOT / ".claude" / "commands"),
         ]
 
         # The hard per-call spend cap has to be in the command vector, not just in a docstring.
