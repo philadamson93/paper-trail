@@ -43,6 +43,12 @@ Three behaviours worth not re-deriving:
   (`ROLLUP_ORDER_UNPARSEABLE`) rather than silently unchecked -- fail-closed, because an
   unparseable ladder means the rule is unenforceable, not that it does not apply.
 
+* **`source_mode` is variant-gated, exactly like the verdict enum.** `"sarol_corpus"` is legal
+  here and illegal on `main`. Phase 1's evidence is selected mechanically out of Sarol's chunked
+  corpus, which none of the native `{paperclip, pdf, pdf_ocr_fallback}` values describes; the
+  alternative was declaring `"pdf"` and shipping a provenance field that lies on every row. The
+  frozen contract file is untouched -- this module is the thing that knows about the variant.
+
 * **`AMBIGUOUS` is a counted miss, not a rubric mismatch.** It is a native verdict, so the obvious
   reading would put it with the wrong-rubric rejections. The frozen enum contract says otherwise in
   as many words: `AMBIGUOUS` survives in the shipped tool as a *workflow flag* (Open Questions §7),
@@ -120,7 +126,21 @@ REQUIRED_TOP_LEVEL = (
 
 REQUIRED_SUB_CLAIM = ("sub_claim_id", "text", "evidence", "verdict")
 
+#: What the frozen native contract (`src/specs/verdict_schema.md`) allows. Unchanged, and
+#: unchangeable: it is a `contract_file=True` manifest entry.
 VALID_SOURCE_MODES = frozenset({"paperclip", "pdf", "pdf_ocr_fallback"})
+
+#: The variant extension (Open Questions §13, resolved 2026-09-02 by Phil: variant-gate it).
+#:
+#: Phase 1's mechanical producers do not ingest a PDF -- they select passages out of Sarol's
+#: pre-chunked corpus. None of the three native values describes that. Declaring `"pdf"` would make
+#: every Phase 1 verdict assert an ingest that never happened, so the provenance field would lie on
+#: every row of the experiment's only comparable condition.
+#:
+#: This module is adapter-owned and not frozen, so teaching it a new value is legal where editing
+#: the contract file is not. Same shape as the verdict-enum gate above: the native contract stays
+#: strict on `main`, and the experiment's validator knows one more value under its own variant.
+SAROL_VARIANT_SOURCE_MODES = frozenset({"sarol_corpus"})
 
 #: Claim types the native schema puts a >=3 floor on. Everything else floors at 1; the schema is
 #: explicit about DIRECT/PARAPHRASED and FRAMING and silent about the rest.
@@ -244,12 +264,15 @@ def validate_obj(
 
     # Envelope rules 10 and 11 are label-independent, so they survive the variant gate unchanged.
     source_mode = verdict.get("source_mode")
-    if source_mode not in VALID_SOURCE_MODES:
+    # Reached only under the variant gate above, so the variant's extra value is in scope here by
+    # construction -- a file not stamped `sarol_2024_9class` has already returned.
+    if source_mode not in (VALID_SOURCE_MODES | SAROL_VARIANT_SOURCE_MODES):
         violations.append(f"SOURCE_MODE_MISSING:{source_mode!r}")
     paperclip_handle = verdict.get("paperclip_handle")
     if source_mode == "paperclip" and not paperclip_handle:
         violations.append("PAPERCLIP_HANDLE_MISMATCH:paperclip mode without a handle")
     if source_mode != "paperclip" and paperclip_handle:
+        # Covers `sarol_corpus` unchanged: a mechanical corpus selection has no paperclip handle.
         violations.append(f"PAPERCLIP_HANDLE_MISMATCH:handle set under source_mode={source_mode!r}")
 
     sub_claims = verdict.get("sub_claims")
@@ -428,6 +451,29 @@ def _selftest() -> int:
          not validate_obj({**_fixture("valid_all_sarol.json"), "rubric_variant": "native"}).ok),
         ("the two enums are disjoint, so the asymmetry is decidable",
          not (SAROL_9 & NATIVE_VERDICTS)),
+        # Open Questions §13, resolved 2026-09-02 (Phil): variant-gate `source_mode` rather than
+        # declare a `"pdf"` ingest that never happened. Phase 1's whole evidence condition rides
+        # on this value being legal, so it is pinned in both directions.
+        ("the Phase 1 envelope's source_mode validates under the variant",
+         validate_obj({**_fixture("valid_all_sarol.json"),
+                       "source_mode": "sarol_corpus",
+                       "sub_claims": [{**_fixture("valid_all_sarol.json")["sub_claims"][0],
+                                       "evidence": [{"section": "content", "line": 12,
+                                                     "snippet": "s",
+                                                     "source_mode": "sarol_corpus"}]}],
+                       "overall_verdict": "ACCURATE"}).ok),
+        ("...and it is the variant that makes it legal, not a relaxation",
+         "sarol_corpus" in SAROL_VARIANT_SOURCE_MODES
+         and "sarol_corpus" not in VALID_SOURCE_MODES),
+        ("...so the frozen native contract's set is unchanged",
+         VALID_SOURCE_MODES == frozenset({"paperclip", "pdf", "pdf_ocr_fallback"})),
+        ("a genuinely unknown source_mode is still rejected",
+         not validate_obj({**_fixture("valid_all_sarol.json"),
+                           "source_mode": "sarol_corpus_v2"}).ok),
+        ("a corpus-selected envelope must not carry a paperclip handle",
+         not validate_obj({**_fixture("valid_all_sarol.json"),
+                           "source_mode": "sarol_corpus",
+                           "paperclip_handle": "pc://x"}).ok),
     ]
 
     failed = 0
