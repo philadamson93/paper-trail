@@ -141,7 +141,7 @@ Each needs a decision before the freeze: add it to the manifest, or fix the prom
 - **`context/task-and-scoring.md`** — the frontier scalar (macro-F1 over the 3-way collapse, per `sarol`'s own D1/D36 — this is *already decided*, not novel here) plus the per-class F1 breakdown; the error taxonomy — `sarol`'s own named failure modes are a real head start: the **INDIRECT-detection failure mode** (Contribution #6) and the **severity-under-commitment pattern** (its "s4," tentative, pending N=50+ data) are exactly the kind of adapter-owned error-class taxonomy crc's Part D #6 required; import them rather than inventing new classes.
 - **`context/release-format.md`** — the per-iteration data contract (Part C1).
 
-**B2. The hot-path prompt** (`experiments/sarol-2024/optimizer/prompt/`, the adapter's `agent_instructions`): objective (maximize macro-F1 on held-out Val); edit/read/sealed scope — EDIT = the `program-v0` globset **minus every `contract_file=True` entry** (Part A1; per OQ8 the Sarol enum contract, the native structure schema and the verifier-results contract are read-only to the optimizer, and the adapter re-hashes all three after each edit pass because the engine's flag checks presence, not content); READ = the release + a sampled slice of the mistake corpus + continuity docs; SEALED = Val/Test claim records and gold labels, which `sarol`'s design already keeps **physically outside the repo tree** (`$PAPER_TRAIL_BENCHMARKS_DIR`/`$PAPER_TRAIL_GOLD_DIR`) — a stronger sealing guarantee than either rad-eval or crc build, since there is no in-repo directory for the optimizer to be denied access to in the first place. Include the **per-claim budget** discipline `sarol` already speclos (its "D45," model-call-count primary, 1.5× v1 default) and the **round-trip sanity canary** (its "D46," guarding against a silently-broken scorer) — both directly reusable, not novel. **Cost/runtime risk (not yet estimated):** each claim triggers 3 full nested Claude-Code subagent sessions, and the graduated-N ramp goes up to the full 2,141-claim TRAIN split — a rough per-iteration $ estimate at each graduated-N landmark (10/25/50/100/200/2,141) is needed before a real run, plus confirmation that D45's budget ceiling is actually wired into whichever dispatcher script the engine's `Runner` calls (not just cited as reused); see Verification.
+**B2. The hot-path prompt** (`experiments/sarol-2024/optimizer/prompt/`, the adapter's `agent_instructions`): objective (maximize macro-F1 on held-out Val); edit/read/sealed scope. ⚠ **Amended 2026-09-02 by Part C6:** the EDIT set is now **profile-dependent**, and Phase 1 (`adjudicator-only`) narrows it to just `adjudicator-dispatch-sarol.md` and `verdict_schema_sarol.md`. The rest of this paragraph describes the `full` profile. Leaving a stage's prompt editable while that stage is out of the loop is worse than useless: the edit cannot move the score, and the optimizer would read that null result as "this change was neutral". The baseline EDIT set is the `program-v0` globset **minus every `contract_file=True` entry** (Part A1; per OQ8 the Sarol enum contract, the native structure schema and the verifier-results contract are read-only to the optimizer, and the adapter re-hashes all three after each edit pass because the engine's flag checks presence, not content); READ = the release + a sampled slice of the mistake corpus + continuity docs; SEALED = Val/Test claim records and gold labels, which `sarol`'s design already keeps **physically outside the repo tree** (`$PAPER_TRAIL_BENCHMARKS_DIR`/`$PAPER_TRAIL_GOLD_DIR`) — a stronger sealing guarantee than either rad-eval or crc build, since there is no in-repo directory for the optimizer to be denied access to in the first place. Include the **per-claim budget** discipline `sarol` already speclos (its "D45," model-call-count primary, 1.5× v1 default) and the **round-trip sanity canary** (its "D46," guarding against a silently-broken scorer) — both directly reusable, not novel. **Cost/runtime risk (not yet estimated):** each claim triggers 3 full nested Claude-Code subagent sessions, and the graduated-N ramp goes up to the full 2,141-claim TRAIN split — a rough per-iteration $ estimate at each graduated-N landmark (10/25/50/100/200/2,141) is needed before a real run, plus confirmation that D45's budget ceiling is actually wired into whichever dispatcher script the engine's `Runner` calls (not just cited as reused); see Verification.
 
 **B3. Continuity docs.** `sarol`'s `NEXT.md` + committed `results.tsv`-equivalent + an analysis notebook already serve much of this role; the one genuine gap versus crc/rad-eval's pattern is a `meta-learnings.md`-equivalent (confirmed/pending/reverted fixes across iterations) — add this new, small file; everything else ports forward.
 
@@ -176,6 +176,76 @@ Two further items would need an **engine** change if wanted, and are deliberatel
 
 ---
 
+## Part C6 — Pipeline profiles and experiment phasing (added 2026-09-02)
+
+**Decision (Phil, 2026-09-02).** Optimize the **adjudicator alone first**. Add the extractor to the loop afterwards and hill-climb there too. The three-stage pipeline is not discarded — it becomes a configurable profile, because we expect to run it later.
+
+This changes Part B2's edit surface and Part C's runner contract, and it is what the first real curve will actually be run under, so it is recorded here rather than left as an implementation choice.
+
+**C6.1 — Profiles.** A profile is a named configuration fixing three things together: which stages run, how the adjudicator's input is shaped, and which files the optimizer may edit.
+
+| Profile | Stages run | Adjudicator input | Optimizer may edit |
+|---|---|---|---|
+| **`adjudicator-only`** (Phase 1) | adjudicator | an extractor-shaped envelope built mechanically from the staged `content.txt` | `adjudicator-dispatch-sarol.md`, `verdict_schema_sarol.md` |
+| **`full`** (Phase 2) | extractor → adjudicator → verifier | the extractor's own JSON | the above **plus** both extractor prompts and `verifier-dispatch.md` |
+
+**The freeze does not change.** All 8 manifest entries stay frozen and `program-v0` keeps its tag and its `combined_hash` `391f54fae7c5`. A profile selects which frozen files are *exercised* and which are *editable*; it never changes what is frozen.
+
+That constraint is the reason the input is reformatted rather than the adjudicator prompt rewritten. Rewriting the prompt to read raw paper text would change a frozen entry, force a re-freeze and a new tag, and — the real cost — leave Phase 1 and Phase 2 running *different* adjudicators, destroying the comparison the phasing exists to create.
+
+**C6.2 — Input shaping for `adjudicator-only`.** `stage_claim.py` already writes the cited paper's text to `pdfs/<citekey>/content.txt` (Sarol ships pre-extracted text; nothing is ever fetched). A mechanical transform — no model call — wraps that into the envelope the adjudicator prompt already expects: one sub-claim carrying the claim text, with `evidence[]` populated from the paper's passages as `{section, line, snippet}`.
+
+The adjudicator therefore performs sub-claim decomposition, evidence selection and verdict assignment inside one session. That is precisely the shape of Sarol's own baselines.
+
+*Open contract detail:* in `full`, the extractor fills `attestation.phrasings_tried` and the exit validator enforces a floor against it. In `adjudicator-only` the adjudicator is the stage that did the searching, so **it** owns attestation and must emit it; the floor stands unchanged. Do not pre-fill attestation in the synthesized envelope — that would satisfy the validator while making the attestation meaningless.
+
+**C6.3 — A profile is part of a run's identity.** Macro-F1 under `adjudicator-only` and under `full` measure different systems. The engine's frontier is a bare scalar and has no notion of this, so the consumer must enforce it:
+
+- The profile is **fixed for a run**. Changing it starts a new run and a new curve.
+- The profile is stamped in the run manifest and in both release payloads.
+- The dispatcher **refuses to resume** a run under a different profile than it started with.
+
+Without this, switching profiles mid-run would silently corrupt best-so-far and step-back, which compare scalars across iterations with no idea they came from different systems.
+
+**C6.4 — What each phase claims.**
+
+- **Phase 1** is single-step classification from (claim, cited paper text). Same shape as Sarol's published baselines, so the resulting macro-F1 is directly comparable to MultiVerS 0.52 and GPT-4 4-shot 0.45.
+- **Phase 2** puts the extractor in the loop. The question then stops being "how good is paper-trail" and becomes **"does an explicit extract-then-judge decomposition beat a single agent reading the whole paper?"** — measured against Phase 1's *optimized* adjudicator, not against an unoptimized one.
+
+That second question is a sharper contribution than this plan originally described, and it is only available because Phase 1 runs first. Running both stages from the start would have confounded the two effects.
+
+**C6.5 — Cost.** Per iteration at TRAIN=10, VAL=316 (the engine calls the Runner three times: TRAIN, VAL, post-commit probe):
+
+| Profile | Sessions / iteration | ≈ $ / iteration |
+|---|---:|---:|
+| `full` | 1,926 | ~$96 |
+| `adjudicator-only` | 642 | ~$32 |
+| `adjudicator-only` + probe cache | 326 | ~$16 |
+
+No one-time staging pass is needed, because the text Phase 1 consumes is already staged.
+
+**C6.6 — What Phase 1 deliberately cannot test.** The named remedy for the INDIRECT-detection blind spot (`experiment-april-20-findings.md`) is **extractor-side**: promote `attestation.indirect_attribution_check` from a free-form note into a structured field the adjudicator is forced to consume. With the extractor outside the loop, that fix is unreachable.
+
+Phase 1's version of the hypothesis therefore narrows to: *can the adjudicator detect indirect attribution from the passages it is handed?* `meta-learnings.md` (P1) and `context/playbook.md` must say so explicitly, or Phase 1's optimizer will be pointed at a fix it has no way to make.
+
+**C6.7 — Mistake corpus: per-claim, not counts (corrects the first implementation).** Part C2 specifies per-claim adjudicator reasoning plus evidence, TRAIN-side fully open. The first implementation returned only a path and `error_class_counts`, so the optimizer could see *that* it scored 0.41 with 14 invalid labels but not **which** claims failed, what it answered, or what the gold said. Optimizing against that is close to optimizing against a scalar, which is exactly what Tier 1 exists to avoid.
+
+Required: the Scorer already computes the prediction/gold join and discards it. It must retain it, and `build_mistake_corpus` must emit per-claim records — claim text, the passages, the adjudicator's verdict and its reasoning, and the gold label. The engine only ever calls `build_mistake_corpus` with `train_artifacts`, so this is structurally TRAIN-only.
+
+**Three actors, not two** — worth stating plainly because an earlier draft of this work conflated the first two:
+
+| Actor | TRAIN gold | VAL gold | TEST gold |
+|---|---|---|---|
+| the program (nested adjudicator sessions) | never | never | never |
+| **the optimizer** | **fully open** | scalar only | sealed |
+| the scorer (`parse_verdict.py`, code, not an agent) | reads | reads | reads once at unseal |
+
+Rule 1 sandboxes the *subagents*. The optimizer reading TRAIN gold is not a leak — it is the mechanism by which it learns anything.
+
+**C6.8 — VAL per-example outputs need their own root.** The Runner currently writes TRAIN and VAL per-example outputs under one root, separated only by a `train/` vs `val/` subdirectory. The framework requires VAL's per-example outputs to sit **outside the optimizer's readable scope**. A directory name is a convention, not a boundary: VAL outputs must go to a root the optimizer's `--add-dir` does not cover, or Tier 2's scalar-only guarantee rests on nothing but the optimizer choosing not to look.
+
+---
+
 ## Files to create
 
 Consolidated from Parts A–C (this repo's own `docs/claude_ops.md` template expects this section; it was previously scattered across the Parts above):
@@ -190,6 +260,8 @@ Consolidated from Parts A–C (this repo's own `docs/claude_ops.md` template exp
 | `experiments/sarol-2024/optimizer/adapter.py` (proposed) | new | the four `TaskAdapter` protocols — `ProgramStore` (strip-and-verify of the manifest's adapter-owned extras + the contract-file re-hash, A4/OQ8; the two-source *composition* is a one-time build step under OQ6, not a per-call pre-step), `Runner` (nested dispatch + preflight + calling the C5 exit validator), `Scorer` (must stash `_split`, C4 #3), `ReleaseBuilder` |
 | `experiments/sarol-2024/optimizer/dispatcher.py` (proposed) | new | drives `run_loop`; owns the cost preflight and `--max-budget-usd`/timeout/retry bounds (C4 #1) |
 | `experiments/sarol-2024/optimizer/validate_sarol.py` | new — **path and ownership confirmed (OQ9)** | `rubric_variant`-gated exit validator + its three fixtures (Part C5); an experiment-only module the Runner calls, **not** Runner-internal logic and **not** a relaxation of `main`'s validator |
+| `experiments/sarol-2024/optimizer/profiles.py` (proposed) | **new — C6** | the profile registry: `adjudicator-only` and `full`, each fixing stages / input shaping / editable set. Consumed by the Runner, by `editable_paths()`, and stamped into the run manifest and both release payloads |
+| `experiments/sarol-2024/optimizer/shape_input.py` (proposed) | **new — C6.2** | the mechanical, no-model transform from staged `content.txt` into the extractor-shaped envelope the adjudicator prompt already expects. Deliberately does **not** fill `attestation` |
 | `experiments/sarol-2024/optimizer/context/playbook.md` | new | iteration procedure (Part B1) |
 | `experiments/sarol-2024/optimizer/context/task-and-scoring.md` | new | frontier scalar + error taxonomy (Part B1) |
 | `experiments/sarol-2024/optimizer/context/release-format.md` | new | per-iteration data contract (Part B1, C1) |
@@ -262,6 +334,11 @@ There is no planner/executor split for this consumer — every phase below runs 
 | Finite-metric assertion (**added**) | `PrimaryMetric` accepts NaN (`schemas.py:80-81` checks `isinstance` only) | the adapter asserts `primary_metric` is finite before returning `ScoreResult` | NaN reaching the frontier → `select_best` becomes order-dependent and step-back never fires |
 | Coverage assertion (**added**) | Guard partial/missing output, not just degenerate values | `n_total == requested_count` and `n_invalid` is surfaced in the release | a partially-unscored batch scoring as if complete → not a result |
 | Paperclip mismatch negative control (**added**) | Prove the pin is enforced, not just recorded | with a deliberately wrong pinned version the Runner returns `infra_error` **before** any claim is dispatched | a scored batch produced under a mismatched CLI → the pin is decorative |
+| Profile isolation (**added, C6.3**) | A profile change must not be comparable to what came before it | the profile is stamped in the run manifest and in both release payloads; the dispatcher refuses to resume a run whose recorded profile differs from the requested one | a run that silently switches profile → every best-so-far and step-back decision after the switch compares two different systems; treat the whole curve as void |
+| Stage subsetting is faithful (**added, C6.1/C6.2**) | Prove `adjudicator-only` runs one session per claim and still satisfies the exit contract | exactly 1 nested session per claim (not 3); the synthesized envelope validates; the adjudicator emits its own `attestation.phrasings_tried` and clears the floor | attestation pre-filled by the transform rather than by the adjudicator → the floor passes vacuously and the attestation means nothing |
+| Edit scope matches the profile (**added, C6.1**) | A stage outside the loop must not be editable | under `adjudicator-only`, `editable_paths()` returns exactly the adjudicator prompt and the rubric guidance; the extractor and verifier prompts are read-only | an out-of-loop prompt left editable → the optimizer spends iterations on edits that cannot move the score and reads the null result as evidence |
+| Mistake corpus is per-claim (**added, C6.7**) | The optimizer must see *which* claims failed and what gold said, not just counts | the TRAIN corpus carries per-claim records: claim text, passages, the adjudicator's verdict and reasoning, and the gold label | a counts-only corpus → the optimizer is effectively optimizing against a scalar on TRAIN, which is what Tier 1 exists to prevent |
+| VAL outputs are out of reach (**added, C6.8**) | Tier 2 must be a boundary, not a convention | VAL per-example outputs are written to a root outside the optimizer's `--add-dir`; a read attempt from the optimizer's scope fails | VAL per-example output readable from the optimizer's scope → scalar-only rests on the optimizer choosing not to look |
 | First real scoring run | Establish paper-trail's actual v0 baseline against Sarol for the first time | a real 3-way macro-F1 number exists where none did before, directly comparable to `paper-tool-validation.md`'s named targets (MultiVerS 0.52 macro / GPT-4 4-shot 0.45 macro) with no reachability caveat and no abstention caveat, since the Sarol variant predicts the benchmark's own labels and has no abstention value; this **is** the "characterize" step's prerequisite (Part D #5) | metric pinned at exactly 0/0.33/1.0 on the smoke set → fixture or column-map bug, not a result; **or macro-F1 ≈ 0.292 with micro ≈ 0.781 → the program has collapsed to always-ACCURATE, not a result** |
 
 ---
