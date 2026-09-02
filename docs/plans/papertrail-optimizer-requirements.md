@@ -3,7 +3,7 @@ Reference: docs/claude_ops.md
 # papertrail-optimizer-requirements — pin `program-v0`, author the paper-trail optimizer-prompt, and spec the paper-trail consumer that further validates the `agentic-label-opt` seam
 
 **Status.** Draft.
-**Reviewed.** **Yes** — approved by Phil 2026-09-02 via the `/explain-plan` visual path, against the SHA-in-sync HTML companion at `18aac02ae8b2`. That SHA is the **last-reviewed baseline**: the next `/explain-plan` regeneration diffs against it. Three questions remain open by design (OQ11, OQ12, OQ13) and are implementation-time decisions, each carrying a recommendation; OQ13 blocks the envelope work specifically. OQ2's owed hand-sample is a rater task, not a design decision.
+**Reviewed.** **Stale** — approved by Phil 2026-09-02 via the `/explain-plan` visual path, against the SHA-in-sync HTML companion at `18aac02ae8b2`, then **edited past that baseline** the same day: C6.2's envelope skeleton was missing the required `schema_version` field (see C6.2's first consequence). `18aac02ae8b2` remains the **last-reviewed baseline** the next `/explain-plan` regeneration diffs against, and the `.html` companion is now stale — regenerate it before any visual review. The edit is a one-field correction to a spec block, not a design change. Three questions remain open by design (OQ11, OQ12, OQ13) and are implementation-time decisions, each carrying a recommendation; OQ13 blocks the envelope work specifically. OQ2's owed hand-sample is a rater task, not a design decision.
 **Sibling of / feeds.** `docs/plans/2026-07-16-crc-optimizer-requirements.md` in the **crc-extraction-agent** repo (`~/Documents/Stanford/VISTA/code/crc-extraction-agent`, a separate, VISTA/Stanford, cross-org repo) — crc's own analog of this plan — and `docs/plans/2026-07-10-shared-optimization-engine-package.md` in the same repo, the `agentic-label-opt` engine-extraction plan itself. rad-eval is consumer #1, crc-extraction-agent is consumer #2, and this plan makes **paper-trail consumer #3** — the first fully external one (no relationship to VISTA/Stanford, PolyForm-NC-licensed, public GitHub). This plan is paper-trail's analog of crc's `crc-optimizer-requirements.md`: the engine plan abstracts the *container* (engine ⊕ `TaskAdapter` seam) but never builds a consumer's *payload* — this plan builds paper-trail's.
 **Branch.** `sarol` — this is agentic-pipeline-optimization research content, not paper-trail-the-tool feature work, per the 2026-04-29 branch-hygiene decision (`docs/journal/2026-04-29-pause-sarol-pivot-to-features.md`) to keep `main` free of Sarol context.
 **Operating standard.** This repo's own conventions (`CLAUDE.md`: plain language, one-topic-per-file, the `plan-check` skill for handoff-readiness) plus, only for the parts of this plan that feed the cross-repo engine effort, VISTA `research-skills/claude_ops.md`'s plan-before-code / verification-first discipline — inherited for this dependency, not imposed on paper-trail-the-tool generally.
@@ -204,7 +204,7 @@ So **"adjudicator-only" cannot mean "the adjudicator reads the paper."** Somethi
 
 ```json
 {
-  "claim_id": "C042", "run_id": "run_...", "citekey": "ref_a1b2c3",
+  "claim_id": "C042", "schema_version": "1.1", "run_id": "run_...", "citekey": "ref_a1b2c3",
   "source_mode": "sarol_corpus",
   "handle": "pdfs/ref_a1b2c3/", "paperclip_handle": null, "ingest_mode": null,
   "claim_text": "<verbatim citing sentence>",
@@ -224,7 +224,9 @@ So **"adjudicator-only" cannot mean "the adjudicator reads the paper."** Somethi
 }
 ```
 
-Four consequences worth stating rather than discovering during implementation:
+Five consequences worth stating rather than discovering during implementation:
+
+- **`schema_version` is required, and an earlier draft of this skeleton omitted it** (found 2026-09-02 by running this very skeleton through `validate_sarol.validate_obj()`). It is in the validator's `REQUIRED_TOP_LEVEL`, and the adjudicator's output contract preserves "all other fields ... from the extractor's JSON" — so an envelope without it yields a verdict without it, and **every claim in the first Phase 1 run fails** with `MISSING_FIELD:schema_version`. Reproduced with OQ13 settled the lenient way (`"pdf"`): that was the *only* remaining violation. The producer must emit it; `"1.1"` is the value the valid fixture (`optimizer/fixtures/valid_all_sarol.json`) and the extractor prompts' schema reference both carry. Cheap to fix, invisible until a paid run, which is why it is stated here rather than left to implementation.
 
 - **`source_mode: "sarol_corpus"` is not yet legal.** `src/specs/verdict_schema.md` constrains the field to `{paperclip, pdf, pdf_ocr_fallback}`, and that file is a **frozen `contract_file=True` entry** — so the value cannot simply be added. Either `validate_sarol.py` variant-gates `source_mode` the way it already variant-gates the verdict enum, or Phase 1 declares `"pdf"` and asserts an ingest that never happened. See Open Questions §13; this must be settled before the envelope is implemented, because the exit validator will reject every claim otherwise.
 
