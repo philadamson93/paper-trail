@@ -49,3 +49,8 @@
 # belt-and-suspenders in case someone drops one under the tree.
 *-service-account*.json
 gcp-credentials*.json
+
+# Per-session resume state written by /wrapup. Working notes for the next agent, not a
+# historical record: they name in-flight branches, blockers and open questions, and go stale
+# the moment the work moves. The plan docs and docs/journal/ are what get committed.
+docs/session/
