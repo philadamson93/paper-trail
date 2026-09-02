@@ -77,6 +77,7 @@ if str(_SCRIPTS) not in sys.path:
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import evidence_producers  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import validate_sarol  # noqa: E402
 
@@ -556,6 +557,24 @@ class SarolRunner:
                 "stages": {},
                 "status": "ok",
             }
+            # Mechanical profiles have no extractor stage, so nothing would otherwise write the
+            # evidence envelope the adjudicator reads (C6.0/C6.2). Produce it here, before the
+            # judge is dispatched. Never raises -- a producer failure is this claim's failure, not
+            # the batch's exception.
+            producer = evidence_producers.for_profile(self.profile)
+            if producer is not None:
+                try:
+                    producer(
+                        claim.staging_dir,
+                        claim.claim_id,
+                        run_id=inputs.batch_id,
+                        profile=self.profile,
+                    )
+                except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                    record["status"] = "program_error"
+                    record["detail"] = f"evidence producer failed: {str(exc)[:200]}"
+                    return record
+
             for stage in self.profile.stages:
                 cmd = self._stage_command(stage, claim, materialized_path)
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
@@ -1242,6 +1261,23 @@ def _selftest() -> int:
             batch = pathlib.Path(tmp) / "batch.json"
             staging = pathlib.Path(tmp) / "staging"
             staging.mkdir()
+            # A minimally staged claim, in `stage_claim.py`'s own shape, so the mechanical
+            # evidence producer has something real to retrieve over under the retrieval profile.
+            (staging / "staging_info.json").write_text(json.dumps({
+                "citekey": "k1",
+                "claim_text_normalized": "deep learning reconstruction accelerates MRI fourfold",
+                "source_mode": "corpus",
+                "multi_cit_context": "single",
+                "source_description": "corpus-chunks (N=3)",
+            }), encoding="utf-8")
+            handle = staging / "pdfs" / "k1"
+            handle.mkdir(parents=True)
+            (handle / "content.txt").write_text(
+                "L1 [p?]: a fourfold acceleration was achieved for MRI reconstruction\n"
+                "L2 [p?]: unrelated sentence about cardiology cohorts\n"
+                "L3 [p?]: deep learning methods were applied throughout\n",
+                encoding="utf-8",
+            )
             batch.write_text(json.dumps({"claims": [
                 {"claim_id": "C1", "citekey": "k1", "staging_dir": str(staging)}
             ]}), encoding="utf-8")

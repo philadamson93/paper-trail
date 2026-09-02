@@ -323,11 +323,22 @@ def validate_obj(
     phrasings = attestation.get("phrasings_tried") if isinstance(attestation, dict) else None
     claim_type = verdict.get("claim_type") or {}
     ctype = claim_type.get("type") if isinstance(claim_type, dict) else None
-    floor = STRICT_PHRASING_FLOOR if ctype in STRICT_PHRASING_TYPES else DEFAULT_PHRASING_FLOOR
+    # The >=3 floor exists to stop an *agent* declaring "no evidence" after one lazy grep. A
+    # mechanical selector has no such failure mode: BM25 top-k is one query returning k results,
+    # not k queries, so the honest `phrasings_tried` is length 1 and padding it to three would be
+    # fabricating search effort that never happened. So the floor keys off `attestation.selector`
+    # rather than assuming a search occurred (C6.2). A declared selector is exactly the signal that
+    # no agent searched; its absence leaves the agentic rule untouched.
+    selector = attestation.get("selector") if isinstance(attestation, dict) else None
+    if selector:
+        floor = DEFAULT_PHRASING_FLOOR
+    else:
+        floor = STRICT_PHRASING_FLOOR if ctype in STRICT_PHRASING_TYPES else DEFAULT_PHRASING_FLOOR
     n_phrasings = len(phrasings) if isinstance(phrasings, list) else 0
     if n_phrasings < floor:
         violations.append(
-            f"PHRASINGS_FLOOR:claim_type={ctype!r} needs >={floor}, got {n_phrasings}"
+            f"PHRASINGS_FLOOR:claim_type={ctype!r} selector={selector!r} "
+            f"needs >={floor}, got {n_phrasings}"
         )
 
     return ValidationResult(
