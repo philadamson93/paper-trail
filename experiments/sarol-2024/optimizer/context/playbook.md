@@ -23,15 +23,31 @@ One iteration is five steps. The engine (`agentic-label-opt`) drives all of them
 
 ## What you may and may not touch
 
-**EDIT — the five files the optimizer owns:**
+**EDIT — and the list depends on which profile this run is on.**
+
+A run's *profile* fixes which stages actually execute, and you may only edit a stage that runs.
+The profile is named in your release payload (`corpus.profile`) and in the run manifest; if you are
+unsure which one you are on, read it there rather than assuming.
+
+**Under `retrieval` (Phase 1) — two files:**
+
+- `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` — verdict assignment
+- `experiments/sarol-2024/specs/verdict_schema_sarol.md` — the rubric *guidance*: class
+  definitions, boundaries, worked examples, tie-breaks, the worst-wins rollup order,
+  multi-citation handling. Improving this is much of the point.
+
+**Under `agentic` / `paperclip` (Phase 2) — those two, plus three more:**
 
 - `src/prompts/extractor-dispatch-paperclip.md`
 - `src/prompts/extractor-dispatch-pdf.md`
 - `src/prompts/verifier-dispatch.md`
-- `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md`
-- `experiments/sarol-2024/specs/verdict_schema_sarol.md` — the rubric *guidance*: class
-  definitions, boundaries, worked examples, tie-breaks, the worst-wins rollup order,
-  multi-citation handling. Improving this is much of the point.
+
+**Why the narrowing, and why it is not arbitrary.** Under `retrieval` there is no extractor
+session at all: the evidence envelope is written mechanically by BM25 top-20 over the cited
+paper's chunks, before your judge ever runs. Editing an extractor prompt would therefore change
+nothing measurable — the file is never read — while still producing a new version, a new tag and a
+wasted iteration. The experiment on this rung is "how good can the judge get at a *fixed* evidence
+budget", so the judge and its rubric are the whole surface.
 
 **One mechanical constraint on the rubric.** The exit validator enforces that every
 `overall_verdict` is the worst-wins rollup of its sub-claims, and it reads the ladder *from your
@@ -94,7 +110,8 @@ loop applies.
 
 ## Per-claim budget
 
-Each claim costs three nested Claude Code sessions (extractor, adjudicator, verifier). The
+Cost per claim follows the profile: **one** nested Claude Code session under `retrieval` (the
+adjudicator alone), **three** under `agentic` / `paperclip` (extractor, adjudicator, verifier). The
 per-claim budget is a fixed model-call count — primary, because it is deterministic — with
 wall-clock as a secondary bound. The default ceiling is 1.5× `program-v0`'s own per-claim call
 count: enough headroom to try something, not enough to win by spending.

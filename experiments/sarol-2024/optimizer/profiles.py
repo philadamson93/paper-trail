@@ -288,6 +288,32 @@ def _selftest() -> int:
              problems_for(name="odd", stages=("adjudicator", "summarizer")))),
     ]
 
+    # -- C6.7: the optimizer's own docs must agree with this module --------------------------
+    # The plan is explicit that these three files be updated *in the same change* that lands the
+    # profile, because an optimizer reading "you own five files" while the edit scope grants two
+    # will spend iterations editing files that are never read. This makes the agreement a gate
+    # rather than a promise.
+    here = pathlib.Path(__file__).resolve().parent
+    docs = {
+        "playbook.md": (here / "context" / "playbook.md").read_text(encoding="utf-8"),
+        "optimizer-instructions.md": (here / "prompt" / "optimizer-instructions.md")
+        .read_text(encoding="utf-8"),
+        "meta-learnings.md": (here / "meta-learnings.md").read_text(encoding="utf-8"),
+    }
+    guidance = docs["playbook.md"] + docs["optimizer-instructions.md"]
+    checks += [
+        ("the optimizer's docs name every path the agentic scope grants",
+         all(path in guidance for path in AGENTIC.editable)),
+        ("...and both name the profile the scope depends on",
+         "retrieval" in docs["playbook.md"] and "retrieval" in docs["optimizer-instructions.md"]),
+        ("no doc still claims a fixed five-file edit scope",
+         "five files" not in guidance),
+        ("...nor that every claim costs three sessions unconditionally",
+         "costs three nested" not in guidance),
+        ("meta-learnings warns that the P1 extractor-side fix is unreachable in Phase 1",
+         "unreachable under the `retrieval` profile" in docs["meta-learnings.md"]),
+    ]
+
     failed = 0
     for name, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")

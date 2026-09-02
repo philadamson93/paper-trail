@@ -6,7 +6,8 @@ your standing instruction set; it is injected every iteration. Structure follows
 
 ## Setup
 
-The program is three prompt-driven stages — **extractor** → **adjudicator** → **verifier** — run
+The program is up to three prompt-driven stages — **extractor** → **adjudicator** → **verifier** —
+run
 once per citation instance. Given a citing sentence and one paper it cites, it emits one verdict
 from a fixed nine-label vocabulary.
 
@@ -45,15 +46,20 @@ miss and counted under `invalid_label`; it will not crash, it will just cost you
 
 ## CAN / CANNOT
 
-**You CAN edit** — and only these five files:
+**You CAN edit** — and the list depends on this run's **profile**, which is named in your release
+payload as `corpus.profile`. Read it there; do not assume.
 
-| File | What it controls |
-|---|---|
-| `src/prompts/extractor-dispatch-paperclip.md` | evidence retrieval, in-corpus read path |
-| `src/prompts/extractor-dispatch-pdf.md` | evidence retrieval, fetched-PDF read path |
-| `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` | verdict assignment |
-| `src/prompts/verifier-dispatch.md` | evidence spot-check |
-| `experiments/sarol-2024/specs/verdict_schema_sarol.md` | rubric guidance: class definitions, boundaries, examples, tie-breaks, rollup order, multi-citation handling |
+| File | What it controls | `retrieval` | `agentic` / `paperclip` |
+|---|---|:--:|:--:|
+| `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` | verdict assignment | ✅ | ✅ |
+| `experiments/sarol-2024/specs/verdict_schema_sarol.md` | rubric guidance: class definitions, boundaries, examples, tie-breaks, rollup order, multi-citation handling | ✅ | ✅ |
+| `src/prompts/extractor-dispatch-paperclip.md` | evidence retrieval, in-corpus read path | ❌ | ✅ |
+| `src/prompts/extractor-dispatch-pdf.md` | evidence retrieval, fetched-PDF read path | ❌ | ✅ |
+| `src/prompts/verifier-dispatch.md` | evidence spot-check | ❌ | ✅ |
+
+Under `retrieval` the extractor and verifier **never run** — the evidence envelope is produced
+mechanically (BM25 top-20 over the cited paper's chunks) before your judge sees it. Editing a file
+that is never read spends an iteration and moves no number.
 
 You may reorder the worst-wins strictness ladder in that rubric — the validator reads the ladder
 from your file and holds the program to whatever order you declared. Keep it in a fenced block
@@ -102,7 +108,8 @@ a genuine result and is easy to mistake for a lost edit.
 
 ## Per-claim budget
 
-Each claim costs three nested sessions. The per-claim budget is a fixed **model-call count**
+Each claim costs one nested session under `retrieval`, three under `agentic` / `paperclip` — the
+profile decides. The per-claim budget is a fixed **model-call count**
 (deterministic, so it is the primary bound), with wall-clock as secondary. Ceiling: **1.5×
 `program-v0`'s per-claim call count.**
 

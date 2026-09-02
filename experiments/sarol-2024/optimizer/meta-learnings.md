@@ -53,7 +53,19 @@ distinguishes the classes, and the review/not-review split straddles two differe
 (`INDIRECT` → NOT_ACCURATE, `INDIRECT_NOT_REVIEW` → IRRELEVANT), so getting it right pays on the
 frontier scalar rather than only on the 9-way breakdown.
 
-**Status:** untested.
+**Status:** untested — and **unreachable under the `retrieval` profile.**
+
+⚠ **Read this before spending an iteration on P1.** The handle above is *extractor-side*: it
+depends on `attestation.indirect_attribution_check` carrying something an adjudicator can act on.
+Under `retrieval` there is no extractor, and the mechanical producer sets that field to `null` on
+every claim — so the fix as written cannot be applied and cannot be measured on this rung.
+
+What remains testable under `retrieval` is the narrower question: **can the judge detect onward
+attribution from the passages it is handed?** The citation-marker signal is in the retrieved
+snippets themselves, so a rubric change that tells the adjudicator to treat a trailing `(12)` /
+`(Ota et al., 2009)` inside an otherwise-supporting passage as an INDIRECT signal is both legal and
+in scope here. It is a weaker version of the same idea, and the delta between it and the
+extractor-side fix is part of what Phase 2 is for.
 
 ### P2 — severity under-commitment
 
