@@ -63,6 +63,7 @@ import math
 import os
 import pathlib
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -286,30 +287,70 @@ def headless_claude_invoke(
 
     ``loop.py`` has no timeout anywhere, so the bound has to live here: an agentic Runner that
     hangs would otherwise stall the whole optimization loop with no stop.
+
+    **Why a process group rather than plain ``subprocess.run(timeout=...)``.** Hardening, not a
+    fix for an observed defect — the distinction matters, so read this before "simplifying" it
+    back. ``subprocess.run`` kills only the *direct* child on timeout and then drains its pipes;
+    ``claude`` spawns grandchildren (``bg-pty-host``, ``bg-spare``, tool subprocesses) that
+    inherit those pipes, so killing the root alone can leave the drain waiting on a descendant.
+    Running in its own session (``start_new_session=True``) and killing the whole **group** closes
+    that gap, and the post-kill drain is itself bounded, because a guard that can hang is not a
+    guard. Net effect: the call returns within ``timeout_seconds + 30`` whatever the child spawned.
+
+    ⚠ **A long wall-clock gap here is not automatically a hang.** On 2026-09-02 a claim showed a
+    101-minute gap between its evidence envelope and the next claim's, with no verdict written.
+    That was **the laptop sleeping** (Phil), not a stuck session: macOS's monotonic clock does not
+    advance across sleep, so the timeout correctly did not fire — almost no time had passed from
+    the process's point of view. The claims either side ran in 82s and 4min. Before treating a gap
+    like that as a timeout bug, check whether the machine was awake, and run long batches under
+    ``caffeinate -i`` so it stays that way.
     """
     started = time.monotonic()
+    proc = subprocess.Popen(
+        list(cmd),
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        # Its own process group, so one signal reaches the session AND everything it spawned.
+        start_new_session=True,
+    )
     try:
-        proc = subprocess.run(
-            list(cmd),
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        )
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
+        _kill_process_group(proc)
+        try:
+            # Bounded: the group is dead, so the pipes are closed and this returns at once. The
+            # timeout is belt-and-braces against a pathological descendant that escaped the group.
+            proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
         return InvocationResult(
             exit_code=124,
             cost_usd=0.0,
             duration_seconds=time.monotonic() - started,
             timed_out=True,
-            detail=f"timed out after {timeout_seconds}s",
+            detail=f"timed out after {timeout_seconds}s (process group killed)",
         )
     return InvocationResult(
         exit_code=proc.returncode,
-        cost_usd=_parse_cost(proc.stdout),
+        cost_usd=_parse_cost(stdout or ""),
         duration_seconds=time.monotonic() - started,
-        detail=(proc.stderr or "").strip()[:500],
+        detail=(stderr or "").strip()[:500],
     )
+
+
+def _kill_process_group(proc: "subprocess.Popen") -> None:
+    """SIGKILL the child's whole process group, falling back to the child alone."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        # Already reaped, or the platform would not give us the group. Killing the direct child is
+        # strictly better than nothing, even though it is what left grandchildren behind before.
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
 
 
 def installed_paperclip_version(
@@ -1088,6 +1129,22 @@ def _selftest() -> int:
 
     store = SarolProgramStore()
     checks: list[tuple[str, bool]] = []
+
+    # -- the per-call timeout must bound a REAL process tree, not just its root -------------------
+    # `sh -c 'sleep 60 & sleep 60'` is the shape that matters: a backgrounded grandchild inherits
+    # stdout and outlives its parent, so killing only the root can leave the drain waiting on it.
+    # This pins the bound the Runner actually relies on -- a hung tree returns in seconds, not in
+    # however long the longest descendant happens to live.
+    _t0 = time.monotonic()
+    _res = headless_claude_invoke(["sh", "-c", "sleep 60 & sleep 60"], pathlib.Path.cwd(), 1.0)
+    _elapsed = time.monotonic() - _t0
+    checks += [
+        ("a hung nested session times out", _res.timed_out and _res.exit_code == 124),
+        ("...and the timeout is REAL wall-clock, not a value the pipe drain can outlive",
+         _elapsed < 20.0),
+        ("...and a grandchild holding stdout cannot keep the call alive",
+         _elapsed < 20.0 and _res.timed_out),
+    ]
 
     # -- manifest / edit scope --------------------------------------------------------------
     contracts = store.contract_paths()

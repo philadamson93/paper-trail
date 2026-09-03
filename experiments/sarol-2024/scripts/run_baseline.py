@@ -58,6 +58,12 @@ def main(argv: "list[str] | None" = None) -> int:
     ap.add_argument("--profile", default="retrieval", choices=sorted(profiles_mod.PROFILES))
     ap.add_argument("--out-root", required=True, help="where staging, batch and outputs land")
     ap.add_argument("--run-id", default="baseline")
+    ap.add_argument(
+        "--program-tag",
+        default="program-v0",
+        help="which frozen program to score. Defaults to the v0 starting point; pass the loop's "
+             "best_tag (e.g. program-v3) to re-score an OPTIMIZED program on the same VAL sample.",
+    )
     ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
     ap.add_argument("--per-call-timeout-seconds", type=float, default=900.0)
     args = ap.parse_args(argv)
@@ -102,7 +108,7 @@ def main(argv: "list[str] | None" = None) -> int:
         for e in store.raw["entries"]
     ]
     manifest = ProgramManifest(entries=tuple(stripped), combined_hash=store.raw["combined_hash"])
-    sha = _tag_sha(store.repo_root)
+    sha = _tag_sha(store.repo_root, args.program_tag)
     dest = out_root / "materialized"
     _clear(dest)
     materialize(manifest, sha, repo_root=store.repo_root, dest=dest)
@@ -163,6 +169,7 @@ def main(argv: "list[str] | None" = None) -> int:
         "n_requested": args.n,
         "profile": profile.name,
         "retrieval_k": profile.retrieval_k,
+        "program_tag": args.program_tag,
         "program_sha": sha,
         "status": arts.status,
         "sessions": arts.sub_invocation_count,
@@ -178,11 +185,16 @@ def main(argv: "list[str] | None" = None) -> int:
     return 0
 
 
-def _tag_sha(repo_root: pathlib.Path) -> str:
+def _tag_sha(repo_root: pathlib.Path, tag: str = "program-v0") -> str:
+    """Resolve a program tag to its COMMIT, matching `materialize_smoke.py`'s convention.
+
+    `program-v0` is an annotated tag, so a bare `rev-parse` returns the tag OBJECT sha — a
+    different id for the same program, which would make one run look like two systems.
+    """
     import subprocess
 
     return subprocess.run(
-        ["git", "-C", str(repo_root), "rev-parse", "program-v0^{commit}"],
+        ["git", "-C", str(repo_root), "rev-parse", f"{tag}^{{commit}}"],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
 
