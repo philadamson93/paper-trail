@@ -63,6 +63,7 @@ import math
 import os
 import pathlib
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -249,6 +250,14 @@ class InvocationResult:
     duration_seconds: float
     timed_out: bool = False
     detail: str = ""
+    #: The nested session's own id, read from the `system/init` event of the stream. It is the
+    #: filename Claude Code writes its transcript under, which is what makes the judge's full
+    #: reasoning trace reachable at all -- see :func:`_parse_stream_meta`.
+    session_id: str | None = None
+    #: The RESOLVED model id (`claude-haiku-4-5`), not the alias that was requested (`haiku`).
+    #: A number is only reportable alongside the instrument that produced it, and the alias is
+    #: not the instrument -- it is a pointer that moves when Anthropic ships a new Haiku.
+    model: str | None = None
 
 
 #: A seam, so every offline gate below can drive the Runner without spending money. The real
@@ -278,6 +287,76 @@ def _parse_cost(stdout: str) -> float:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             total = float(value)
     return total
+
+
+#: The JUDGE's model, NOT the optimizer's -- and the only model choice that moves the bill. The
+#: judge runs one nested session per claim, ~113 an iteration, against the optimizer's one; at
+#: Opus prices that was ~$95 an iteration and ~$0.84 a claim, measured.
+#:
+#: Haiku is ~5x cheaper, which at a fixed budget buys ~5x the VAL -- and VAL SIZE, not judge
+#: quality, is what the 2026-09-02 run actually ran out of: its effects were ~1 claim ~ 0.03
+#: macro-F1 against n=50, which is noise. Buying resolution is worth more here than buying a
+#: better judge. Phil's call 2026-09-03, explicitly revisitable, hence `--model` rather than a
+#: hard-coded string.
+#:
+#: ⚠ Changing it invalidates `program-v0`'s baseline (0.4949 was measured on Opus) and any canary
+#: pinned under the previous model. `canary.load` refuses that mismatch rather than trusting the
+#: caller to remember -- the same guard it already applies to `profile`, for the same reason: a
+#: guard silently comparing against a different instrument is worse than no guard.
+#:
+#: Named here rather than defaulted in two signatures so `dispatcher` and `canary` agree on what
+#: "no --model was given" means without either restating it.
+DEFAULT_JUDGE_MODEL = "haiku"
+
+
+def _parse_stream_meta(stdout: str) -> "tuple[str | None, str | None]":
+    """``(session_id, resolved_model)`` from the CLI's own stream-json output.
+
+    Both ride on the `system`/`init` event. The session id is the only thing that makes the
+    judge's reasoning trace reachable: `--output-format stream-json --verbose` streams the whole
+    trace through this pipe, :func:`headless_claude_invoke` reads the cost out of it and drops
+    the rest, and Claude Code separately persists the same session to
+    ``~/.claude/projects/<slug>/<session_id>.jsonl``. Without the id those transcripts are an
+    undifferentiated pool -- 691 of them survived the 2026-09-02 run with nothing linking any of
+    them to a claim.
+
+    The model is read here rather than taken from ``self.model`` because the request carries an
+    ALIAS and the response carries the resolution. Recording `haiku` would make a run
+    unreproducible the day a new Haiku ships; recording `claude-haiku-4-5` would not.
+    """
+    session_id = model = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if session_id is None and isinstance(obj.get("session_id"), str):
+            session_id = obj["session_id"]
+        if model is None and obj.get("type") == "system" and isinstance(obj.get("model"), str):
+            model = obj["model"]
+        if session_id and model:
+            break
+    return session_id, model
+
+
+def find_transcript(session_id: str) -> "pathlib.Path | None":
+    """The on-disk transcript for a nested session, or None.
+
+    Globs `~/.claude/projects/*/` rather than recomputing Claude Code's project-slug rule
+    (path separators AND dots both become dashes, so `.claude/worktrees` slugs to
+    `--claude-worktrees`). Reimplementing that rule would be a second copy of somebody else's
+    private convention, silently wrong the day it changes; a glob over ~60 directories costs
+    nothing against a claim that costs an LLM session.
+    """
+    if not session_id:
+        return None
+    root = pathlib.Path.home() / ".claude" / "projects"
+    for candidate in root.glob(f"*/{session_id}.jsonl"):
+        return candidate
+    return None
 
 
 def headless_claude_invoke(
@@ -332,11 +411,14 @@ def headless_claude_invoke(
             timed_out=True,
             detail=f"timed out after {timeout_seconds}s (process group killed)",
         )
+    session_id, model = _parse_stream_meta(stdout or "")
     return InvocationResult(
         exit_code=proc.returncode,
         cost_usd=_parse_cost(stdout or ""),
         duration_seconds=time.monotonic() - started,
         detail=(stderr or "").strip()[:500],
+        session_id=session_id,
+        model=model,
     )
 
 
@@ -440,7 +522,7 @@ class SarolRunner:
         per_call_timeout_seconds: float = 900.0,
         per_call_max_budget_usd: float = 2.0,
         paperclip_version_probe: Callable[[], str | None] | None = None,
-        model: str = "opus",
+        model: str = DEFAULT_JUDGE_MODEL,
         canary: "CanarySpec | None" = None,
         command_name: str = "sarol-eval-item",
         require_command: bool = True,
@@ -647,11 +729,34 @@ class SarolRunner:
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
                 counter["subs"] += 1
                 counter["cost"] += res.cost_usd
+                # Copy the judge's own reasoning trace in beside the manifests, rather than
+                # only pointing at `~/.claude/projects/`. That directory is a cache Claude Code
+                # owns and prunes; a trace cited as evidence for a result cannot live somewhere
+                # that may garbage-collect it. Copy failures are deliberately non-fatal -- a
+                # missing trace is worth less than a claim, and must never cost one.
+                trace_ref = None
+                if res.session_id:
+                    src = find_transcript(res.session_id)
+                    if src is not None:
+                        dest = out_dir / "traces" / f"{claim.claim_id}-{stage}.jsonl"
+                        try:
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copyfile(src, dest)
+                            trace_ref = str(dest)
+                        except OSError:
+                            trace_ref = None
                 record["stages"][stage] = {
                     "exit_code": res.exit_code,
                     "cost_usd": res.cost_usd,
                     "duration_seconds": res.duration_seconds,
                     "timed_out": res.timed_out,
+                    # The instrument, and the record of what it thought. `model` is the resolved
+                    # id; `trace_ref` is an OPTIONAL read -- nothing pushes the trace into the
+                    # optimizer's context, it just becomes openable when the agent wants to know
+                    # why the judge said what it said.
+                    "model": res.model,
+                    "session_id": res.session_id,
+                    "trace_ref": trace_ref,
                 }
                 if res.timed_out:
                     record["status"] = "timeout"
@@ -729,6 +834,19 @@ class SarolRunner:
                         # Stamping the profile here is the consumer-side half of keeping them
                         # distinguishable.
                         "profile": self.profile.name,
+                        # Run identity, same rule as `retrieval_k`: a macro-F1 without the
+                        # instrument that produced it is not a result. Resolved id, taken from
+                        # what the sessions reported rather than from the requested alias, and
+                        # None only if no stage ever reported one.
+                        "model": next(
+                            (
+                                st.get("model")
+                                for rec in records
+                                for st in (rec.get("stages") or {}).values()
+                                if st.get("model")
+                            ),
+                            None,
+                        ),
                         "profile_stages": list(self.profile.stages),
                         "retrieval_k": self.profile.retrieval_k,
                         # The Scorer's coverage assertion compares against what was actually ASKED
@@ -1025,6 +1143,7 @@ class SarolScorer:
             # describes the run that actually happened.
             "profile": run_manifest.get("profile"),
             "retrieval_k": run_manifest.get("retrieval_k"),
+            "model": run_manifest.get("model"),
         }
         if not complete:
             breakdown["reason"] = (
@@ -1082,7 +1201,7 @@ class SarolScorer:
 #: nothing about the held-out set: this widens the identity metadata, not the leakage surface.
 _VAL_BREAKDOWN_ALLOWED = (
     "scored", "reason", "n_total", "n_invalid", "requested_count", "split", "profile",
-    "retrieval_k",
+    "retrieval_k", "model",
 )
 
 
@@ -1902,6 +2021,110 @@ def _selftest() -> int:
                 ("...still carrying the claims that had already finished, so the salvage "
                  "recovers a run rather than an empty file",
                  isinstance(_salvaged, dict) and len(_salvaged.get("claims", [])) >= 1),
+            ]
+
+            # --------------------------------------------------------------------------------
+            # The judge's own reasoning trace, and the instrument that produced it.
+            #
+            # `--output-format stream-json --verbose` streams the full trace through the pipe
+            # `headless_claude_invoke` reads, which parsed the cost out and dropped the rest;
+            # Claude Code separately persisted the same session under `~/.claude/projects/`.
+            # 691 transcripts survived the 2026-09-02 run with nothing linking any of them to a
+            # claim. These gates pin the link, the copy, and the model record.
+            _fake_home = pathlib.Path(tmp) / "fakehome"
+            _sid = "11111111-2222-3333-4444-555555555555"
+            _slug_dir = _fake_home / ".claude" / "projects" / "some-slug"
+            _slug_dir.mkdir(parents=True, exist_ok=True)
+            _transcript_body = '{"type":"system","subtype":"init","model":"claude-haiku-4-5"}\n'
+            (_slug_dir / f"{_sid}.jsonl").write_text(_transcript_body, encoding="utf-8")
+
+            def _trace_invoke(cmd, cwd, t):
+                return InvocationResult(
+                    exit_code=0, cost_usd=0.0, duration_seconds=0.1,
+                    session_id=_sid, model="claude-haiku-4-5",
+                )
+
+            _trace_out = pathlib.Path(tmp) / "traceout"
+            _trace_runner = SarolRunner(
+                store,
+                invoke=_trace_invoke,
+                output_roots={"train": _trace_out},
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+            )
+            _mat_t = pathlib.Path(tmp) / "t"
+            _mat_t.mkdir(exist_ok=True)
+            # Patched so the Runner's OWN resolution path is exercised, rather than testing a
+            # root parameter the production call never passes.
+            _real_home = pathlib.Path.home
+            pathlib.Path.home = staticmethod(lambda: _fake_home)
+            try:
+                _tres = _trace_runner.run(
+                    _mat_t,
+                    schemas.RunInputs(
+                        input_ref=str(multi_batch), batch_id="tr", split="train"
+                    ),
+                )
+            finally:
+                pathlib.Path.home = _real_home
+
+            _tman = json.loads(
+                pathlib.Path(_tres.artifact_refs[0].path).read_text(encoding="utf-8")
+            )
+            _tclaim = _tman["claims"][0]
+            _tstage = next(iter((_tclaim.get("stages") or {}).values()), {})
+            _tref = _tstage.get("trace_ref")
+            # A real subprocess emitting a real stream-json line: no LLM, no spend, but the
+            # production invoker's own parsing path.
+            _live_meta = headless_claude_invoke(
+                [
+                    "sh", "-c",
+                    "printf '%s\\n' "
+                    "'{\"type\":\"system\",\"subtype\":\"init\","
+                    "\"session_id\":\"S9\",\"model\":\"claude-haiku-4-5\"}'",
+                ],
+                pathlib.Path.cwd(),
+                20.0,
+            )
+            _sid_p, _model_p = _parse_stream_meta(
+                '{"type":"system","subtype":"init","session_id":"abc","model":"claude-haiku-4-5"}\n'
+                'not json at all\n'
+                '{"type":"result","total_cost_usd":0.4}\n'
+            )
+
+            checks += [
+                ("the stream's session_id and RESOLVED model are parsed out of the output that "
+                 "was previously read for cost and discarded",
+                 (_sid_p, _model_p) == ("abc", "claude-haiku-4-5")),
+                # ...and the same assertion against the REAL invoker. Testing `_parse_stream_meta`
+                # alone proves the parser, not that anything calls it -- the exact shape of the
+                # `loop_ops` gap, where a gate drove the engine directly and nothing checked that
+                # the production entrypoint passed the argument. Negative-controlled: blanking the
+                # call site leaves the parser gate above green.
+                ("...and `headless_claude_invoke` actually calls it, so the fields reach a real "
+                 "InvocationResult rather than only a unit-tested helper",
+                 (_live_meta.session_id, _live_meta.model) == ("S9", "claude-haiku-4-5")),
+                ("each claim records the session that judged it, so a trace is reachable at all",
+                 _tstage.get("session_id") == _sid),
+                ("...and the RESOLVED model id rather than the alias that was requested -- an "
+                 "alias moves when a new release ships, so it cannot identify an instrument",
+                 _tstage.get("model") == "claude-haiku-4-5"),
+                ("the trace is COPIED into the run root, not merely pointed at inside "
+                 "~/.claude/projects, which is a cache Claude Code prunes",
+                 bool(_tref) and pathlib.Path(_tref).exists()
+                 and str(_trace_out) in str(_tref)),
+                ("...byte-identical to the session Claude Code wrote",
+                 bool(_tref)
+                 and pathlib.Path(_tref).read_text(encoding="utf-8") == _transcript_body),
+                ("the run manifest carries the model as run identity, the same rule as "
+                 "retrieval_k: a macro-F1 without its instrument is not a result",
+                 _tman.get("model") == "claude-haiku-4-5"),
+                ("the judge defaults to the cheap model, since the judge is ~113 sessions an "
+                 "iteration and the optimizer is one",
+                 SarolRunner(store, require_command=False).model == DEFAULT_JUDGE_MODEL
+                 and DEFAULT_JUDGE_MODEL == "haiku"),
+                ("a session that reported no id yields no trace_ref rather than a broken path",
+                 find_transcript("") is None),
             ]
 
             # The round-trip canary: a moved instrument stops the run before any scored claim.

@@ -510,6 +510,9 @@ def build_components(
     train_output_root: pathlib.Path | None = None,
     val_output_root: pathlib.Path | None = None,
     val_n: int | None = None,
+    #: The JUDGE's model, not the optimizer's. Defaults to `adapter.SarolRunner`'s own default
+    #: rather than restating it here -- one place knows what the judge runs on.
+    model: str | None = None,
 ):
     """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
 
@@ -554,6 +557,7 @@ def build_components(
             per_call_max_budget_usd=per_call_max_budget_usd,
             profile=prof,
             output_roots=roots,
+            **({"model": model} if model else {}),
         ),
         store,
         budget=budget,
@@ -665,7 +669,12 @@ def run_optimization(
         # run. Refused at this entrypoint rather than in `build_components` for the same reason
         # the output roots are: selftests must still be able to assemble components freely.
         if require_canary and component_kwargs.get("canary") is None:
-            pinned = canary_mod.load(profiles_mod.get(profile).name)
+            pinned = canary_mod.load(
+                profiles_mod.get(profile).name,
+                # The alias this run will actually dispatch with. Falling back to the Runner's
+                # own default rather than restating it keeps "no --model given" meaning one thing.
+                model=component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL,
+            )
             if pinned is None:
                 raise ValueError(
                     f"no round-trip canary is pinned for profile "
@@ -847,6 +856,7 @@ def _seed_repo(dest: pathlib.Path, store: SarolProgramStore) -> str:
 
 
 def _integration_checks(schemas) -> list[tuple[str, bool]]:
+    _VAL_ALLOWED_KEYS = set(adapter._VAL_BREAKDOWN_ALLOWED)
     """Drive the engine's REAL ``run_loop`` and prove the contract guard stops it before commit.
 
     This is the check the isolated `adapter.py --selftest` cannot make. That one constructs a
@@ -1053,6 +1063,9 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
              (val_payload.get("metrics", {}).get("breakdown", {}) or {}).get("retrieval_k") == 20
              and (val_payload.get("metrics", {}).get("breakdown", {}) or {}).get("profile")
              == "retrieval"),
+            ("...and the JUDGE it was measured with, which is run identity exactly as the "
+             "profile and k are -- a macro-F1 says nothing without the instrument",
+             "model" in _VAL_ALLOWED_KEYS),
             ("...while the scorer's per-class structure, offered on the same breakdown, is "
              "stripped -- so the widening is identity metadata, not leakage",
              "per_class_f1" not in json.dumps(val_payload)),
@@ -1187,6 +1200,40 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         _match = _static_train_inputs(
             adapter._import_engine().RunInputs, str(_batch), run_id="g", train_n=3)
 
+    # End-to-end on the plumbing that matters: a pin measured under `haiku`, a run requesting
+    # `opus`, and the refusal must name both. If `run_optimization` stopped forwarding its model
+    # to `canary.load`, this run would sail past the mismatch.
+    _cpath = canary_mod.pin_path("retrieval")
+    _cpath.parent.mkdir(parents=True, exist_ok=True)
+    _csaved = _cpath.read_text(encoding="utf-8") if _cpath.exists() else None
+    _model_reaches_canary = False
+    try:
+        _cpath.write_text(json.dumps({
+            "profile": "retrieval", "split": "train", "model_requested": "haiku",
+            "expected_verdict": "ACCURATE",
+            "claim": {"claim_id": "M1", "citekey": "k", "staging_dir": str(_cpath.parent)},
+        }), encoding="utf-8")
+        with _tempfile.TemporaryDirectory() as _mt:
+            try:
+                run_optimization(
+                    iterations=1, run_id="model-gate", train_input_ref="unused",
+                    val_input_ref="unused", max_budget_usd=1e9, train_n=1,
+                    materialize_root=pathlib.Path(_mt) / "mat",
+                    train_output_root=pathlib.Path(_mt) / "tr",
+                    val_output_root=pathlib.Path(_mt) / "va",
+                    profile="retrieval", model="opus",
+                )
+            except Exception as exc:  # noqa: BLE001 -- a crash here is a FAILED gate, not a
+                # crashed suite. If the model stops reaching `canary.load`, the run gets past the
+                # mismatch and raises something else entirely; catching only ValueError would
+                # turn that into a traceback that masks every check after it.
+                _model_reaches_canary = "haiku" in str(exc) and "opus" in str(exc)
+    finally:
+        if _csaved is None:
+            _cpath.unlink(missing_ok=True)
+        else:
+            _cpath.write_text(_csaved, encoding="utf-8")
+
     no_canary_model = CostModel.for_profile("retrieval", canary_enabled=False)
     checks += [
         ("a real run REFUSES to start with no canary pinned (Finding 4)",
@@ -1202,6 +1249,23 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ("...and a matching one passes through, so the check is on size and not on the path",
          _match.input_ref.endswith("train.json") and _match.split == "train"),
 
+
+        # --model must reach the RUN, not just the estimate. The identical defect shipped once
+        # already for --profile: it was parsed, priced the run, and dropped before the run began,
+        # so the CLI printed a `retrieval` table and executed `agentic`. A flag that reaches only
+        # the quote is worse than no flag, because the quote then lies with authority.
+        ("--model reaches the constructed Runner, not merely the cost table",
+         build_components(
+             max_budget_usd=1e9, train_n=1, require_command=False, model="sonnet"
+         )["runner"].inner.model == "sonnet"),
+        ("...and with no --model the judge takes the one documented default, so 'unspecified' "
+         "means exactly one thing across dispatcher, canary and adapter",
+         build_components(
+             max_budget_usd=1e9, train_n=1, require_command=False
+         )["runner"].inner.model == adapter.DEFAULT_JUDGE_MODEL),
+        ("...and that model reaches the CANARY check too, so a run cannot be judged by one model "
+         "against a pin measured with another",
+         _model_reaches_canary),
         ("a run with no canary wired prices ZERO canary sessions, so 'priced but absent' cannot "
          "happen again", no_canary_model.canary_sessions() == 0),
         ("...while a wired one is priced at three firings per iteration, per OQ12",
@@ -1554,6 +1618,16 @@ def main(argv: "list[str] | None" = None) -> int:
     ap.add_argument("--per-session-usd", type=float, default=DEFAULT_PER_SESSION_USD)
     ap.add_argument("--max-budget-usd", type=float, default=None)
     ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
+    ap.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "the JUDGE's model (alias or full id). Defaults to the Runner's own default. This "
+            "is where ~all the spend is -- one nested session per claim, ~113 an iteration -- so "
+            "it is the knob that moves the bill. Changing it invalidates program-v0's baseline "
+            "and any canary pinned under the previous model; the canary refuses that mismatch."
+        ),
+    )
     ap.add_argument("--train-n", type=int, default=None)
     ap.add_argument("--iterations", type=int, default=1)
     ap.add_argument("--run-id", default=None)
@@ -1661,6 +1735,10 @@ def main(argv: "list[str] | None" = None) -> int:
                     pathlib.Path(args.sampling_root) if args.sampling_root else None
                 ),
                 require_canary=not args.no_canary,
+                # Same lesson as --profile directly above: a flag that reaches the estimate and
+                # not the run is worse than no flag. `model` rides `**component_kwargs` into
+                # `build_components`, which hands it to the Runner.
+                **({"model": args.model} if args.model else {}),
             )
         except BudgetExceeded as exc:
             print(f"REFUSED  {exc}", file=sys.stderr)

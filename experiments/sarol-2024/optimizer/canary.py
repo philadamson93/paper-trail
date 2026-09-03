@@ -95,7 +95,7 @@ def choose_claim(split: str = "train") -> "sampling.ClaimUnit":
     return random.Random(CANARY_SEED).choice(pool)
 
 
-def load(profile: str) -> "adapter.CanarySpec | None":
+def load(profile: str, *, model: str | None = None) -> "adapter.CanarySpec | None":
     """The pinned `CanarySpec` for `profile`, or None if nothing has been pinned yet.
 
     Returning None rather than raising is deliberate for *absence*: whether a missing pin is fatal
@@ -118,6 +118,30 @@ def load(profile: str) -> "adapter.CanarySpec | None":
             f"loaded for {profile!r}. A canary compares this run against a verdict produced by a "
             "DIFFERENT pipeline; re-pin under the profile you intend to run."
         )
+    # The instrument check. A canary answers exactly one question -- "is the pipeline still the
+    # one that produced this verdict?" -- and the MODEL is part of that pipeline, as much as the
+    # profile is. A pin measured on Opus and silently reused on a Haiku run compares this run
+    # against a different judge, which is the failure the canary exists to catch, committed by
+    # the canary itself. Checked against `model_requested` (the alias) rather than the resolved
+    # id because a run knows its alias before it has spent anything; resolving would cost a
+    # session to learn what the guard is supposed to prevent paying for.
+    #
+    # A pin with no model recorded is REFUSED rather than waved through, unlike the `profile`
+    # check above which tolerates absence. That asymmetry is deliberate: `profile` predates model
+    # tracking and has pins in the wild, while a pin carrying no model can only have been written
+    # before this guard existed and therefore cannot testify about the instrument at all. The
+    # post-mortem's own lesson is that a guard which cannot see what it claims to check is worse
+    # than none -- so it fails closed and asks for a re-pin, which is cheap next to a whole run.
+    if model is not None:
+        recorded_model = obj.get("model_requested")
+        if recorded_model != model:
+            raise ValueError(
+                f"canary pin at {path} was measured with model {recorded_model!r} but this run "
+                f"requests {model!r}. The canary compares a run against a verdict produced by a "
+                "specific judge; a different model is a different instrument, so the comparison "
+                f"would be meaningless. Re-pin with `python3 canary.py --pin --profile {profile} "
+                f"--model {model} --repeat 3`."
+            )
     recorded_split = obj.get("split")
     if recorded_split is not None and recorded_split != "train":
         raise ValueError(
@@ -146,6 +170,9 @@ def pin(
     profile: str,
     repeat: int = 1,
     split: str = "train",
+    #: The judge to pin UNDER. A pin is a measurement, so it is only valid for the instrument
+    #: that took it -- `load` refuses to hand this pin to a run using a different model.
+    model: str | None = None,
     source_mode: str = "corpus",
     runner=None,
     program_store=None,
@@ -210,11 +237,14 @@ def pin(
         encoding="utf-8",
     )
 
-    run = runner or adapter.SarolRunner(store, profile=prof.name)
+    run = runner or adapter.SarolRunner(
+        store, profile=prof.name, **({"model": model} if model else {})
+    )
     schemas = adapter._import_engine()
     materialized = store.repo_root
 
     observed: list[str | None] = []
+    resolved_models: list[str] = []
     for attempt in range(repeat):
         artifacts = run.run(
             materialized,
@@ -234,6 +264,9 @@ def pin(
         )
         record = manifest["claims"][0]
         observed.append((record.get("validation") or {}).get("overall_verdict"))
+        # The run manifest carries the RESOLVED model id the sessions actually reported.
+        if manifest.get("model"):
+            resolved_models.append(manifest["model"])
 
     if len(set(observed)) != 1 or observed[0] is None:
         raise RuntimeError(
@@ -244,6 +277,13 @@ def pin(
 
     payload = {
         "profile": prof.name,
+        # BOTH forms, because they answer different questions. `model_requested` is the alias a
+        # run passes (`haiku`) and is what a mismatch is checked against -- a run knows its alias
+        # before it spends anything. `model` is what that alias RESOLVED to at pin time
+        # (`claude-haiku-4-5`), which is what makes the pinned verdict reproducible after the
+        # alias moves under a new release.
+        "model_requested": getattr(run, "model", None),
+        "model": resolved_models[0] if resolved_models else None,
         "expected_verdict": observed[0],
         "observations": observed,
         "pinned_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -405,6 +445,42 @@ def _selftest() -> int:
         "not the only thing standing between a held-out claim and the optimizer",
         _raises(lambda: pin(profile="retrieval", split="dev"), ValueError)))
 
+    # The model is part of the instrument, exactly as the profile is. A pin measured under one
+    # judge and silently handed to a run using another commits the very substitution the canary
+    # exists to detect -- so `load` refuses it, and refuses a pin that cannot say what judged it.
+    _mpath = pin_path("retrieval")
+    _mpath.parent.mkdir(parents=True, exist_ok=True)
+    _saved = _mpath.read_text(encoding="utf-8") if _mpath.exists() else None
+    _claim_blob = {"claim_id": "M1", "citekey": "k", "staging_dir": str(_mpath.parent)}
+    try:
+        _mpath.write_text(json.dumps({
+            "profile": "retrieval", "split": "train", "model_requested": "haiku",
+            "expected_verdict": "ACCURATE", "claim": _claim_blob,
+        }), encoding="utf-8")
+        _same_model_ok = load("retrieval", model="haiku") is not None
+        _wrong_model = _raises(lambda: load("retrieval", model="opus"), ValueError)
+        _unchecked = load("retrieval") is not None
+        _mpath.write_text(json.dumps({
+            "profile": "retrieval", "split": "train",
+            "expected_verdict": "ACCURATE", "claim": _claim_blob,
+        }), encoding="utf-8")
+        _no_model_recorded = _raises(lambda: load("retrieval", model="haiku"), ValueError)
+    finally:
+        if _saved is None:
+            _mpath.unlink(missing_ok=True)
+        else:
+            _mpath.write_text(_saved, encoding="utf-8")
+
+    checks.extend((
+        ("a pin measured under the SAME model loads", _same_model_ok),
+        ("...a pin measured under a DIFFERENT model is refused rather than silently wired -- the "
+         "substitution the canary exists to catch, committed by the canary itself", _wrong_model),
+        ("...a pin carrying NO model is refused too, since a guard that cannot see the "
+         "instrument it claims to check is worse than no guard", _no_model_recorded),
+        ("...while a caller asking for no model check still loads, so the refusal is about the "
+         "model and not about the pin being unreadable", _unchecked),
+    ))
+
     # --repeat is refused below 1, so "pin without measuring" is not reachable.
     try:
         pin(profile="retrieval", repeat=0)
@@ -441,6 +517,15 @@ def main(argv: "list[str] | None" = None) -> int:
                     help="dispatch this many times and refuse to pin unless every verdict agrees")
     ap.add_argument("--profile", default=profiles_mod.DEFAULT_PROFILE,
                     choices=sorted(profiles_mod.PROFILES))
+    ap.add_argument(
+        "--model",
+        default=None,
+        help=(
+            "the judge to pin under (defaults to the Runner's own default). The pin records it "
+            "and a run requesting a different model is refused -- a canary measured on one judge "
+            "says nothing about another."
+        ),
+    )
     ap.add_argument("--split", default="train", choices=("train",),
                     help="split to draw the pinned claim from. TRAIN only, and enforced: TRAIN "
                          "gold is Tier 1 and already open to the optimizer, so a canary there "
@@ -455,7 +540,9 @@ def main(argv: "list[str] | None" = None) -> int:
               f"no canary pinned for profile {args.profile!r}")
         return 0 if current else 1
     if args.pin:
-        payload = pin(profile=args.profile, repeat=args.repeat, split=args.split)
+        payload = pin(
+            profile=args.profile, repeat=args.repeat, split=args.split, model=args.model
+        )
         print(json.dumps(payload, indent=2))
         return 0
     ap.print_help()
