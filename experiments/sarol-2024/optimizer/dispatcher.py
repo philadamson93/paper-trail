@@ -59,6 +59,7 @@ if str(_HERE) not in sys.path:
 
 import adapter  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
+import sampling  # noqa: E402
 from adapter import STAGES, SarolProgramStore  # noqa: E402
 
 #: `sarol`'s graduated-N TRAIN ramp (D13). Nested, so the same version is comparable across levels.
@@ -479,6 +480,7 @@ def build_components(
     profile=None,
     train_output_root: pathlib.Path | None = None,
     val_output_root: pathlib.Path | None = None,
+    val_n: int | None = None,
 ):
     """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
 
@@ -488,7 +490,12 @@ def build_components(
     """
     store = program_store or SarolProgramStore()
     prof = profiles_mod.get(profile)
-    cost_model = CostModel.for_profile(prof, per_session_usd=per_session_usd)
+    # `val_n` is the cost lever, and it has to reach the cost model or the preflight prices a run
+    # that is not the one about to happen. VAL is charged TWICE per iteration at a fixed size, so
+    # at TRAIN=10 it is ~98% of the bill -- subsampling TRAIN alone barely moves it.
+    cost_model = CostModel.for_profile(
+        prof, per_session_usd=per_session_usd, val_size=val_n or VAL_SIZE
+    )
     # C6.9. Stated, not derived: `train_output_root` is where the per-claim mistake corpus lands
     # and must be readable by the optimizer; `val_output_root` must not be.
     roots = {}
@@ -550,12 +557,28 @@ def run_optimization(
     per_session_usd: float = DEFAULT_PER_SESSION_USD,
     current_tag: str = "program-v0",
     components: dict | None = None,
+    train_schedule: "list[int] | None" = None,
+    draw_mode: str = "cumulative",
+    val_n: int | None = None,
+    sampling_root: pathlib.Path | None = None,
     **component_kwargs,
 ):
     """Drive the engine's ``run_loop``. This is the entrypoint the plan's Files-to-create names.
 
     A whole-run affordability check runs before anything is dispatched; the per-iteration refusal
     still lives in :class:`CachingRunner`, because ``run_loop`` exposes no pre-iteration hook.
+
+    **Graduated N.** Pass ``train_schedule`` (e.g. ``[5, 10, 20]``) to grow the TRAIN batch across
+    iterations instead of running a fixed cohort every time — the engine takes ``train_inputs`` as
+    a factory, so this needs no engine change. ``draw_mode`` selects `sampling`'s cumulative /
+    fresh / reproduce semantics. Omit ``train_schedule`` and the old static-batch behaviour is
+    unchanged, which is what every existing caller and gate relies on.
+
+    ⚠ **The ramp is not the cost fix on its own.** An iteration is three Runner calls, two of them
+    VAL at a fixed size, so at TRAIN=10 roughly 98% of the bill is VAL. ``val_n`` is the knob that
+    actually moves the number; ``train_schedule`` is the knob that controls what the optimizer
+    learns from. Both are priced, and the preflight below uses the ramp's TOP rung so the check
+    describes the most expensive iteration the run can reach, not its cheapest.
     """
     engine_root = adapter.engine_path()
     if str(engine_root) not in sys.path:
@@ -591,19 +614,25 @@ def run_optimization(
         if blocked:
             raise ValueError(blocked)
 
+    # The ramp's top rung, not its first: the affordability check has to describe the most
+    # expensive iteration the run can reach. Checking rung 0 would clear a run that cannot pay for
+    # its own last iteration -- and the engine stops nothing.
+    peak_train_n = max(train_schedule) if train_schedule else train_n
+
     parts = components or build_components(
         max_budget_usd=max_budget_usd,
-        train_n=train_n,
+        train_n=peak_train_n,
         per_session_usd=per_session_usd,
         profile=profile,
         train_output_root=train_output_root,
         val_output_root=val_output_root,
+        val_n=val_n,
         **component_kwargs,
     )
 
     ok, message = preflight(
         parts["cost_model"],
-        train_n=train_n,
+        train_n=peak_train_n,
         iterations=iterations,
         max_budget_usd=max_budget_usd,
     )
@@ -619,8 +648,23 @@ def run_optimization(
         scorer=parts["scorer"],
         release_builder=parts["release_builder"],
         agent=parts["agent"],
-        train_inputs=RunInputs(
-            input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train"
+        # A factory when a ramp was asked for, a fixed batch otherwise. `run_loop` accepts either
+        # (`train_inputs: RunInputs | Callable[[int], RunInputs]`), so the graduated cohort needs
+        # no engine change -- the same seam crc drives its growing batch through.
+        train_inputs=(
+            sampling.train_inputs_factory(
+                schedule=train_schedule,
+                mode=draw_mode,
+                split="train",
+                run_id=run_id,
+                staging_root=pathlib.Path(sampling_root or train_output_root) / "staging",
+                batch_root=pathlib.Path(sampling_root or train_output_root) / "batches",
+                history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
+            )
+            if train_schedule
+            else RunInputs(
+                input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train"
+            )
         ),
         val_inputs=RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val"),
         task_config={
@@ -916,6 +960,22 @@ def _selftest() -> int:
          600 < CostModel.for_profile("retrieval").iteration_cost(10) < 700),
         ("the cost table says which rung it is describing",
          "retrieval" in CostModel.for_profile("retrieval").render_table()),
+        # -- the graduated cohort (Phil, 2026-09-02), and which knob actually moves the bill -----
+        ("a smaller VAL is priced, since VAL is what an iteration mostly buys",
+         CostModel.for_profile("retrieval", val_size=25).iteration_cost(10)
+         < 0.2 * CostModel.for_profile("retrieval").iteration_cost(10)),
+        ("...and the cost table reports the VAL size it priced",
+         "VAL=25" in CostModel.for_profile("retrieval", val_size=25).render_table()),
+        # The finding that shaped the CLI: ramping TRAIN alone is nearly free of effect, because
+        # two of the three Runner calls are VAL at a fixed size. Pinned so nobody re-derives it
+        # after paying for it.
+        ("ramping TRAIN 10 -> 5 changes an iteration by <2%, so TRAIN is NOT the cost lever",
+         abs(CostModel.for_profile("retrieval").iteration_cost(5)
+             - CostModel.for_profile("retrieval").iteration_cost(10))
+         < 0.02 * CostModel.for_profile("retrieval").iteration_cost(10)),
+        ("...while halving VAL changes it by ~half, which is",
+         CostModel.for_profile("retrieval", val_size=158).iteration_cost(10)
+         < 0.6 * CostModel.for_profile("retrieval").iteration_cost(10)),
     ]
 
     # -- C6.9: the VAL boundary is a filesystem fact, not a payload convention ------------------
@@ -1156,22 +1216,57 @@ def main(argv: "list[str] | None" = None) -> int:
         help="where VAL run outputs land (C6.9). Must lie OUTSIDE the optimizer's readable tree, "
              "or the held-out set's per-claim outputs are directly readable.",
     )
+    ap.add_argument(
+        "--train-n-schedule",
+        default=None,
+        help="graduated TRAIN cohort, e.g. '5,10,20': iteration i uses rung i, holding at the top "
+             "rung thereafter. Replaces --train-inputs, which stages a fixed batch. Non-decreasing.",
+    )
+    ap.add_argument(
+        "--draw-mode",
+        default="cumulative",
+        choices=sorted(sampling.DRAW_MODES),
+        help="how each rung is drawn. 'cumulative' grows the batch without dropping anything the "
+             "optimizer already saw; 'fresh' redraws independently; 'reproduce' repeats the "
+             "previous iteration's exact set.",
+    )
+    ap.add_argument(
+        "--val-n",
+        type=int,
+        default=None,
+        help="subsample VAL to this many claims (default: all 316). THIS is the cost lever -- VAL "
+             "is charged twice per iteration at a fixed size, so at TRAIN=10 it is ~98%% of the "
+             "bill and ramping TRAIN alone barely changes the total.",
+    )
+    ap.add_argument(
+        "--sampling-root",
+        default=None,
+        help="where drawn batches, their staging trees and draw_history.json land "
+             "(default: --train-output-root).",
+    )
     args = ap.parse_args(argv)
 
     if args.selftest:
         return _selftest()
 
     if args.run:
+        # A ramp supplies its own TRAIN batches per iteration, so --train-inputs/--train-n are
+        # exactly what it replaces. Requiring both would force the caller to hand over a fixed
+        # batch that is then ignored -- the kind of dead argument that later reads as a bug.
+        schedule = (
+            sampling.parse_schedule(args.train_n_schedule) if args.train_n_schedule else None
+        )
         required = {
             "--max-budget-usd": args.max_budget_usd,
-            "--train-n": args.train_n,
             "--run-id": args.run_id,
-            "--train-inputs": args.train_inputs,
             "--val-inputs": args.val_inputs,
             "--materialize-root": args.materialize_root,
             "--train-output-root": args.train_output_root,
             "--val-output-root": args.val_output_root,
         }
+        if schedule is None:
+            required["--train-n"] = args.train_n
+            required["--train-inputs"] = args.train_inputs
         missing = [flag for flag, value in required.items() if value is None]
         if missing:
             print(f"--run requires: {', '.join(missing)}", file=sys.stderr)
@@ -1193,6 +1288,12 @@ def main(argv: "list[str] | None" = None) -> int:
                 val_output_root=pathlib.Path(args.val_output_root),
                 per_session_usd=args.per_session_usd,
                 per_call_max_budget_usd=args.per_call_max_budget_usd,
+                train_schedule=schedule,
+                draw_mode=args.draw_mode,
+                val_n=args.val_n,
+                sampling_root=(
+                    pathlib.Path(args.sampling_root) if args.sampling_root else None
+                ),
             )
         except BudgetExceeded as exc:
             print(f"REFUSED  {exc}", file=sys.stderr)
@@ -1206,7 +1307,11 @@ def main(argv: "list[str] | None" = None) -> int:
         }, indent=2))
         return 0
 
-    cost_model = CostModel.for_profile(args.profile, per_session_usd=args.per_session_usd)
+    cost_model = CostModel.for_profile(
+        args.profile,
+        per_session_usd=args.per_session_usd,
+        val_size=args.val_n or VAL_SIZE,
+    )
     if args.preflight:
         print(cost_model.render_table())
         if args.max_budget_usd is not None and args.train_n is not None:
