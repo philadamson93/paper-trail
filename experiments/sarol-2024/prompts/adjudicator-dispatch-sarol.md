@@ -40,10 +40,7 @@ You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment va
 
 **3. Populate `paper_value` and `claim_value` for MISQUOTE and OVERSIMPLIFY sub-claims where a number drifted** (extractor may have pre-filled these; confirm or correct).
 
-**4. Multi-cit rule.** If `multi_cit_context == "grouped"`:
-- Consider only the portion of the citing claim attributable to this specific source.
-- If the source supports its attributable portion, use ACCURATE even when the overall sentence says more than this paper alone substantiates.
-- If it is impossible to determine what this specific source was cited for, use ETIQUETTE.
+**4. Multi-cit rule.** If `multi_cit_context == "grouped"`, follow the rubric's "Multi-citation handling" section: fix the attributable portion from the citing sentence *first*, then judge that portion by exactly the standard you would apply to a single citation.
 
 **5. Compute `overall_verdict` (paper-level) via worst-wins rollup:**
 

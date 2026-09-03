@@ -34,9 +34,16 @@ Exception: a single-sub-claim citation gets that sub-claim's label directly (pre
 
 ## Multi-citation handling (critical — 51% of Sarol data)
 
-When the citing sentence contains `<|multi_cit|>` — i.e., the evaluated citation is part of a `[1,2,3]`-style cluster — the adjudicator must verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
+When the evaluated citation is one of a `[1,2,3]`-style cluster (`multi_cit_context == "grouped"`), judge only the portion of the claim attributable to *this specific source*.
 
-When a citation is grouped ambiguously such that no sub-claim can clearly be attributed to a single source, prefer ETIQUETTE.
+**Fix that portion first — from the citing sentence alone, before you look at the evidence.** There are two cases and only two:
+
+1. **The sentence assigns.** Its syntax ties a particular clause to this citation's position: separate markers on separate clauses ("… in vitro ([OTHER_CIT]) and … in vivo ([CIT])"), or a named attribution ("Laflamme et al. showed X ([CIT])"). That clause is the attributable portion.
+2. **The sentence does not assign.** The cluster sits at the end and covers the whole statement. Then **the entire claim is attributable to this source** — every item of an enumeration, every conjunct of a compound claim. Do not carve elements out on the theory that a sibling citation might cover them. A shared citation asserts joint support, not a division of labour.
+
+Fixing the portion is the **only** thing the grouped context changes. Once it is fixed, judge it exactly as strictly as you would judge a single citation: the same bar for what counts as supported, and the same bar for a missing or mismatched element. Grouping narrows *what* is judged. It never softens *how* it is judged, and it is never in itself a reason to prefer ACCURATE.
+
+Reach for ETIQUETTE only when case 1 seems to apply but the assignment is genuinely undecidable — not merely because the sentence is long or cites several sources. An end-of-sentence cluster is case 2, not ambiguity.
 
 ## 3-way collapse
 
