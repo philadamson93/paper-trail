@@ -54,3 +54,15 @@ gcp-credentials*.json
 # historical record: they name in-flight branches, blockers and open questions, and go stale
 # the moment the work moves. The plan docs and docs/journal/ are what get committed.
 docs/session/
+
+# Per-iteration release payloads. The engine's `loop_ops` writes `iter/<n>/release_{train,val}.json`
+# under the repo root, because the repo root is the optimizer's cwd and that is where
+# `optimizer/context/release-format.md` tells it to look. Run state, rewritten every run — the
+# durable record of a run's numbers is the run root under ~/.paper-trail/runs/, not this.
+/iter/
+
+# Canary staging and the throwaway one-claim batch used to MEASURE a pin. The pin itself
+# (`canary-<profile>.json`) IS committed: it is the recorded observation the guard compares
+# against, and a guard whose reference value is not under version control is not a guard.
+/experiments/sarol-2024/optimizer/canary/staging/
+/experiments/sarol-2024/optimizer/canary/pin-batch-*.json
