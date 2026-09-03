@@ -328,6 +328,30 @@ def _selftest() -> int:
              problems_for(name="odd", stages=("adjudicator", "summarizer")))),
     ]
 
+    def _emits(token: str) -> bool:
+        """Does any module in this package actually produce `token`?"""
+        d = pathlib.Path(__file__).resolve().parent
+        return any(
+            token in (d / f).read_text(encoding="utf-8")
+            for f in ("adapter.py", "dispatcher.py", "sampling.py")
+        )
+
+    def _unresolvable_doc_paths(docs: dict) -> list:
+        """Every repo-relative `.md` path the optimizer-facing docs cite that does not exist.
+
+        Resolved against the REPO ROOT, because that is the agent's working directory and the
+        whole point of the defect this guards. EVERY backticked `.md` is checked, not just ones
+        already rooted at a top-level directory -- checking only the latter would pass the exact
+        bug it exists to catch, since `context/playbook.md` is precisely what the instructions
+        used to say. A file named in prose but not present in this repo (an external reference)
+        must therefore not be written as a code-formatted path.
+        """
+        root = pathlib.Path(__file__).resolve().parents[3]
+        cited = set()
+        for text in docs.values():
+            cited.update(re.findall(r"`([A-Za-z0-9_./-]+\.md)`", text))
+        return sorted(c for c in cited if not (root / c).exists())
+
     # -- C6.7: the optimizer's own docs must agree with this module --------------------------
     # The plan is explicit that these three files be updated *in the same change* that lands the
     # profile, because an optimizer reading "you own five files" while the edit scope grants two
@@ -362,6 +386,23 @@ def _selftest() -> int:
          not _unqualified(r"costs?\s+(one|two|three)\s+nested", guidance)),
         ("...and both name the mechanical producer that replaces the extractor in Phase 1",
          "BM25" in guidance),
+
+        # Sev 3, made permanent. `optimizer-instructions.md` told the agent to read
+        # `context/playbook.md` and three siblings by BARE RELATIVE path, while the agent's cwd is
+        # the REPO ROOT, where no `context/` exists. All four were missing from where it was sent.
+        # It only worked because the per-turn prompt separately handed over an absolute context
+        # dir and the agent was capable enough to reconcile two conventions in one document.
+        # Resolving every cited path from the root is the check that keeps that fixed.
+        ("every path the optimizer's docs cite resolves from the agent's cwd, the repo root",
+         not _unresolvable_doc_paths(docs)),
+
+        # The mirror of the Sev-1 class. `followups` had a whole section describing a channel that
+        # scored the agent's predictions back to it; `grep -rn followups *.py` returned nothing,
+        # and both procedure docs built the iteration loop on it. A doc that promises a mechanism
+        # no code emits trains the reader to discount the doc. Keyed off whether code emits it, so
+        # the gate relaxes on its own if the mechanism is ever actually built.
+        ("no doc promises `followups` while no code emits it",
+         _emits("followups") or "no `followups` key" in docs["release-format.md"]),
         ("meta-learnings warns that the P1 extractor-side fix is unreachable in Phase 1",
          "unreachable under the `retrieval` profile" in docs["meta-learnings.md"]),
         # C6.8 made `corpus.ref` point at the mistake corpus itself. The doc that tells the
