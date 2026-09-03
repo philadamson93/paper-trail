@@ -1063,6 +1063,87 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                  "support_9way", "mistakes_ref"))),
         ]
 
+        # -----------------------------------------------------------------------------------
+        # Finding 3, asserted at the PRODUCTION call site.
+        #
+        # The release check above drives `run_loop` directly and passes its OWN `loop_ops`,
+        # under a comment reading "exactly what run_optimization passes". That comment is an
+        # assumption, not a check. It proves the ENGINE writes a release when handed loop_ops
+        # -- which was never in doubt -- and proves nothing about whether the entrypoint that
+        # actually shipped hands it over. Negative-controlled 2026-09-03: delete `loop_ops=`
+        # from `run_optimization`, reintroducing the exact defect that cost the 2026-09-02 run
+        # its VAL signal, and all 91 gates stayed green.
+        #
+        # That is the postmortem's own diagnosis -- "a test that asserts an assumption instead
+        # of a contract" -- reappearing in the fix for the bug it diagnosed. So drive the real
+        # entrypoint end-to-end and look for the files on disk.
+        #
+        # `build_mistake_corpus` is left None deliberately: the engine substitutes its own
+        # default, which keeps this gate about the loop_ops seam rather than about corpus
+        # construction (covered separately by the adapter's own gates).
+        repo3 = pathlib.Path(tmp) / "repo3"
+        repo3.mkdir()
+        _seed_repo(repo3, real_store)
+        store3 = SarolProgramStore(repo_root=repo3)
+
+        _batch3 = pathlib.Path(tmp) / "train3.json"
+        _batch3.write_text(
+            json.dumps({"claims": [{"claim_id": "C0", "citekey": "k0", "staging_dir": tmp}]}),
+            encoding="utf-8",
+        )
+
+        _parts3 = {
+            "program_store": store3,
+            "runner": _Runner(),
+            "scorer": _Scorer(),
+            "profile": profiles_mod.get("retrieval"),
+            "release_builder": adapter.SarolReleaseBuilder(),
+            "build_mistake_corpus": None,
+            "agent": adapter.ContractGuardedAgent(_CleanAgent(repo3), store3, tree_root=repo3),
+            "budget": None,
+            "cost_model": CostModel.for_profile("retrieval", val_size=1),
+        }
+        entrypoint_error = None
+        try:
+            run_optimization(
+                iterations=1,
+                run_id="selftest3",
+                train_input_ref=str(_batch3),
+                val_input_ref=str(_batch3),
+                max_budget_usd=1e9,
+                train_n=1,
+                materialize_root=pathlib.Path(tmp) / "materialized3",
+                current_tag="program-v0",
+                components=_parts3,
+            )
+        except Exception as exc:  # noqa: BLE001 -- the files on disk are what is asserted
+            entrypoint_error = exc
+
+        entry_train_release = repo3 / "iter" / "1" / "release_train.json"
+        entry_val_release = repo3 / "iter" / "1" / "release_val.json"
+        entry_val_payload = (
+            json.loads(entry_val_release.read_text(encoding="utf-8"))
+            if entry_val_release.exists()
+            else {}
+        )
+
+        checks += [
+            ("run_optimization ITSELF writes the release payload -- the entrypoint that ships, "
+             "not just the engine it calls (Finding 3, at the seam that actually broke)",
+             entry_train_release.exists() and entry_val_release.exists()),
+            ("...and the VAL release it writes carries the held-out scalar, which is the whole "
+             "channel the 2026-09-02 run was missing",
+             isinstance(
+                 ((entry_val_payload.get("metrics") or {}).get("primary_metric") or {}).get(
+                     "value"
+                 ),
+                 (int, float),
+             )),
+            ("...and the entrypoint completed without raising, so the two checks above are "
+             "evidence of a written file and not of an early abort",
+             entrypoint_error is None),
+        ]
+
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
     parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False)
 

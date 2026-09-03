@@ -1744,6 +1744,72 @@ def _selftest() -> int:
                  not list((inc_root / "m").glob("*.tmp"))),
             ]
 
+            # --------------------------------------------------------------------------------
+            # The two checks above CANNOT go red single-threaded, and a gate that cannot fail is
+            # not a gate. `spy_invoke` reads the manifest BETWEEN invocations, never during a
+            # write, so a truncate-in-place implementation finishes writing before control
+            # returns and is never observed torn; and a plain `write_text` leaves no `.tmp`
+            # files at all, so the scratch-file check passes trivially on the broken version.
+            # Negative-controlled 2026-09-03: reverting the atomic write to a bare
+            # `manifest_path.write_text(payload)` left every gate in the suite green.
+            #
+            # Durability is only testable by INTERRUPTING a write. Fail every write from the
+            # second onward, halfway through the payload, then read the manifest back:
+            # temp-plus-rename leaves the last complete manifest untouched, while
+            # truncate-in-place leaves invalid JSON exactly where the salvage path looks for a
+            # run. This is the check that motivated writing the manifest early in the first
+            # place -- the v0 baseline was recovered from a killed run's partial manifest.
+            crash_root = pathlib.Path(tmp) / "crash"
+            _real_write_text = pathlib.Path.write_text
+            _manifest_writes: list[str] = []
+
+            def _half_write(self, data, *a, **kw):
+                if self.name.startswith("run_manifest.json"):
+                    _manifest_writes.append(self.name)
+                    if len(_manifest_writes) >= 2:
+                        _real_write_text(self, data[: len(data) // 2], *a, **kw)
+                        raise OSError("simulated kill mid-manifest-write")
+                return _real_write_text(self, data, *a, **kw)
+
+            crash_runner = SarolRunner(
+                store,
+                invoke=lambda cmd, cwd, t: InvocationResult(
+                    exit_code=0, cost_usd=0.0, duration_seconds=0.1
+                ),
+                output_roots={"train": crash_root},
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+            )
+            mat_c = pathlib.Path(tmp) / "c"
+            mat_c.mkdir(exist_ok=True)
+            pathlib.Path.write_text = _half_write
+            try:
+                crash_runner.run(
+                    mat_c,
+                    schemas.RunInputs(
+                        input_ref=str(multi_batch), batch_id="crash", split="train"
+                    ),
+                )
+            except Exception:  # noqa: BLE001 -- the file on disk is what is asserted
+                pass
+            finally:
+                pathlib.Path.write_text = _real_write_text
+
+            _crash_manifest = crash_root / "c" / "run_manifest.json"
+            try:
+                _salvaged = json.loads(_crash_manifest.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                _salvaged = None
+
+            checks += [
+                ("a manifest write KILLED HALFWAY leaves the previous manifest parseable -- the "
+                 "salvage path's whole premise, and untestable without interrupting a write",
+                 _salvaged is not None),
+                ("...still carrying the claims that had already finished, so the salvage "
+                 "recovers a run rather than an empty file",
+                 isinstance(_salvaged, dict) and len(_salvaged.get("claims", [])) >= 1),
+            ]
+
             # The round-trip canary: a moved instrument stops the run before any scored claim.
             canary_claim = ClaimRecord(
                 claim_id="CANARY", citekey="canary", staging_dir=staging
