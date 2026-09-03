@@ -26,8 +26,11 @@ The adjudicator picks exactly one per sub-claim. The names below are the contrac
 
 `ACCURATE` therefore does not require every element to be independently located. Ask what the citing sentence asserts *on the strength of this source* — its central proposition — and whether the evidence supports that.
 
-- Central proposition supported, and one peripheral element (a further item in an enumeration, a secondary conjunct, an example) neither found nor contradicted → **ACCURATE**.
+- Central proposition supported, and one peripheral element neither found nor contradicted → **ACCURATE**. An element is peripheral only when the citing sentence states it **open-endedly**: an illustrative "such as" list, "various", "and others", or a hedge ("potentially", "can", "may"). Open-ended phrasing does not assert that any particular listed item is in this source, so failing to retrieve one costs nothing.
+- A **specific assertion is never peripheral**, however topical the paper is — a number, percentage or rate; a named magnitude, direction or comparison; a stated consequence or mechanism; a temporal or conditional finding. If the citing sentence positively asserts one of these on this source's strength and the retrieved evidence does not contain it, that is `NOT_SUBSTANTIATE`. Do not excuse it as a retrieval gap.
 - Central proposition unsupported, or a claimed element positively conflicting with the evidence → `NOT_SUBSTANTIATE` (or `CONTRADICT` where the source states the opposite).
+
+Evidence that fails to contradict an element is not evidence that supports it. "Consistent with" and "nowhere contradicted" can make an element peripheral; they can never make it substantiated.
 
 The "key element missing" in NOT_SUBSTANTIATE means the claim's substance is only half-made — not that the enumeration ran one item longer than the retrieved passages did.
 
