@@ -872,8 +872,37 @@ class SarolScorer:
         Read from the adjudicated ledger file rather than re-derived, so what the optimizer reads
         is exactly what the judge wrote. A missing or malformed file degrades to empty fields --
         the mistake is still worth recording without its reasoning.
+
+        **`sub_claims` carries the judge's working, not just its conclusion.** The flat
+        `evidence_snippets` list below is the UNION of every sub-claim's evidence, and
+        `adjudicator_reasoning.sub_claim_verdicts` is a bare list of labels with no text attached
+        -- so a reader could see that a claim was judged wrong and which snippets were in play,
+        but not WHICH evidence drove the sub-verdict that went wrong. That is the question an
+        optimizer has to answer to fix a rubric: not "was this claim wrong" but "what did the
+        judge read, and what did it conclude from it". The `retrieval` rung makes this sharper --
+        the judge sees a BM25 top-k subset and is not told so, so a sub-claim marked unsupported
+        may simply have had its evidence retrieved away. Only the per-sub-claim mapping
+        distinguishes a rubric defect from a retrieval defect.
+
+        `locator` (`pdfs/<citekey>/content.txt#L22`, relative to the claim's staging dir) rides
+        along with each snippet so scattered-versus-clustered evidence is visible without opening
+        the source. `claim_type` and `rubric_variant` are the judge's own read of the claim and
+        the rubric version that produced the verdict -- both plausible upstream causes of a wrong
+        label, and both previously invisible.
+
+        The flat fields are KEPT rather than replaced: `context/release-format.md` describes them,
+        and this is a widening, not a migration. TRAIN-only either way (the caller returns early
+        for any other split), so no gold-label surface changes -- the cited papers are public
+        biomedical literature and Tier 1 is fully open by design.
         """
-        blank = {"claim_text": None, "evidence_snippets": [], "adjudicator_reasoning": {}}
+        blank = {
+            "claim_text": None,
+            "claim_type": None,
+            "rubric_variant": None,
+            "evidence_snippets": [],
+            "adjudicator_reasoning": {},
+            "sub_claims": [],
+        }
         claim_id = record.get("claim_id")
         try:
             verdict = json.loads(
@@ -897,6 +926,26 @@ class SarolScorer:
                 "overall_flag": verdict.get("overall_flag"),
                 "remediation": verdict.get("remediation"),
             },
+            "claim_type": verdict.get("claim_type"),
+            "rubric_variant": verdict.get("rubric_variant"),
+            "sub_claims": [
+                {
+                    "sub_claim_id": sub.get("sub_claim_id"),
+                    "text": sub.get("text"),
+                    "verdict": sub.get("verdict"),
+                    "nuance": sub.get("nuance"),
+                    "evidence": [
+                        {
+                            "snippet": ev.get("snippet"),
+                            "locator": ev.get("locator"),
+                            "section": ev.get("section"),
+                            "line": ev.get("line"),
+                        }
+                        for ev in (sub.get("evidence") or [])
+                    ],
+                }
+                for sub in subs
+            ],
         }
 
     def score(self, artifacts, split, task_config):  # positional -- loop.py:336/:337
@@ -1388,9 +1437,23 @@ def _selftest() -> int:
             (pathlib.Path(tmp) / "ledger" / "claims" / "C2.json").write_text(json.dumps({
                 "claim_id": "C2",
                 "claim_text": "the citing sentence",
-                "sub_claims": [{"verdict": "ACCURATE",
-                                "nuance": "the passage states it directly",
-                                "evidence": [{"snippet": "a fourfold acceleration"}]}],
+                "claim_type": {"type": "PARAPHRASED", "confidence": "medium"},
+                "rubric_variant": "verdict_schema_sarol@v3",
+                # TWO sub-claims with DISJOINT evidence. One would not distinguish a real
+                # per-sub-claim mapping from the flat union that shipped before.
+                "sub_claims": [
+                    {"sub_claim_id": "C2.a", "text": "the first half",
+                     "verdict": "ACCURATE",
+                     "nuance": "the passage states it directly",
+                     "evidence": [{"snippet": "a fourfold acceleration",
+                                   "locator": "pdfs/k2/content.txt#L22",
+                                   "section": "content", "line": 22}]},
+                    {"sub_claim_id": "C2.b", "text": "the second half",
+                     "verdict": "NOT_SUBSTANTIATE",
+                     "evidence": [{"snippet": "no comparable effect was observed",
+                                   "locator": "pdfs/k2/content.txt#L91",
+                                   "section": "content", "line": 91}]},
+                ],
                 "overall_flag": None,
                 "remediation": {"category": "REWORD", "suggested_edit": "narrow the scope"},
             }), encoding="utf-8")
@@ -1414,6 +1477,8 @@ def _selftest() -> int:
             row = corpus_file["claims"][0]
             val_score = scored_with("val", mroot)
             built = build_mistake_corpus(ok_artifacts, train_score)
+            _subs = row.get("sub_claims") or []
+            _failing_sub = _subs[1] if len(_subs) > 1 else {}
 
             checks += [
                 ("a TRAIN score writes a per-claim mistake corpus",
@@ -1426,18 +1491,47 @@ def _selftest() -> int:
                 ("...listing only the claims that were wrong, with the denominator beside them",
                  corpus_file["n_mistakes"] == 1 and corpus_file["n_correct"] == 1
                  and corpus_file["n_scored"] == 2),
-                ("...and `claims` carrying exactly C6.8's nine fields",
+                ("...and `claims` carrying C6.8's nine fields plus the three that carry the "
+                 "judge's working rather than only its conclusion",
                  set(corpus_file["claims"][0]) == {
                      "claim_id", "citekey", "claim_text", "evidence_snippets",
                      "pred_label", "gold_label", "pred_3way", "gold_3way",
-                     "adjudicator_reasoning"}),
+                     "adjudicator_reasoning", "claim_type", "rubric_variant",
+                     "sub_claims"}),
                 ("...naming which claim failed", row["claim_id"] == "C2"),
                 ("...what it answered and what gold said",
                  row["pred_label"] == "ACCURATE" and row["gold_label"] == "CONTRADICT"),
                 ("...at the granularity the frontier is scored on",
                  row["pred_3way"] == "ACCURATE" and row["gold_3way"] == "NOT_ACCURATE"),
-                ("...the evidence the judge actually saw",
-                 row["evidence_snippets"] == ["a fourfold acceleration"]),
+                ("...the evidence the judge actually saw, flattened across sub-claims as before",
+                 row["evidence_snippets"] == ["a fourfold acceleration",
+                                              "no comparable effect was observed"]),
+
+                # The flat list above is the UNION and cannot answer "which evidence drove the
+                # sub-verdict that went wrong" -- the question that separates a rubric defect
+                # from a retrieval one. These pin the per-sub-claim mapping.
+                # Read defensively. A gate that raises KeyError when its property is absent
+                # reports a crashed suite instead of a named failure, and the crash masks every
+                # later check in the block -- so the negative control that proves the gate works
+                # cannot say WHICH property went missing. Verified 2026-09-03: with the mapping
+                # reverted these five report five clean failures rather than one traceback.
+                ("each sub-claim carries its own text and verdict, so a rollup error can be "
+                 "traced to the sub-claim that caused it",
+                 [(c.get("sub_claim_id"), c.get("verdict")) for c in _subs]
+                 == [("C2.a", "ACCURATE"), ("C2.b", "NOT_SUBSTANTIATE")]),
+                ("...with the evidence MAPPED to it rather than pooled -- the failing sub-claim "
+                 "shows only what the judge cited for it",
+                 [ev.get("snippet") for ev in _failing_sub.get("evidence", [])]
+                 == ["no comparable effect was observed"]),
+                ("...and located, so scattered-versus-clustered evidence is visible without "
+                 "opening the source",
+                 next(iter(_failing_sub.get("evidence", [])), {}).get("locator")
+                 == "pdfs/k2/content.txt#L91"),
+                ("the judge's own read of the claim rides along, being a plausible upstream "
+                 "cause of a wrong label",
+                 row.get("claim_type") == {"type": "PARAPHRASED", "confidence": "medium"}),
+                ("...as does the rubric version that produced the verdict",
+                 row.get("rubric_variant") == "verdict_schema_sarol@v3"),
                 ("...and why it said what it said",
                  "the passage states it directly" in row["adjudicator_reasoning"]["nuance"]),
                 # Blinding hygiene: TRAIN gold is open, raw benchmark provenance is not.
