@@ -274,7 +274,7 @@ fragment reads as CONTRADICT, widen the sibling excuse and a real gap reads as A
 
 **Edit made** (both files; the rule is stated once and referenced once):
 
-1. `specs/verdict_schema_sarol.md` — rewrote "Multi-citation handling". Added a two-case procedure
+1. `experiments/sarol-2024/specs/verdict_schema_sarol.md` — rewrote "Multi-citation handling". Added a two-case procedure
    for fixing the attributable portion, *from the citing sentence alone, before looking at the
    evidence*: (1) the sentence syntactically assigns a clause to this citation → that clause; (2) it
    does not assign, the cluster sits at the end → **the whole claim**, every enumeration item and
@@ -286,7 +286,7 @@ fragment reads as CONTRADICT, widen the sibling excuse and a real gap reads as A
    cluster, which would have pushed a large share of the data into ETIQUETTE and therefore into the
    IRRELEVANT bucket. It now says explicitly that an end-of-sentence cluster is case 2, not
    ambiguity.
-2. `prompts/adjudicator-dispatch-sarol.md` — **deleted** the four-line restatement of the old rule
+2. `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` — **deleted** the four-line restatement of the old rule
    at step 4 and replaced it with a one-line pointer to the rubric section. The prompt shrank by 3
    lines. This was duplication with drift risk (the rubric itself warns against second copies), and
    the prompt's copy carried the same one-directional ACCURATE bias.
@@ -403,7 +403,7 @@ checklist.
 
 **Edit made** (both files):
 
-1. `specs/verdict_schema_sarol.md` — new section **"How much of the claim must be substantiated"**
+1. `experiments/sarol-2024/specs/verdict_schema_sarol.md` — new section **"How much of the claim must be substantiated"**
    (+11 lines, placed between the class list and Rollup). States that the evidence is a
    keyword-retrieved subset, that a missing element counts as genuinely absent only when it is core
    subject matter of the paper (lockdowns in a COVID-interventions paper = retrieval gap;
@@ -411,13 +411,13 @@ checklist.
    central proposition supported + one peripheral element neither found nor contradicted →
    ACCURATE; central proposition unsupported, or an element positively conflicting → 
    NOT_SUBSTANTIATE / CONTRADICT. Closes with what "key element missing" does not mean.
-2. `specs/verdict_schema_sarol.md`, multi-citation section — **amended two of P0's sentences**, not
+2. `experiments/sarol-2024/specs/verdict_schema_sarol.md`, multi-citation section — **amended two of P0's sentences**, not
    reverted. Case 2 now adds that fixing the portion sets what is *in scope* and the threshold
    decides how much of it must be verified. And "the same bar for a missing or mismatched element"
    — which is the element-wise instruction in so many words — became "the same sufficiency
    threshold, no stricter and no softer." P0's directional guard (grouping is never itself a reason
    to prefer ACCURATE) is kept.
-3. `prompts/adjudicator-dispatch-sarol.md` — **deleted** the "often ETIQUETTE or NOT_SUBSTANTIATE"
+3. `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` — **deleted** the "often ETIQUETTE or NOT_SUBSTANTIATE"
    default and replaced it in place with a pointer to the sufficiency threshold. Net zero lines.
 
 Net: rubric +11 lines, prompt ±0. Ladder untouched and still the sole fenced block; no contract
@@ -539,7 +539,7 @@ a direction, a consequence, a temporal finding).
 Note also the second-order failure in `638-48` and `969-93`: *absence of contradiction* was read as
 support. That is a separate leak in the same section and cheap to close in one sentence.
 
-**Edit made** — one file, `specs/verdict_schema_sarol.md`, section "How much of the claim must be
+**Edit made** — one file, `experiments/sarol-2024/specs/verdict_schema_sarol.md`, section "How much of the claim must be
 substantiated". The prompt was deliberately not touched, so the change is single-file attributable.
 
 1. Bounded the peripheral bullet: an element is peripheral **only when the citing sentence states it

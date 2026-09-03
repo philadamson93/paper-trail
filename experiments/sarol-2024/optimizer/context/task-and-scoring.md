@@ -11,9 +11,15 @@ The benchmark is Sarol, Schneider & Kilicoglu 2024, *Assessing Citation Integrit
 Publications* (Bioinformatics btae420): 3,063 human-annotated citation instances with reported
 inter-annotator agreement, split TRAIN 2,141 / VAL 316 / TEST 606.
 
+⚠ **Those are the headline figures, not the pool you are scored against.** A claim whose cited
+bucket carries no evidence annotation has no gold label and is refused at staging, so the
+*drawable* population is **1,699 TRAIN / 255 dev** — roughly 20-24% smaller. The gold table below
+(1,463 + 376 + 34 = 1,873 annotations) is derived from the smaller population, so read the two
+together and do not mix a rate from one with a count from the other.
+
 ## The output vocabulary
 
-Nine labels, defined in the frozen `verdict_enum_sarol.md`. You cannot change this set.
+Nine labels, defined in the frozen `experiments/sarol-2024/specs/verdict_enum_sarol.md`. You cannot change this set.
 
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
@@ -29,8 +35,22 @@ The nine labels collapse to three for the published metric:
 | IRRELEVANT | `ETIQUETTE`, `INDIRECT_NOT_REVIEW`, `IRRELEVANT` |
 
 **3-way macro-F1 is the number being optimized.** It is directly comparable to the published
-baselines — MultiVerS 0.52, GPT-4 4-shot 0.45 — and every class is reachable, so there is no
-ceiling artifact to explain away.
+baselines — MultiVerS 0.52, GPT-4 4-shot 0.45.
+
+⚠ **An earlier version of this document claimed every class is reachable and there is no ceiling
+artifact. That was wrong, and the 2026-09-02 run disproved it.** Neither `program-v0` nor any
+optimized version ever predicted a member of the IRRELEVANT bucket, so its F1 was structurally
+0.000 and roughly **one third of the frontier metric was pinned at zero before the program did
+anything.** At a 1.8% gold base rate against TRAIN batches of 25-50, seeing zero instances is the
+*expected* outcome, not bad luck.
+
+Two things follow for you. First, a macro-3 of 0.49 is not "two thirds of the way to 0.75" — the
+IRRELEVANT third may be unavailable on your batch, so read `support_3way` / `support_9way` before
+you interpret the level of any macro number. Second, **do not chase IRRELEVANT.** At that base
+rate a wrong IRRELEVANT prediction costs you on ACCURATE and gains nothing. Whether the estimator
+itself should change (stratifying the draw, or reporting macro over reachable classes only) is an
+open decision above your level; it is flagged here so you do not mistake the artifact for your
+program's failure.
 
 ### Micro-F1 is reported. It is not the objective, and it is a trap
 
@@ -70,11 +90,44 @@ against whatever the gold class was, and counted under `invalid_label` and
 
 ## Known failure modes
 
-These are real, observed on a stratified N=5 smoke run in April 2026
-(`docs/plans/experiment-april-20-findings.md`). They are a head start, not a complete taxonomy —
-and the sample was five claims, so treat the first as established and the second as a hypothesis.
+A head start, not a complete taxonomy. **Read the ordering caveat first:** modes 1 and 2 were
+observed on a stratified **N=5** smoke run in April 2026
+(`docs/plans/experiment-april-20-findings.md`); modes 3, 4 and 5 come from the **n=50** run of
+2026-09-02 and are correspondingly better evidenced. Where they disagree, prefer the larger sample.
 
-### 1. The INDIRECT-detection blind spot — established, and the highest-value target
+### 3. The judge is too STRICT, not too lenient — n=50, and it inverts mode 1's advice
+
+The strongest signal in the 2026-09-02 run: iteration 2's mistake corpus was **16 of 19 rows with
+gold `ACCURATE`**. The program was calling correct citations inaccurate far more often than the
+reverse. Mode 1 below points you at making the judge *stricter* about indirect attribution; on n=50
+the error mass sat squarely on the other side. Start here, and read `per_class_f1` for ACCURATE
+against the NOT_ACCURATE classes before you accept either framing.
+
+### 4. Retrieval silence read as absence — n=50, and invisible to the judge
+
+Under `retrieval` the judge is handed a BM25 top-*k* subset of the cited paper and **nothing in the
+prompt or the rubric tells it that it is a subset.** Observed consequence: given 20 chunks of a
+COVID-NPI paper, the judge located two of five named interventions and wrote that lockdowns are
+things "this paper never discusses" — of a paper about lockdowns.
+
+So an "unsupported" verdict on this rung conflates two very different things: the paper does not
+say it, and the retrieved window did not contain it. The rubric is yours to edit and this
+distinction is exactly the kind it can carry. `sub_claims[].evidence[].locator` in the mistake
+corpus is how you tell them apart — scattered locators across the paper mean broad coverage, a
+tight cluster means you are looking through a keyhole.
+
+### 5. The judge does not decompose multi-proposition claims — n=50
+
+Every one of the 50 TRAIN claims produced exactly **one** sub-claim. On at least 5 of them the
+judge's own `nuance` prose named two propositions — *"both halves of the citing sentence"*, *"the
+morbidity conjunct"* — and still emitted a single sub-claim covering both.
+
+This matters twice over. A sentence whose first half is supported and second half is not has no way
+to be scored as such, so it gets one verdict for two claims; and the worst-wins rollup is the
+identity function while this holds, which makes the strictness ladder inert (see
+`experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`). The rubric governs decomposition, so this is in scope for you.
+
+### 1. The INDIRECT-detection blind spot — N=5 only; see mode 3 before prioritising it
 
 The adjudicator calls indirectly-attributed claims `ACCURATE`. Two of five claims failed this way,
 including the most clear-cut INDIRECT case available: a cited review in which *every* relevant
@@ -85,7 +138,9 @@ The shape: the cited paper contains the fact, but credits someone else for it. T
 should have cited the primary. `INDIRECT` when the cited paper is a review,
 `INDIRECT_NOT_REVIEW` otherwise.
 
-Why this one is worth attacking first:
+Why it looked worth attacking first — and why the n=50 evidence complicates that (mode 3 found the
+error mass on the leniency side, and no mistake in the three 2026-09-02 corpora carried gold
+`INDIRECT` at all beyond a single instance):
 
 - **The signal is lexically detectable.** Evidence snippets that support the claim end in citation
   markers — `(12)`, `(12,15)`, `(Ota et al., 2009)`. If every supporting quote carries one, the
@@ -101,7 +156,7 @@ Note the collapse: `INDIRECT` → NOT_ACCURATE but `INDIRECT_NOT_REVIEW` → IRR
 review/not-review distinction wrong moves the answer across two different 3-way buckets, so it
 costs you on the frontier scalar, not just on the 9-way breakdown.
 
-### 2. Severity under-commitment — tentative, and mostly invisible to the frontier
+### 2. Severity under-commitment — N=5, tentative, and mostly invisible to the frontier
 
 Two of five claims landed one step down a severity ladder from gold: gold `NOT_SUBSTANTIATE`
 predicted `OVERSIMPLIFY`, and gold `CONTRADICT` predicted `NOT_SUBSTANTIATE`. The second is the

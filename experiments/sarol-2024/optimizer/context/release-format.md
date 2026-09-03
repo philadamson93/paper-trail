@@ -1,7 +1,9 @@
 # Release format — what you are handed each iteration
 
 Two files land per iteration, written by the engine before your session starts:
-`iter/<n>/release_train.json` and `iter/<n>/release_val.json`. They are deliberately not the same
+`iter/<n>/release_train.json` and `iter/<n>/release_val.json`, where `<n>` is the iteration number
+your turn prompt gives you. **Every path in this document is relative to your working directory,
+which is the repository root.** They are deliberately not the same
 shape, and the difference is the whole leakage design.
 
 ## TRAIN release — Tier 1, fully open
@@ -69,10 +71,57 @@ Its shape is an object wrapping the per-claim list:
       "pred_3way": "ACCURATE",   "gold_3way": "NOT_ACCURATE",
       "adjudicator_reasoning": {
         "sub_claim_verdicts": ["ACCURATE"], "nuance": ["..."],
-        "overall_flag": null, "remediation": { "category": "...", "suggested_edit": "..." } } }
+        "overall_flag": null, "remediation": { "category": "...", "suggested_edit": "..." } },
+
+      "claim_type": { "type": "PARAPHRASED", "confidence": "medium" },
+      "rubric_variant": "sarol_2024_9class",
+      "sub_claims": [
+        { "sub_claim_id": "C042.a", "text": "<the proposition actually judged>",
+          "verdict": "ACCURATE", "nuance": "...",
+          "evidence": [ { "snippet": "...", "locator": "pdfs/ref_a1b2c3/content.txt#L22",
+                          "section": "content", "line": 22 } ] }
+      ] }
   ]
 }
 ```
+
+### `sub_claims` — which evidence drove which sub-verdict
+
+`evidence_snippets` above is the **union** of every sub-claim's evidence, and
+`adjudicator_reasoning.sub_claim_verdicts` is a bare list of labels with no text attached. Between
+them they can tell you a claim was wrong and which passages were in play, but not *which passage
+drove the sub-verdict that went wrong* — which is the question you have to answer to fix a rubric.
+
+`sub_claims` closes that: each entry carries the proposition the judge actually evaluated, the
+verdict it gave that proposition, and the evidence **mapped to it**, with a `locator`
+(`pdfs/<citekey>/content.txt#L22`) so you can see whether the retrieved passages cluster in one
+part of the paper or are scattered across it. Under `retrieval` that distinction matters more than
+it sounds: the judge sees a BM25 top-*k* subset and is **not told that it is a subset**, so a
+sub-claim marked unsupported may simply have had its evidence retrieved away. Only the per-sub-claim
+mapping separates a rubric defect from a retrieval one.
+
+⚠ **`sub_claims` is currently almost always length 1.** In the 2026-09-02 run every one of 50
+claims produced exactly one sub-claim — even the five where the judge's own `nuance` named two
+propositions ("both halves of the citing sentence", "the morbidity conjunct"). The claims
+decompose; the judge is not decomposing them. Two consequences: the worst-wins rollup is currently
+the identity function (see `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md` on the ladder), and **making the judge
+decompose is an available target with direct evidence behind it.**
+
+`claim_type` is the judge's own read of the claim (`PARAPHRASED`, `DIRECT`, …) and `rubric_variant`
+names the rubric version that produced the verdict — both are plausible upstream causes of a wrong
+label, and both were previously invisible to you.
+
+### `trace_ref` — the judge's full session, if you want it
+
+The run manifest records, per claim and per stage, a `trace_ref` pointing at a copy of the judge's
+own session transcript (`<run>/traces/<claim_id>-<stage>.jsonl`), alongside the `model` that
+produced it and the `session_id`.
+
+**This is an optional read and nothing pushes it into your context.** Open one when the structured
+fields above leave you genuinely unsure *why* the judge concluded what it did — it is the full
+reasoning, not a summary. It is also large: opening many of them will exhaust your session budget
+long before it teaches you anything, and `## Output discipline` in your standing instructions still
+applies. One or two, on the claims you actually care about, is the intended use.
 
 **Read `n_correct` before `n_mistakes`.** Three mistakes out of ten is a disaster; three out of
 three hundred is close to ceiling, and the same list of three looks identical either way. The
@@ -83,7 +132,7 @@ listed. That is a deliberate boundary: your job is to fix mistakes without break
 works, and `n_correct` is how you notice if you did.
 
 ⚠ **What is NOT here, and why.** There is no verifier bounce history: under the `retrieval` profile
-no verifier runs at all (see `playbook.md`). `evidence_snippets` under that profile are the BM25
+no verifier runs at all (see `experiments/sarol-2024/optimizer/context/playbook.md`). `evidence_snippets` under that profile are the BM25
 top-*k* passages, not an extractor's chosen quotes. And TRAIN is Tier 1 — gold labels are open to
 you here, deliberately, because that is the mechanism by which you learn. Raw benchmark provenance
 (row ids, paper buckets, which split a claim came from) is withheld even so; you have no use for it.
@@ -100,9 +149,10 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
   "metrics": {
     "primary_metric": { "name": "sarol_3way_macro_f1", "value": 0.39,
                         "higher_is_better": true },
-    "breakdown": { "scored": true, "n_total": 316, "n_invalid": 0,
-                   "requested_count": 316, "split": "val",
-                   "profile": "retrieval" }
+    "breakdown": { "scored": true, "n_total": 50, "n_invalid": 0,
+                   "requested_count": 50, "split": "val",
+                   "profile": "retrieval", "retrieval_k": 20,
+                   "model": "claude-haiku-4-5" }
   }
 }
 ```
@@ -110,6 +160,13 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
 That is the entire VAL surface. **No per-class F1, no confusion matrix, no error-class counts, no
 per-example anything.** The scalar plus enough metadata to distinguish a real score from a partial
 batch.
+
+`profile`, `retrieval_k` and `model` are **run identity**, not signal: they say which pipeline, how
+much evidence, and which judge produced the number. A macro-F1 quoted without them is not a
+result, and none of the three tells you anything about which claims went which way. The judge model
+is configurable (`--model`) and defaults to a cheap one, since it runs once per claim and is where
+essentially all of a run's cost is — so two numbers from different runs are only comparable when
+this field matches.
 
 `n_invalid` is the one borderline field, and it is included deliberately: it is a bare count of
 malformed predictions, never a distribution over classes, so it tells you *that* output was
@@ -146,11 +203,16 @@ never actually the problem.
   separately and consumer-side by `dispatcher.py`. If a run stops for budget reasons it will say so
   explicitly; you will not see it coming in this field.
 
-## `followups`
+## Checking your own predictions
 
-When your previous change note named target verdict classes, the next TRAIN release reports how
-those specific classes moved, previous versus current. This only works if you named them, which is
-the practical reason the playbook asks you to.
+There is **no `followups` key and nothing scores your predictions back to you.** An earlier version
+of this document promised one; no code ever emitted it, so the promise is removed rather than left
+standing.
+
+What you do instead: name the target verdict classes in `experiments/sarol-2024/optimizer/meta-learnings.md` when you make an edit,
+and next iteration read `per_class_f1` and `per_class_f1_9way` in the new TRAIN release against
+what you wrote. The comparison is yours to make. It is still the thing that turns an iteration
+into a test rather than a guess — the automation is what is missing, not the discipline.
 
 ## Schema stability
 
