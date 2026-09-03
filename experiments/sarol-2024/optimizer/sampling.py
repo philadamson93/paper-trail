@@ -268,6 +268,49 @@ def stage_batch(
     return batch_path
 
 
+def val_inputs_for(
+    *,
+    n: int,
+    split: str,
+    run_id: str,
+    staging_root: pathlib.Path,
+    batch_root: pathlib.Path,
+    history_path: pathlib.Path,
+    source_mode: str = "corpus",
+) -> Any:
+    """A **fixed** VAL subsample, drawn once and reused by every iteration of the run.
+
+    Fixed is the whole point, and it is not a convenience. The engine's frontier is a bare scalar:
+    it compares iteration *i*'s VAL score against the best so far and steps back when the score
+    drops. Redrawing VAL each iteration would make that comparison span two different claim sets,
+    so ordinary sampling noise would read as a regression and trigger step-backs that have nothing
+    to do with the program. One draw per run, held constant.
+
+    The draw is seeded and iteration-independent (`SEED + 0`), so a resumed run reconstructs the
+    same set without needing to persist it — and `history_path` still records the exact claim_ids,
+    which is the audit trail for "which 50 claims is this number over?".
+
+    ⚠ Two VAL sizes are two different measurements. A score over a 50-claim VAL is not comparable
+    to one over the full pool, and neither is comparable to a published baseline computed over the
+    whole dev set. `--val-n` buys a real number sooner; it does not buy a comparable one.
+    """
+    from adapter import _import_engine  # noqa: PLC0415
+
+    schemas = _import_engine()
+    units = resolve_batch(0, n=n, mode="fresh", split=split, history_path=history_path)
+    batch_path = pathlib.Path(batch_root) / f"{run_id}-val.json"
+    stage_batch(
+        units,
+        split=split,
+        staging_root=staging_root,
+        batch_path=batch_path,
+        source_mode=source_mode,
+    )
+    return schemas.RunInputs(
+        input_ref=str(batch_path), batch_id=f"{run_id}-val", split="val"
+    )
+
+
 def train_inputs_factory(
     *,
     schedule: "list[int]",
@@ -379,6 +422,22 @@ def _selftest() -> int:
         checks.append(("an unknown mode is refused",
                        _raises(lambda: resolve_batch(0, n=1, mode="random", split="dev",
                                                      history_path=hist, pool=pool), ValueError)))
+
+    # -- VAL must be ONE draw held constant, or the frontier compares two different sets ----------
+    with tempfile.TemporaryDirectory() as tmp:
+        hist = pathlib.Path(tmp) / "val_draw.json"
+        v_a = resolve_batch(0, n=10, mode="fresh", split="dev", history_path=hist, pool=pool)
+        v_b = resolve_batch(0, n=10, mode="fresh", split="dev", history_path=hist, pool=pool)
+        checks.append((
+            "a VAL draw is reproducible across calls, so every iteration scores the same claims "
+            "and a step-back means the program moved, not the sample",
+            [u.claim_id for u in v_a] == [u.claim_id for u in v_b],
+        ))
+        v_c = resolve_batch(0, n=20, mode="fresh", split="dev", history_path=hist, pool=pool)
+        checks.append((
+            "...but a different VAL size is a different measurement, not a superset",
+            [u.claim_id for u in v_c] != [u.claim_id for u in v_a],
+        ))
 
     # -- the draw unit ----------------------------------------------------------------------------
     checks.append(("a unit's claim_id carries both row and bucket, so two buckets of one claim "

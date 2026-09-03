@@ -666,7 +666,21 @@ def run_optimization(
                 input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train"
             )
         ),
-        val_inputs=RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val"),
+        # A sampled VAL when one was asked for, the caller's fixed batch otherwise. Drawn ONCE and
+        # held constant for the run: the engine's frontier is a bare scalar, so a VAL that moved
+        # between iterations would turn sampling noise into phantom regressions and step-backs.
+        val_inputs=(
+            sampling.val_inputs_for(
+                n=val_n,
+                split="dev",
+                run_id=run_id,
+                staging_root=pathlib.Path(sampling_root or val_output_root) / "val-staging",
+                batch_root=pathlib.Path(sampling_root or val_output_root) / "val-batches",
+                history_path=pathlib.Path(sampling_root or val_output_root) / "val_draw.json",
+            )
+            if val_n
+            else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
+        ),
         task_config={
             "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
             "profile": parts["profile"].name,
@@ -1259,7 +1273,6 @@ def main(argv: "list[str] | None" = None) -> int:
         required = {
             "--max-budget-usd": args.max_budget_usd,
             "--run-id": args.run_id,
-            "--val-inputs": args.val_inputs,
             "--materialize-root": args.materialize_root,
             "--train-output-root": args.train_output_root,
             "--val-output-root": args.val_output_root,
@@ -1267,6 +1280,9 @@ def main(argv: "list[str] | None" = None) -> int:
         if schedule is None:
             required["--train-n"] = args.train_n
             required["--train-inputs"] = args.train_inputs
+        # --val-n draws and stages its own VAL batch, so a supplied one would be ignored.
+        if not args.val_n:
+            required["--val-inputs"] = args.val_inputs
         missing = [flag for flag, value in required.items() if value is None]
         if missing:
             print(f"--run requires: {', '.join(missing)}", file=sys.stderr)
