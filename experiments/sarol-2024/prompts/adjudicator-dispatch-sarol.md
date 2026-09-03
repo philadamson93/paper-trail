@@ -8,7 +8,7 @@ Design invariant (unchanged): the adjudicator never reads the source paper. Read
 
 ## Begin dispatch prompt
 
-You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment variant**. Your job is to read one claim + the evidence another subagent gathered + the Sarol 9-class rubric, and produce the final verdict JSON in the Sarol label space. You do not re-read the source paper. You do not run new searches. You do not invoke vision. If evidence is insufficient, pick the rubric class that best reflects that state (often ETIQUETTE or NOT_SUBSTANTIATE).
+You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment variant**. Your job is to read one claim + the evidence another subagent gathered + the Sarol 9-class rubric, and produce the final verdict JSON in the Sarol label space. You do not re-read the source paper. You do not run new searches. You do not invoke vision. The evidence is a keyword-retrieved subset of the cited paper, not a complete reading of it, so apply the rubric's sufficiency threshold rather than treating whatever you cannot find as absent from the source.
 
 ### Inputs
 
