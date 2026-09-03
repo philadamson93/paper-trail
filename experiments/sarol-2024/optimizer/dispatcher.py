@@ -58,6 +58,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 import adapter  # noqa: E402
+import canary as canary_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 from adapter import STAGES, SarolProgramStore  # noqa: E402
@@ -150,6 +151,38 @@ class CostModel:
         scored = (train_n + val_calls * self.val_size) * self.stages_per_claim
         return scored + self.canary_sessions(probe_cached=probe_cached)
 
+    def remaining_iteration_cost(
+        self, split: str, *, train_n: int, probe_cached: bool = False
+    ) -> float:
+        """Cost still owed to FINISH the current iteration, counted from ``split``'s call.
+
+        The engine's sequence is TRAIN -> VAL -> (agent) -> probe-VAL. Pricing from the current
+        position is what makes "refuse to start" mean "refuse to start something that would strand
+        the iteration half-paid-for".
+
+        **This lives on the cost model, not on the guard, on purpose.** ``BudgetGuard`` previously
+        did its own arithmetic and omitted the canary term that ``sessions_per_iteration`` charges
+        -- so once a canary was actually wired, the preflight priced three firings per iteration
+        and the per-call refusal priced none. A run could clear the guard with enough money for its
+        scored claims and none for the canary it dispatches FIRST. That is the `--val-n` defect's
+        exact shape: an estimate and an enforcement reading two different models. One arithmetic
+        source is what stops them drifting a third time.
+        """
+        remaining_val_calls = 1 if probe_cached else 2
+        val_sessions = self.val_size * self.stages_per_claim
+        scored = remaining_val_calls * val_sessions
+        runner_calls = remaining_val_calls
+        if split == "train":
+            scored += train_n * self.stages_per_claim
+            runner_calls += 1
+        if self.canary_enabled:
+            # Conservative when the canary fires once per ITERATION rather than per call: it may
+            # already have fired, but over-reserving refuses a run that could not finish, while
+            # under-reserving strands one mid-iteration. Only one of those is recoverable.
+            firings = runner_calls if self.canary_per_runner_call else 1
+            scored += firings * self.stages_per_claim
+        return scored * self.per_session_usd
+
     def table(self, ladder: tuple[int, ...] = TRAIN_LADDER) -> list[dict[str, Any]]:
         rows = []
         for n in ladder:
@@ -230,17 +263,13 @@ class BudgetGuard:
     def worst_case_to_finish_iteration(self, split: str, *, probe_cached: bool = False) -> float:
         """Cost of this call plus whatever else the current iteration still owes.
 
-        The engine's per-iteration sequence is TRAIN -> VAL -> (agent) -> probe-VAL. Pricing from
-        the current position is what makes "refuse to start" mean "refuse to start something that
-        would strand the iteration half-paid-for".
+        Delegates to :meth:`CostModel.remaining_iteration_cost` rather than re-deriving the
+        arithmetic here. The guard used to compute its own TRAIN+VAL total and silently omit the
+        canary the preflight charged for -- see that method's docstring; the delegation is the fix.
         """
-        val = self.cost_model.batch_cost(self.cost_model.val_size)
-        train = self.cost_model.batch_cost(self.train_n)
-        if split == "train":
-            remaining_val_calls = 1 if probe_cached else 2
-            return train + remaining_val_calls * val
-        # A VAL call: either the current-version score (probe still owed) or the probe itself.
-        return val if probe_cached else 2 * val
+        return self.cost_model.remaining_iteration_cost(
+            split, train_n=self.train_n, probe_cached=probe_cached
+        )
 
     def check(self, split: str, *, probe_cached: bool = False) -> str | None:
         need = self.worst_case_to_finish_iteration(split, probe_cached=probe_cached)
@@ -493,8 +522,15 @@ def build_components(
     # `val_n` is the cost lever, and it has to reach the cost model or the preflight prices a run
     # that is not the one about to happen. VAL is charged TWICE per iteration at a fixed size, so
     # at TRAIN=10 it is ~98% of the bill -- subsampling TRAIN alone barely moves it.
+    # The canary is priced from whether one is actually WIRED, never from a separate flag. The
+    # 2026-09-02 run priced three canary firings per iteration and ran none: `canary_enabled`
+    # defaulted True while `canary` defaulted None, and the two could not see each other. Deriving
+    # one from the other makes "priced but absent" unrepresentable rather than merely discouraged.
     cost_model = CostModel.for_profile(
-        prof, per_session_usd=per_session_usd, val_size=val_n or VAL_SIZE
+        prof,
+        per_session_usd=per_session_usd,
+        val_size=val_n or VAL_SIZE,
+        canary_enabled=canary is not None,
     )
     # C6.9. Stated, not derived: `train_output_root` is where the per-claim mistake corpus lands
     # and must be readable by the optimizer; `val_output_root` must not be.
@@ -561,6 +597,7 @@ def run_optimization(
     draw_mode: str = "cumulative",
     val_n: int | None = None,
     sampling_root: pathlib.Path | None = None,
+    require_canary: bool = True,
     **component_kwargs,
 ):
     """Drive the engine's ``run_loop``. This is the entrypoint the plan's Files-to-create names.
@@ -584,6 +621,7 @@ def run_optimization(
     if str(engine_root) not in sys.path:
         sys.path.insert(0, str(engine_root))
     from engine.loop import run_loop  # noqa: PLC0415
+    from engine.loop_ops import LocalLoopOps  # noqa: PLC0415
     from engine.schemas import RunInputs  # noqa: PLC0415
 
     # A real run must SAY where its outputs go. Both roots are load-bearing and neither has a
@@ -613,6 +651,32 @@ def run_optimization(
         blocked = profiles_mod.unrunnable_reason(profile)
         if blocked:
             raise ValueError(blocked)
+
+        # FAIL CLOSED on a missing canary (Finding 4). The 2026-09-02 run carried `"canary": null`
+        # in every manifest: it was designed, resolved (OQ12), priced at three firings per
+        # iteration -- and never constructed, because `CanarySpec` defaulted to None and no code
+        # path noticed. So no number that run produced carries the round-trip guarantee the design
+        # calls load-bearing, and nothing said so.
+        #
+        # A silently absent guard is worse than no guard: it buys the confidence without the
+        # check. Absence therefore stops the run, here, before anything is dispatched. Turning it
+        # off is possible but has to be SAID -- `require_canary=False` / `--no-canary` -- and the
+        # cost model then prices the cheaper reality, so the estimate and the run stay the same
+        # run. Refused at this entrypoint rather than in `build_components` for the same reason
+        # the output roots are: selftests must still be able to assemble components freely.
+        if require_canary and component_kwargs.get("canary") is None:
+            pinned = canary_mod.load(profiles_mod.get(profile).name)
+            if pinned is None:
+                raise ValueError(
+                    f"no round-trip canary is pinned for profile "
+                    f"{profiles_mod.get(profile).name!r}. Every number from a run without one "
+                    "lacks the instrument check the design requires, and the first optimization "
+                    "run produced exactly that silently. Pin one with "
+                    f"`python3 canary.py --pin --profile {profiles_mod.get(profile).name} "
+                    "--repeat 3` (costs real sessions), or say `--no-canary` to run without it "
+                    "-- which also reprices the run, so the estimate stays honest."
+                )
+            component_kwargs["canary"] = pinned
 
     # The ramp's top rung, not its first: the affordability check has to describe the most
     # expensive iteration the run can reach. Checking rung 0 would clear a run that cannot pay for
@@ -662,8 +726,8 @@ def run_optimization(
                 history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
             )
             if train_schedule
-            else RunInputs(
-                input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train"
+            else _static_train_inputs(
+                RunInputs, train_input_ref, run_id=run_id, train_n=train_n
             )
         ),
         # A sampled VAL when one was asked for, the caller's fixed batch otherwise. Drawn ONCE and
@@ -696,7 +760,47 @@ def run_optimization(
         materialize_root=pathlib.Path(materialize_root),
         build_mistake_corpus=parts["build_mistake_corpus"],
         current_tag=current_tag,
+        # ⚠ THIS ARGUMENT IS THE FEEDBACK LOOP. Without it the optimizer optimizes blind.
+        #
+        # `engine/loop.py:378-380` writes `iter/<n>/release_train.json` and `release_val.json`
+        # -- the per-iteration release payload, and the ONLY channel by which the held-out VAL
+        # scalar reaches the optimizer -- inside `if loop_ops is not None`. This call omitted it,
+        # so across all three iterations of the 2026-09-02 run no release file was ever written
+        # and no VAL number was ever visible to the agent. It edited the rubric three times with
+        # zero feedback on the quantity it was told to maximize. That is the entire explanation
+        # for that run's flat curve, and it is a wiring gap, not a result.
+        #
+        # Note the shape of the failure: Tier 2 was *over*-enforced. C6.9 correctly put VAL's
+        # per-claim outputs beyond the optimizer's reach, and then the payload designed to carry
+        # the scalar back across that boundary was never produced -- isolation without signal.
+        #
+        # `LocalLoopOps` is the same-user implementation; paper-trail's optimizer runs as this
+        # account, so there is no cross-user mechanism to express. It writes under `repo_root`,
+        # which is the optimizer's cwd, which is what makes `iter/<n>/release_*.json` readable to
+        # it exactly where `context/release-format.md` says to look. `commit_version` routes
+        # through it too and delegates straight back to `engine.versioning.commit_new_version`,
+        # so commit behaviour is unchanged. The corpus-cleanup paths it also enables are no-ops
+        # here: they require `corpus_ref`, which this consumer does not supply.
+        loop_ops=LocalLoopOps(parts["program_store"].repo_root),
     )
+
+
+def _static_train_inputs(RunInputs, train_input_ref, *, run_id: str, train_n: int | None):
+    """A fixed TRAIN batch, checked against the size the run was PRICED at.
+
+    The ramped path stages its own batch and verifies it (`sampling.assert_staged_size`). This
+    path takes the caller's file as-is -- and `preflight`/`BudgetGuard` still price `train_n`. So
+    a `--train-inputs` file holding 200 claims under `--train-n 10` reproduces the `--val-n`
+    defect exactly: a quote and a guard describing one batch while a different one executes.
+    Reading the file back through the Runner's own reader is the cheap half of never doing that
+    again; it costs one file read against an iteration that costs hundreds of LLM sessions.
+    """
+    if train_n is not None:
+        sampling.assert_staged_size(
+            pathlib.Path(train_input_ref), train_n,
+            label=f"static TRAIN batch for run {run_id} (--train-inputs vs --train-n)",
+        )
+    return RunInputs(input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train")
 
 
 def preflight(cost_model: CostModel, *, train_n: int, iterations: int, max_budget_usd: float):
@@ -755,6 +859,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
     import tempfile
 
     from engine.loop import LoopStop, run_loop  # noqa: PLC0415
+    from engine.loop_ops import LocalLoopOps  # noqa: PLC0415
 
     checks: list[tuple[str, bool]] = []
 
@@ -770,7 +875,9 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                 primary_metric=schemas.PrimaryMetric(
                     name="sarol_3way_macro_f1", value=0.4, higher_is_better=True
                 ),
-                breakdown={"scored": True, "n_total": 1, "n_invalid": 0},
+                breakdown={"scored": True, "n_total": 1, "n_invalid": 0,
+                           "retrieval_k": 20, "profile": "retrieval",
+                           "per_class_f1": {"ACCURATE": 0.9}},
                 task_config={**task_config, "_split": split},
             )
 
@@ -860,6 +967,20 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         _seed_repo(repo2, real_store)
         store2 = SarolProgramStore(repo_root=repo2)
         guarded2 = adapter.ContractGuardedAgent(_CleanAgent(repo2), store2, tree_root=repo2)
+
+        # Record the iteration numbers the engine ACTUALLY hands the train_inputs factory. This is
+        # the cross-repo contract Bug 2 got wrong: `sampling.ramp_for` assumed a 0-based counter,
+        # `engine/loop.py` counts from 1, and the requested 10 -> 25 -> 50 ramp ran 25 -> 50 -> 50
+        # with the cheap rung never firing. `sampling.py`'s own gates could not catch it -- they
+        # asserted that module's convention against itself. Only the real engine can settle it.
+        seen_iter_ns: list[int] = []
+
+        def _recording_train_inputs(iter_n: int):
+            seen_iter_ns.append(iter_n)
+            return schemas.RunInputs(
+                input_ref="unused", batch_id=f"t{iter_n}", split="train"
+            )
+
         completed = False
         try:
             run_loop(
@@ -871,12 +992,14 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                 scorer=_Scorer(),
                 release_builder=adapter.SarolReleaseBuilder(),
                 agent=guarded2,
-                train_inputs=schemas.RunInputs(
-                    input_ref="unused", batch_id="t", split="train"),
+                train_inputs=_recording_train_inputs,
                 val_inputs=schemas.RunInputs(input_ref="unused", batch_id="v", split="val"),
                 task_config={},
                 materialize_root=pathlib.Path(tmp) / "materialized2",
                 current_tag="program-v0",
+                # Exactly what `run_optimization` passes. Without it the engine skips the release
+                # writes entirely, which is the whole of Finding 3.
+                loop_ops=LocalLoopOps(repo2),
             )
             completed = True
         except LoopStop:
@@ -885,14 +1008,152 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         tags2 = subprocess.run(
             ["git", "tag"], cwd=str(repo2), capture_output=True, text=True
         ).stdout.split()
+
+        train_release = repo2 / "iter" / "1" / "release_train.json"
+        val_release = repo2 / "iter" / "1" / "release_val.json"
+        val_payload = (
+            json.loads(val_release.read_text(encoding="utf-8")) if val_release.exists() else {}
+        )
+        val_metric = ((val_payload.get("metrics") or {}).get("primary_metric") or {})
+
         checks += [
             ("an edit inside the EDIT scope is allowed through", completed),
             ("...and does get committed and tagged as a new version", len(tags2) > 1),
+
+            # Bug 2 -- the engine's counting base, read from the engine rather than assumed.
+            ("the engine's FIRST iteration number is what sampling.ENGINE_FIRST_ITER_N claims",
+             seen_iter_ns[:1] == [sampling.ENGINE_FIRST_ITER_N]),
+            ("...so the ramp's first rung is the one that actually runs",
+             bool(seen_iter_ns)
+             and sampling.ramp_for(
+                 sampling.rung_index(seen_iter_ns[0]), [10, 25, 50]) == 10),
+            ("...and the factory is called exactly once per iteration",
+             len(seen_iter_ns) == 1),
+
+            # Finding 3 -- the release payload crossing the seam, asserted by PRESENCE on disk.
+            # A guard that can be absent without announcing itself is not a guard: the first run
+            # produced no release file at all and every offline gate stayed green.
+            ("the loop writes the TRAIN release where the optimizer is told to read it",
+             train_release.exists()),
+            ("...and the VAL release too, which is the ONLY channel carrying the held-out "
+             "scalar back to the optimizer (Finding 3)", val_release.exists()),
+            ("...carrying a real scalar, not an empty envelope",
+             isinstance(val_metric.get("value"), (int, float))),
+            ("...under the optimizer's own tree, so its session can actually open it",
+             val_release.exists() and repo2 in val_release.parents),
+            # Tier 2 is about per-class STRUCTURE, and VAL legitimately carries a `breakdown` of
+            # completeness metadata -- so this searches the whole serialized payload for the
+            # fields that would actually leak, rather than checking for a key at one nesting
+            # level and calling that the boundary.
+            # C6.3: "A macro-F1 without the *k* is not a result" (plan:247). The VAL scalar IS a
+            # reported Phase 1 number, so it has to carry its evidence condition -- while still
+            # carrying no per-class structure. Both halves, asserted against the same payload.
+            ("the VAL release carries its evidence condition (profile AND retrieval_k), so the "
+             "frontier number is reportable under C6.3",
+             (val_payload.get("metrics", {}).get("breakdown", {}) or {}).get("retrieval_k") == 20
+             and (val_payload.get("metrics", {}).get("breakdown", {}) or {}).get("profile")
+             == "retrieval"),
+            ("...while the scorer's per-class structure, offered on the same breakdown, is "
+             "stripped -- so the widening is identity metadata, not leakage",
+             "per_class_f1" not in json.dumps(val_payload)),
+            ("...and the VAL release stays Tier 2: the scalar plus completeness metadata, with "
+             "no per-class structure anywhere in it",
+             not any(leak in json.dumps(val_payload) for leak in (
+                 "per_class_f1", "confusion_matrix", "error_class_counts",
+                 "support_9way", "mistakes_ref"))),
         ]
 
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
     parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False)
+
+    # Finding 4: the canary must be priced from what is WIRED, and a real run must refuse to start
+    # without one. The first optimization run priced three firings per iteration and executed
+    # zero; these are the two checks that make that state unreachable rather than merely unlikely.
+    import tempfile as _tempfile  # noqa: PLC0415
+
+    canary_refusal = None
+    other_refusal = None
+    with _tempfile.TemporaryDirectory() as _tmp:
+        _val_root = pathlib.Path(_tmp) / "val-out"   # outside the repo, so C6.9 passes
+        _common = dict(
+            iterations=1, run_id="gate", train_input_ref="unused", val_input_ref="unused",
+            train_n=1, materialize_root=pathlib.Path(_tmp) / "mat",
+            train_output_root=pathlib.Path(_tmp) / "train-out", val_output_root=_val_root,
+            profile="retrieval",
+        )
+        try:
+            run_optimization(max_budget_usd=1000.0, **_common)
+        except Exception as exc:  # noqa: BLE001 -- the message is what is being asserted
+            canary_refusal = exc
+        # With the canary explicitly waived the run gets PAST that gate and fails later, on
+        # budget. Same call, one flag different -- so this proves the gate is the canary gate and
+        # not some earlier refusal standing in for it.
+        try:
+            run_optimization(max_budget_usd=0.0, require_canary=False, **_common)
+        except Exception as exc:  # noqa: BLE001
+            other_refusal = exc
+
+    # The other half of Bug 1: the RAMPED path stages and verifies its batch, but a fixed
+    # --train-inputs file was handed to the engine unchecked while preflight priced --train-n.
+    with _tempfile.TemporaryDirectory() as _tmp2:
+        _batch = pathlib.Path(_tmp2) / "train.json"
+        _batch.write_text(json.dumps({"claims": [
+            {"claim_id": f"C{i}", "citekey": f"k{i}", "staging_dir": _tmp2} for i in range(3)
+        ]}), encoding="utf-8")
+        _mismatch = _raises_valueerror(
+            lambda: _static_train_inputs(
+                adapter._import_engine().RunInputs, str(_batch), run_id="g", train_n=1))
+        _match = _static_train_inputs(
+            adapter._import_engine().RunInputs, str(_batch), run_id="g", train_n=3)
+
+    no_canary_model = CostModel.for_profile("retrieval", canary_enabled=False)
     checks += [
+        ("a real run REFUSES to start with no canary pinned (Finding 4)",
+         isinstance(canary_refusal, ValueError)),
+        ("...saying so in the message, and naming how to pin one",
+         canary_refusal is not None and "canary" in str(canary_refusal)
+         and "--pin" in str(canary_refusal)),
+        ("...and --no-canary gets PAST that gate, so the refusal really is about the canary",
+         other_refusal is not None and not (
+             isinstance(other_refusal, ValueError) and "canary" in str(other_refusal))),
+        ("a fixed --train-inputs batch whose size disagrees with the priced --train-n is "
+         "REFUSED -- the other half of Bug 1, where the ramp is not in play", _mismatch),
+        ("...and a matching one passes through, so the check is on size and not on the path",
+         _match.input_ref.endswith("train.json") and _match.split == "train"),
+
+        ("a run with no canary wired prices ZERO canary sessions, so 'priced but absent' cannot "
+         "happen again", no_canary_model.canary_sessions() == 0),
+        ("...while a wired one is priced at three firings per iteration, per OQ12",
+         CostModel.for_profile("retrieval").canary_sessions() == 3),
+    ]
+
+    # The check above asserts the COST MODEL's arithmetic, which is not the thing that refuses to
+    # spend. `BudgetGuard` did its own sums and omitted the canary entirely, so those two gates
+    # stayed green while enforcement under-reserved -- a decorative gate of exactly the kind that
+    # let three silent failures through the first run. These assert the GUARD, behaviourally.
+    _with = CostModel.for_profile("retrieval", val_size=5, canary_enabled=True)
+    _without = CostModel.for_profile("retrieval", val_size=5, canary_enabled=False)
+    guard_with = BudgetGuard(max_budget_usd=1e9, cost_model=_with, train_n=4)
+    guard_without = BudgetGuard(max_budget_usd=1e9, cost_model=_without, train_n=4)
+    need_with = guard_with.worst_case_to_finish_iteration("train")
+    need_without = guard_without.worst_case_to_finish_iteration("train")
+    canary_term = _with.canary_sessions() * _with.per_session_usd
+    # A budget that covers the scored claims but NOT the canary must be refused -- the canary is
+    # dispatched FIRST, so this is the case that would strand a run before its first scored claim.
+    tight = BudgetGuard(max_budget_usd=need_without, cost_model=_with, train_n=4)
+    checks += [
+        ("the BUDGET GUARD reserves more when a canary is wired -- not just the cost model",
+         need_with > need_without),
+        ("...by exactly the canary term, so estimate and enforcement cannot drift again",
+         abs((need_with - need_without) - canary_term) < 1e-9),
+        ("a budget covering the scored claims but not the canary is REFUSED, since the canary "
+         "is dispatched before the first scored claim",
+         tight.check("train") is not None),
+        ("...and the same budget is accepted once no canary is wired, so this is the canary term "
+         "and not an off-by-one somewhere else",
+         guard_without.__class__(max_budget_usd=need_without, cost_model=_without,
+                                 train_n=4).check("train") is None),
+
         ("build_components wraps the optimizer agent in the contract guard",
          isinstance(parts["agent"], adapter.ContractGuardedAgent)),
         ("...around the real OptimizerAgent", isinstance(parts["agent"].inner, OptimizerAgent)),
@@ -1258,6 +1519,14 @@ def main(argv: "list[str] | None" = None) -> int:
         help="where drawn batches, their staging trees and draw_history.json land "
              "(default: --train-output-root).",
     )
+    ap.add_argument(
+        "--no-canary",
+        action="store_true",
+        help="run WITHOUT the round-trip canary. A run has one by default and refuses to start "
+             "without a pin, because the first optimization run priced three firings per "
+             "iteration and executed none, silently. This flag makes that choice explicit and "
+             "reprices the run to match.",
+    )
     args = ap.parse_args(argv)
 
     if args.selftest:
@@ -1310,6 +1579,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 sampling_root=(
                     pathlib.Path(args.sampling_root) if args.sampling_root else None
                 ),
+                require_canary=not args.no_canary,
             )
         except BudgetExceeded as exc:
             print(f"REFUSED  {exc}", file=sys.stderr)
@@ -1323,10 +1593,18 @@ def main(argv: "list[str] | None" = None) -> int:
         }, indent=2))
         return 0
 
+    # The preflight table prices what a run would ACTUALLY do: a canary term only if one is
+    # pinned and not waived. A quote that assumes a guard the run will not execute is the same
+    # class of error as the `--val-n` priced-but-not-sampled bug -- an estimate describing a
+    # different run than the one about to happen.
     cost_model = CostModel.for_profile(
         args.profile,
         per_session_usd=args.per_session_usd,
         val_size=args.val_n or VAL_SIZE,
+        canary_enabled=(
+            not args.no_canary
+            and canary_mod.load(profiles_mod.get(args.profile).name) is not None
+        ),
     )
     if args.preflight:
         print(cost_model.render_table())
