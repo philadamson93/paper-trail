@@ -57,6 +57,34 @@ SEED = 20260902
 
 DRAW_MODES = ("cumulative", "fresh", "reproduce")
 
+#: The engine's first ``iter_n``. ``engine/loop.py`` iterates ``for n in range(resume_from + 1,
+#: iterations + 1)``, so on a fresh run the first iteration it hands this module is **1**, not 0.
+#:
+#: This is a cross-repo contract, not a detail. The first optimization run (2026-09-02) ramped
+#: 25 -> 50 -> 50 instead of the requested 10 -> 25 -> 50 because `ramp_for` assumed a 0-based
+#: counter, so the cheap 10-claim rung -- the one whose entire purpose is to fail early -- never
+#: ran. It is stated once here, and `dispatcher._integration_checks` pins it by driving the REAL
+#: ``run_loop`` and recording the values the factory is actually called with. That is deliberate:
+#: this module's own selftests previously asserted the convention against itself, which is how a
+#: wrong base passed 296 green gates.
+ENGINE_FIRST_ITER_N = 1
+
+
+def rung_index(iter_n: int, *, first_iter_n: int = ENGINE_FIRST_ITER_N) -> int:
+    """The engine's ``iter_n`` -> a 0-based ramp rung.
+
+    Deliberately separate from :func:`ramp_for`, which stays a pure 0-based lookup the offline
+    gates can exercise directly. One function knows the engine's counting base; everything else
+    is expressed in rungs.
+    """
+    rung = iter_n - first_iter_n
+    if rung < 0:
+        raise ValueError(
+            f"iter_n={iter_n} is below the engine's first iteration ({first_iter_n}); "
+            "the ramp has no rung for it"
+        )
+    return rung
+
 
 @dataclass(frozen=True)
 class ClaimUnit:
@@ -87,8 +115,12 @@ def claim_pool(split: str) -> list[ClaimUnit]:
     return units
 
 
-def ramp_for(iteration: int, schedule: "list[int]") -> int:
-    """The graduated `N` for this iteration: schedule[i], clamped at the last rung.
+def ramp_for(rung: int, schedule: "list[int]") -> int:
+    """The graduated `N` for a 0-based ramp **rung**: schedule[rung], clamped at the last one.
+
+    Takes a rung, not the engine's ``iter_n`` -- convert with :func:`rung_index` first. Keeping
+    this function 0-based and base-agnostic is what lets the gates below test the ramp itself
+    without also encoding an assumption about who calls it.
 
     A ramp shorter than the run does not fall off the end -- it holds at its top rung, so
     `--iterations 10` against a 3-rung ramp runs seven iterations at full size rather than
@@ -96,9 +128,9 @@ def ramp_for(iteration: int, schedule: "list[int]") -> int:
     """
     if not schedule:
         raise ValueError("ramp schedule is empty")
-    if iteration < 0:
-        raise ValueError(f"iteration must be >= 0, got {iteration}")
-    return schedule[min(iteration, len(schedule) - 1)]
+    if rung < 0:
+        raise ValueError(f"rung must be >= 0, got {rung}")
+    return schedule[min(rung, len(schedule) - 1)]
 
 
 def parse_schedule(text: str) -> list[int]:
@@ -268,6 +300,29 @@ def stage_batch(
     return batch_path
 
 
+def assert_staged_size(batch_path: pathlib.Path, expected_n: int, *, label: str) -> None:
+    """Assert the batch that will actually be EXECUTED holds `expected_n` claims.
+
+    This is the gate Bug 1 was missing. `--val-n` reached :class:`dispatcher.CostModel` but not
+    the sampler, so the preflight quoted $63 for a $647 run -- and because ``BudgetGuard`` reads
+    the same cost model, enforcement was wrong by the same 10x, in the same direction. 296
+    offline gates missed it because every one of them asserted on ``CostModel``, a *pricing*
+    input, and none on the staged batch the Runner is handed.
+
+    So this reads the file back through ``adapter.load_batch`` -- the Runner's own reader -- rather
+    than trusting the list that was just written. Asserting the artifact is the whole point: when
+    a flag both prices work and selects work, a check that only reads the price proves nothing.
+    """
+    from adapter import load_batch  # noqa: PLC0415 -- adapter imports the engine lazily
+
+    actual = len(load_batch(batch_path))
+    if actual != expected_n:
+        raise ValueError(
+            f"{label}: staged {actual} claims but {expected_n} were requested ({batch_path}). "
+            "The batch that gets priced and the batch that gets executed must be the same batch."
+        )
+
+
 def val_inputs_for(
     *,
     n: int,
@@ -306,6 +361,7 @@ def val_inputs_for(
         batch_path=batch_path,
         source_mode=source_mode,
     )
+    assert_staged_size(batch_path, n, label=f"VAL batch for run {run_id}")
     return schemas.RunInputs(
         input_ref=str(batch_path), batch_id=f"{run_id}-val", split="val"
     )
@@ -321,21 +377,30 @@ def train_inputs_factory(
     batch_root: pathlib.Path,
     history_path: pathlib.Path,
     source_mode: str = "corpus",
+    first_iter_n: int = ENGINE_FIRST_ITER_N,
 ) -> Callable[[int], Any]:
-    """The engine's `train_inputs` hook: iteration -> `RunInputs` over that iteration's batch.
+    """The engine's `train_inputs` hook: ``iter_n`` -> `RunInputs` over that iteration's batch.
+
+    The engine calls this with **its** iteration counter, which starts at
+    :data:`ENGINE_FIRST_ITER_N` (1), not at 0. `first_iter_n` states that base explicitly rather
+    than letting the ramp infer it -- inferring it is what skipped the cheapest rung on the first
+    real run. Draw bookkeeping (the seed and `draw_history.json` keys) stays keyed on the engine's
+    own ``iter_n`` so a history file reads the same way the run log does; only the *ramp rung* is
+    rebased.
 
     Imported lazily so this module stays importable (and selftestable) without the engine present.
     """
 
-    def factory(iteration: int):
+    def factory(iter_n: int):
         from adapter import _import_engine  # noqa: PLC0415 -- engine is optional at import time
 
         schemas = _import_engine()
-        n = ramp_for(iteration, schedule)
+        rung = rung_index(iter_n, first_iter_n=first_iter_n)
+        n = ramp_for(rung, schedule)
         units = resolve_batch(
-            iteration, n=n, mode=mode, split=split, history_path=history_path
+            iter_n, n=n, mode=mode, split=split, history_path=history_path
         )
-        batch_path = pathlib.Path(batch_root) / f"{run_id}-train-i{iteration}.json"
+        batch_path = pathlib.Path(batch_root) / f"{run_id}-train-i{iter_n}.json"
         stage_batch(
             units,
             split=split,
@@ -343,9 +408,12 @@ def train_inputs_factory(
             batch_path=batch_path,
             source_mode=source_mode,
         )
+        assert_staged_size(
+            batch_path, n, label=f"TRAIN batch for iter {iter_n} (ramp rung {rung})"
+        )
         return schemas.RunInputs(
             input_ref=str(batch_path),
-            batch_id=f"{run_id}-train-i{iteration}",
+            batch_id=f"{run_id}-train-i{iter_n}",
             split="train",
         )
 
@@ -374,6 +442,24 @@ def _selftest() -> int:
          _raises(lambda: parse_schedule("20,10"), ValueError)),
         ("a zero rung is refused", _raises(lambda: parse_schedule("0,5"), ValueError)),
         ("an empty schedule is refused", _raises(lambda: ramp_for(0, []), ValueError)),
+    ]
+
+    # -- the engine's counting base (Bug 2) -------------------------------------------------------
+    # These test the CONVERSION only. That the base really is 1 is pinned in
+    # `dispatcher._integration_checks`, against the real `run_loop` -- asserting it here too would
+    # repeat the original mistake of testing this module's assumption against itself.
+    checks += [
+        ("the engine's first iteration maps to the FIRST rung, not the second -- the whole of "
+         "Bug 2", ramp_for(rung_index(ENGINE_FIRST_ITER_N), [10, 25, 50]) == 10),
+        ("...and the second engine iteration to the second rung",
+         ramp_for(rung_index(ENGINE_FIRST_ITER_N + 1), [10, 25, 50]) == 25),
+        ("...and the third to the third, so a 3-rung ramp over 3 iterations runs all three",
+         ramp_for(rung_index(ENGINE_FIRST_ITER_N + 2), [10, 25, 50]) == 50),
+        ("a 0-based caller under the engine's base is refused rather than silently clamped -- "
+         "the failure Bug 2 wanted",
+         _raises(lambda: rung_index(0, first_iter_n=1), ValueError)),
+        ("the base is a parameter, so a caller that counts from 0 says so",
+         rung_index(0, first_iter_n=0) == 0),
     ]
 
     # -- draws, against a synthetic pool so the gates need no benchmark ---------------------------
