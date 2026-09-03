@@ -589,12 +589,21 @@ class SarolRunner:
         except (OSError, KeyError, json.JSONDecodeError) as exc:
             return artifacts("infra_error", code="BATCH_UNREADABLE", message=str(exc)[:300])
 
+        # Namespace every Runner call under the materialized version it actually ran (Bug 3).
+        # The engine calls this Runner THREE times per iteration -- TRAIN and current-VAL against
+        # `iter<n>-current`, then the post-commit probe against `iter<n>-<tag>` -- and
+        # `materialized_path.name` is the one value already distinct across all three. Without it
+        # every VAL call wrote the same `run_manifest.json`, so only the last survived: the first
+        # optimization run's three-point VAL curve does not exist on disk, and per-call cost
+        # accounting was impossible after the fact. Downstream reads the manifest through the
+        # returned `ArtifactRef`, never a derived path, so nothing depends on the old flat layout.
+        call_ns = pathlib.Path(materialized_path).name
         explicit = self.output_roots.get(inputs.split)
         if explicit is not None:
-            out_dir = explicit
+            out_dir = pathlib.Path(explicit) / call_ns
         else:
             out_root = self.output_root or (materialized_path.parent / f"runs-{inputs.batch_id}")
-            out_dir = pathlib.Path(out_root) / inputs.split
+            out_dir = pathlib.Path(out_root) / inputs.split / call_ns
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Validate against the rubric the program ACTUALLY RAN UNDER -- the materialized copy, not
@@ -685,46 +694,82 @@ class SarolRunner:
                     cost=counter["cost"],
                 )
 
-        results: list[dict[str, Any]] = [process(c) for c in claims]
+        manifest_path = out_dir / "run_manifest.json"
+
+        def write_manifest(records: "list[dict[str, Any]]", *, complete: bool) -> None:
+            """Write the run manifest. Called after EVERY claim, not only at the end.
+
+            The Runner wrote per-claim verdicts incrementally but its manifest only after the whole
+            batch, so a killed run left finished claims on disk with nothing pointing at them. The
+            v0 baseline survived its interruption at 37/50 only because a manifest was rebuilt by
+            hand over the claims that happened to finish -- ad-hoc recovery standing in for a
+            missing feature, on the single most expensive artifact of the run.
+
+            A partial manifest is safe to leave lying around: `requested_count` still names the
+            full batch, so `SarolScorer`'s coverage check reports `scored: False` with a coverage
+            reason rather than letting a half-finished batch reach the frontier as a real number.
+            `complete` says the same thing directly, for whoever is reading the file by hand.
+            """
+            # Roll the validator's own invalid-label counts up to the batch. The Scorer merges
+            # these rather than re-deriving them, because `parse_verdict` only ever sees the
+            # OVERALL label: an invalid SUB-CLAIM verdict under a valid overall verdict would
+            # otherwise score clean and disappear from error_class_counts entirely.
+            validator_counts: dict[str, int] = {}
+            for rec in records:
+                for key, n in (
+                    (rec.get("validation") or {}).get("error_class_counts") or {}
+                ).items():
+                    validator_counts[key] = validator_counts.get(key, 0) + n
+            payload = json.dumps(
+                    {
+                        "batch_id": inputs.batch_id,
+                        "split": inputs.split,
+                        # C6.5: macro-F1 under two profiles measures two different systems, and
+                        # the engine's frontier is a bare scalar that cannot tell them apart.
+                        # Stamping the profile here is the consumer-side half of keeping them
+                        # distinguishable.
+                        "profile": self.profile.name,
+                        "profile_stages": list(self.profile.stages),
+                        "retrieval_k": self.profile.retrieval_k,
+                        # The Scorer's coverage assertion compares against what was actually ASKED
+                        # of the Runner, not against however many records came back.
+                        "requested_count": len(claims),
+                        # False until the last claim lands. A reader finding this file after a
+                        # kill knows immediately whether it describes a finished batch.
+                        "complete": complete,
+                        "claims": records,
+                        "validator_error_class_counts": validator_counts,
+                        "canary": canary_record,
+                        "sub_invocation_count": counter["subs"],
+                        "cost_usd": counter["cost"],
+                    },
+                    indent=2,
+            )
+            # Atomic: serialize to a sibling temp file, then rename over the target. A plain
+            # `write_text` truncates first, so a kill mid-write leaves a TORN manifest -- and this
+            # file is rewritten after every claim precisely so a killed run stays salvageable.
+            # Unreadable JSON at the moment of the kill would defeat the whole point of writing it
+            # early. `os.replace` is atomic within a directory on POSIX, so a reader sees either
+            # the previous complete manifest or the new one, never a half of either.
+            #
+            # Cost noted and accepted: this reserializes the whole manifest per claim, which is
+            # O(n^2) in batch size. At the real rungs (10-200 claims) that is microseconds against
+            # a claim that costs a full LLM session -- ~$1 and ~100s measured. Salvageability is
+            # worth more than the arithmetic; revisit only if a rung ever approaches the full 2,141.
+            tmp_path = manifest_path.with_name(manifest_path.name + ".tmp")
+            tmp_path.write_text(payload, encoding="utf-8")
+            os.replace(tmp_path, manifest_path)
+
+        results: list[dict[str, Any]] = []
+        for claim in claims:
+            results.append(process(claim))
+            write_manifest(results, complete=False)
+        write_manifest(results, complete=True)
+
         timed_out = any(r["status"] == "timeout" for r in results)
         errored = any(r["status"] == "program_error" for r in results)
         total_cost = counter["cost"]
         sub_invocations = counter["subs"]
-
-        # Roll the validator's own invalid-label counts up to the batch. The Scorer merges these
-        # rather than re-deriving them, because `parse_verdict` only ever sees the OVERALL label:
-        # an invalid SUB-CLAIM verdict under a valid overall verdict would otherwise score clean
-        # and disappear from error_class_counts entirely.
-        validator_counts: dict[str, int] = {}
-        for record in results:
-            for key, n in ((record.get("validation") or {}).get("error_class_counts") or {}).items():
-                validator_counts[key] = validator_counts.get(key, 0) + n
-
-        manifest_path = out_dir / "run_manifest.json"
-        manifest_path.write_text(
-            json.dumps(
-                {
-                    "batch_id": inputs.batch_id,
-                    "split": inputs.split,
-                    # C6.5: macro-F1 under two profiles measures two different systems, and the
-                    # engine's frontier is a bare scalar that cannot tell them apart. Stamping the
-                    # profile here is the consumer-side half of keeping them distinguishable.
-                    "profile": self.profile.name,
-                    "profile_stages": list(self.profile.stages),
-                    "retrieval_k": self.profile.retrieval_k,
-                    # The Scorer's coverage assertion compares against what was actually ASKED of
-                    # the Runner, not against however many records came back.
-                    "requested_count": len(claims),
-                    "claims": results,
-                    "validator_error_class_counts": validator_counts,
-                    "canary": canary_record,
-                    "sub_invocation_count": sub_invocations,
-                    "cost_usd": total_cost,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
         ref = schemas.ArtifactRef(
             path=str(manifest_path),
             sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
@@ -976,8 +1021,19 @@ class SarolScorer:
 #: `profile` is on this list and is not a judgement call: it says nothing about *which* held-out
 #: claims were missed or how, only which system produced the number. Withholding it would leave a
 #: VAL scalar that cannot be told apart from a scalar produced by a different experiment (C6.5).
+#: What survives the Tier 2 reduction. The rule is *run condition and completeness, never per-class
+#: structure* -- so `profile` and `retrieval_k` belong and `per_class_f1` / `confusion_matrix` /
+#: `error_class_counts` / `support_9way` / `mistakes_ref` never can.
+#:
+#: `retrieval_k` was missing, which broke the plan's own C6.3: "A macro-F1 without the *k* is not a
+#: result" (`papertrail-optimizer-requirements.md:247`), and every reported Phase 1 number must
+#: carry its profile and, under `retrieval`, its k (`:423`). The VAL scalar IS a reported Phase 1
+#: number -- it is the frontier -- so it was being reported without its evidence condition. `k` is
+#: a scalar property of how the run was configured, identical for every claim, so it discloses
+#: nothing about the held-out set: this widens the identity metadata, not the leakage surface.
 _VAL_BREAKDOWN_ALLOWED = (
     "scored", "reason", "n_total", "n_invalid", "requested_count", "split", "profile",
+    "retrieval_k",
 )
 
 
@@ -1584,6 +1640,108 @@ def _selftest() -> int:
                  res.status == "timeout"),
                 ("the engine checks this status on only 1 of its 3 calls, so we report it",
                  res.sub_invocation_count == 1),
+            ]
+
+            # Bug 3: the three Runner calls of one iteration must not overwrite each other's
+            # manifest. Same split, same batch, different materialized version -- which is exactly
+            # the current-VAL / probe-VAL pair the frontier curve is built from.
+            ns_root = pathlib.Path(tmp) / "ns-out"
+            ns_runner = SarolRunner(
+                store,
+                invoke=timeout_invoke,
+                output_roots={"val": ns_root},
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+            )
+            mat_current = pathlib.Path(tmp) / "iter1-current"
+            mat_probe = pathlib.Path(tmp) / "iter1-program-v1"
+            mat_current.mkdir(exist_ok=True)
+            mat_probe.mkdir(exist_ok=True)
+            val_inputs = schemas.RunInputs(
+                input_ref=str(batch), batch_id="b", split="val"
+            )
+            res_cur = ns_runner.run(mat_current, val_inputs)
+            res_probe = ns_runner.run(mat_probe, val_inputs)
+            cur_path = pathlib.Path(res_cur.artifact_refs[0].path)
+            probe_path = pathlib.Path(res_probe.artifact_refs[0].path)
+            checks += [
+                ("two Runner calls on one VAL batch write to DIFFERENT manifests, so a "
+                 "per-iteration curve survives on disk (Bug 3)", cur_path != probe_path),
+                ("...namespaced by the materialized version each call actually ran",
+                 cur_path.parent.name == "iter1-current"
+                 and probe_path.parent.name == "iter1-program-v1"),
+                ("...both still under the declared VAL output root, so C6.9 isolation holds",
+                 ns_root in cur_path.parents and ns_root in probe_path.parents),
+                ("...and both files really exist rather than one having clobbered the other",
+                 cur_path.exists() and probe_path.exists()),
+            ]
+
+            # Salvageability: a manifest exists after EVERY claim, so a killed run leaves
+            # something pointing at the claims that finished. Asserted by spying on the
+            # filesystem mid-batch rather than by reading the final file, which would prove
+            # nothing about when it appeared.
+            multi_batch = pathlib.Path(tmp) / "multi.json"
+            multi_batch.write_text(json.dumps({"claims": [
+                {"claim_id": f"C{i}", "citekey": f"k{i}", "staging_dir": str(staging)}
+                for i in range(3)
+            ]}), encoding="utf-8")
+            inc_root = pathlib.Path(tmp) / "inc-out"
+            # (claims recorded so far, complete flag) sampled from inside the batch. The default
+            # profile dispatches three stages per claim, so this fires more than once per claim --
+            # what matters is that a manifest is READABLE mid-batch and honestly marked partial.
+            seen_partials: list[tuple[int, Any]] = []
+
+            torn: list[str] = []
+
+            def spy_invoke(cmd, cwd, t):
+                mp = inc_root / "m" / "run_manifest.json"
+                if mp.exists():
+                    # Parsed, not just stat'd. A manifest rewritten in place is readable-but-torn
+                    # exactly when someone looks mid-write, and a salvage path that finds invalid
+                    # JSON is no salvage path at all.
+                    try:
+                        obj = json.loads(mp.read_text(encoding="utf-8"))
+                    except json.JSONDecodeError as exc:
+                        torn.append(str(exc))
+                        return InvocationResult(
+                            exit_code=0, cost_usd=0.0, duration_seconds=0.1
+                        )
+                    seen_partials.append((len(obj["claims"]), obj.get("complete")))
+                return InvocationResult(
+                    exit_code=0, cost_usd=0.0, duration_seconds=0.1
+                )
+
+            inc_runner = SarolRunner(
+                store,
+                invoke=spy_invoke,
+                output_roots={"train": inc_root},
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+            )
+            mat_m = pathlib.Path(tmp) / "m"
+            mat_m.mkdir(exist_ok=True)
+            inc_res = inc_runner.run(
+                mat_m,
+                schemas.RunInputs(input_ref=str(multi_batch), batch_id="inc", split="train"),
+            )
+            final_manifest = json.loads(
+                pathlib.Path(inc_res.artifact_refs[0].path).read_text(encoding="utf-8")
+            )
+            checks += [
+                ("a manifest exists BEFORE the batch finishes, so a killed run is salvagable "
+                 "without rebuilding one by hand", bool(seen_partials)),
+                ("...covering the claims finished so far, and growing",
+                 sorted({n for n, _ in seen_partials}) == [1, 2]),
+                ("...and honestly marked incomplete while it is partial",
+                 all(flag is False for _, flag in seen_partials)),
+                ("the finished manifest says so", final_manifest.get("complete") is True),
+                ("...and still names the full batch, so a partial one cannot pass the Scorer's "
+                 "coverage check as a real number",
+                 final_manifest["requested_count"] == 3),
+                ("every mid-batch read of the manifest parsed as valid JSON -- the write is "
+                 "atomic (temp + rename), not a truncate-in-place", not torn),
+                ("...and no .tmp scratch file is left behind for a salvage reader to trip over",
+                 not list((inc_root / "m").glob("*.tmp"))),
             ]
 
             # The round-trip canary: a moved instrument stops the run before any scored claim.
