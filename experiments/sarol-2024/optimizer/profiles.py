@@ -328,6 +328,15 @@ def _selftest() -> int:
              problems_for(name="odd", stages=("adjudicator", "summarizer")))),
     ]
 
+    def _objective_classes() -> tuple:
+        """The scorer's own objective class set -- read, never restated."""
+        import sys as _sys
+        d = pathlib.Path(__file__).resolve().parents[1] / "scripts"
+        if str(d) not in _sys.path:
+            _sys.path.insert(0, str(d))
+        import score_sarol3  # noqa: PLC0415
+        return score_sarol3.OBJECTIVE_CLASSES
+
     def _emits(token: str) -> bool:
         """Does any module in this package actually produce `token`?"""
         d = pathlib.Path(__file__).resolve().parent
@@ -367,6 +376,10 @@ def _selftest() -> int:
         # `corpus.ref` points at the run manifest -- false since C6.8 -- while the gate did not
         # read it. A gate that covers three of four optimizer-facing docs gives false assurance.
         "release-format.md": (here / "context" / "release-format.md").read_text(encoding="utf-8"),
+        # Added when the objective moved off 3-way: the file that DEFINES what counts as better
+        # was the one doc this gate did not read.
+        "task-and-scoring.md": (here / "context" / "task-and-scoring.md")
+        .read_text(encoding="utf-8"),
     }
     guidance = docs["playbook.md"] + docs["optimizer-instructions.md"]
     checks += [
@@ -403,6 +416,22 @@ def _selftest() -> int:
         # the gate relaxes on its own if the mechanism is ever actually built.
         ("no doc promises `followups` while no code emits it",
          _emits("followups") or "no `followups` key" in docs["release-format.md"]),
+
+        # The objective moved from 3-way macro to macro over the six measurable classes. A doc
+        # still naming the old objective would send the agent to hill-climb a number the frontier
+        # no longer uses -- the same class of defect as an edit scope that names files the run
+        # never reads, which is what this whole gate block exists for. Keyed off the scorer's own
+        # constant so the docs cannot drift from it silently.
+        # Word-boundary, not substring. The first cut used `c in text`, and a negative control
+        # renaming MISQUOTE -> MISQUOTE_TYPO in the doc left the gate GREEN, because the typo
+        # contains the original as a substring. A gate that passes on the drift it exists to
+        # catch is worse than none.
+        ("the objective docs name exactly the class set the scorer optimizes",
+         all(re.search(rf"\b{c}\b", docs["task-and-scoring.md"])
+             and re.search(rf"\b{c}\b", docs["optimizer-instructions.md"])
+             for c in _objective_classes())),
+        ("...and no longer present 3-way macro as the thing to maximize",
+         "Maximize 3-way macro-F1" not in docs["optimizer-instructions.md"]),
         ("meta-learnings warns that the P1 extractor-side fix is unreachable in Phase 1",
          "unreachable under the `retrieval` profile" in docs["meta-learnings.md"]),
         # C6.8 made `corpus.ref` point at the mistake corpus itself. The doc that tells the

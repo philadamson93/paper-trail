@@ -883,7 +883,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         def score(self, artifacts, split, task_config):
             return schemas.ScoreResult(
                 primary_metric=schemas.PrimaryMetric(
-                    name="sarol_3way_macro_f1", value=0.4, higher_is_better=True
+                    name=adapter.PRIMARY_METRIC_NAME, value=0.4, higher_is_better=True
                 ),
                 breakdown={"scored": True, "n_total": 1, "n_invalid": 0,
                            "retrieval_k": 20, "profile": "retrieval",
@@ -1066,6 +1066,12 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             ("...and the JUDGE it was measured with, which is run identity exactly as the "
              "profile and k are -- a macro-F1 says nothing without the instrument",
              "model" in _VAL_ALLOWED_KEYS),
+            ("...and the objective's own denominator, since it renormalises over the classes "
+             "present in the batch -- two numbers with different denominators are not comparable",
+             {"n_objective_classes_present", "objective_class_set"} <= _VAL_ALLOWED_KEYS),
+            ("...but NOT which classes were present: that is a thresholded `support_9way`, i.e. "
+             "VAL's gold structure, and the count alone is what makes the number readable",
+             "objective_classes_present" not in _VAL_ALLOWED_KEYS),
             ("...while the scorer's per-class structure, offered on the same breakdown, is "
              "stripped -- so the widening is identity metadata, not leakage",
              "per_class_f1" not in json.dumps(val_payload)),
@@ -1302,9 +1308,13 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ("build_components wraps the optimizer agent in the contract guard",
          isinstance(parts["agent"], adapter.ContractGuardedAgent)),
         ("...around the real OptimizerAgent", isinstance(parts["agent"].inner, OptimizerAgent)),
-        ("...which loads the hot-path prompt as its instructions",
-         "maximize 3-way macro-F1" in parts["agent"].inner.agent_instructions().lower()
-         or "Maximize 3-way macro-F1" in parts["agent"].inner.agent_instructions()),
+        # Keyed on the metric NAME the adapter actually emits, not on a phrase from the prose.
+        # The previous version matched "maximize 3-way macro-F1", which broke the moment the
+        # objective moved -- and would have gone on passing if the prompt kept the old wording
+        # while the scorer changed underneath it. The name is the seam both sides share.
+        ("...which loads the hot-path prompt as its instructions, naming the objective the "
+         "adapter actually reports",
+         adapter.PRIMARY_METRIC_NAME in parts["agent"].inner.agent_instructions()),
         ("the optimizer session also carries a hard budget cap",
          "--max-budget-usd" in parts["agent"].inner.command(1, pathlib.Path("/tmp/m"))),
     ]

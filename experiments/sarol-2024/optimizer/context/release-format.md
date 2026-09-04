@@ -21,9 +21,14 @@ shape, and the difference is the whole leakage design.
     "profile": "retrieval",
     "retrieval_k": 20,
     "metrics": {
-      "primary_metric_name": "sarol_3way_macro_f1",
+      "primary_metric_name": "sarol_macro_f1_6class",
       "primary_metric": 0.41,
       "breakdown": {
+        "macro_f1_3way": 0.41,
+        "objective_class_set": ["ACCURATE","NOT_SUBSTANTIATE","CONTRADICT",
+                               "OVERSIMPLIFY","MISQUOTE","INDIRECT"],
+        "objective_classes_present": ["ACCURATE","NOT_SUBSTANTIATE","CONTRADICT","INDIRECT"],
+        "n_objective_classes_present": 4,
         "micro_f1": 0.76,
         "per_class_f1": { "ACCURATE": 0.86, "NOT_ACCURATE": 0.37, "IRRELEVANT": 0.0 },
         "confusion_matrix": { "ACCURATE": {...}, "NOT_ACCURATE": {...}, "IRRELEVANT": {...} },
@@ -45,6 +50,13 @@ shape, and the difference is the whole leakage design.
   }
 }
 ```
+
+**Reading the objective.** `primary_metric` is macro-F1 over `objective_class_set`, renormalised
+over the members actually present in this batch. **`n_objective_classes_present` is part of the
+number** — a score renormalised over 4 classes is not comparable to one over 6, so read it first
+and say which you are quoting. On TRAIN you also get `objective_classes_present`, so you can see
+*which* class a small batch is missing; on VAL you get only the count, because the presence vector
+is VAL gold structure.
 
 **Reading the 9-way fields.** `macro_f1_9way` always divides by nine, so a batch whose gold covers only five
 classes caps at 5/9 = 0.556 however perfect the predictions. **Always read `support_9way` and
@@ -147,12 +159,15 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
   "produced_at_utc": "2026-09-01T18:19:52+00:00",
   "optimizer_isolation_hash": "sarol-2024",
   "metrics": {
-    "primary_metric": { "name": "sarol_3way_macro_f1", "value": 0.39,
+    "primary_metric": { "name": "sarol_macro_f1_6class", "value": 0.39,
                         "higher_is_better": true },
     "breakdown": { "scored": true, "n_total": 50, "n_invalid": 0,
                    "requested_count": 50, "split": "val",
                    "profile": "retrieval", "retrieval_k": 20,
-                   "model": "claude-haiku-4-5" }
+                   "model": "claude-haiku-4-5",
+                   "n_objective_classes_present": 6,
+                   "objective_class_set": ["ACCURATE","NOT_SUBSTANTIATE","CONTRADICT",
+                                           "OVERSIMPLIFY","MISQUOTE","INDIRECT"] }
   }
 }
 ```

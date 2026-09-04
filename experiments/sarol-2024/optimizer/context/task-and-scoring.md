@@ -24,33 +24,48 @@ Nine labels, defined in the frozen `experiments/sarol-2024/specs/verdict_enum_sa
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
 
-## The frontier scalar: 3-way macro-F1
+## The frontier scalar: macro-F1 over the six measurable classes
 
-The nine labels collapse to three for the published metric:
+**The number being optimized is macro-F1 at 9-way resolution, over the six classes the held-out
+split can actually measure, renormalised over those present in the batch:**
 
-| Bucket | From |
-|---|---|
-| ACCURATE | `ACCURATE` |
-| NOT_ACCURATE | `OVERSIMPLIFY`, `NOT_SUBSTANTIATE`, `CONTRADICT`, `MISQUOTE`, `INDIRECT` |
-| IRRELEVANT | `ETIQUETTE`, `INDIRECT_NOT_REVIEW`, `IRRELEVANT` |
+`ACCURATE` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `OVERSIMPLIFY` · `MISQUOTE` · `INDIRECT`
 
-**3-way macro-F1 is the number being optimized.** It is directly comparable to the published
-baselines — MultiVerS 0.52, GPT-4 4-shot 0.45.
+That set is not a preference, it is what the data supports. The 9-way gold distribution of the
+drawable dev pool (255 claims) is:
 
-⚠ **An earlier version of this document claimed every class is reachable and there is no ceiling
-artifact. That was wrong, and the 2026-09-02 run disproved it.** Neither `program-v0` nor any
-optimized version ever predicted a member of the IRRELEVANT bucket, so its F1 was structurally
-0.000 and roughly **one third of the frontier metric was pinned at zero before the program did
-anything.** At a 1.8% gold base rate against TRAIN batches of 25-50, seeing zero instances is the
-*expected* outcome, not bad luck.
+| Class | dev gold | in objective |
+|---|---:|:--:|
+| ACCURATE | 185 | ✅ |
+| NOT_SUBSTANTIATE | 25 | ✅ |
+| CONTRADICT | 22 | ✅ |
+| OVERSIMPLIFY | 8 | ✅ |
+| MISQUOTE | 6 | ✅ |
+| INDIRECT | 6 | ✅ |
+| ETIQUETTE | 3 | ❌ support 3 — one claim moves a macro by ~0.06 |
+| INDIRECT_NOT_REVIEW | **0** | ❌ no gold in dev at all |
+| IRRELEVANT | **0** | ❌ no gold in dev at all |
 
-Two things follow for you. First, a macro-3 of 0.49 is not "two thirds of the way to 0.75" — the
-IRRELEVANT third may be unavailable on your batch, so read `support_3way` / `support_9way` before
-you interpret the level of any macro number. Second, **do not chase IRRELEVANT.** At that base
-rate a wrong IRRELEVANT prediction costs you on ACCURATE and gains nothing. Whether the estimator
-itself should change (stratifying the draw, or reporting macro over reachable classes only) is an
-open decision above your level; it is flagged here so you do not mistake the artifact for your
-program's failure.
+Two classes have **no gold instance anywhere in dev**, so raw macro-9 caps a *perfect* program at
+7/9 = 0.778 — a property of the sample, not of the program. Renormalising over present classes is
+what removes that artifact, and it is why `n_objective_classes_present` is reported beside every
+number. **Read it before comparing two scores**: a number renormalised over 5 classes is not
+comparable to one over 6.
+
+### Why not 3-way, which this used to be
+
+3-way collapses `OVERSIMPLIFY` / `NOT_SUBSTANTIATE` / `CONTRADICT` / `MISQUOTE` / `INDIRECT` into
+one NOT_ACCURATE bucket. In dev that is **67 of 255 claims (26%)** whose entire error structure
+becomes invisible: confusing CONTRADICT for NOT_SUBSTANTIATE costs exactly nothing. That is a
+quarter of the data with no gradient on it.
+
+Worse, 3-way's IRRELEVANT bucket has support **3** in the entire dev pool (the ETIQUETTE claims;
+its other two members have no dev gold). A third of the old objective rested on three claims —
+which is precisely why the 2026-09-02 run never predicted IRRELEVANT and ~⅓ of the metric sat
+pinned at zero before the program did anything.
+
+3-way is still computed and reported as `macro_f1_3way`, because the published baselines are on
+that axis (MultiVerS 0.52, GPT-4 4-shot 0.45). It is a comparability number, not the objective.
 
 ### Micro-F1 is reported. It is not the objective, and it is a trap
 
@@ -62,8 +77,12 @@ For single-label multiclass, micro-F1 equals accuracy. The gold distribution is 
 | NOT_ACCURATE | 376 | 20.1% |
 | IRRELEVANT | 34 | 1.8% |
 
-So a program that emits `ACCURATE` unconditionally and does no work at all scores **micro 0.781** —
-beating both published baselines — while scoring **macro 0.292**. If you find yourself with a
+So a program that emits `ACCURATE` unconditionally and does no work at all scores **micro 0.725**
+on the real dev pool — while scoring **0.140** on the objective and 0.280 on 3-way. Measured, not
+estimated. The 2026-09-02 program scored micro 0.784, so *everything the pipeline does* is worth
+about six points of micro sitting on top of a 72.5-point floor you get for free by returning a
+constant. And inside that band the cheapest way up is to answer `ACCURATE` more often, because
+ACCURATE is 72.5% of dev — the gradient points at the do-nothing program. If you find yourself with a
 rising micro and a falling macro, you are making the program worse and the wrong number is telling
 you otherwise. `score_sarol3.py --selftest` pins both figures so this cannot be adopted by
 accident.

@@ -308,6 +308,11 @@ def _parse_cost(stdout: str) -> float:
 #: "no --model was given" means without either restating it.
 DEFAULT_JUDGE_MODEL = "haiku"
 
+#: The frontier metric's name. One definition, shared by the scorer's output, the release payload
+#: and the gate that checks the optimizer's prompt names the objective the adapter reports -- so
+#: a rename cannot leave the prompt describing a metric nothing computes.
+PRIMARY_METRIC_NAME = "sarol_macro_f1_6class"
+
 
 def _parse_stream_meta(stdout: str) -> "tuple[str | None, str | None]":
     """``(session_id, resolved_model)`` from the CLI's own stream-json output.
@@ -1078,7 +1083,7 @@ class SarolScorer:
 
         def result(metric_value: float, breakdown: dict[str, Any]):
             metric = schemas.PrimaryMetric(
-                name="sarol_3way_macro_f1", value=metric_value, higher_is_better=True
+                name=PRIMARY_METRIC_NAME, value=metric_value, higher_is_better=True
             )
             return schemas.ScoreResult(
                 primary_metric=metric, breakdown=breakdown, task_config=config
@@ -1202,6 +1207,17 @@ class SarolScorer:
 _VAL_BREAKDOWN_ALLOWED = (
     "scored", "reason", "n_total", "n_invalid", "requested_count", "split", "profile",
     "retrieval_k", "model",
+    # The objective renormalises over the objective classes PRESENT in the batch, so the
+    # denominator is part of the number and VAL is uninterpretable without it.
+    #
+    # The COUNT is allowed; the presence LIST is not. `objective_classes_present` is a thresholded
+    # `support_9way` (support > 0), and `support_9way` is on the deny-list two lines down for
+    # exactly the reason that matters here -- it is VAL's gold structure. The count says "this
+    # number was renormalised over 5 classes, so do not compare it to a 6-class one"; the list
+    # would additionally say WHICH class VAL happens to lack, which is gold distribution and buys
+    # the optimizer nothing it should have. `objective_class_set` is the fixed configured set,
+    # identical every run and independent of the draw, so it leaks nothing at all.
+    "n_objective_classes_present", "objective_class_set",
 )
 
 
@@ -1516,7 +1532,7 @@ def _selftest() -> int:
                 ("a complete batch scores", score.breakdown["scored"] is True),
                 ("the metric is finite", math.isfinite(score.primary_metric.value)),
                 ("the frontier scalar is 3-way macro-F1",
-                 score.primary_metric.name == "sarol_3way_macro_f1"),
+                 score.primary_metric.name == PRIMARY_METRIC_NAME),
                 # The scorer sees only the OVERALL label, so a bad sub-claim verdict reaches
                 # error_class_counts only because the validator's counts are merged in.
                 ("an invalid sub-claim label survives into error_class_counts",

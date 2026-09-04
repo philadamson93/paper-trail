@@ -30,11 +30,23 @@ Read these before your first edit:
 
 ## The objective
 
-**Maximize 3-way macro-F1 on the held-out VAL split.** One number.
+**Maximize macro-F1 over the six measurable classes, on the held-out VAL split.** One number,
+reported as `primary_metric` (`sarol_macro_f1_6class`).
 
-Do not optimize micro-F1. For single-label multiclass it equals accuracy, and gold is 78.1%
-ACCURATE — so a program that always answers ACCURATE scores micro 0.781 and macro 0.292. A rising
-micro with a falling macro means you are making it worse.
+The six are `ACCURATE`, `NOT_SUBSTANTIATE`, `CONTRADICT`, `OVERSIMPLIFY`, `MISQUOTE`, `INDIRECT` —
+every class the dev split has enough gold to score. The other three are excluded because dev cannot
+measure them (two have zero gold there; `ETIQUETTE` has three claims), not because they do not
+matter. It is computed at 9-way resolution and renormalised over the objective classes present in
+the batch, so **read `n_objective_classes_present` before comparing two numbers.**
+
+Do not optimize micro-F1. For single-label multiclass it equals accuracy, and dev is 72.5%
+ACCURATE — so a program that always answers ACCURATE and does no work scores micro **0.725** while
+scoring **0.140** on the objective. A rising micro with a falling objective means you are making it
+worse.
+
+`macro_f1_3way` is also reported. It is the axis the published baselines use (MultiVerS 0.52,
+GPT-4 4-shot 0.45) and is there for comparability, not to be optimized: it collapses five of your
+six classes into one bucket, so it cannot see most of what you change.
 
 ## The output vocabulary — fixed, exactly nine
 

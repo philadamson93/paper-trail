@@ -59,6 +59,43 @@ SAROL_9_ORDER: tuple[str, ...] = (
 UNKNOWN = "UNKNOWN"
 
 
+#: The classes the objective is computed over: the ones the held-out split can actually measure.
+#:
+#: Not a preference. Over the drawable dev pool (255 claims) the 9-way gold distribution is
+#: ACCURATE 185, NOT_SUBSTANTIATE 25, CONTRADICT 22, OVERSIMPLIFY 8, MISQUOTE 6, INDIRECT 6,
+#: ETIQUETTE 3, INDIRECT_NOT_REVIEW 0, IRRELEVANT 0. Two classes have NO gold instance anywhere in
+#: dev, so raw macro-9 caps a *perfect* program at 7/9 = 0.778; and ETIQUETTE's support of 3 means
+#: one claim flipping moves a macro-7 by ~0.06, which is noise to hill-climb on. The six below are
+#: every class with dev support >= 6.
+#:
+#: Why not 3-way (the previous objective): its IRRELEVANT bucket has support **3** in the entire
+#: dev pool, so a third of the number rested on three claims -- which is why no run ever predicted
+#: it and ~1/3 of the metric sat pinned at zero. It also collapses five classes into NOT_ACCURATE,
+#: making every confusion among 26% of dev cost exactly nothing. 3-way is still reported, because
+#: the published baselines (MultiVerS 0.52, GPT-4 4-shot 0.45) are on that axis.
+#:
+#: Why not micro: micro == accuracy for single-label multiclass, and a program that always answers
+#: ACCURATE and does no work scores **0.725** on dev. The measured program scores 0.784, so the
+#: entire competence of the pipeline is ~6 points on top of a free 72.5-point floor -- and the
+#: cheapest way to climb inside that band is to say ACCURATE more, which walks toward the
+#: degenerate program. Reported, never optimized.
+OBJECTIVE_CLASSES = (
+    "ACCURATE",
+    "NOT_SUBSTANTIATE",
+    "CONTRADICT",
+    "OVERSIMPLIFY",
+    "MISQUOTE",
+    "INDIRECT",
+)
+
+#: The objective renormalises over the objective classes PRESENT in the batch, rather than dividing
+#: by a fixed 6. Dividing by a constant would make a batch that happens to draw no MISQUOTE cap at
+#: 5/6 through no fault of the program -- the exact ceiling artifact that made raw macro-9
+#: unusable. The cost of renormalising is that the denominator varies between batches, so
+#: `objective_classes_present` is reported beside every number and MUST be read with it. VAL is
+#: drawn once and held for a run, so its denominator is stable across the frontier being compared.
+
+
 def _f1(tp: int, fp: int, fn: int) -> float:
     if tp == 0:
         return 0.0
@@ -135,10 +172,22 @@ def score(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
 
     per_class_9, support_9 = _nine_way(pairs)
 
+    objective_present = [c for c in OBJECTIVE_CLASSES if support_9.get(c, 0) > 0]
+    objective_macro = (
+        sum(per_class_9[c] for c in objective_present) / len(objective_present)
+        if objective_present
+        else 0.0
+    )
+
     return {
-        # Every class is reachable under this variant, so the frontier scalar is the full 3-way
-        # macro-F1 -- the axis the published baselines report.
-        "primary_metric": sum(per_class.values()) / len(BUCKETS),
+        # The frontier scalar: 9-way-resolution macro-F1 over the classes the held-out split can
+        # measure, renormalised over those present in this batch. See OBJECTIVE_CLASSES.
+        "primary_metric": objective_macro,
+        "objective_class_set": list(OBJECTIVE_CLASSES),
+        "objective_classes_present": objective_present,
+        "n_objective_classes_present": len(objective_present),
+        # The published-comparability axis, reported not optimised: MultiVerS 0.52, GPT-4 0.45.
+        "macro_f1_3way": sum(per_class.values()) / len(BUCKETS),
         # Reported only. See the module docstring: micro == accuracy here and is gameable.
         "micro_f1": correct / scored if scored else 0.0,
         "per_class_f1": per_class,
@@ -165,13 +214,27 @@ def _selftest() -> int:
     r = score(do_nothing)
 
     perfect = score([(rep[b], rep[b]) for b in BUCKETS])
+
+    # The measured 9-way gold distribution of the drawable dev pool (255 of 316; a claim whose
+    # cited bucket carries no evidence annotation has no gold label and is refused at staging).
+    _DEV_GOLD = {"ACCURATE": 185, "NOT_SUBSTANTIATE": 25, "CONTRADICT": 22, "OVERSIMPLIFY": 8,
+                 "MISQUOTE": 6, "INDIRECT": 6, "ETIQUETTE": 3}
+    _dev_nothing = score(
+        [("ACCURATE", g) for g, n in _DEV_GOLD.items() for _ in range(n)]
+    )
+    _two_class_perfect = score([("ACCURATE", "ACCURATE"), ("CONTRADICT", "CONTRADICT")])
     invalid = score([("NOT_A_LABEL", "ACCURATE"), ("ACCURATE", "ACCURATE")])
     # the two labels the mainline-plus-collapse path could not tell apart
     split = score([("INDIRECT", "INDIRECT"), ("INDIRECT_NOT_REVIEW", "INDIRECT_NOT_REVIEW")])
 
     checks = [
         ("do-nothing micro_f1 is degenerate (== majority share)", round(r["micro_f1"], 3) == 0.781),
-        ("do-nothing primary_metric is near-worthless", round(r["primary_metric"], 3) == 0.292),
+        ("do-nothing 3-way macro is near-worthless", round(r["macro_f1_3way"], 3) == 0.292),
+        # 0.438 not 0.140 because THIS fixture carries only two objective classes (ACCURATE and
+        # OVERSIMPLIFY), so renormalising divides by 2. The real dev distribution is asserted
+        # separately below -- that is the number the objective choice actually rests on.
+        ("do-nothing objective is well under micro on this fixture too",
+         round(r["primary_metric"], 3) == 0.439),
         ("primary_metric < micro_f1 (micro would have been gameable)",
          r["primary_metric"] < r["micro_f1"]),
         ("perfect predictions score 1.0", perfect["primary_metric"] == 1.0),
@@ -189,17 +252,41 @@ def _selftest() -> int:
         ("perfect 9-way predictions on the represented classes score 1.0 each",
          all(split["per_class_f1_9way"][c] == 1.0 for c in ("INDIRECT", "INDIRECT_NOT_REVIEW"))),
         ("9-way punishes the do-nothing program harder than 3-way",
-         r["macro_f1_9way"] < r["primary_metric"]),
+         r["macro_f1_9way"] < r["macro_f1_3way"]),
         ("...roughly a tenth, not a third", round(r["macro_f1_9way"], 3) == 0.097),
         # The sample-size hazard, made concrete: macro-9 always divides by 9, so a batch whose
         # gold covers 3 classes caps at 3/9 even with flawless predictions. This is why 9-way is
         # a breakdown and not the frontier at VAL=316.
         ("macro-9 caps at classes_present/9 -- a property of the sample, not the program",
          round(perfect["macro_f1_9way"], 4) == round(3 / 9, 4)),
-        ("...and perfect 3-way on the same batch is a clean 1.0", perfect["primary_metric"] == 1.0),
+        ("...and perfect 3-way on the same batch is a clean 1.0",
+         perfect["macro_f1_3way"] == 1.0),
         ("support is reported so the cap is visible rather than mysterious",
          perfect["n_classes_present_9way"] == 3
          and sum(perfect["support_9way"].values()) == 3),
+        # ------------------------------------------------------------------------------------
+        # The objective choice, pinned against the REAL drawable dev distribution (255 claims).
+        # These are the numbers the decision was made on; if the class set or the renormalisation
+        # changes, they move and this says so.
+        ("on real dev, a do-nothing program scores ~0.14 on the objective -- so the metric has "
+         "room to hill-climb in", round(_dev_nothing["primary_metric"], 2) == 0.14),
+        ("...while scoring 0.726 on MICRO, which is why micro is not the objective: the whole "
+         "pipeline is worth ~6 points on top of that free floor",
+         0.72 < _dev_nothing["micro_f1"] < 0.73),
+        ("...and 0.28 on 3-way, whose IRRELEVANT third rests on 3 dev claims",
+         round(_dev_nothing["macro_f1_3way"], 2) == 0.28),
+        ("the objective covers the six classes dev can measure, and excludes the three it "
+         "cannot -- two have zero dev gold, one has support 3",
+         set(OBJECTIVE_CLASSES) == {"ACCURATE", "NOT_SUBSTANTIATE", "CONTRADICT",
+                                     "OVERSIMPLIFY", "MISQUOTE", "INDIRECT"}
+         and not ({"ETIQUETTE", "INDIRECT_NOT_REVIEW", "IRRELEVANT"} & set(OBJECTIVE_CLASSES))),
+        ("a batch missing an objective class is NOT capped for it -- renormalising over present "
+         "classes is what makes 9-way resolution usable at all",
+         _two_class_perfect["primary_metric"] == 1.0
+         and _two_class_perfect["n_objective_classes_present"] == 2),
+        ("...and the classes it renormalised over are reported, so two numbers with different "
+         "denominators cannot be silently compared",
+         _two_class_perfect["objective_classes_present"] == ["ACCURATE", "CONTRADICT"]),
         ("the do-nothing batch's gold support sums to the corpus size",
          sum(r["support_9way"].values()) == 1873),
     ]
