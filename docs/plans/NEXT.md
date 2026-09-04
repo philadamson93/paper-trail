@@ -99,6 +99,51 @@ Runtime matters as much as money: 98.7s/session × 645 sessions ≈ **17.7 hours
 2. **OQ2 pass 2** — the owed hand-sample of the adjudicator's 9-class judgement on real dev-split claims. A rater task, not an agent task.
 3. Still open: pushing the `program-v0` tag (now safe), and the bare-relative `{{spec_root}}` fix in `verifier-dispatch.md:93` on `main`.
 
+### Session 2026-09-03b — instruments fixed, objective moved to 9-way, prompt cleaned
+
+Seven commits on `sarol-optimizer-impl`, all pushed (`afef010`..`86983ba`). **402 offline gates
+green** (was 337). Full detail in `docs/session/papertrail-optimizer-impl-readback.md` (git-ignored);
+the optimizer-prompt audit is `docs/session/papertrail-optimizer-prompt-review.md`.
+
+**1. Two post-mortem fixes had no gate that could fail.** `loop_ops` (the $370-400 bug) and the
+atomic manifest write both stayed green when reverted. Closed and negative-controlled. Codex's
+gate-quality section was wrong about the first — it is not a reliable source unrun.
+
+**2. Judge traces are reachable.** `--output-format stream-json` was already streaming the judge's
+full reasoning into a pipe that parsed the cost and dropped the rest; 691 transcripts survived the
+2026-09-02 run unlinked to any claim. Now `session_id` + resolved `model` are captured and each
+trace is **copied** into `<run>/traces/`. An optional read — nothing pushes it into context.
+
+**3. Judge model is a flag, defaulting to `haiku`** (Phil's call, revisitable). It is ~113 sessions
+an iteration vs the optimizer's one, so it is the only model choice that moves the bill: ~$19/iter
+vs ~$95 on opus. Guards: `canary.load` refuses a pin measured under another model; `model` is run
+identity in the manifest and VAL release; `--model` is gated as reaching the run.
+
+**4. Mistake corpus carries the judge's working** — `sub_claims` with evidence mapped per
+sub-claim (+`locator`), `claim_type`, `rubric_variant`.
+
+**5. Objective moved to 9-way** (Phil's call — "more signal"). Now `sarol_macro_f1_6class`: macro-F1
+at 9-way resolution over the six classes dev can measure, renormalised over those present. Measured
+drawable-dev gold made the case: `INDIRECT_NOT_REVIEW` and `IRRELEVANT` have **zero** dev gold (raw
+macro-9 caps a perfect program at 0.778), `ETIQUETTE` has 3. And old macro-3 was worse than it
+looked — its IRRELEVANT third rests on those same 3 claims, which *is* the "⅓ pinned at zero"
+finding. Micro was answered with data: do-nothing scores 0.725 vs 0.140 on the objective.
+`macro_f1_3way` still reported for the MultiVerS/GPT-4 comparison.
+
+**6. VAL draw stratifies by default** — free for a macro objective (equalises support, does not
+shift the estimand). **n=100 recommended**: exhausts every scarce dev class, ~$34/iter on haiku.
+
+**7. Optimizer prompt first pass** — five promised-but-nonexistent mechanisms removed (`followups`,
+step-back, "change note", per-claim ceiling, present-tense canary), all 13 cited paths verified to
+resolve from the agent's cwd, population and cost figures corrected, failure modes re-ordered onto
+the n=50 evidence. Gated: docs must cite only resolvable paths and must not promise a mechanism no
+code emits. **Phil still reviews the prompt before any run.**
+
+**Owed before the next run:** re-baseline `program-v0` under haiku (0.4949 was measured on opus),
+pin the canary under haiku (`canary.py --pin --profile retrieval --model haiku --repeat 3`), and
+Phil's read of the prompt. Open judgment call: the stratified draw *excludes* gold classes outside
+the objective (3 ETIQUETTE claims on dev) — reversible via one argument.
+
 Everything below this line predates the pause and is historical design context, not live status.
 
 > **Major reframe 2026-04-21: experiment is agent-only; infrastructure is the contribution.** Human decision: the optimizer is an agent (not human-in-the-loop). Paper-trail + Sarol is the case study; the framework is the primary contribution. See `docs/plans/agentic-pipeline-optimization-framework.md` for the authoritative plan (tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses). Everything downstream — contributions list, Task 5 eval-arm deliverables, hygiene rules — has been updated below.
