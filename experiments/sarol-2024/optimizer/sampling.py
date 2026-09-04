@@ -36,6 +36,7 @@ writes one; gold resolution stays where `parse_verdict.py` puts it.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import pathlib
 import random
@@ -113,6 +114,94 @@ def claim_pool(split: str) -> list[ClaimUnit]:
             units.append(ClaimUnit(claim_row_id=int(row["id"]), paper_bucket=bucket))
     units.sort(key=lambda u: (u.claim_row_id, u.paper_bucket))
     return units
+
+
+def gold_labels(split: str) -> "dict[tuple[int, int], str]":
+    """`(claim_row_id, paper_bucket) -> 9-class gold label`, for every unit in `split`'s pool.
+
+    Read from the benchmark rather than from a staged run, so a draw can be stratified *before*
+    anything is dispatched -- stratifying after staging would mean paying for the claims you then
+    throw away.
+    """
+    import stage_claim  # noqa: PLC0415
+    from parse_verdict import gold_paper_label  # noqa: PLC0415
+
+    out: dict[tuple[int, int], str] = {}
+    for row in stage_claim.load_claims(split):
+        evidence = row.get("evidence") or {}
+        row_id = int(row["id"])
+        for bucket in sorted({int(doc_id) // 1000 for doc_id in evidence}):
+            mine = {k: v for k, v in evidence.items() if v and int(k) // 1000 == bucket}
+            if mine:
+                out[(row_id, bucket)] = gold_paper_label(mine)
+    return out
+
+
+def stratified_draw(
+    units: "list[ClaimUnit]",
+    gold: "dict[tuple[int, int], str]",
+    n: int,
+    *,
+    seed: int,
+    classes: "tuple[str, ...] | None" = None,
+) -> "list[ClaimUnit]":
+    """Draw `n` units spread as evenly as the pool allows across the objective's classes.
+
+    **Why stratifying is free here, and would not be under a different objective.** The frontier is
+    macro-F1, which already weights every class equally regardless of how common it is. Equalising
+    support therefore does not shift the estimand at all -- it only cuts its variance. Under a
+    micro/accuracy objective the same draw WOULD distort the number, which is part of why micro is
+    not the objective. (It does break comparability of the reported `micro_f1` and of the published
+    3-way baseline, so quote those from an unstratified batch.)
+
+    Water-filling, scarcest class first: each class takes an equal share of what is left, capped by
+    what it actually has, and the surplus flows to classes with capacity. On the real dev pool at
+    n=140 that resolves to "every rare-class claim dev has, plus ACCURATE for the remainder", which
+    is the most support the split can give.
+
+    Units whose gold is OUTSIDE `classes` are **excluded from the draw**, not merely unscored. Such
+    a claim cannot add recall to any scored class -- its gold class is not in the objective -- while
+    a prediction on it can only cost precision, so including it injects noise the metric has no way
+    to attribute. On dev that drops 3 ETIQUETTE claims out of 255.
+    """
+    import random  # noqa: PLC0415
+
+    from score_sarol3 import OBJECTIVE_CLASSES  # noqa: PLC0415
+
+    classes = classes or OBJECTIVE_CLASSES
+    by_class: dict[str, list] = {c: [] for c in classes}
+    for u in units:
+        label = gold.get((u.claim_row_id, u.paper_bucket))
+        if label in by_class:
+            by_class[label].append(u)
+
+    rng = random.Random(seed)
+    for c in classes:
+        rng.shuffle(by_class[c])
+
+    available = [c for c in classes if by_class[c]]
+    # Scarcest first: a class with 6 claims must claim its share before an abundant one soaks up
+    # the budget. Sorting the other way would hand ACCURATE n/k and starve the tail.
+    available.sort(key=lambda c: len(by_class[c]))
+
+    taken: list = []
+    remaining = n
+    for i, c in enumerate(available):
+        share = remaining // (len(available) - i)
+        take = min(len(by_class[c]), share)
+        taken.extend(by_class[c][:take])
+        by_class[c] = by_class[c][take:]
+        remaining -= take
+    # Surplus (every class exhausted below its share) flows to whoever still has capacity.
+    for c in sorted(available, key=lambda c: -len(by_class[c])):
+        if remaining <= 0:
+            break
+        take = min(len(by_class[c]), remaining)
+        taken.extend(by_class[c][:take])
+        remaining -= take
+
+    taken.sort(key=lambda u: (u.claim_row_id, u.paper_bucket))
+    return taken
 
 
 def ramp_for(rung: int, schedule: "list[int]") -> int:
@@ -332,6 +421,7 @@ def val_inputs_for(
     batch_root: pathlib.Path,
     history_path: pathlib.Path,
     source_mode: str = "corpus",
+    stratify: bool = True,
 ) -> Any:
     """A **fixed** VAL subsample, drawn once and reused by every iteration of the run.
 
@@ -352,7 +442,26 @@ def val_inputs_for(
     from adapter import _import_engine  # noqa: PLC0415
 
     schemas = _import_engine()
-    units = resolve_batch(0, n=n, mode="fresh", split=split, history_path=history_path)
+    # Spread the draw across the objective's classes. Free for a macro objective (see
+    # `stratified_draw`), and rare-class support -- not batch size -- is this metric's binding
+    # constraint: dev holds only 6 MISQUOTE and 6 INDIRECT, so an unstratified n=50 expects ~1 of
+    # each and their F1 swings on a single claim. A stratified n=60 takes every one.
+    #
+    # Narrowed as a POOL rather than drawn directly, so `resolve_batch` still owns the draw, the
+    # seeding and the `draw_history.json` audit trail. Two mechanisms writing that history would
+    # be one too many.
+    pool = None
+    if stratify:
+        pool = stratified_draw(claim_pool(split), gold_labels(split), n, seed=SEED)
+        if len(pool) < n:
+            raise ValueError(
+                f"stratified VAL draw could only fill {len(pool)} of {n} requested claims from "
+                f"split {split!r}: the objective's classes do not hold that many. Lower --val-n, "
+                "or pass stratify=False to draw from the raw pool."
+            )
+    units = resolve_batch(
+        0, n=n, mode="fresh", split=split, history_path=history_path, pool=pool
+    )
     batch_path = pathlib.Path(batch_root) / f"{run_id}-val.json"
     stage_batch(
         units,
@@ -526,6 +635,54 @@ def _selftest() -> int:
         ))
 
     # -- the draw unit ----------------------------------------------------------------------------
+    # -- stratified draw: rare-class support is what the macro objective actually needs ----------
+    # Synthetic pool, so these test the ALGORITHM rather than today's benchmark contents (the real
+    # dev distribution is pinned in score_sarol3's gates). Five classes with spread availability,
+    # because a 3-class fixture cannot distinguish scarcest-first from abundant-first -- the
+    # surplus pass repairs the difference at small k, and an earlier version of these gates was
+    # green under BOTH orderings for exactly that reason.
+    _AVAIL = {"ACCURATE": 200, "NOT_SUBSTANTIATE": 50, "CONTRADICT": 50,
+              "OVERSIMPLIFY": 8, "MISQUOTE": 1, "ETIQUETTE": 9}  # ETIQUETTE: outside the objective
+    _su, _sg, _next = [], {}, 0
+    for _lbl, _cnt in _AVAIL.items():
+        for _ in range(_cnt):
+            _u = ClaimUnit(claim_row_id=_next, paper_bucket=0)
+            _su.append(_u); _sg[(_next, 0)] = _lbl; _next += 1
+
+    def _dist_of(drawn):
+        d = {}
+        for u in drawn:
+            lbl = _sg[(u.claim_row_id, 0)]
+            d[lbl] = d.get(lbl, 0) + 1
+        return d
+
+    _drawn = stratified_draw(_su, _sg, 157, seed=1)
+    _dist = _dist_of(_drawn)
+    _again = stratified_draw(_su, _sg, 157, seed=1)
+
+    checks += [
+        ("a stratified draw returns exactly the requested size", len(_drawn) == 157),
+        ("...taking EVERY unit of the scarcest objective classes rather than their proportional "
+         "share -- rare-class support, not batch size, is what a macro objective is short of",
+         _dist.get("MISQUOTE") == 1 and _dist.get("OVERSIMPLIFY") == 8),
+        ("...and capping the abundant class near an equal share rather than letting it soak up "
+         "the budget (abundant-first would give it ~86 of 157 here)",
+         _dist.get("ACCURATE", 0) <= 55),
+        ("...spreading the remainder evenly across the classes that still have units",
+         _dist.get("NOT_SUBSTANTIATE") == _dist.get("CONTRADICT") >= 45),
+        ("...excluding classes outside the objective, which cannot add recall to any scored "
+         "class and can only cost precision",
+         "ETIQUETTE" not in _dist),
+        ("...deterministically for a fixed seed, so a resumed run rebuilds the same VAL",
+         [u.claim_id for u in _drawn] == [u.claim_id for u in _again]),
+        ("a request larger than the objective classes can fill comes back short, so the caller "
+         "can refuse rather than silently measure something else",
+         len(stratified_draw(_su, _sg, 5000, seed=1)) == 200 + 50 + 50 + 8 + 1),
+        # The default is the decision: an unstratified VAL at these sizes expects ~1 MISQUOTE.
+        ("VAL stratifies BY DEFAULT, not on request",
+         inspect.signature(val_inputs_for).parameters["stratify"].default is True),
+    ]
+
     checks.append(("a unit's claim_id carries both row and bucket, so two buckets of one claim "
                    "never collide", ClaimUnit(7, 31).claim_id == "7-31"))
 
