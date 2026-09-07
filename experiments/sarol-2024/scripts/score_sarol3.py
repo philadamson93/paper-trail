@@ -18,10 +18,20 @@ Two design points worth not re-deriving (see the plan's Part A2):
   defines it and this scorer consumes it. A label outside `SAROL_9` is an ordinary invalid output:
   scored as a miss and counted in `error_class_counts`. It never crashes the run and is never
   silently re-bucketed, so a bad edit simply scores worse and the loop rejects it on its own.
-* **3-way micro-F1 is reported but MUST NOT be the objective.** For single-label multiclass it
-  equals accuracy, and with ACCURATE at 78.1% of gold an always-ACCURATE program scores 0.781 --
-  beating both published baselines while doing nothing. `--selftest` pins this so nobody adopts it
-  by accident.
+* **The objective is accuracy over the nine labels, and it is quoted against a floor.** A claim
+  counts only if the predicted label equals the gold label; `micro_f1` is the same quantity
+  computed AFTER the 3-way collapse, so it forgives every confusion inside NOT_ACCURATE and is a
+  diagnostic, not the objective. Accuracy is dominated by the ACCURATE base rate -- an
+  always-ACCURATE program scores 0.595 on the repaired dev pool -- so `do_nothing_floor` is
+  computed from each batch's own gold and reported beside it. Compare against the floor, never
+  against zero. `macro_f1_renormalised` is kept as the diagnostic that catches the one degenerate
+  strategy accuracy admits: collapsing toward ACCURATE raises accuracy and craters macro.
+  `--selftest` pins all of this, in both directions.
+
+  *(History, so it is not re-litigated: the objective was 3-way macro-F1, then macro-F1
+  renormalised over the classes present. The renormalising denominator moved between batches,
+  which manufactured a -0.15 TRAIN "decline" across three iterations for a program that never
+  changed. Accuracy has no denominator to wobble. Changed 2026-09-07.)*
 """
 
 from __future__ import annotations
@@ -75,17 +85,22 @@ UNKNOWN = "UNKNOWN"
 #: OVERSIMPLIFY 8, MISQUOTE 6, INDIRECT 6 (dev). Every class dev holds has support >= 6; only
 #: `INDIRECT_NOT_REVIEW` is genuinely absent there, and renormalisation drops it automatically.
 #:
-#: Why renormalise rather than divide by nine: a fixed denominator caps a *perfect* program at
-#: classes_present/9 -- 8/9 on full dev -- which is a property of the sample, not the program. The
-#: cost is that the denominator varies between batches, so `n_objective_classes_present` is
-#: reported beside every number and MUST be read with it. VAL is drawn once and held per run.
+#: Why the macro diagnostic renormalises rather than dividing by nine: a fixed denominator caps a
+#: *perfect* program at classes_present/9 -- 8/9 on full dev -- which is a property of the sample,
+#: not the program. The cost is that the denominator varies between batches, so
+#: `n_objective_classes_present` is reported beside it and MUST be read with it. That wobble is
+#: precisely why this is no longer the frontier: it made a constant program look like it was
+#: declining. VAL is drawn once and held per run.
 #:
 #: Why not 3-way: it collapses five classes into NOT_ACCURATE, so confusions among 26% of dev cost
 #: nothing, and its IRRELEVANT bucket rested on the same handful of claims the filter was deleting.
 #: Still reported as `macro_f1_3way` for the published baselines (MultiVerS 0.52, GPT-4 0.45).
 #:
-#: Why not micro: micro == accuracy for single-label multiclass, and a program that always answers
-#: ACCURATE and does no work scores ~0.6 on the repaired dev pool. Reported, never optimised.
+#: ⚠ **This set no longer defines the objective** -- since 2026-09-07 the objective is plain
+#: accuracy over the nine labels, which needs no class set. It defines the renormalised macro
+#: kept as a DIAGNOSTIC (`macro_f1_renormalised`), and it is what `sampling.stratified_draw`
+#: spreads a draw across when a per-class question is being asked. The renormalisation rationale
+#: above still applies to that diagnostic; it no longer applies to the frontier.
 OBJECTIVE_CLASSES = SAROL_9_ORDER
 
 #: The objective renormalises over the objective classes PRESENT in the batch, rather than dividing
@@ -172,6 +187,18 @@ def score(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
 
     per_class_9, support_9 = _nine_way(pairs)
 
+    # THE OBJECTIVE: 9-class accuracy. A claim counts only if the predicted label equals the gold
+    # label -- not if their 3-way buckets happen to agree. Five of the nine collapse into
+    # NOT_ACCURATE, so a 3-way accuracy would treat the rubric's hardest discrimination as free.
+    # An invalid label can never equal a gold label, so this shares `scored`'s denominator.
+    correct_9 = sum(1 for predicted, gold in pairs if predicted == gold)
+
+    # The do-nothing floor, computed FROM THIS BATCH so it is never quoted from a stale fixture.
+    # A program that always answers ACCURATE and does no work scores exactly this. Denominator is
+    # `n_total`, because that program emits no invalid labels and so scores every claim.
+    n_gold_accurate = support_9.get("ACCURATE", 0)
+    do_nothing_floor = n_gold_accurate / total if total else 0.0
+
     objective_present = [c for c in OBJECTIVE_CLASSES if support_9.get(c, 0) > 0]
     objective_macro = (
         sum(per_class_9[c] for c in objective_present) / len(objective_present)
@@ -180,15 +207,25 @@ def score(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
     )
 
     return {
-        # The frontier scalar: 9-way-resolution macro-F1 over the classes the held-out split can
-        # measure, renormalised over those present in this batch. See OBJECTIVE_CLASSES.
-        "primary_metric": objective_macro,
+        # The frontier scalar: overall 9-class accuracy on this batch.
+        "primary_metric": correct_9 / scored if scored else 0.0,
+        # Quoted BESIDE it, always. Accuracy is dominated by the ACCURATE base rate, so the
+        # comparison that means anything is against this number, never against zero.
+        "do_nothing_floor": do_nothing_floor,
+        "n_correct_9way": correct_9,
+        # The diagnostic, not the objective (it WAS `primary_metric` until 2026-09-07): macro-F1
+        # at 9-way resolution, renormalised over the classes present. Read it to see whether an
+        # accuracy gain came from getting the rare classes right or from collapsing toward
+        # ACCURATE -- a collapse raises accuracy and craters this.
+        "macro_f1_renormalised": objective_macro,
         "objective_class_set": list(OBJECTIVE_CLASSES),
         "objective_classes_present": objective_present,
         "n_objective_classes_present": len(objective_present),
         # The published-comparability axis, reported not optimised: MultiVerS 0.52, GPT-4 0.45.
         "macro_f1_3way": sum(per_class.values()) / len(BUCKETS),
-        # Reported only. See the module docstring: micro == accuracy here and is gameable.
+        # 3-WAY accuracy -- the same quantity as `primary_metric` but computed after the collapse,
+        # so it forgives every within-bucket confusion. Reported as a diagnostic: the gap between
+        # this and `primary_metric` IS the mass of the confusions inside NOT_ACCURATE.
         "micro_f1": correct / scored if scored else 0.0,
         "per_class_f1": per_class,
         "confusion_matrix": {g: dict(confusion[g]) for g in BUCKETS},
@@ -227,19 +264,30 @@ def _selftest() -> int:
     )
     _two_class_perfect = score([("ACCURATE", "ACCURATE"), ("CONTRADICT", "CONTRADICT")])
     invalid = score([("NOT_A_LABEL", "ACCURATE"), ("ACCURATE", "ACCURATE")])
+    # One within-bucket confusion and one hit. 3-way accuracy sees 2/2; 9-way sees 1/2. This is
+    # the fixture the objective choice turns on, so it is asserted in both directions below.
+    within = score([("CONTRADICT", "OVERSIMPLIFY"), ("ACCURATE", "ACCURATE")])
     # the two labels the mainline-plus-collapse path could not tell apart
     split = score([("INDIRECT", "INDIRECT"), ("INDIRECT_NOT_REVIEW", "INDIRECT_NOT_REVIEW")])
 
     checks = [
-        ("do-nothing micro_f1 is degenerate (== majority share)", round(r["micro_f1"], 3) == 0.781),
+        # -- the objective is ACCURACY (2026-09-07). These four replace the four that asserted
+        # the opposite; each is written so that switching the objective back turns it RED.
+        ("a do-nothing program scores exactly the do-nothing floor -- that is what makes the "
+         "floor the number to compare against",
+         round(r["primary_metric"], 6) == round(r["do_nothing_floor"], 6)),
+        ("...and the floor is REPORTED, not left for the reader to remember",
+         "do_nothing_floor" in r and round(r["do_nothing_floor"], 3) == 0.781),
+        ("primary_metric is accuracy over the NINE labels, so it can never exceed the 3-way "
+         "accuracy that forgives within-bucket confusions",
+         r["primary_metric"] <= r["micro_f1"] and within["primary_metric"] < within["micro_f1"]),
+        ("...which is the whole point: a CONTRADICT answered for an OVERSIMPLIFY is WRONG, "
+         "though both collapse to NOT_ACCURATE and 3-way accuracy calls it right",
+         within["primary_metric"] == 0.5 and within["micro_f1"] == 1.0),
+        ("the renormalised macro survives as a DIAGNOSTIC, so a gain bought by collapsing "
+         "toward ACCURATE is visible rather than invisible",
+         round(r["macro_f1_renormalised"], 3) == 0.292),
         ("do-nothing 3-way macro is near-worthless", round(r["macro_f1_3way"], 3) == 0.292),
-        # 0.438 not 0.140 because THIS fixture carries only two objective classes (ACCURATE and
-        # OVERSIMPLIFY), so renormalising divides by 2. The real dev distribution is asserted
-        # separately below -- that is the number the objective choice actually rests on.
-        ("do-nothing objective is well under micro on this fixture too",
-         round(r["primary_metric"], 3) == 0.292),
-        ("primary_metric < micro_f1 (micro would have been gameable)",
-         r["primary_metric"] < r["micro_f1"]),
         ("perfect predictions score 1.0", perfect["primary_metric"] == 1.0),
         ("invalid label is a miss, not a crash", invalid["n_invalid"] == 1),
         ("invalid label is counted", invalid["error_class_counts"].get("invalid_label") == 1),
@@ -271,11 +319,17 @@ def _selftest() -> int:
         # The objective choice, pinned against the REAL drawable dev distribution (255 claims).
         # These are the numbers the decision was made on; if the class set or the renormalisation
         # changes, they move and this says so.
-        ("on real dev, a do-nothing program scores ~0.09 on the objective -- so the metric has "
-         "room to hill-climb in", round(_dev_nothing["primary_metric"], 2) == 0.09),
-        ("...while scoring ~0.59 on MICRO, which is why micro is not the objective: it is mostly "
-         "the ACCURATE base rate, available for free",
-         0.59 < _dev_nothing["micro_f1"] < 0.60),
+        ("on real dev, a do-nothing program scores 0.595 -- THE number to quote beside every "
+         "accuracy this experiment reports",
+         round(_dev_nothing["primary_metric"], 3) == 0.595),
+        ("...and the scorer reports that floor itself, from the batch's own gold",
+         round(_dev_nothing["do_nothing_floor"], 3) == 0.595),
+        ("...the real cost of the choice, on the record: accuracy is mostly the ACCURATE base "
+         "rate, so rubric work on the rare classes will barely move it",
+         _dev_nothing["primary_metric"] > 0.5),
+        ("...which is exactly what the macro diagnostic is kept for -- it scores the same "
+         "do-nothing program at ~0.09",
+         round(_dev_nothing["macro_f1_renormalised"], 2) == 0.09),
         ("...and ~0.25 on 3-way", round(_dev_nothing["macro_f1_3way"], 2) == 0.25),
         ("dev supports 8 of 9 classes once the pool filter is repaired -- only "
          "INDIRECT_NOT_REVIEW is genuinely absent there",
@@ -285,8 +339,8 @@ def _selftest() -> int:
          set(OBJECTIVE_CLASSES) == set(SAROL_9_ORDER)
          and {"ETIQUETTE", "IRRELEVANT"} <= set(OBJECTIVE_CLASSES)),
         ("a batch missing an objective class is NOT capped for it -- renormalising over present "
-         "classes is what makes 9-way resolution usable at all",
-         _two_class_perfect["primary_metric"] == 1.0
+         "classes is what makes the macro DIAGNOSTIC usable at 9-way resolution",
+         _two_class_perfect["macro_f1_renormalised"] == 1.0
          and _two_class_perfect["n_objective_classes_present"] == 2),
         ("...and the classes it renormalised over are reported, so two numbers with different "
          "denominators cannot be silently compared",

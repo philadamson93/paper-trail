@@ -32,20 +32,35 @@ nine-label vocabulary. Up to three prompt-driven stages — **extractor** → **
 
 ## The objective
 
-**Maximize macro-F1 over the nine classes, renormalised over the classes present in the batch, on
-the held-out VAL split.** One number, reported as `primary_metric` under the name
-`sarol_macro_f1_6class` — the `_6class` is a leftover and the metric is the nine-class one defined
-above. It is the key the adapter emits, so it is the key you read.
+**Maximize accuracy over the nine classes on the held-out VAL split.** The fraction of claims whose
+predicted label equals the gold label — nothing collapsed, nothing renormalised. One number,
+reported as `primary_metric` under the name `sarol_accuracy_9class`. It is the key the adapter
+emits, so it is the key you read.
 
-`n_objective_classes_present` is part of that number — a score renormalised over six classes is not
-comparable to one over eight — so read it first and say which you are quoting.
+**Compare it against 0.595, never against zero.** Gold is 59.5% ACCURATE on the dev pool, so a
+program that answers ACCURATE every time and does no work scores 0.595. The release reports that
+floor as `do_nothing_floor`, computed from the batch's own gold, so you never have to remember it.
+An accuracy of 0.62 is not "62% right", it is **2.5 points of work** on top of a free 59.5.
 
-`micro_f1` and `macro_f1_3way` are reported alongside it. Read them freely; they are informative.
-Micro is dominated by the ACCURATE base rate, and 3-way is the axis the published baselines use
-(MultiVerS 0.52, GPT-4 4-shot 0.45), so it is there for comparability.
-`experiments/sarol-2024/optimizer/context/task-and-scoring.md`
-records what a do-nothing always-ACCURATE program scores on each axis — that calibration is what
-keeps any of the three from misleading you. The one you are optimizing is `primary_metric`.
+**The cost of this objective, stated plainly so you can plan around it.** Accuracy is dominated by
+the common classes. MISQUOTE and INDIRECT have six dev instances each, so getting both perfectly
+right moves the number by about four points at most, and getting them wrong costs about the same.
+You will not be rewarded much for rare-class work. That is a known property of the objective, not
+a signal that the rare classes are unimportant.
+
+**Read `macro_f1_renormalised` beside it, every time.** It is macro-F1 over the classes present,
+and it is the diagnostic that catches the one degenerate strategy this objective admits: collapsing
+toward ACCURATE raises accuracy and craters macro. Accuracy up **and** macro down means you bought
+the gain by answering ACCURATE more often, which is not an improvement to the rubric. Accuracy up
+and macro flat or up is a real gain.
+
+`micro_f1` and `macro_f1_3way` are also reported. `micro_f1` is accuracy computed *after* the
+collapse into ACCURATE / NOT_ACCURATE / IRRELEVANT, so it forgives every confusion **inside**
+NOT_ACCURATE — the gap between it and `primary_metric` is exactly the mass of those confusions,
+which makes it a useful readout of how much of your error is fine-grained. `macro_f1_3way` is the
+axis the published baselines use (MultiVerS 0.52, GPT-4 4-shot 0.45), reported for comparability.
+Neither is the objective. `experiments/sarol-2024/optimizer/context/task-and-scoring.md` carries
+the full calibration table.
 
 ## The output vocabulary — fixed, exactly nine
 

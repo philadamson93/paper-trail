@@ -334,7 +334,11 @@ DEFAULT_JUDGE_MODEL = "haiku"
 #: The frontier metric's name. One definition, shared by the scorer's output, the release payload
 #: and the gate that checks the optimizer's prompt names the objective the adapter reports -- so
 #: a rename cannot leave the prompt describing a metric nothing computes.
-PRIMARY_METRIC_NAME = "sarol_macro_f1_6class"
+#:
+#: Renamed 2026-09-07 from `sarol_macro_f1_6class`, which was wrong twice over by the end: the
+#: objective had stopped being six-class (the "6" was an artifact of the pool-filter bug) and then
+#: stopped being macro-F1 at all. It is overall accuracy over the nine emittable labels.
+PRIMARY_METRIC_NAME = "sarol_accuracy_9class"
 
 
 def _parse_stream_meta(stdout: str) -> "tuple[str | None, str | None]":
