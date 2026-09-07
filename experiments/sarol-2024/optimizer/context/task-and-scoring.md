@@ -24,48 +24,55 @@ Nine labels, defined in the frozen `experiments/sarol-2024/specs/verdict_enum_sa
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
 
-## The frontier scalar: macro-F1 over the six measurable classes
+## The frontier scalar: macro-F1 over the nine classes, renormalised
 
-**The number being optimized is macro-F1 at 9-way resolution, over the six classes the held-out
-split can actually measure, renormalised over those present in the batch:**
+**The number being optimized is macro-F1 at 9-way resolution over `OBJECTIVE_CLASSES` (all nine),
+renormalised over the classes actually present in the batch.** On dev that resolves to eight —
+`INDIRECT_NOT_REVIEW` is the only class with no dev gold.
 
-`ACCURATE` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `OVERSIMPLIFY` · `MISQUOTE` · `INDIRECT`
+Drawable gold, after the pool repair described below:
 
-That set is not a preference, it is what the data supports. The 9-way gold distribution of the
-drawable dev pool (255 claims) is:
+| Class | TRAIN | dev |
+|---|---:|---:|
+| ACCURATE | 1308 | 185 |
+| ETIQUETTE | 264 | 38 |
+| NOT_SUBSTANTIATE | 189 | 25 |
+| CONTRADICT | 58 | 22 |
+| IRRELEVANT | 118 | 21 |
+| OVERSIMPLIFY | 56 | 8 |
+| INDIRECT | 35 | 6 |
+| MISQUOTE | 23 | 6 |
+| INDIRECT_NOT_REVIEW | 25 | **0** |
 
-| Class | dev gold | in objective |
-|---|---:|:--:|
-| ACCURATE | 185 | ✅ |
-| NOT_SUBSTANTIATE | 25 | ✅ |
-| CONTRADICT | 22 | ✅ |
-| OVERSIMPLIFY | 8 | ✅ |
-| MISQUOTE | 6 | ✅ |
-| INDIRECT | 6 | ✅ |
-| ETIQUETTE | 3 | ❌ support 3 — one claim moves a macro by ~0.06 |
-| INDIRECT_NOT_REVIEW | **0** | ❌ no gold in dev at all |
-| IRRELEVANT | **0** | ❌ no gold in dev at all |
+⚠ **Read `n_objective_classes_present` before comparing two numbers.** Renormalising means the
+denominator depends on which classes the batch drew; a score over 6 classes is not comparable to
+one over 8. Dividing by a fixed nine instead would cap a *perfect* program at
+`classes_present/9` — a property of the sample, not of the program.
 
-Two classes have **no gold instance anywhere in dev**, so raw macro-9 caps a *perfect* program at
-7/9 = 0.778 — a property of the sample, not of the program. Renormalising over present classes is
-what removes that artifact, and it is why `n_objective_classes_present` is reported beside every
-number. **Read it before comparing two scores**: a number renormalised over 5 classes is not
-comparable to one over 6.
+### The pool used to delete two classes, and it shaped everything
+
+Until 2026-09-07 a claim was drawable only if its cited bucket carried an **evidence annotation**.
+But `IRRELEVANT` means *"no information in the cited paper is relevant"* and `ETIQUETTE` means
+*"unclear what is being cited to this paper"* — both are **defined by the absence of evidence**, so
+neither has evidence segments to point at.
+
+The filter therefore deleted exactly those two classes and nothing else: **442 of 2141 TRAIN rows
+(300 ETIQUETTE + 142 IRRELEVANT) and 61 of 316 dev rows (37 + 24)** — an exact match, while every
+other class was 100% evidence-covered. That is why no run ever predicted `IRRELEVANT`: the program
+was never shown one. It was a property of our filter, not of the benchmark.
+
+Their labels are recovered from the benchmark's per-citation annotation files by matching claim
+text (`sampling.recovered_gold`). The join is controlled against rows whose gold is already known:
+**235 agree, 0 disagree** — its only failure is *no match* (~8%), never a wrong label, and
+unmatched rows stay excluded. Pools are now **2076 TRAIN / 311 dev**.
 
 ### Why not 3-way, which this used to be
 
 3-way collapses `OVERSIMPLIFY` / `NOT_SUBSTANTIATE` / `CONTRADICT` / `MISQUOTE` / `INDIRECT` into
-one NOT_ACCURATE bucket. In dev that is **67 of 255 claims (26%)** whose entire error structure
-becomes invisible: confusing CONTRADICT for NOT_SUBSTANTIATE costs exactly nothing. That is a
-quarter of the data with no gradient on it.
-
-Worse, 3-way's IRRELEVANT bucket has support **3** in the entire dev pool (the ETIQUETTE claims;
-its other two members have no dev gold). A third of the old objective rested on three claims —
-which is precisely why the 2026-09-02 run never predicted IRRELEVANT and ~⅓ of the metric sat
-pinned at zero before the program did anything.
-
-3-way is still computed and reported as `macro_f1_3way`, because the published baselines are on
-that axis (MultiVerS 0.52, GPT-4 4-shot 0.45). It is a comparability number, not the objective.
+one NOT_ACCURATE bucket, so every confusion among them costs nothing — a quarter of dev with no
+gradient on it. Its IRRELEVANT bucket also rested almost entirely on the claims the filter was
+deleting. It is still reported as `macro_f1_3way` for the published baselines (MultiVerS 0.52,
+GPT-4 4-shot 0.45): a comparability number, not the objective.
 
 ### Micro-F1 is reported. It is not the objective, and it is a trap
 
@@ -77,12 +84,12 @@ For single-label multiclass, micro-F1 equals accuracy. The gold distribution is 
 | NOT_ACCURATE | 376 | 20.1% |
 | IRRELEVANT | 34 | 1.8% |
 
-So a program that emits `ACCURATE` unconditionally and does no work at all scores **micro 0.725**
-on the real dev pool — while scoring **0.140** on the objective and 0.280 on 3-way. Measured, not
-estimated. The 2026-09-02 program scored micro 0.784, so *everything the pipeline does* is worth
-about six points of micro sitting on top of a 72.5-point floor you get for free by returning a
-constant. And inside that band the cheapest way up is to answer `ACCURATE` more often, because
-ACCURATE is 72.5% of dev — the gradient points at the do-nothing program. If you find yourself with a
+So a program that emits `ACCURATE` unconditionally and does no work at all scores **micro 0.595**
+on the repaired dev pool — while scoring **0.093** on the objective and 0.249 on 3-way. Measured,
+not estimated. Most of that micro is simply the ACCURATE base rate (59.5% of dev), available for
+free, and the cheapest way to climb inside it is to answer `ACCURATE` more often — the gradient
+points at the do-nothing program. Micro is reported and you are free to read it; just do not
+optimise it. If you find yourself with a
 rising micro and a falling macro, you are making the program worse and the wrong number is telling
 you otherwise. `score_sarol3.py --selftest` pins both figures so this cannot be adopted by
 accident.

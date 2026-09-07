@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import functools
 import json
+import re
 import pathlib
 import random
 import sys
@@ -100,6 +102,95 @@ class ClaimUnit:
         return f"{self.claim_row_id}-{self.paper_bucket}"
 
 
+#: Splits, as the benchmark's annotation tree names them.
+_ANN_SPLIT = {"train": "Train", "dev": "Dev", "test": "Test"}
+
+
+def _norm(text) -> str:
+    """Whitespace/punctuation-insensitive form, for joining a claim to its annotation file."""
+    if isinstance(text, list):
+        text = " ".join(map(str, text))
+    return re.sub(r"\W+", " ", str(text or "")).lower().strip()
+
+
+@functools.lru_cache(maxsize=8)
+def recovered_gold(split: str) -> "dict[tuple[int, int], str]":
+    """Gold for the claims the evidence-annotation rule silently deleted.
+
+    **The bug this repairs.** A unit was drawable only if its cited bucket carried an *evidence
+    annotation*. But `IRRELEVANT` means "no information in the cited paper is relevant" and
+    `ETIQUETTE` means "unclear what is being cited to this paper" -- both are *defined by the
+    absence of evidence*, so neither has evidence segments to point at. The rule therefore deleted
+    exactly the two classes whose defining property is having nothing to point at, and nothing
+    else: the excluded population is **442/2141 TRAIN (300 ETIQUETTE + 142 IRRELEVANT)** and
+    **61/316 dev (37 + 24)**, an exact match, while every other class is 100% evidence-covered.
+
+    That is why no run ever predicted `IRRELEVANT` and why a third of 3-way macro sat pinned at
+    zero: the program was never shown one. It was a property of our filter, not of the benchmark.
+
+    **How gold is recovered.** The label lives in the benchmark's per-citation annotation files
+    (`annotations/<Split>/citations/<cited>/<citing>_<n>.json`), which `claims-*.jsonl` does not
+    carry for these rows. The join is on normalised claim text against the annotation's
+    `citation_context`, restricted to the cited paper's own directory.
+
+    **Validated, not assumed.** Run against the 255 dev rows whose gold is already known from
+    their evidence annotations, the join agrees **235/235 and disagrees 0 times** -- its only
+    failure mode is *no match* (~8%), never a wrong label. Unmatched rows stay excluded, which
+    keeps the pool conservative: a claim is added only when its label is unambiguous. That control
+    is a standing gate, not a one-off check.
+    """
+    import stage_claim  # noqa: PLC0415
+
+    by_bucket = _annotations_by_bucket(split)
+    out: dict[tuple[int, int], str] = {}
+    for row in stage_claim.load_claims(split):
+        evidence = row.get("evidence") or {}
+        if any(evidence.values()):
+            continue  # already drawable; gold comes from its own evidence annotations
+        for bucket in sorted({int(d) // 1000 for d in (row.get("cited_doc_ids") or [])}):
+            label = join_label(row.get("claim"), bucket, by_bucket)
+            if label is not None:
+                out[(int(row["id"]), bucket)] = label
+    return out
+
+
+def join_label(claim, bucket: int, by_bucket: "dict[int, list[dict]]") -> "str | None":
+    """The annotation label for `claim` under `bucket`, or None when it is not unambiguous.
+
+    Split out so the precision control in the gates drives *this* function rather than a
+    reimplementation of it -- a control that exercises a copy proves nothing about what ships.
+    """
+    text = _norm(claim)
+    if not text:
+        return None
+    hits = {
+        obj["label"]
+        for obj in by_bucket.get(bucket, ())
+        if text in _norm(obj.get("citation_context") or obj.get("citing_paragraph"))
+    }
+    return hits.pop() if len(hits) == 1 else None
+
+
+def _annotations_by_bucket(split: str) -> "dict[int, list[dict]]":
+    """Per-citation annotation records, keyed by the cited paper's bucket number."""
+    import stage_claim  # noqa: PLC0415
+
+    ann_dir = stage_claim.BENCH_DIR / "annotations" / _ANN_SPLIT[split] / "citations"
+    by_bucket: dict[int, list[dict]] = {}
+    if ann_dir.is_dir():
+        for path in ann_dir.rglob("*.json"):
+            try:
+                obj = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(obj, dict) or not obj.get("label"):
+                continue
+            head = path.parent.name.split("_", 1)[0]
+            if head.isdigit():
+                by_bucket.setdefault(int(head), []).append(obj)
+    return by_bucket
+
+
 def claim_pool(split: str) -> list[ClaimUnit]:
     """Every stageable `(claim, cited bucket)` in `split`, in a stable order.
 
@@ -107,11 +198,19 @@ def claim_pool(split: str) -> list[ClaimUnit]:
     produce different batches and quietly break `reproduce`.
     """
     units: list[ClaimUnit] = []
+    seen: set[tuple[int, int]] = set()
     for row in stage_claim.load_claims(split):
         buckets = sorted({int(doc_id) // 1000 for doc_id in (row.get("evidence") or {})})
-        # No annotation on any bucket -> no gold label to score against. See module docstring.
         for bucket in buckets:
+            seen.add((int(row["id"]), bucket))
             units.append(ClaimUnit(claim_row_id=int(row["id"]), paper_bucket=bucket))
+    # ...plus the ETIQUETTE / IRRELEVANT claims the evidence-annotation rule used to delete. Their
+    # cited paper is `cited_doc_ids // 1000`, which agrees with the evidence-derived bucket on
+    # 255/255 rows where both exist -- so BM25 has exactly the same document to search that it
+    # does for any other claim. See `recovered_gold`.
+    for (row_id, bucket) in recovered_gold(split):
+        if (row_id, bucket) not in seen:
+            units.append(ClaimUnit(claim_row_id=row_id, paper_bucket=bucket))
     units.sort(key=lambda u: (u.claim_row_id, u.paper_bucket))
     return units
 
@@ -134,6 +233,11 @@ def gold_labels(split: str) -> "dict[tuple[int, int], str]":
             mine = {k: v for k, v in evidence.items() if v and int(k) // 1000 == bucket}
             if mine:
                 out[(row_id, bucket)] = gold_paper_label(mine)
+    # The evidence-less classes carry their label in the annotation files instead; `recovered_gold`
+    # joins them back. Merged second and without overwriting, so a unit that has real evidence
+    # always keeps the label derived from it.
+    for key, label in recovered_gold(split).items():
+        out.setdefault(key, label)
     return out
 
 
@@ -641,8 +745,10 @@ def _selftest() -> int:
     # because a 3-class fixture cannot distinguish scarcest-first from abundant-first -- the
     # surplus pass repairs the difference at small k, and an earlier version of these gates was
     # green under BOTH orderings for exactly that reason.
+    # ETIQUETTE and IRRELEVANT are IN the objective now (the six-class set was a pool-filter
+    # artifact). `NOT_A_LABEL` stands in for anything outside the scored vocabulary.
     _AVAIL = {"ACCURATE": 200, "NOT_SUBSTANTIATE": 50, "CONTRADICT": 50,
-              "OVERSIMPLIFY": 8, "MISQUOTE": 1, "ETIQUETTE": 9}  # ETIQUETTE: outside the objective
+              "OVERSIMPLIFY": 8, "MISQUOTE": 1, "NOT_A_LABEL": 9}
     _su, _sg, _next = [], {}, 0
     for _lbl, _cnt in _AVAIL.items():
         for _ in range(_cnt):
@@ -670,14 +776,66 @@ def _selftest() -> int:
          _dist.get("ACCURATE", 0) <= 55),
         ("...spreading the remainder evenly across the classes that still have units",
          _dist.get("NOT_SUBSTANTIATE") == _dist.get("CONTRADICT") >= 45),
-        ("...excluding classes outside the objective, which cannot add recall to any scored "
+        ("...excluding gold outside the scored vocabulary, which cannot add recall to any scored "
          "class and can only cost precision",
-         "ETIQUETTE" not in _dist),
+         "NOT_A_LABEL" not in _dist),
         ("...deterministically for a fixed seed, so a resumed run rebuilds the same VAL",
          [u.claim_id for u in _drawn] == [u.claim_id for u in _again]),
         ("a request larger than the objective classes can fill comes back short, so the caller "
          "can refuse rather than silently measure something else",
          len(stratified_draw(_su, _sg, 5000, seed=1)) == 200 + 50 + 50 + 8 + 1),
+        # The repair itself: the two classes the evidence-annotation rule used to delete are now
+        # drawable, and the objective spans all nine.
+        ("the pool carries ETIQUETTE and IRRELEVANT, which the evidence-annotation rule deleted "
+         "(442 TRAIN / 61 dev rows, 100% those two classes)",
+         {"ETIQUETTE", "IRRELEVANT"} <= set(gold_labels("dev").values())),
+        ("...and the recovered dev gold is ~56 claims, not the 3 the old filter left",
+         50 <= len(recovered_gold("dev")) <= 62),
+        # gold_labels() merging the recovery is NOT enough: the units must also reach the POOL, or
+        # the draw silently reverts to the old 255 while gold looks complete. Negative-controlled
+        # 2026-09-07 -- dropping them from `claim_pool` failed nothing until this gate existed.
+        ("the recovered claims reach the POOL, not just the gold map -- dev is 311 units, not "
+         "the 255 the evidence-annotation rule left",
+         305 <= len(claim_pool("dev")) <= 316),
+        ("...and the pool actually contains the two recovered classes",
+         {"ETIQUETTE", "IRRELEVANT"} <= {
+             gold_labels("dev").get((u.claim_row_id, u.paper_bucket))
+             for u in claim_pool("dev")
+         }),
+    ]
+
+    # -- PRECISION CONTROL for the recovery join ------------------------------------------------
+    # `recovered_gold` invents gold labels for claims the benchmark file does not label, by
+    # matching claim text to a per-citation annotation. That is a heuristic, and a heuristic that
+    # mislabels gold poisons every number downstream -- so it is controlled, not trusted.
+    #
+    # The control runs the SAME `join_label` the recovery uses against the dev rows whose gold is
+    # already known from their own evidence annotations, and requires it to never disagree. It is
+    # allowed to return None (no match) -- incompleteness costs coverage, a wrong label costs
+    # correctness, and only one of those is acceptable. Measured 2026-09-07: 235 agree, 0 disagree.
+    from parse_verdict import gold_paper_label  # noqa: PLC0415
+
+    _by_bucket = _annotations_by_bucket("dev")
+    _agree = _disagree = 0
+    for _row in stage_claim.load_claims("dev"):
+        _ev = {k: v for k, v in (_row.get("evidence") or {}).items() if v}
+        if not _ev:
+            continue
+        _known = gold_paper_label(_ev)
+        _got = join_label(_row.get("claim"), int(next(iter(_ev))) // 1000, _by_bucket)
+        if _got is None:
+            continue
+        if _got == _known:
+            _agree += 1
+        else:
+            _disagree += 1
+
+    checks += [
+        ("the recovery join NEVER disagrees with gold that is already known -- a wrong label "
+         "would poison every number downstream, so precision is the property that matters",
+         _disagree == 0),
+        ("...and it matches often enough to be worth having (>200 of the 255 known-gold rows)",
+         _agree > 200),
         # The default is the decision: an unstratified VAL at these sizes expects ~1 MISQUOTE.
         ("VAL stratifies BY DEFAULT, not on request",
          inspect.signature(val_inputs_for).parameters["stratify"].default is True),

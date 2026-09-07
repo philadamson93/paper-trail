@@ -59,34 +59,34 @@ SAROL_9_ORDER: tuple[str, ...] = (
 UNKNOWN = "UNKNOWN"
 
 
-#: The classes the objective is computed over: the ones the held-out split can actually measure.
+#: The classes the objective is computed over: all nine, renormalised over those present.
 #:
-#: Not a preference. Over the drawable dev pool (255 claims) the 9-way gold distribution is
-#: ACCURATE 185, NOT_SUBSTANTIATE 25, CONTRADICT 22, OVERSIMPLIFY 8, MISQUOTE 6, INDIRECT 6,
-#: ETIQUETTE 3, INDIRECT_NOT_REVIEW 0, IRRELEVANT 0. Two classes have NO gold instance anywhere in
-#: dev, so raw macro-9 caps a *perfect* program at 7/9 = 0.778; and ETIQUETTE's support of 3 means
-#: one claim flipping moves a macro-7 by ~0.06, which is noise to hill-climb on. The six below are
-#: every class with dev support >= 6.
+#: This was briefly a six-class set, on the finding that dev held no gold for `IRRELEVANT` and only
+#: three `ETIQUETTE`. **That finding was an artifact of our own pool filter, not the benchmark.**
+#: A claim was drawable only if its cited bucket carried an *evidence annotation*, and `IRRELEVANT`
+#: ("nothing in the cited paper is relevant") and `ETIQUETTE` ("unclear what is being cited") are
+#: defined by the absence of evidence -- so the filter deleted exactly those two classes and
+#: nothing else: 442/2141 TRAIN and 61/316 dev excluded, 100% of them ETIQUETTE or IRRELEVANT,
+#: while every other class was 100% evidence-covered. See `sampling.recovered_gold`.
 #:
-#: Why not 3-way (the previous objective): its IRRELEVANT bucket has support **3** in the entire
-#: dev pool, so a third of the number rested on three claims -- which is why no run ever predicted
-#: it and ~1/3 of the metric sat pinned at zero. It also collapses five classes into NOT_ACCURATE,
-#: making every confusion among 26% of dev cost exactly nothing. 3-way is still reported, because
-#: the published baselines (MultiVerS 0.52, GPT-4 4-shot 0.45) are on that axis.
+#: With that repaired the drawable pools carry ACCURATE 1308, ETIQUETTE 264, NOT_SUBSTANTIATE 189,
+#: IRRELEVANT 118, CONTRADICT 58, OVERSIMPLIFY 56, INDIRECT 35, INDIRECT_NOT_REVIEW 25, MISQUOTE 23
+#: (TRAIN) and ACCURATE 185, ETIQUETTE 38, NOT_SUBSTANTIATE 25, CONTRADICT 22, IRRELEVANT 21,
+#: OVERSIMPLIFY 8, MISQUOTE 6, INDIRECT 6 (dev). Every class dev holds has support >= 6; only
+#: `INDIRECT_NOT_REVIEW` is genuinely absent there, and renormalisation drops it automatically.
+#:
+#: Why renormalise rather than divide by nine: a fixed denominator caps a *perfect* program at
+#: classes_present/9 -- 8/9 on full dev -- which is a property of the sample, not the program. The
+#: cost is that the denominator varies between batches, so `n_objective_classes_present` is
+#: reported beside every number and MUST be read with it. VAL is drawn once and held per run.
+#:
+#: Why not 3-way: it collapses five classes into NOT_ACCURATE, so confusions among 26% of dev cost
+#: nothing, and its IRRELEVANT bucket rested on the same handful of claims the filter was deleting.
+#: Still reported as `macro_f1_3way` for the published baselines (MultiVerS 0.52, GPT-4 0.45).
 #:
 #: Why not micro: micro == accuracy for single-label multiclass, and a program that always answers
-#: ACCURATE and does no work scores **0.725** on dev. The measured program scores 0.784, so the
-#: entire competence of the pipeline is ~6 points on top of a free 72.5-point floor -- and the
-#: cheapest way to climb inside that band is to say ACCURATE more, which walks toward the
-#: degenerate program. Reported, never optimized.
-OBJECTIVE_CLASSES = (
-    "ACCURATE",
-    "NOT_SUBSTANTIATE",
-    "CONTRADICT",
-    "OVERSIMPLIFY",
-    "MISQUOTE",
-    "INDIRECT",
-)
+#: ACCURATE and does no work scores ~0.6 on the repaired dev pool. Reported, never optimised.
+OBJECTIVE_CLASSES = SAROL_9_ORDER
 
 #: The objective renormalises over the objective classes PRESENT in the batch, rather than dividing
 #: by a fixed 6. Dividing by a constant would make a batch that happens to draw no MISQUOTE cap at
@@ -217,8 +217,11 @@ def _selftest() -> int:
 
     # The measured 9-way gold distribution of the drawable dev pool (255 of 316; a claim whose
     # cited bucket carries no evidence annotation has no gold label and is refused at staging).
-    _DEV_GOLD = {"ACCURATE": 185, "NOT_SUBSTANTIATE": 25, "CONTRADICT": 22, "OVERSIMPLIFY": 8,
-                 "MISQUOTE": 6, "INDIRECT": 6, "ETIQUETTE": 3}
+    # The REPAIRED drawable dev pool (311 of 316). Before `sampling.recovered_gold`, the
+    # evidence-annotation rule deleted 61 rows that were 100% ETIQUETTE (37) and IRRELEVANT (24),
+    # which is what made those classes look unmeasurable and forced a six-class objective.
+    _DEV_GOLD = {"ACCURATE": 185, "ETIQUETTE": 38, "NOT_SUBSTANTIATE": 25, "CONTRADICT": 22,
+                 "IRRELEVANT": 21, "OVERSIMPLIFY": 8, "MISQUOTE": 6, "INDIRECT": 6}
     _dev_nothing = score(
         [("ACCURATE", g) for g, n in _DEV_GOLD.items() for _ in range(n)]
     )
@@ -234,7 +237,7 @@ def _selftest() -> int:
         # OVERSIMPLIFY), so renormalising divides by 2. The real dev distribution is asserted
         # separately below -- that is the number the objective choice actually rests on.
         ("do-nothing objective is well under micro on this fixture too",
-         round(r["primary_metric"], 3) == 0.439),
+         round(r["primary_metric"], 3) == 0.292),
         ("primary_metric < micro_f1 (micro would have been gameable)",
          r["primary_metric"] < r["micro_f1"]),
         ("perfect predictions score 1.0", perfect["primary_metric"] == 1.0),
@@ -268,18 +271,19 @@ def _selftest() -> int:
         # The objective choice, pinned against the REAL drawable dev distribution (255 claims).
         # These are the numbers the decision was made on; if the class set or the renormalisation
         # changes, they move and this says so.
-        ("on real dev, a do-nothing program scores ~0.14 on the objective -- so the metric has "
-         "room to hill-climb in", round(_dev_nothing["primary_metric"], 2) == 0.14),
-        ("...while scoring 0.726 on MICRO, which is why micro is not the objective: the whole "
-         "pipeline is worth ~6 points on top of that free floor",
-         0.72 < _dev_nothing["micro_f1"] < 0.73),
-        ("...and 0.28 on 3-way, whose IRRELEVANT third rests on 3 dev claims",
-         round(_dev_nothing["macro_f1_3way"], 2) == 0.28),
-        ("the objective covers the six classes dev can measure, and excludes the three it "
-         "cannot -- two have zero dev gold, one has support 3",
-         set(OBJECTIVE_CLASSES) == {"ACCURATE", "NOT_SUBSTANTIATE", "CONTRADICT",
-                                     "OVERSIMPLIFY", "MISQUOTE", "INDIRECT"}
-         and not ({"ETIQUETTE", "INDIRECT_NOT_REVIEW", "IRRELEVANT"} & set(OBJECTIVE_CLASSES))),
+        ("on real dev, a do-nothing program scores ~0.09 on the objective -- so the metric has "
+         "room to hill-climb in", round(_dev_nothing["primary_metric"], 2) == 0.09),
+        ("...while scoring ~0.59 on MICRO, which is why micro is not the objective: it is mostly "
+         "the ACCURATE base rate, available for free",
+         0.59 < _dev_nothing["micro_f1"] < 0.60),
+        ("...and ~0.25 on 3-way", round(_dev_nothing["macro_f1_3way"], 2) == 0.25),
+        ("dev supports 8 of 9 classes once the pool filter is repaired -- only "
+         "INDIRECT_NOT_REVIEW is genuinely absent there",
+         _dev_nothing["n_objective_classes_present"] == 8),
+        ("the objective spans all nine classes, renormalised over those present -- the earlier "
+         "six-class set was an artifact of the pool filter, not of the benchmark",
+         set(OBJECTIVE_CLASSES) == set(SAROL_9_ORDER)
+         and {"ETIQUETTE", "IRRELEVANT"} <= set(OBJECTIVE_CLASSES)),
         ("a batch missing an objective class is NOT capped for it -- renormalising over present "
          "classes is what makes 9-way resolution usable at all",
          _two_class_perfect["primary_metric"] == 1.0
