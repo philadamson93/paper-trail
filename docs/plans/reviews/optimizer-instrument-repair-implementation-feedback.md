@@ -93,3 +93,41 @@ A follow-up commit is warranted. The core optimizer/code changes are mostly impl
 - Verified composed tag: `python3 experiments/sarol-2024/scripts/freeze_program_v0.py --verify --tree program-v0`; result: FAIL, enum mismatch.
 - Recomputed HEAD file hashes against manifest entries; all 8 HEAD files matched and the combined hash reproduced.
 - Searched for old/new combined hashes; found stale current-contract uses of `391f54fae7c5` outside the updated manifest.
+
+---
+
+## Disposition (applied 2026-09-07, after the audit)
+
+Every finding was agreed with; none was disputed. Applied in commits `988456a`..`HEAD`:
+
+- **Critical Drift — `program-v0` tag not re-cut.** Correct, and it was an explicit plan instruction
+  I had missed: *Landing & cleanup* says "restore the tree to pristine `v0` **and re-tag**". I did
+  the restore, not the re-tag. Tag re-cut onto `988456a` with a message recording the new
+  `combined_hash 0a02710cbd88` and naming the superseded `67fb280`.
+  `freeze_program_v0.py --verify --tree program-v0` now reports **OK 8/8**, and
+  `materialize_smoke.py` confirms the engine writes all 8 files byte-faithfully from that SHA.
+  The requirements plan already recorded this exact Stop-condition at its line 403 ("a `program-v0`
+  tag cut over the superseded fileset → delete the tag and re-cut it after the re-freeze").
+- **Test Gap 2 — the guard checked the tree, not the tag.** The sharpest finding in the audit. The
+  S26 guard was built to stop a mislabelled baseline and had a blind spot in exactly that dimension,
+  because `engine.materialize` reads from the tag via `git show` and never off disk. Added
+  `SarolProgramStore.verify_tag_tree()` and a second refusal in `run_optimization`. Gated with the
+  Codex scenario reproduced literally — clean tree, stale tag — plus a negative control asserting
+  the *tree* check calls that same repo clean, and a check that an unresolvable tag is a violation
+  rather than a silent pass. Negative-controlled: disabling the tag check turns both wiring gates
+  red. Gates 433 → 439.
+- **Test Gap 1 — nothing ran `--verify --tree`.** Covered by the above; the mechanism is now gated
+  in `dispatcher._selftest` against a purpose-built repo rather than depending on a local tag.
+- **Test Gap 3 — stale selftest label.** `adapter.py` no longer describes the assertion as "the
+  frontier scalar is 3-way macro-F1".
+- **Missing Piece 2 — `NEXT.md` archival drift.** Superseded marker added; the 2026-09-03 narrative
+  is left intact as history.
+- **Missing Piece 1 / Question 2 — stale `combined_hash` in `papertrail-optimizer-requirements.md`.**
+  Put to the author, who chose superseded markers over rewriting. Three added at the
+  current-contract sites (lines ~63, ~203, ~323); narrative untouched.
+- **Question 1 — was the tag intentionally left unmoved?** No: it was an oversight, now fixed. The
+  author additionally chose to **push** the re-cut tag (`origin/program-v0`, new — v0 had never been
+  pushed, though v1–v3 were), so the baseline identity is reproducible from a fresh clone.
+
+Both *Defensible Deviations* were confirmed by the author as intended: S23's 9-way accuracy and
+S13's row-level `trace_ref`.
