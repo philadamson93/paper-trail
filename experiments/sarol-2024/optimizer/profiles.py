@@ -458,6 +458,15 @@ def _selftest() -> int:
          "0.2.0" in docs["release-format.md"] and "`0.1.0`." not in docs["release-format.md"]),
         ("...and does not promise verifier output that Phase 1 never produces",
          "no verifier runs at all" in docs["release-format.md"]),
+
+        # S12e. The single best rule any iteration produced -- "name the test that decides a new
+        # rule's terms" -- was learned twice, at the cost of two iterations, and then sat at line
+        # 618 of a 620-line `meta-learnings.md` that is reset between runs. It survived only by
+        # being copied into the STANDING instructions, which are injected every iteration. This
+        # gate is what stops the next reset losing it again: it must be in the prompt, and being
+        # in `meta-learnings.md` must not satisfy it.
+        ("the standing prompt carries the rule that a new rubric rule must name its own test",
+         "name the test that decides its terms" in docs["optimizer-instructions.md"]),
     ]
 
     failed = 0

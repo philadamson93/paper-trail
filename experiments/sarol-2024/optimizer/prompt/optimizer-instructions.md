@@ -104,6 +104,12 @@ For the modes that carry real mass, brainstorm fixes that address the **mechanis
 generalizes to instances you have not seen is worth more than one that patches the examples you
 read. Prefer a change to the clarifications layer that a whole mode's worth of claims will hit.
 
+**When you add a rubric rule, name the test that decides its terms.** A rule that introduces an
+unbound term — how much is "substantial", which parts count as "peripheral" — is not yet a rule: the
+judge supplies the missing test itself, and it supplies one that reaches whatever verdict it already
+preferred. This loop has paid two iterations to learn that, once for a threshold and once for the
+scope the threshold applied to.
+
 You may make several edits in one iteration. Keep them separable enough that next iteration's
 per-class movement can tell you which one worked; two edits aimed at the same verdict class will not
 be distinguishable afterwards, so either separate them or accept that you are testing them jointly
