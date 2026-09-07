@@ -11,15 +11,19 @@ The benchmark is Sarol, Schneider & Kilicoglu 2024, *Assessing Citation Integrit
 Publications* (Bioinformatics btae420): 3,063 human-annotated citation instances with reported
 inter-annotator agreement, split TRAIN 2,141 / VAL 316 / TEST 606.
 
-⚠ **Those are the headline figures, not the pool you are scored against.** A claim whose cited
-bucket carries no evidence annotation has no gold label and is refused at staging, so the
-*drawable* population is **1,699 TRAIN / 255 dev** — roughly 20-24% smaller. The gold table below
-(1,463 + 376 + 34 = 1,873 annotations) is derived from the smaller population, so read the two
-together and do not mix a rate from one with a count from the other.
+⚠ **Those are the headline figures, not the pool you are scored against.** A claim is drawable only
+if its gold label can be resolved, so the *drawable* population is **2,076 TRAIN / 311 dev** — a few
+percent smaller, almost entirely rows the text join could not match. Every per-class count in this
+document is over that repaired pool. (It was much smaller until 2026-09-07, for the reason in
+"The pool used to delete two classes" below; any figure you meet elsewhere quoting 1,699 / 255 is
+recording that bug, not the benchmark.)
 
 ## The output vocabulary
 
-Nine labels, defined in the frozen `experiments/sarol-2024/specs/verdict_enum_sarol.md`. You cannot change this set.
+Nine labels. The emittable set is frozen in
+`experiments/sarol-2024/specs/verdict_enum_sarol.md` and what each one *means* is frozen in
+`experiments/sarol-2024/specs/verdict_definitions_sarol.md`. You cannot change either. How to *apply*
+them is the editable clarifications layer — see `experiments/sarol-2024/optimizer/context/edit-surface.md`.
 
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
@@ -78,11 +82,14 @@ GPT-4 4-shot 0.45): a comparability number, not the objective.
 
 For single-label multiclass, micro-F1 equals accuracy. The gold distribution is heavily skewed:
 
-| Bucket | Gold count | Share |
+| Bucket (dev, repaired pool) | Gold count | Share |
 |---|---:|---:|
-| ACCURATE | 1,463 | 78.1% |
-| NOT_ACCURATE | 376 | 20.1% |
-| IRRELEVANT | 34 | 1.8% |
+| ACCURATE | 185 | 59.5% |
+| NOT_ACCURATE | 67 | 21.5% |
+| IRRELEVANT | 59 | 19.0% |
+
+The IRRELEVANT bucket used to read 1.8% here. That was the deleted-classes bug, not the benchmark:
+`ETIQUETTE` and `IRRELEVANT` both collapse into it and both were being filtered out.
 
 So a program that emits `ACCURATE` unconditionally and does no work at all scores **micro 0.595**
 on the repaired dev pool — while scoring **0.093** on the objective and 0.249 on 3-way. Measured,
@@ -149,9 +156,10 @@ judge's own `nuance` prose named two propositions — *"both halves of the citin
 morbidity conjunct"* — and still emitted a single sub-claim covering both.
 
 This matters twice over. A sentence whose first half is supported and second half is not has no way
-to be scored as such, so it gets one verdict for two claims; and the worst-wins rollup is the
-identity function while this holds, which makes the strictness ladder inert (see
-`experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`). The rubric governs decomposition, so this is in scope for you.
+to be scored as such, so it gets one verdict for two claims; and while this holds the worst-wins rollup is
+the identity function, so reordering the strictness ladder cannot move anything. Decomposition is
+governed by the editable clarifications layer, so it is in scope for you — and it is the change that
+would make the ladder matter at all.
 
 ### 1. The INDIRECT-detection blind spot — N=5 only; see mode 3 before prioritising it
 

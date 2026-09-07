@@ -64,6 +64,10 @@ classes caps at 5/9 = 0.556 however perfect the predictions. **Always read `supp
 small, not that the program got worse. This is why 9-way is a breakdown and the 3-way macro-F1 is the frontier.
 A concrete calibration: the do-nothing always-ACCURATE program scores 0.097 at 9-way against 0.292 at 3-way.
 
+`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` is how that corpus gets read —
+the draw discipline, the blame record, and what to hand a subagent. This section is the shape; that
+document is the procedure.
+
 **`corpus.ref` points at the per-claim mistake corpus itself** — `mistakes/<batch_id>.json` under
 the run's TRAIN output root. Not at the run manifest: the manifest carries dispatch bookkeeping
 (exit codes, costs, timings) and no gold and no reasoning, so following it taught you nothing about
@@ -116,8 +120,8 @@ mapping separates a rubric defect from a retrieval one.
 claims produced exactly one sub-claim — even the five where the judge's own `nuance` named two
 propositions ("both halves of the citing sentence", "the morbidity conjunct"). The claims
 decompose; the judge is not decomposing them. Two consequences: the worst-wins rollup is currently
-the identity function (see `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md` on the ladder), and **making the judge
-decompose is an available target with direct evidence behind it.**
+the identity function, so reordering the strictness ladder cannot move anything; and **making the
+judge decompose is an available target with direct evidence behind it.**
 
 `claim_type` is the judge's own read of the claim (`PARAPHRASED`, `DIRECT`, …) and `rubric_variant`
 names the rubric version that produced the verdict — both are plausible upstream causes of a wrong

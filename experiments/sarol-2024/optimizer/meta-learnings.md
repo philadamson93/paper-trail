@@ -8,6 +8,24 @@ everything learned after N), so this file is the only thing that carries forward
 do not delete them. A reverted attempt is as useful as a confirmed one, and more likely to be
 retried by accident.
 
+## What belongs here, and what belongs in `findings/`
+
+This file is **across iterations**; `findings/iter-<n>.md` is **within one**. The split exists
+because this file is read by every future iteration and that one is not.
+
+**Here:** what is and is not working about optimizing *this task*. Which kinds of edit have moved the
+number and which have not. Whether a prediction held. What was deleted and whether it mattered. A
+failure mode confirmed across more than one iteration. A request for something outside the current
+edit surface. Keep it concise — a log of per-example blames in here makes it useless to the reader it
+exists for.
+
+**In `findings/iter-<n>.md`:** the per-example blames the Phase 1 subagents returned, the modes
+clustered out of them with their counts, the hypotheses considered, the edits made, and the
+predictions for this iteration. Length is fine there; nothing reads it in bulk.
+
+The test: if it is about *these examples*, it is a finding. If it is about *how to optimize this
+task*, it is a meta-learning.
+
 ## Status
 
 **Iterations 1, 2 and 3 have run.** `program-v0`, `v1` and `v2` all have TRAIN numbers; **none has
