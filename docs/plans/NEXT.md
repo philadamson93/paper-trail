@@ -144,6 +144,38 @@ pin the canary under haiku (`canary.py --pin --profile retrieval --model haiku -
 Phil's read of the prompt. Open judgment call: the stratified draw *excludes* gold classes outside
 the objective (3 ETIQUETTE claims on dev) — reversible via one argument.
 
+### Session 2026-09-07 — the pool filter was deleting two whole classes
+
+`64c07d7` pushed. **409 offline gates green.**
+
+**The finding.** A claim was drawable only if its cited bucket carried an *evidence annotation*.
+But `IRRELEVANT` ("nothing in the cited paper is relevant") and `ETIQUETTE` ("unclear what is being
+cited") are **defined by the absence of evidence**. The rule deleted exactly those two classes and
+nothing else — **442/2141 TRAIN (300+142) and 61/316 dev (37+24)**, exact — while every other class
+was 100% evidence-covered. That is why no run ever predicted `IRRELEVANT` and why ⅓ of macro-3 sat
+pinned at zero. A property of our filter, not the benchmark.
+
+**The repair.** `sampling.recovered_gold` joins claim text to the benchmark's per-citation
+annotation files. Controlled against rows whose gold is already known: **235 agree, 0 disagree** —
+its only failure is no-match (~8%), never a wrong label; unmatched rows stay excluded. Pools are
+now **2076 TRAIN / 311 dev**.
+
+**Consequences.** Objective widened from macro-6 to **all nine classes renormalised** (8 on dev;
+only `INDIRECT_NOT_REVIEW` is genuinely absent there). The repaired pool is less skewed —
+do-nothing micro drops 0.725 → **0.595**. Stratified VAL **n=80** now gives 12/12/12/12/12/8/6/6
+across eight classes at ~$27/iter, better balance than the old n=100.
+
+**Two earlier claims corrected**: the benchmark's fetch provenance *is* documented
+(`data/benchmarks/sarol-2024/download.sh` → `ScienceNLP-Lab/Citation-Integrity`), and the memory
+note recording "drawable pool is 1,699/255" was recording the bug, not a fact about the benchmark.
+
+**Next: the optimizer-prompt redesign.** Phil annotated `prompt/optimizer-instructions.md` with 12
+comments (preserved verbatim at `docs/session/optimizer-prompt-ANNOTATED-2026-09-07.md`, git-ignored).
+Agreed shape: subagent fan-out for failure-mode discovery (rad-eval's sampled-blame, extended),
+per-iteration findings doc split from `meta-learnings.md`, widened edit surface with **scorer and
+gold permission-locked**, canary kept as-is, label definitions frozen from source with an editable
+clarifications layer, and the rollup/ladder passage cut.
+
 Everything below this line predates the pause and is historical design context, not live status.
 
 > **Major reframe 2026-04-21: experiment is agent-only; infrastructure is the contribution.** Human decision: the optimizer is an agent (not human-in-the-loop). Paper-trail + Sarol is the case study; the framework is the primary contribution. See `docs/plans/agentic-pipeline-optimization-framework.md` for the authoritative plan (tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses). Everything downstream — contributions list, Task 5 eval-arm deliverables, hygiene rules — has been updated below.
