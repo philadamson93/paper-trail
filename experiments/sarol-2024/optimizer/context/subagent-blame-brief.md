@@ -1,9 +1,16 @@
 # Blame brief — read one claim, say why it was judged wrong
 
-**This document is your whole brief.** You have been handed a list of claim ids and the path to a
-mistake corpus. Work those claims and return one record each. You do not need any context beyond
-this file — not the run's history, not what the optimizer is planning, not how your slice was
-chosen.
+**This is your brief.** You have been handed three things: a list of claim ids, the path to a
+mistake-corpus JSON file, and the name of this run's **profile**. Work those claims and return one
+record each.
+
+**You need nothing about the run itself** — not its history, not what the optimizer is planning, not
+how your slice was chosen, not the previous iterations' findings. Those would cost you attention and
+buy you nothing, and you have not been given them on purpose.
+
+**You will need to open two program files**, named below: the rubric (because deciding whether the
+guidance was at fault means reading the guidance) and the label definitions. Read them once, before
+you start; do not go looking for anything else.
 
 **Every path here is relative to your working directory, which is the repository root.**
 
@@ -14,6 +21,18 @@ verdict from a fixed nine-label vocabulary. On your claims it emitted the wrong 
 say **why** — the step the judge took that produced the wrong answer.
 
 You are not fixing anything. You are producing evidence about a mechanism.
+
+**The profile you were given decides how the evidence reached the judge**, and it changes which
+blames are even possible. Do not assume; use the one you were handed.
+
+| Profile | How the judge got its evidence | What that means for you |
+|---|---|---|
+| `retrieval` | BM25 keyword search over the cited paper picked the top *k* passages, mechanically, before the judge ran | `retrieval` blame is about a **keyword miss**. There is no extractor to blame |
+| `agentic` / `paperclip` | an extractor agent searched and selected the passages | `retrieval` blame is about an **agent's search**, which is a different defect with a different fix |
+
+Under `retrieval` the envelope also carries exactly one sub-claim covering the whole citing
+sentence, and the indirect-attribution check is null. Those are properties of the profile, not
+defects of the judge — do not blame the judge for them.
 
 ## Your input
 
@@ -29,13 +48,32 @@ fields that matter to you:
 | `sub_claims[]` | the proposition the judge actually evaluated, its verdict, and **the evidence mapped to it** |
 | `sub_claims[].evidence[].locator` | `pdfs/<citekey>/content.txt#L22` — where in the cited paper that passage came from |
 | `evidence_snippets` | every passage the judge was given, as a flat union across sub-claims |
-| `adjudicator_reasoning.nuance` | the judge's own prose about what it was weighing |
+| `adjudicator_reasoning.nuance` | ⚠ **a JSON array of strings**, one per sub-claim that carried nuance — not a single prose string. Often empty |
+| `adjudicator_reasoning.remediation.suggested_edit` | the judge's own proposal for fixing the citing sentence. Undocumented until now and often the most revealing field in the record: it shows what the judge *thought the problem was*, which is frequently the mechanism you are looking for |
+| `adjudicator_reasoning.overall_flag` | the judge's paper-level flag, when it set one |
 | `claim_type` | the judge's read of the claim (`PARAPHRASED`, `DIRECT`, …) |
+| `rubric_variant` | which version of the rubric produced this verdict |
+| `trace_ref` | path to the judge's full session transcript for this claim, or `null`. See step 5 |
+
+**Every one of these can be absent, empty, or null.** The record is assembled from whatever the
+judge wrote, and a judge that wrote nothing leaves an empty field rather than an error. If a field
+you wanted is missing, say so in the record and blame `unclear` — do not go looking for it
+elsewhere, and do not treat its absence as evidence of anything.
+
+### The two files you should open
 
 The nine labels: `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` ·
-`INDIRECT` · `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`. Their definitions are in
-`experiments/sarol-2024/specs/verdict_definitions_sarol.md` — read it if a blame call turns on what
-a label means.
+`INDIRECT` · `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`.
+
+- **`experiments/sarol-2024/specs/verdict_schema_sarol.md` — the rubric. Read this one first, and
+  read it every time.** It is the operative guidance: it is loaded into the judge's context on every
+  claim, and it is what a `rubric` blame is a blame *of*. You cannot say the guidance pointed the
+  judge wrong without having read the guidance, and a mechanism sentence written without it tends to
+  come out as a restatement of the outcome.
+- `experiments/sarol-2024/specs/verdict_definitions_sarol.md` — what each label means, from the
+  benchmark's annotation scheme. This is what the **gold annotators** were working from, so it is
+  the right reference for "is the gold label defensible", i.e. for a `gold` blame. Note that the
+  judge does **not** read this file, so it is never itself the cause of a judge's mistake.
 
 ## Per claim
 
@@ -47,8 +85,16 @@ a label means.
 3. **Read `adjudicator_reasoning.nuance`.** The judge frequently names the thing it got wrong.
 4. **Decide the blame.** One of:
 
-   - **rubric** — the guidance the judge followed pointed it at the wrong label, or failed to
-     distinguish the two labels in play.
+   - **rubric** — the guidance is **wrong or silent**: it pointed the judge at the wrong label, or
+     it does not distinguish the two labels in play at all. The test: reading the rubric, could a
+     careful reader have reached the gold label? If not, it is this.
+   - **execution** — the guidance is **right and the judge did not follow it**. The rubric covers
+     this case, correctly, and the verdict contradicts it anyway. The test is the same one, answered
+     the other way: a careful reader *could* have reached the gold label from the rubric as written.
+     Kept separate from `rubric` because the two imply opposite fixes — `rubric` says write a rule,
+     `execution` says the rule exists and needs to be made harder to skip (moved earlier, stated as
+     a check, given a worked example). Collapsing them is how an iteration adds a rule that was
+     already there.
    - **retrieval** — the evidence needed to reach the gold label was not in the window the judge
      saw. On this pipeline the judge is handed a keyword-retrieved subset of the cited paper and is
      **not told that it is a subset**, so it can report a fact as absent from the paper when the
@@ -58,37 +104,59 @@ a label means.
      them as one, so a single verdict had to cover both.
    - **attribution** — the sentence cites a cluster of sources and the judge attributed the wrong
      portion of it to this one.
-   - **gold** — you believe the benchmark's label is wrong or genuinely ambiguous. Legitimate, and
-     rare. Say why in one sentence; it is not a catch-all for a miss you cannot explain.
+   - **gold** — you believe the benchmark's label is wrong or genuinely ambiguous. Legitimate. Say
+     why in one sentence, against the definitions file. It is not a catch-all for a miss you cannot
+     explain — that is `unclear` — but do not talk yourself out of it either: this category used to
+     be described as "rare", and that word alone was enough to break a tie the evidence did not.
    - **unclear** — the record does not tell you. Better than a guess.
 
-5. **Open a reasoning trace only if you must.** The run manifest records a `trace_ref` per claim,
-   pointing at the judge's own session transcript. It is the full reasoning and it is large. Open
-   one when the fields above genuinely cannot tell you why the judge concluded what it did — one or
-   two across your whole slice, not one per claim. Opening them by default will exhaust your budget
-   before it teaches you anything.
+5. **Open a reasoning trace only if you must.** Each corpus row carries `trace_ref`: a path to the
+   judge's own session transcript for that claim, openable directly. It is the full reasoning and it
+   is large. Open one when the fields above genuinely cannot tell you why the judge concluded what
+   it did — one or two across your whole slice, not one per claim. Opening them by default will
+   exhaust your budget before it teaches you anything. When `trace_ref` is `null` the transcript was
+   not captured; that is not a finding, just an absence.
 
 ## What to return
 
 One record per claim, and nothing else. Not the evidence text, not the trace, not the corpus.
 
 ```
-claim_id:      C042
-gold / pred:   CONTRADICT -> ACCURATE   (3-way: NOT_ACCURATE -> ACCURATE, crossed)
-blame:         rubric
+claim_id:      <the id from the corpus>
+gold / pred:   <GOLD> -> <PRED>   (3-way: <gold_3way> -> <pred_3way>, crossed | same bucket)
+blame:         rubric | execution | retrieval | decomposition | attribution | gold | unclear
 mechanism:     one sentence on WHY the judge landed where it did -- the step it took, not the
-               outcome. "Treated a source passage stating the opposite as merely unsupportive,
-               because the guidance requires a verbatim opposing excerpt and this one paraphrased."
+               outcome
 evidence_cue:  the single locator or short snippet that shows it (<= 15 words)
 confidence:    high | medium | low
 ```
 
-`mechanism` is the load-bearing field. "The judge was wrong about CONTRADICT" restates the label
-columns and is worth nothing. Name the step that produced the wrong answer.
+A filled-in one. The failure it describes is real — it is the retrieval-silence case observed in
+the n=50 run of 2026-09-02, where the judge was handed 20 chunks of a paper about COVID
+non-pharmaceutical interventions, found two of the five it named, and wrote that lockdowns were
+something "this paper never discusses". The **id and the locator values below are placeholders**:
+that run's per-claim corpus is not on disk, so they are shown in the right shape rather than quoted.
+
+```
+claim_id:      <id>
+gold / pred:   ACCURATE -> NOT_SUBSTANTIATE   (3-way: ACCURATE -> NOT_ACCURATE, crossed)
+blame:         retrieval
+mechanism:     Judged the claim unsupported because the passage supporting it was never in the
+               judge's window -- the locators cluster in one region of the paper, so BM25
+               returned a keyhole and the judge read the silence as absence.
+evidence_cue:  "this paper never discusses" -- of a paper about exactly that
+confidence:    medium
+```
+
+`mechanism` is the load-bearing field. **Name the step that produced the wrong answer, not the
+outcome.** "The judge was wrong about CONTRADICT" restates the label columns and is worth nothing.
+"Treated a source passage stating the opposite as merely unsupportive, because the guidance requires
+a verbatim opposing excerpt and this one paraphrased" names a step, and a fix follows from it.
 
 ## Boundaries
 
 - **Do not edit any file.** You are reading and blaming; someone else makes the edits.
-- **Do not look for VAL or TEST claim records or gold labels.** They are outside the repository tree
-  entirely. Attempts are logged, and a threshold of denied calls pauses the run.
+- **Do not look for VAL or TEST claim records or gold labels.** They are outside the repository
+  tree entirely, so there is nothing in it to find — the isolation is structural, not enforced by
+  anything watching you. Every gold label you are allowed to see is already on your corpus rows.
 - **Do not print the corpus back.** Your return value is the records above.

@@ -1009,6 +1009,14 @@ class SarolScorer:
                 "gold_label": resolved.get("gold_label"),
                 "pred_3way": resolved.get("pred_3way"),
                 "gold_3way": resolved.get("gold_3way"),
+                # S13. The trace path, ON THE ROW. It was reachable only from the run manifest,
+                # which a blame subagent is never handed -- so the brief's "open the trace if the
+                # fields cannot explain the verdict" step sent it hunting through the tree, which
+                # the same brief forbids. Copying the one string across turns an impossible
+                # instruction into a one-line file read. None when the trace could not be copied.
+                "trace_ref": ((record.get("stages") or {}).get("adjudicator") or {}).get(
+                    "trace_ref"
+                ),
             })
         out = self.mistakes_root / "mistakes" / f"{batch_id}.json"
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -1545,7 +1553,12 @@ def _selftest() -> int:
                 "profile": "retrieval", "retrieval_k": 20,
                 "claims": [
                     {"claim_id": "C1", "citekey": "k1", "staging_dir": tmp, "status": "ok"},
-                    {"claim_id": "C2", "citekey": "k2", "staging_dir": tmp, "status": "ok"},
+                    # C2 becomes the mistake row below. It carries the per-stage record the real
+                    # Runner writes, so the trace_ref join (S13) is exercised against the actual
+                    # manifest shape rather than asserted against an invented one.
+                    {"claim_id": "C2", "citekey": "k2", "staging_dir": tmp, "status": "ok",
+                     "stages": {"adjudicator": {"exit_code": 0,
+                                                "trace_ref": "/runs/traces/C2-adjudicator.jsonl"}}},
                 ],
                 # An invalid SUB-CLAIM label under a valid overall verdict. parse_verdict only
                 # ever reports the overall label, so without the merge this vanishes.
@@ -1672,8 +1685,15 @@ def _selftest() -> int:
                      "claim_id", "citekey", "claim_text", "evidence_snippets",
                      "pred_label", "gold_label", "pred_3way", "gold_3way",
                      "adjudicator_reasoning", "claim_type", "rubric_variant",
-                     "sub_claims"}),
+                     "sub_claims", "trace_ref"}),
                 ("...naming which claim failed", row["claim_id"] == "C2"),
+                # S13. The brief tells a blame subagent to open the judge's trace when the
+                # structured fields cannot explain the verdict. That instruction was unfollowable:
+                # the path lived in the run manifest, which the subagent is never handed, and the
+                # same brief forbids the tree-searching that finding it would take.
+                ("...and the judge's reasoning trace, so the brief's 'open the trace' step is "
+                 "actually followable from the corpus alone",
+                 row["trace_ref"] == "/runs/traces/C2-adjudicator.jsonl"),
                 ("...what it answered and what gold said",
                  row["pred_label"] == "ACCURATE" and row["gold_label"] == "CONTRADICT"),
                 ("...at the granularity the frontier is scored on",

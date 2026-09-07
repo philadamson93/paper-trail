@@ -4,7 +4,12 @@
 
 ## The rule
 
-Your edit surface is the intersection of two things. Neither alone is the answer.
+**The manifest defines the program. Everything else is machinery.** That is not a rule of thumb, it
+is what the code does: when an iteration is frozen, only manifest entries are staged, so an edit
+outside the manifest is not part of any `program-v<n>`. If you want a crisp test for "is this thing
+mine to change" — is it a manifest entry?
+
+Within the program, your edit surface is the intersection of two things. Neither alone is the answer.
 
 **1. The manifest says what the program is.** It is at
 `experiments/sarol-2024/program-v0/manifest.json` and you can read it. Each entry carries a `path`
@@ -30,8 +35,31 @@ Concretely, as the manifest and the profiles stand today:
 | `src/prompts/extractor-dispatch-pdf.md` | evidence retrieval, fetched-PDF read path | inert | ✅ |
 | `src/prompts/verifier-dispatch.md` | evidence spot-check | inert | ✅ |
 
+And the three manifest entries that are **frozen contract files** — in the program, never editable,
+listed here so the fileset is complete rather than half-shown:
+
+| File | What it is |
+|---|---|
+| `experiments/sarol-2024/specs/verdict_enum_sarol.md` | the emittable set and the 9→3 collapse |
+| `src/specs/verdict_schema.md` | the output schema the exit validator enforces |
+| `src/specs/verifier_results.md` | the verifier's result contract |
+
 **The manifest and the profile are the authority; this table is a convenience.** If they disagree,
 they are what the harness enforces and the table is stale — read them.
+
+## What the judge actually sees
+
+Your whole job is editing the guidance a judge reads, so this is worth stating outright rather than
+inferring. On every claim, the adjudicator loads **exactly three things**:
+
+1. `experiments/sarol-2024/specs/verdict_enum_sarol.md` — the label set;
+2. `experiments/sarol-2024/specs/verdict_schema_sarol.md` — the rubric, i.e. your clarifications layer;
+3. the evidence envelope for that claim, at `ledger/evidence/<claim_id>.json`.
+
+**And nothing else** (`adjudicator-dispatch-sarol.md:21-22` says so in as many words). Not this
+document, not the definitions file, not your findings, not the meta-learnings, not the claim's gold
+label — it has never seen a gold label. If a fact needs to reach the judge, it has to be in the
+rubric or the enum. Reasoning about a document the judge does not open is reasoning about nothing.
 
 ## The one thing that will surprise you: edits outside the manifest do not survive
 
@@ -68,9 +96,11 @@ adjust its own metric is not being optimized. If you believe the scorer is wrong
 for `experiments/sarol-2024/optimizer/meta-learnings.md`, not an edit.
 
 **VAL and TEST claim records, and all gold labels for them.** They live outside the repository tree
-entirely (`$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR`) — there is no in-repo directory to
-be denied, which is a stronger guarantee than a filesystem permission. Attempts to locate them are
-logged to the audit ledger, and a denied-call threshold pauses the run.
+entirely (`$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR`). **The isolation is by
+construction: there is no in-repo path that holds them, so there is nothing to be tempted by and
+nothing to deny.** That is a stronger guarantee than a permission check, because it does not depend
+on anything noticing. Nothing is watching you here and nothing needs to be — looking simply finds
+an empty tree.
 
 TRAIN gold **is** open to you, deliberately: seeing which claims were wrong and what they should have
 been is the mechanism by which you learn. The boundary is the held-out split, not gold as such.
@@ -98,15 +128,43 @@ Nearly every rubric-blamed failure mode is a defect in the clarifications layer,
 much of the point of this loop. The division is: the definitions say what `OVERSIMPLIFY` *is*; the
 clarifications say how to tell it from `NOT_SUBSTANTIATE` on a claim in front of you.
 
-### One mechanical constraint on the clarifications layer
+### The strictness ladder: two copies, and a parser that is easier to fool than to break
 
-The exit validator reads the worst-wins strictness order **out of your rubric file** rather than
-hard-coding it, so that the ordering stays yours to change. That makes the fenced block holding it
-load-bearing: it must be one fenced code block containing all nine labels separated by `>`, strongest
-first. If it cannot be parsed, every claim in the run fails `ROLLUP_ORDER_UNPARSEABLE` — it fails
-closed, because an unenforceable rule is not the same as an inapplicable one.
+The worst-wins ladder is the one place in the rubric where the mechanics can bite you, in two
+separate ways. Both are worth knowing before you touch it.
 
-Reorder it freely. Just do not break the block.
+**1. There are TWO ladders, and only one of them is enforced.**
+
+| Copy | Who reads it | Effect |
+|---|---|---|
+| `experiments/sarol-2024/specs/verdict_schema_sarol.md` (the rubric) | the exit **validator** | what your rollups are *checked against* |
+| `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` (~line 48) | the **judge** | what the rollup is actually *computed from* |
+
+They are byte-different copies of the same ordering, and nothing keeps them in step. So reordering
+the rubric's ladder alone does not change a single verdict — the judge never sees it — and then the
+validator checks your unchanged rollups against your changed ladder and fails them. The edit appears
+to backfire when in fact it was never applied. **Both files are yours under every profile: if you
+reorder the ladder, reorder it in both, in the same iteration.**
+
+**2. The parser does not require `>`, and takes the FIRST block that qualifies.**
+`validate_sarol.parse_rollup_order` walks **every** fenced block in the rubric, in document order,
+collects the capitalised tokens that are enum labels, and returns the first block in which all nine
+appear. The separators are never checked.
+
+The failure mode this creates is not the obvious one. A malformed ladder does not usually fail
+closed — `ROLLUP_ORDER_UNPARSEABLE` fires only when *no* fenced block anywhere in the file mentions
+all nine labels. What actually happens is quieter and worse: **any earlier fenced block that happens
+to name all nine labels is silently taken as the ladder.** A worked example, a table of the
+vocabulary, a "here is what each label means" listing — put one of those in a fenced block above the
+real ladder and the run adopts *its* incidental ordering, with no error and no warning.
+
+This matters because the docs actively encourage worked examples in the rubric, which is exactly the
+material most likely to enumerate the labels. So:
+
+- keep the real ladder as the **first** fenced block in the file that mentions all nine, or
+- keep any earlier fenced block from listing the complete set — nine is the trigger, eight is safe.
+
+Reorder freely. Just keep both copies in step, and keep the ladder first.
 
 ## Profiles: why some editable files are inert on a given run
 

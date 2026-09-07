@@ -28,11 +28,35 @@ them is the editable clarifications layer — see `experiments/sarol-2024/optimi
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
 
-## The frontier scalar: macro-F1 over the nine classes, renormalised
+## The objective: accuracy over the nine classes
 
-**The number being optimized is macro-F1 at 9-way resolution over `OBJECTIVE_CLASSES` (all nine),
-renormalised over the classes actually present in the batch.** On dev that resolves to eight —
-`INDIRECT_NOT_REVIEW` is the only class with no dev gold.
+**The number being optimized is accuracy** — the fraction of claims whose predicted label equals the
+gold label, over the nine emittable labels. Nothing is collapsed and nothing is renormalised.
+Reported as `primary_metric`, under the name `sarol_accuracy_9class`.
+
+**Compare it against 0.595, never against zero.** See *The one table* below: that is what a program
+scores by answering `ACCURATE` every time and doing no work at all. The release computes the floor
+from each batch's own gold and reports it as `do_nothing_floor`, so it is always beside the number
+it calibrates.
+
+**The cost of this choice, on the record.** Accuracy is weighted by how common each class is, so it
+is dominated by `ACCURATE`. `MISQUOTE` and `INDIRECT` have six dev instances each: getting both
+perfectly right is worth about four points, and getting both wrong costs about the same. Rubric work
+on the rare classes is real work that the number will barely reward. That is a known property of the
+objective, not a signal the rare classes do not matter.
+
+**Which is why you read `macro_f1_renormalised` beside it, every time.** It is macro-F1 at 9-way
+resolution, renormalised over the classes present, and it is kept for one job: catching the single
+degenerate strategy accuracy admits. Collapsing toward `ACCURATE` raises accuracy and craters macro.
+So — accuracy up *and* macro down means the gain was bought by answering `ACCURATE` more often, and
+is not an improvement. Accuracy up with macro flat or rising is a real gain. `objective_class_set`
+and `n_objective_classes_present` belong to this diagnostic, not to the objective; two macro numbers
+with different denominators are not comparable, and accuracy has no such caveat.
+
+*(This was macro-F1 until 2026-09-07, and before that 3-way macro. The renormalising denominator
+moved with the batch's class mix, which manufactured a −0.15 TRAIN "decline" across three iterations
+for a program that never changed. Accuracy has no denominator to wobble, and that is most of why it
+won.)*
 
 Drawable gold, after the pool repair described below:
 
@@ -48,10 +72,10 @@ Drawable gold, after the pool repair described below:
 | MISQUOTE | 23 | 6 |
 | INDIRECT_NOT_REVIEW | 25 | **0** |
 
-⚠ **Read `n_objective_classes_present` before comparing two numbers.** Renormalising means the
-denominator depends on which classes the batch drew; a score over 6 classes is not comparable to
-one over 8. Dividing by a fixed nine instead would cap a *perfect* program at
-`classes_present/9` — a property of the sample, not of the program.
+⚠ **That caveat applies to the macro diagnostic, not to the objective.** Renormalising means the
+denominator depends on which classes the batch drew, so a `macro_f1_renormalised` over 6 classes is
+not comparable to one over 8 — read `n_objective_classes_present` before comparing two of them.
+Accuracy is free of this: its denominator is the batch size, whatever the batch contains.
 
 ### The pool used to delete two classes, and it shaped everything
 
@@ -62,15 +86,50 @@ neither has evidence segments to point at.
 
 The filter therefore deleted exactly those two classes and nothing else: **442 of 2141 TRAIN rows
 (300 ETIQUETTE + 142 IRRELEVANT) and 61 of 316 dev rows (37 + 24)** — an exact match, while every
-other class was 100% evidence-covered. That is why no run ever predicted `IRRELEVANT`: the program
-was never shown one. It was a property of our filter, not of the benchmark.
+other class was 100% evidence-covered. It was a property of our filter, not of the benchmark.
+
+⚠ **What that does and does not explain.** It explains why no run was ever *scored correct* on an
+`IRRELEVANT` claim: there were none in the pool to be scored on. It does **not** explain why the
+program never *emitted* `IRRELEVANT` — the program never sees gold labels at all, so the pool's
+composition cannot reach its output. Those are two different facts with two different causes, and
+the repaired pool fixes only the first. Do not expect a program to start predicting `IRRELEVANT`
+merely because the pool now contains some; if it does not emit them, that is a rubric question and
+it is yours.
 
 Their labels are recovered from the benchmark's per-citation annotation files by matching claim
 text (`sampling.recovered_gold`). The join is controlled against rows whose gold is already known:
 **235 agree, 0 disagree** — its only failure is *no match* (~8%), never a wrong label, and
 unmatched rows stay excluded. Pools are now **2076 TRAIN / 311 dev**.
 
-### Why not 3-way, which this used to be
+### The one table: what a do-nothing program scores, on every axis
+
+One fixture, one pool, every number in one place — the **repaired drawable dev pool, n=311**. The
+program is "emit `ACCURATE` for every claim and do no work". All measured, not estimated, and pinned
+by `score_sarol3.py --selftest`.
+
+| Axis | Do-nothing scores | What it is |
+|---|---:|---|
+| **`primary_metric`** (accuracy, 9-class) | **0.595** | **The objective. This is the floor to beat.** |
+| `micro_f1` (accuracy, after the 3-way collapse) | 0.595 | Diagnostic. Equal to the objective *only* for this program |
+| `macro_f1_renormalised` (9-way, classes present) | 0.093 | Diagnostic. The collapse detector |
+| `macro_f1_3way` | 0.249 | Comparability with the published baselines |
+| `macro_f1_9way` (fixed /9 denominator) | 0.097 | Descriptive breakdown |
+
+The 3-way gold distribution underlying it — `ACCURATE` **185 (59.5%)**, `NOT_ACCURATE` **67
+(21.5%)**, `IRRELEVANT` **59 (19.0%)**. The `IRRELEVANT` row used to read 1.8%; that was the
+deleted-classes bug, not the benchmark, since `ETIQUETTE` and `IRRELEVANT` both collapse into it and
+both were being filtered out.
+
+**Why `micro_f1` reads the same as the objective here, and will not once you do any work.** Both are
+accuracy; they differ only in whether the labels are compared before or after the 3-way collapse. A
+program that only ever says `ACCURATE` is right on exactly the gold-`ACCURATE` claims either way, so
+the two coincide at the floor. The moment the program starts emitting the other eight labels they
+separate, and **the gap between them is precisely the mass of your within-bucket confusions** — a
+`CONTRADICT` answered for an `OVERSIMPLIFY` is wrong on `primary_metric` and right on `micro_f1`.
+Read the gap as a readout: wide means much of your error is fine-grained discrimination inside
+NOT_ACCURATE; narrow means your errors cross bucket boundaries.
+
+### Why not 3-way, which the objective used to be
 
 3-way collapses `OVERSIMPLIFY` / `NOT_SUBSTANTIATE` / `CONTRADICT` / `MISQUOTE` / `INDIRECT` into
 one NOT_ACCURATE bucket, so every confusion among them costs nothing — a quarter of dev with no
@@ -78,41 +137,20 @@ gradient on it. Its IRRELEVANT bucket also rested almost entirely on the claims 
 deleting. It is still reported as `macro_f1_3way` for the published baselines (MultiVerS 0.52,
 GPT-4 4-shot 0.45): a comparability number, not the objective.
 
-### Micro-F1 is reported. It is not the objective, and it is a trap
-
-For single-label multiclass, micro-F1 equals accuracy. The gold distribution is heavily skewed:
-
-| Bucket (dev, repaired pool) | Gold count | Share |
-|---|---:|---:|
-| ACCURATE | 185 | 59.5% |
-| NOT_ACCURATE | 67 | 21.5% |
-| IRRELEVANT | 59 | 19.0% |
-
-The IRRELEVANT bucket used to read 1.8% here. That was the deleted-classes bug, not the benchmark:
-`ETIQUETTE` and `IRRELEVANT` both collapse into it and both were being filtered out.
-
-So a program that emits `ACCURATE` unconditionally and does no work at all scores **micro 0.595**
-on the repaired dev pool — while scoring **0.093** on the objective and 0.249 on 3-way. Measured,
-not estimated. Most of that micro is simply the ACCURATE base rate (59.5% of dev), available for
-free, and the cheapest way to climb inside it is to answer `ACCURATE` more often — the gradient
-points at the do-nothing program. Micro is reported and you are free to read it; just do not
-optimise it. If you find yourself with a
-rising micro and a falling macro, you are making the program worse and the wrong number is telling
-you otherwise. `score_sarol3.py --selftest` pins both figures so this cannot be adopted by
-accident.
-
 ### Reported alongside
 
-- Per-class F1 for all three buckets.
+- Per-class F1 for all three **buckets** (`per_class_f1`) and for all nine **labels**
+  (`per_class_f1_9way`). ⚠ These answer different questions. `per_class_f1` has only three entries,
+  so it cannot tell you anything about a nine-class prediction — if you are checking whether
+  `MISQUOTE` moved, `per_class_f1_9way` is the only one that can say.
 - The 3×3 confusion matrix.
-- 9-way per-class F1 and `macro_f1_9way`, as a descriptive breakdown only.
-  **Read `support_9way` first.** Macro-9 always divides by nine, so a batch whose gold covers five
-  classes caps at 5/9 = 0.556 however good the predictions — a low 9-way macro on a small batch
-  usually means the batch was small. For calibration, the do-nothing always-ACCURATE program scores
-  0.097 at 9-way against 0.292 at 3-way: the 9-way axis punishes it harder, which is informative,
-  but it is still not the objective. There are **no published baselines** at
-  9-way granularity — Sarol et al. abandoned that resolution because models could not learn it —
-  so it is a diagnostic, not a score to chase.
+- `macro_f1_9way`, a descriptive breakdown with a fixed /9 denominator. **Read `support_9way`
+  first**: it divides by nine regardless, so a batch whose gold covers five classes caps at
+  5/9 = 0.556 however good the predictions — a low 9-way macro on a small batch usually just means
+  the batch was small. There are **no published baselines** at 9-way granularity; Sarol et al.
+  abandoned that resolution because models could not learn it.
+- `do_nothing_floor` — the always-`ACCURATE` score on *this* batch's gold. Quote it beside every
+  accuracy you report.
 - `error_class_counts`, including `invalid_label` (see below).
 
 ### Invalid labels
@@ -123,20 +161,24 @@ against whatever the gold class was, and counted under `invalid_label` and
 
 ## Known failure modes
 
-A head start, not a complete taxonomy. **Read the ordering caveat first:** modes 1 and 2 were
+A head start, not a complete taxonomy. **They are ordered by weight of evidence, best first**, and
+numbered in that order — modes 1-3 come from the **n=50** run of 2026-09-02; modes 4 and 5 were
 observed on a stratified **N=5** smoke run in April 2026
-(`docs/plans/experiment-april-20-findings.md`); modes 3, 4 and 5 come from the **n=50** run of
-2026-09-02 and are correspondingly better evidenced. Where they disagree, prefer the larger sample.
+(`docs/plans/experiment-april-20-findings.md`). Where they disagree, prefer the larger sample. The
+bracketed id after each heading is the number the mode carried in earlier documents, which numbered
+them by discovery date rather than by evidence, so a reader working top-to-bottom met the weakest
+evidence first and its correction afterwards.
 
-### 3. The judge is too STRICT, not too lenient — n=50, and it inverts mode 1's advice
+### 1. The judge is too STRICT, not too lenient — n=50 *(was mode 3)*
 
 The strongest signal in the 2026-09-02 run: iteration 2's mistake corpus was **16 of 19 rows with
 gold `ACCURATE`**. The program was calling correct citations inaccurate far more often than the
-reverse. Mode 1 below points you at making the judge *stricter* about indirect attribution; on n=50
-the error mass sat squarely on the other side. Start here, and read `per_class_f1` for ACCURATE
-against the NOT_ACCURATE classes before you accept either framing.
+reverse. Mode 4 below points you at making the judge *stricter* about indirect attribution; on n=50
+the error mass sat squarely on the other side. Start here, and read **`per_class_f1_9way`** for
+ACCURATE against the NOT_ACCURATE classes before you accept either framing — `per_class_f1` has only
+the three buckets in it and cannot answer a nine-class question.
 
-### 4. Retrieval silence read as absence — n=50, and invisible to the judge
+### 2. Retrieval silence read as absence — n=50, and invisible to the judge *(was mode 4)*
 
 Under `retrieval` the judge is handed a BM25 top-*k* subset of the cited paper and **nothing in the
 prompt or the rubric tells it that it is a subset.** Observed consequence: given 20 chunks of a
@@ -149,7 +191,7 @@ distinction is exactly the kind it can carry. `sub_claims[].evidence[].locator` 
 corpus is how you tell them apart — scattered locators across the paper mean broad coverage, a
 tight cluster means you are looking through a keyhole.
 
-### 5. The judge does not decompose multi-proposition claims — n=50
+### 3. The judge does not decompose multi-proposition claims — n=50 *(was mode 5)*
 
 Every one of the 50 TRAIN claims produced exactly **one** sub-claim. On at least 5 of them the
 judge's own `nuance` prose named two propositions — *"both halves of the citing sentence"*, *"the
@@ -161,7 +203,7 @@ the identity function, so reordering the strictness ladder cannot move anything.
 governed by the editable clarifications layer, so it is in scope for you — and it is the change that
 would make the ladder matter at all.
 
-### 1. The INDIRECT-detection blind spot — N=5 only; see mode 3 before prioritising it
+### 4. The INDIRECT-detection blind spot — N=5 only; read mode 1 first *(was mode 1)*
 
 The adjudicator calls indirectly-attributed claims `ACCURATE`. Two of five claims failed this way,
 including the most clear-cut INDIRECT case available: a cited review in which *every* relevant
@@ -172,7 +214,7 @@ The shape: the cited paper contains the fact, but credits someone else for it. T
 should have cited the primary. `INDIRECT` when the cited paper is a review,
 `INDIRECT_NOT_REVIEW` otherwise.
 
-Why it looked worth attacking first — and why the n=50 evidence complicates that (mode 3 found the
+Why it looked worth attacking first — and why the n=50 evidence complicates that (mode 1 found the
 error mass on the leniency side, and no mistake in the three 2026-09-02 corpora carried gold
 `INDIRECT` at all beyond a single instance):
 
@@ -186,11 +228,13 @@ error mass on the leniency side, and no mistake in the three 2026-09-02 corpora 
   single-citation claims and 2.8% of multi-citation ones, but `OVERSIMPLIFY` and
   `NOT_SUBSTANTIATE` instances frequently carry an indirect-attribution component too.
 
-Note the collapse: `INDIRECT` → NOT_ACCURATE but `INDIRECT_NOT_REVIEW` → IRRELEVANT. Getting the
-review/not-review distinction wrong moves the answer across two different 3-way buckets, so it
-costs you on the frontier scalar, not just on the 9-way breakdown.
+Note the collapse: `INDIRECT` → NOT_ACCURATE but `INDIRECT_NOT_REVIEW` → IRRELEVANT. That used to
+be the reason this confusion was worth attention — it crossed two 3-way buckets while its neighbours
+did not. **Under accuracy that argument is retired**: every wrong label costs exactly one claim,
+whatever bucket it collapses into. The distinction is worth getting right on its own merits now, not
+because of where it lands.
 
-### 2. Severity under-commitment — N=5, tentative, and mostly invisible to the frontier
+### 5. Severity under-commitment — N=5, tentative, and NO LONGER invisible *(was mode 2)*
 
 Two of five claims landed one step down a severity ladder from gold: gold `NOT_SUBSTANTIATE`
 predicted `OVERSIMPLIFY`, and gold `CONTRADICT` predicted `NOT_SUBSTANTIATE`. The second is the
@@ -200,14 +244,17 @@ informative one — the extractor had already recorded the verbatim opposing pas
 Two honest caveats, both of which should temper how much effort you spend here:
 
 - **N=5 is within noise.** Whether the adjudicator *systematically* under-commits needs N≥50 to
-  say. Do not treat it as established.
-- **Both misses are 3-way hits.** `OVERSIMPLIFY`, `NOT_SUBSTANTIATE` and `CONTRADICT` all collapse
-  into NOT_ACCURATE, so this pattern costs **nothing** on the frontier scalar. It shows up only in
-  the 9-way breakdown, which is descriptive.
+  say. Do not treat it as established. This caveat stands.
+- ~~**Both misses are 3-way hits**, so this pattern costs nothing on the frontier.~~ **No longer
+  true, and the reversal matters.** That was written when the objective was 3-way; `OVERSIMPLIFY`,
+  `NOT_SUBSTANTIATE` and `CONTRADICT` all collapse into NOT_ACCURATE, so a slip among them was free.
+  **Under accuracy every one of them is a full miss.** These three plus `MISQUOTE` and `INDIRECT`
+  hold 67 of dev's 311 claims, and confusions *inside* that group are now scored — they are exactly
+  the mass that `micro_f1` still forgives and `primary_metric` does not.
 
-So: worth recording when you see it, not worth optimizing against under the current metric. If it
-ever becomes the frontier, that is a decision someone makes deliberately, not one you make by
-chasing a diagnostic.
+So: this went from "worth recording, not worth optimizing" to a live target, on the same evidence.
+The N=5 caveat is the only thing still holding it back, so confirm the pattern at n≥50 before
+spending an iteration on it — but do look.
 
 ## Multi-citation claims are half the data
 
@@ -222,6 +269,9 @@ editable rubric, so it is fully in scope for you to improve.
 
 ## What a good iteration looks like
 
-A named failure class, a smallest-edit test of one hypothesis about it, and a prediction of which
-verdict classes should move. The release reports movement per class, which is only informative if
-you said in advance which ones you were aiming at.
+The error distribution mapped rather than sampled: failure **modes** with counts behind them, edits
+aimed at the mechanisms that carry mass, and a written prediction of which verdict classes should
+move and in which direction. Make as many edits as the evidence supports — there is no separability
+requirement, and an iteration costs a full TRAIN+VAL sweep whether it carries one edit or twelve.
+The release reports movement per class, which is only informative if you said in advance which
+classes you were aiming at, so the prediction is the part that turns an iteration into a test.
