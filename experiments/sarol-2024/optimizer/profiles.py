@@ -14,7 +14,8 @@ manifest, and that is all this is. Three named profiles, checked against the fre
 time. Anything more elaborate would be scaffolding for a generality nobody has asked for.
 
 It is **not profile-awareness in the freeze.** `program-v0` stays 8 entries at ``combined_hash``
-``391f54fae7c5`` under every profile; the engine's materializer still sees all 8 and
+``0a02710cbd88`` under every profile (re-frozen 2026-09-07 when the enum contract was trimmed;
+it read ``391f54fae7c5`` before that); the engine's materializer still sees all 8 and
 ``commit_new_version()`` still stages all 8. A profile narrows what the *optimizer* is allowed to
 touch, which is a consumer-side policy question, not a property of the frozen program. No engine
 change is needed and none is requested.
