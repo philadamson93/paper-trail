@@ -18,15 +18,22 @@ So this module makes **both** cohorts drawable. `val_n` is the real cost lever; 
 one that controls what the optimizer learns from. Two different knobs for two different jobs, and
 conflating them is how a "cheap" ramp turns out to cost the same as the full run.
 
-**What the pool is, exactly.** A claim is drawable only if `stage_claim.stage()` can stage it,
-which requires at least one evidence annotation on the cited paper bucket. That is 1,699 of 2,141
-TRAIN rows and 255 of 316 dev rows. This is not a filter this module invents: the benchmark's
-labelled population *is* its evidence annotations -- `paper-tool-validation.md:203` states the gold
-distribution over "1,873 evidence annotations" (dev+test), and `parse_verdict.gold_paper_label`
-derives a label by taking the strictest observed annotation. A row with no annotation on its cited
-bucket has no gold label to score against, so it is outside the population of record rather than a
-class being silently dropped. Verified 2026-09-02: no claim in either split spans more than one
-evidence bucket, so `(claim_row_id, paper_bucket)` is an unambiguous draw unit.
+**What the pool is, exactly.** A claim is drawable only if `stage_claim.stage()` can stage it.
+That is **2,076 of 2,141 TRAIN rows and 311 of 316 dev rows**. It read 1,699 / 255 until
+2026-09-07, when the evidence-annotation requirement was found to be deleting two whole classes --
+`IRRELEVANT` and `ETIQUETTE` are *defined* by the absence of evidence, so requiring an annotation
+excluded 100% of them and nothing else. `recovered_gold` joins their labels back from the
+annotation files. The 65 TRAIN and 5 dev rows still outside the pool are ones `stage()` cannot
+stage at all, which is a different thing from a class being dropped.
+
+Gold therefore comes from **two** sources, not one. `parse_verdict.gold_paper_label` derives a label
+from the evidence annotations by taking the strictest observed one -- that covers the seven classes
+that have evidence. `recovered_gold` supplies the other two from the annotation files directly. The
+older reading, that "the labelled population *is* its evidence annotations" (from
+`paper-tool-validation.md:203`, which counts gold over "1,873 evidence annotations" for dev+test),
+is the reading that produced the bug: it is true of the seven, and false of exactly the two classes
+whose definition is that no evidence exists. Verified 2026-09-02: no claim in either split spans
+more than one evidence bucket, so `(claim_row_id, paper_bucket)` is an unambiguous draw unit.
 
 **Leakage posture.** This module runs consumer-side, in the dispatcher's process, and is never
 mounted into the optimizer's readable tree. It reads `claims-<split>.jsonl` to learn *which rows
@@ -251,12 +258,18 @@ def stratified_draw(
 ) -> "list[ClaimUnit]":
     """Draw `n` units spread as evenly as the pool allows across the objective's classes.
 
-    **Why stratifying is free here, and would not be under a different objective.** The frontier is
-    macro-F1, which already weights every class equally regardless of how common it is. Equalising
-    support therefore does not shift the estimand at all -- it only cuts its variance. Under a
-    micro/accuracy objective the same draw WOULD distort the number, which is part of why micro is
-    not the objective. (It does break comparability of the reported `micro_f1` and of the published
-    3-way baseline, so quote those from an unstratified batch.)
+    **This draw is NOT free under the current objective, and is off by default.** It was free while
+    the frontier was macro-F1, which weights every class equally however common it is: equalising
+    support cut the variance without shifting the estimand. The frontier is now **accuracy**, which
+    is weighted by the population's own class balance -- so re-balancing the draw changes what the
+    number means rather than how precisely it is measured. A stratified VAL reports accuracy over a
+    population that does not exist, and it is not comparable to the 0.595 do-nothing floor, which is
+    the ACCURATE share of the *unstratified* dev pool.
+
+    So: use this for a per-class question, where equal support is the point and rare-class F1 at
+    n=50 otherwise swings on a single claim. Do not use it to produce the frontier number. Same
+    caveat as before for `micro_f1` and the published 3-way baseline -- quote those unstratified
+    too.
 
     Water-filling, scarcest class first: each class takes an equal share of what is left, capped by
     what it actually has, and the surplus flows to classes with capacity. On the real dev pool at
@@ -525,7 +538,7 @@ def val_inputs_for(
     batch_root: pathlib.Path,
     history_path: pathlib.Path,
     source_mode: str = "corpus",
-    stratify: bool = True,
+    stratify: bool = False,
 ) -> Any:
     """A **fixed** VAL subsample, drawn once and reused by every iteration of the run.
 
@@ -546,10 +559,15 @@ def val_inputs_for(
     from adapter import _import_engine  # noqa: PLC0415
 
     schemas = _import_engine()
-    # Spread the draw across the objective's classes. Free for a macro objective (see
-    # `stratified_draw`), and rare-class support -- not batch size -- is this metric's binding
-    # constraint: dev holds only 6 MISQUOTE and 6 INDIRECT, so an unstratified n=50 expects ~1 of
-    # each and their F1 swings on a single claim. A stratified n=60 takes every one.
+    # OFF by default since the objective became accuracy (2026-09-07). Accuracy is a population
+    # quantity: it asks what fraction of the split's claims the program gets right, so the draw has
+    # to look like the split. A stratified VAL over-samples the rare classes and the resulting
+    # number is not the population accuracy of anything -- it is accuracy on a population that does
+    # not exist. `stratified_draw`'s own docstring said as much while the default still stratified.
+    #
+    # Kept as an opt-in because it is still the right draw for a per-class question (rare-class F1
+    # at n=50 swings on a single claim, and dev holds only 6 MISQUOTE and 6 INDIRECT). Ask for it
+    # when you want per-class resolution; do not ask for it when you want the frontier number.
     #
     # Narrowed as a POOL rather than drawn directly, so `resolve_batch` still owns the draw, the
     # seeding and the `draw_history.json` audit trail. Two mechanisms writing that history would
@@ -836,9 +854,46 @@ def _selftest() -> int:
          _disagree == 0),
         ("...and it matches often enough to be worth having (>200 of the 255 known-gold rows)",
          _agree > 200),
-        # The default is the decision: an unstratified VAL at these sizes expects ~1 MISQUOTE.
-        ("VAL stratifies BY DEFAULT, not on request",
-         inspect.signature(val_inputs_for).parameters["stratify"].default is True),
+        # The default is the decision, and it INVERTED on 2026-09-07 when the objective became
+        # accuracy. Accuracy is a population quantity, so the draw has to look like the population;
+        # a stratified VAL measures accuracy on a population that does not exist and is not
+        # comparable to the 0.595 do-nothing floor. Stratifying stays available for per-class work.
+        ("VAL does NOT stratify by default -- accuracy is a population quantity",
+         inspect.signature(val_inputs_for).parameters["stratify"].default is False),
+    ]
+
+    # -- S24: the default reproduces the population, and the alternative demonstrably does not ----
+    # Run against the REAL dev pool and the REAL draw path (`resolve_batch(pool=None)`, which is
+    # exactly what `val_inputs_for(stratify=False)` calls), not a re-implementation of the sample.
+    # The stratified draw is the negative control: if both draws tracked the population, the
+    # default would be cosmetic and this gate would be worth nothing.
+    _dev_gold = gold_labels("dev")
+    _dev_pool = claim_pool("dev")
+    _n_val = 140
+
+    def _accurate_share(units) -> float:
+        got = [_dev_gold.get((u.claim_row_id, u.paper_bucket)) for u in units]
+        got = [g for g in got if g is not None]
+        return sum(1 for g in got if g == "ACCURATE") / len(got) if got else 0.0
+
+    _population_share = _accurate_share(_dev_pool)
+    with tempfile.TemporaryDirectory() as tmp:
+        _unstrat = resolve_batch(
+            0, n=_n_val, mode="fresh", split="dev",
+            history_path=pathlib.Path(tmp) / "draws.json", pool=None,
+        )
+    _strat = stratified_draw(_dev_pool, _dev_gold, _n_val, seed=SEED)
+
+    # +/- 0.08 is ~2 standard errors of a p=0.6 share at n=140 (se = 0.041), so this is "within
+    # sampling error" stated as a number rather than as a hope.
+    _tol = 0.08
+    checks += [
+        ("the dev pool really is ~59.5% ACCURATE -- the do-nothing floor the objective quotes",
+         abs(_population_share - 0.595) < 0.01),
+        ("the DEFAULT (unstratified) VAL draw reproduces the population's ACCURATE share",
+         abs(_accurate_share(_unstrat) - _population_share) < _tol),
+        ("...while the stratified draw does NOT -- which is why it is no longer the default",
+         abs(_accurate_share(_strat) - _population_share) >= _tol),
     ]
 
     checks.append(("a unit's claim_id carries both row and bucket, so two buckets of one claim "
