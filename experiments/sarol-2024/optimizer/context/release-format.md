@@ -21,12 +21,16 @@ shape, and the difference is the whole leakage design.
     "profile": "retrieval",
     "retrieval_k": 20,
     "metrics": {
-      "primary_metric_name": "sarol_macro_f1_6class",
-      "primary_metric": 0.41,
+      "primary_metric_name": "sarol_accuracy_9class",
+      "primary_metric": 0.63,
       "breakdown": {
+        "do_nothing_floor": 0.595,
+        "n_correct_9way": 32,
+        "macro_f1_renormalised": 0.28,
         "macro_f1_3way": 0.41,
-        "objective_class_set": ["ACCURATE","NOT_SUBSTANTIATE","CONTRADICT",
-                               "OVERSIMPLIFY","MISQUOTE","INDIRECT"],
+        "objective_class_set": ["ACCURATE","OVERSIMPLIFY","NOT_SUBSTANTIATE","CONTRADICT",
+                               "MISQUOTE","INDIRECT","INDIRECT_NOT_REVIEW","ETIQUETTE",
+                               "IRRELEVANT"],
         "objective_classes_present": ["ACCURATE","NOT_SUBSTANTIATE","CONTRADICT","INDIRECT"],
         "n_objective_classes_present": 4,
         "micro_f1": 0.76,
@@ -51,18 +55,31 @@ shape, and the difference is the whole leakage design.
 }
 ```
 
-**Reading the objective.** `primary_metric` is macro-F1 over `objective_class_set`, renormalised
-over the members actually present in this batch. **`n_objective_classes_present` is part of the
-number** — a score renormalised over 4 classes is not comparable to one over 6, so read it first
-and say which you are quoting. On TRAIN you also get `objective_classes_present`, so you can see
-*which* class a small batch is missing; on VAL you get only the count, because the presence vector
-is VAL gold structure.
+**Reading the objective.** `primary_metric` is **accuracy over the nine labels** — the fraction of
+claims whose predicted label equals the gold label. Nothing collapsed, nothing renormalised, so it
+needs no companion field to be comparable between batches.
+
+**Read it against `do_nothing_floor`, which sits beside it.** That is what a program scores by
+answering `ACCURATE` every time, computed from this batch's own gold (≈0.595 on full dev). An
+accuracy of 0.63 is 3.5 points of work, not 63% of a job done.
+
+`macro_f1_renormalised` is the **diagnostic**, not the objective: macro-F1 over
+`objective_class_set` renormalised over the members present. Read it to check *how* an accuracy gain
+was bought — collapsing toward `ACCURATE` raises accuracy and craters macro, and that is the one
+degenerate strategy accuracy admits. `n_objective_classes_present` is part of **that** number, not
+of the objective: a macro over 4 classes is not comparable to one over 6. On TRAIN you also get
+`objective_classes_present`, so you can see *which* class a small batch is missing; on VAL you get
+only the count, because the presence vector is VAL gold structure.
 
 **Reading the 9-way fields.** `macro_f1_9way` always divides by nine, so a batch whose gold covers only five
 classes caps at 5/9 = 0.556 however perfect the predictions. **Always read `support_9way` and
-`n_classes_present_9way` before reading the F1s** — a low 9-way macro on a small batch usually means the batch was
-small, not that the program got worse. This is why 9-way is a breakdown and the 3-way macro-F1 is the frontier.
-A concrete calibration: the do-nothing always-ACCURATE program scores 0.097 at 9-way against 0.292 at 3-way.
+`n_classes_present_9way` before reading the F1s** — a low 9-way macro on a small batch usually means
+the batch was small, not that the program got worse. That fixed denominator is why `macro_f1_9way`
+is a descriptive breakdown and not a frontier; the frontier is **accuracy**, and `macro_f1_3way`
+exists for comparability with the published baselines. The full calibration table — every axis, one
+pool, one do-nothing program — is in
+`experiments/sarol-2024/optimizer/context/task-and-scoring.md`; do not carry a second copy of those
+numbers in your head from here.
 
 `experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` is how that corpus gets read —
 the draw discipline, the blame record, and what to hand a subagent. This section is the shape; that
@@ -70,8 +87,13 @@ document is the procedure.
 
 **`corpus.ref` points at the per-claim mistake corpus itself** — `mistakes/<batch_id>.json` under
 the run's TRAIN output root. Not at the run manifest: the manifest carries dispatch bookkeeping
-(exit codes, costs, timings) and no gold and no reasoning, so following it taught you nothing about
-*why* you were wrong. Read the corpus; it is the point.
+(exit codes, costs, timings, the canary record) and **no gold and no structured reasoning**, so
+following it told you nothing about *why* you were wrong. Read the corpus; it is the point.
+
+*(The manifest does hold one thing worth knowing about: a `trace_ref` per claim and stage, pointing
+at the judge's raw transcript. That is a pointer to unstructured text, not reasoning the manifest
+itself carries — and since 2026-09-07 the same path is copied onto every mistake-corpus row, so you
+never need to open the manifest to reach it.)*
 
 Its shape is an object wrapping the per-claim list:
 
@@ -129,9 +151,11 @@ label, and both were previously invisible to you.
 
 ### `trace_ref` — the judge's full session, if you want it
 
-The run manifest records, per claim and per stage, a `trace_ref` pointing at a copy of the judge's
-own session transcript (`<run>/traces/<claim_id>-<stage>.jsonl`), alongside the `model` that
-produced it and the `session_id`.
+**Every mistake-corpus row carries `trace_ref`**: a path to a copy of the judge's own session
+transcript for that claim (`<run>/traces/<claim_id>-<stage>.jsonl`). It is `null` when the
+transcript could not be captured. The run manifest carries the same path per claim and per stage,
+alongside the `model` that produced it and the `session_id` — but you do not need the manifest for
+this, and a blame subagent, which is handed the corpus and nothing else, could not reach it there.
 
 **This is an optional read and nothing pushes it into your context.** Open one when the structured
 fields above leave you genuinely unsure *why* the judge concluded what it did — it is the full
@@ -163,15 +187,17 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
   "produced_at_utc": "2026-09-01T18:19:52+00:00",
   "optimizer_isolation_hash": "sarol-2024",
   "metrics": {
-    "primary_metric": { "name": "sarol_macro_f1_6class", "value": 0.39,
+    "primary_metric": { "name": "sarol_accuracy_9class", "value": 0.61,
                         "higher_is_better": true },
     "breakdown": { "scored": true, "n_total": 50, "n_invalid": 0,
                    "requested_count": 50, "split": "val",
                    "profile": "retrieval", "retrieval_k": 20,
                    "model": "claude-haiku-4-5",
+                   "do_nothing_floor": 0.60,
                    "n_objective_classes_present": 6,
-                   "objective_class_set": ["ACCURATE","NOT_SUBSTANTIATE","CONTRADICT",
-                                           "OVERSIMPLIFY","MISQUOTE","INDIRECT"] }
+                   "objective_class_set": ["ACCURATE","OVERSIMPLIFY","NOT_SUBSTANTIATE",
+                                           "CONTRADICT","MISQUOTE","INDIRECT",
+                                           "INDIRECT_NOT_REVIEW","ETIQUETTE","IRRELEVANT"] }
   }
 }
 ```
@@ -181,7 +207,7 @@ per-example anything.** The scalar plus enough metadata to distinguish a real sc
 batch.
 
 `profile`, `retrieval_k` and `model` are **run identity**, not signal: they say which pipeline, how
-much evidence, and which judge produced the number. A macro-F1 quoted without them is not a
+much evidence, and which judge produced the number. An accuracy quoted without them is not a
 result, and none of the three tells you anything about which claims went which way. The judge model
 is configurable (`--model`) and defaults to a cheap one, since it runs once per claim and is where
 essentially all of a run's cost is — so two numbers from different runs are only comparable when
@@ -209,9 +235,13 @@ placeholder, with `reason` saying why — a coverage shortfall, an unresolvable 
 metric, or a run that timed out or errored. Do not treat it as a regression and do not react to it
 with a prompt edit; it is an infrastructure signal, not a program signal.
 
-The distinction matters because a failed batch scored as a real 0.0 would poison the frontier: it
-would look like a catastrophic regression, trigger a step-back, and revert a program that was
-never actually the problem.
+The distinction matters more than it would if the loop could recover. A failed batch scored as a
+real 0.0 would poison the frontier — and **the loop is forward-only, so nothing would undo it.**
+There is no step-back and no automatic revert; version *n+1* is built on version *n* whatever
+version *n* scored (see the standing decisions in
+`experiments/sarol-2024/optimizer/context/playbook.md`). A placeholder 0.0 mistaken for a result is
+therefore not a bad iteration you recover from next time, it is a wrong baseline you keep building
+on.
 
 ## `frontier` and `budget`
 
@@ -228,10 +258,39 @@ There is **no `followups` key and nothing scores your predictions back to you.**
 of this document promised one; no code ever emitted it, so the promise is removed rather than left
 standing.
 
-What you do instead: name the target verdict classes in `experiments/sarol-2024/optimizer/meta-learnings.md` when you make an edit,
-and next iteration read `per_class_f1` and `per_class_f1_9way` in the new TRAIN release against
-what you wrote. The comparison is yours to make. It is still the thing that turns an iteration
-into a test rather than a guess — the automation is what is missing, not the discipline.
+What you do instead, and where: **write the prediction into
+`experiments/sarol-2024/optimizer/findings/iter-<n>.md`** when you make the edit — which verdict
+classes should move, in which direction, per edit. **Then, as the FIRST thing you do next
+iteration, open `iter-<n-1>.md` and check it** against `per_class_f1_9way` in the new TRAIN release.
+(`per_class_f1` has only the three collapsed buckets and cannot answer a nine-class prediction.)
+
+Both halves are on you, and the second one is the half that gets skipped. Writing a prediction
+nobody reads back is bookkeeping; reading it back is what turns an iteration into a test rather than
+a guess. The automation is what is missing, not the discipline.
+
+## When the release is not there at all
+
+**All three iterations of the 2026-09-02 run landed here**, and each reconstructed the same recipe
+from scratch, so it is written down now. If `iter/<n>/release_train.json` does not exist:
+
+1. **Do not treat it as a zero, a regression, or a signal about the program.** A release that was
+   never written says nothing about how the program scored. It is the same class of event as
+   `scored: false`.
+2. **Look for the run manifest instead.** The dispatcher writes one per Runner call under the run's
+   TRAIN output root; it carries `claims[]` with per-claim `status`, `staging_dir`, `stages` and the
+   canary record. That tells you whether the batch ran at all, and where it stopped if not.
+3. **Look for the mistake corpus directly**, at `mistakes/<batch_id>.json` under the same root. It
+   is written by the scorer, independently of the release, so it frequently exists when the release
+   does not — and it is the file you actually wanted.
+4. **If neither exists, the batch did not run.** Report that and stop. Do not edit prompts in
+   response to an infrastructure failure; you would be optimizing against noise, and the loop is
+   forward-only, so the edit stays.
+5. **Say so in `experiments/sarol-2024/optimizer/meta-learnings.md`.** An iteration that produced no
+   number is a fact the next iteration needs, and it is invisible in the frontier.
+
+The underlying cause of the 2026-09-02 instances has since been fixed — `run_optimization` was
+calling `run_loop` without `loop_ops`, so the release files were never written. It is recorded here
+because a missing release will happen again for some other reason, and the recipe is the same.
 
 ## Schema stability
 

@@ -81,39 +81,85 @@ is much of the point of this loop. See `experiments/sarol-2024/optimizer/context
 An out-of-enum label is not a crash: it is charged as a miss against whatever the gold class was
 and counted under `invalid_label`. It will not break the run, it will just cost you.
 
-## The iteration, in four phases
+## A word this project overloads: "phase"
+
+**"Phase" means a rung of the evidence ladder, and nothing else** — Phase 1 is the `retrieval`
+profile, Phase 2 is `agentic`. Your own iteration has **steps**, numbered below. The engine's loop
+has its own five steps (see `experiments/sarol-2024/optimizer/context/playbook.md`), always named as
+the engine's. The `phase` key inside a release payload holds `train` or `val`; that is an engine
+schema name for the split, not a rung.
+
+## The iteration, in six steps
 
 **Do not work one failure at a time.** Fixing a single instance per iteration does not scale, and an
 iteration costs a full TRAIN+VAL sweep whether you found one problem or twelve. Spend the iteration
 understanding the error distribution, then fix what carries mass.
 
-### Phase 1 — discover (fan out)
+### Step 1 — check last iteration's prediction
 
-Spawn subagents to read failures and blame them, one example at a time. You decide how many
-examples, which ones, and how they are drawn — by gold class, by predicted class, by confusion cell,
-or a broad rotating sample. You may also have a subagent read a claim's full reasoning trace when
-the structured fields do not explain the verdict.
+**Open `experiments/sarol-2024/optimizer/findings/iter-<n-1>.md` before anything else**, where `<n>`
+is the iteration number in your turn prompt. It contains the previous iteration's edits and, per
+edit, which verdict classes it predicted would move and in which direction. Check each against
+`per_class_f1_9way` in the release you have just been handed. (`per_class_f1` carries only the three
+collapsed buckets and cannot answer a nine-class prediction.)
 
-Hand every subagent exactly two things: its claim ids, and the path
-`experiments/sarol-2024/optimizer/context/subagent-blame-brief.md`. That brief is
-written for it alone and is self-contained — the corpus fields, the per-claim procedure, the blame
-categories, and the record to return. **Do not pass it your plan, your hypotheses, or the run's
-history.** It cannot use them, and paying for it to read them buys you nothing.
+Write down, for each prediction: **held / did not hold / not drawn.** "Not drawn" is a real third
+answer — TRAIN is re-drawn every iteration, so a class with no instances this time was not tested,
+and absence is not evidence of a fix.
+
+This is the step that makes the loop a loop. Skip it and you are running the first iteration again
+with more history. On iteration 1 there is no predecessor: say so and go to step 2.
+
+### Step 2 — establish this iteration's numbers
+
+Before you look at any individual failure, write down what this batch actually says:
+
+- `primary_metric` (accuracy) and `do_nothing_floor` beside it — the gap between them is the work.
+- `macro_f1_renormalised`, to see whether any gain came from collapsing toward `ACCURATE`.
+- `n_correct` and `n_mistakes` from the corpus. Three mistakes out of ten and three out of three
+  hundred are different situations and look identical in a list.
+- `n_objective_classes_present`, which qualifies the macro diagnostic.
+
+Two numbers, not one: how the program is doing, and how much it moved. You cannot tell a real gain
+from batch noise without both.
+
+### Step 3 — draw and fan out
+
+Spawn subagents to read failures and blame them. **Each subagent reads a slice of several claims,
+working through them one claim at a time** — one subagent per claim would be wasteful, and a
+subagent handed the whole corpus reads nothing carefully. Twenty-ish claims per subagent is a
+reasonable slice.
+
+You decide how many subagents, which claims, and how they are drawn — by gold class, by predicted
+class, by confusion cell, by evidence shape, or a broad rotating sample. **You size the fan-out**;
+there is no required number, and it earns its keep as the batch grows (at n=10 you can read the
+corpus yourself; at n=200 you cannot).
+
+Hand every subagent exactly three things: **its claim ids**, the path
+`experiments/sarol-2024/optimizer/context/subagent-blame-brief.md`, and **this run's profile**
+(`corpus.profile` in your release). The brief is written for it alone and carries the corpus fields,
+the per-claim procedure, the blame categories and the record to return. **Do not pass it your plan,
+your hypotheses, or the run's history.** It cannot use them, and paying for it to read them buys you
+nothing.
+
+Give each subagent a **disjoint** slice: two subagents blaming the same claim produce a duplicate,
+not a corroboration, and step 4's counts are only meaningful if each claim is blamed once.
 
 How you choose the slices, and what you do with the records, is
-`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` — yours, not
-theirs.
+`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` — yours, not theirs.
 
-### Phase 2 — categorize
+### Step 4 — cluster into modes
 
-Cluster the per-example blames into failure **modes**: a recurring mechanism, with a count and
+Cluster the per-claim blames into failure **modes**: a recurring mechanism, with a count and
 instances you can point at. Name the mechanism, not the symptom — "the judge reads retrieval silence
 as absence" is a mode; "the adjudicator is imprecise" is not.
 
-Report each mode with its mass. A mode with one instance behind it is an anecdote; say so rather
-than promoting it.
+Report each mode with its mass, and say what you are treating it as. One instance is an anecdote;
+four or more is established; the band in between takes judgement.
+`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` has the table and the
+tie-breakers.
 
-### Phase 3 — propose, then edit
+### Step 5 — propose, then edit
 
 For the modes that carry real mass, brainstorm fixes that address the **mechanism** — a fix that
 generalizes to instances you have not seen is worth more than one that patches the examples you
@@ -125,22 +171,29 @@ judge supplies the missing test itself, and it supplies one that reaches whateve
 preferred. This loop has paid two iterations to learn that, once for a threshold and once for the
 scope the threshold applied to.
 
-You may make several edits in one iteration. Keep them separable enough that next iteration's
-per-class movement can tell you which one worked; two edits aimed at the same verdict class will not
-be distinguishable afterwards, so either separate them or accept that you are testing them jointly
-and say so.
+**Make as many edits as the evidence supports.** There is no separability requirement and no limit.
+An iteration costs a full sweep whether it carries one edit or twelve, so a single-edit iteration is
+not the cautious choice, it is the expensive one. Edits aimed at the same verdict class will not be
+individually attributable next iteration — that is accepted; say in your predictions that you are
+testing them jointly and predict the joint movement.
 
-### Phase 4 — predict, and record
+⚠ **The loop is forward-only.** Nothing reverts a regressing edit; version *n+1* is built on version
+*n* whatever it scored, and declaring a step-back does nothing. An edit you doubt is a liability you
+are handing forward, not a bet the harness will settle. See
+`experiments/sarol-2024/optimizer/context/playbook.md`.
 
-Write this iteration's findings to `experiments/sarol-2024/optimizer/findings/iter-<n>.md`, where
-`<n>` is the iteration number in your turn prompt: the modes you found with their counts, the edits
-you made, and for each edit **which verdict classes should move and in which direction**.
+### Step 6 — predict, and record
+
+Write this iteration's findings to `experiments/sarol-2024/optimizer/findings/iter-<n>.md`: last
+iteration's prediction as you resolved it in step 1, the numbers from step 2, the modes you found
+with their counts, the edits you made, and for each edit **which verdict classes should move and in
+which direction**.
 
 Then append the durable lesson to `experiments/sarol-2024/optimizer/meta-learnings.md`.
 
-Nothing scores your predictions back to you. Next iteration you check them yourself, by reading
-`per_class_f1` and `per_class_f1_9way` in the new TRAIN release against what you wrote. Doing that
-check is what makes an iteration a test rather than a guess, so it is on you to do it.
+Nothing scores your predictions back to you — there is no automated channel and none is coming. The
+check happens because step 1 of the next iteration does it by hand. That is why the prediction has
+to be specific enough to be wrong: "accuracy should improve" cannot fail.
 
 ## The two records, and what goes in which
 
@@ -159,9 +212,20 @@ task*, it is a meta-learning.
 
 ## Simplicity criterion
 
-Prefer the simpler program when scores are within noise. Prompt length is a cost: it raises
-per-claim tokens, slows every run, and makes the next failure harder to localize. If an edit adds 30
-lines of guidance for +0.003 macro-F1, it is not an improvement.
+Prefer the simpler program when two versions score the same. Prompt length is a cost: it raises
+per-claim tokens, slows every run, and makes the next failure harder to localize.
+
+**"The same" needs a number, since nobody has measured this program's noise floor and nobody is
+going to.** Use the sampling error of the batch you are looking at: for accuracy on *n* claims that
+is roughly `1/sqrt(n)` — about **0.14 at n=50, 0.10 at n=100, 0.06 at n=311**. Treat a difference
+smaller than that as no difference at all.
+
+Two things follow, and the first is uncomfortable. **At n=50 almost nothing you do is individually
+measurable**; a single iteration's move is usually inside the band. That is an argument for judging
+edits on their mechanism and their direction over several iterations, not for chasing a number that
+cannot resolve them — and for reading the rare-class movement in `per_class_f1_9way`, which is
+noisier still but at least tells you *what* moved. And an edit that adds thirty lines of guidance
+for a gain inside the band is not an improvement, it is a cost you have not noticed paying.
 
 When you delete something, say so in `experiments/sarol-2024/optimizer/meta-learnings.md` — a
 shrinking prompt that scores the same
@@ -169,10 +233,15 @@ is a genuine result, and is easy to mistake for a lost edit.
 
 ## Your budget
 
-Your session has an enforced dollar cap, and **your subagents spend from it.** Fan-out is the right
-shape for Phase 1, but it is not free: ten subagents reading twenty claims each is a real fraction of
-the iteration's budget. Size the fan-out to the question, start narrower than you think you need, and
-widen if the picture is still unclear.
+Your session has an enforced dollar cap, and **your subagents spend from it.** The cap is set per
+run and is not surfaced in your turn prompt, so do not try to compute a fraction of it — you cannot
+see it.
+
+**Use this default instead of budgeting against a number you do not have: start at four subagents
+of about twenty claims each, and widen only if the picture is genuinely unclear.** That is enough to
+find where the mass is on any batch you will meet, and it is small enough that a second pass is
+affordable if the first one surprises you. Fanning out over every mistake in the corpus because you
+can is the failure mode this replaces.
 
 The per-claim cost of the *pipeline* is fixed by the profile and nothing you write can change it. See
 `experiments/sarol-2024/optimizer/context/edit-surface.md`.
@@ -182,14 +251,32 @@ The per-claim cost of the *pipeline* is fixed by the profile and nothing you wri
 Every run processes one pinned canonical claim with a known expected verdict before any scored claim.
 If its verdict changes, the run stops.
 
-You cannot observe a canary *pass* — the release carries no canary field — so never read silence as
-confirmation that one fired. If you see a canary failure: **stop and report it. Do not edit around
-it.** It means the pipeline or the scorer moved, and every number after the break is uncomparable to
-every number before it. A silently broken metric invalidates all subsequent iterations, not just the
-current one.
+**Where to look for it.** Your release payload carries no canary field, so silence *there* means
+nothing either way. The **run manifest** does carry one, as a top-level `canary` record with the
+observed verdict and status. Three states, and all three have a prescribed response:
+
+| `canary` | What it means | What you do |
+|---|---|---|
+| a record, status `ok` | the round trip is intact; your numbers are comparable to earlier ones | nothing. Proceed |
+| absent / `null` | **no canary was wired for this run** | Your numbers carry no round-trip guarantee. Say so in `experiments/sarol-2024/optimizer/meta-learnings.md` and treat comparisons against other iterations as unverified. A real run now refuses to start without one, so `null` means someone passed `--no-canary` deliberately |
+| a failure | the pipeline or the scorer moved | **Stop and report it. Do not edit around it.** Every number after the break is uncomparable to every number before it, and a silently broken metric invalidates all subsequent iterations, not just this one |
+
+The `null` row is not hypothetical: every iteration of the 2026-09-02 run carried it, the canary was
+priced and designed and never actually constructed, and nothing said so.
 
 ## Crash handling
 
+- **The previous edit was never scored** → the case you are most likely to actually meet: all three
+  iterations of the 2026-09-02 run landed in it. It looks like `scored: false`, or a missing
+  `iter/<n>/release_train.json`, or a release whose numbers are identical to last iteration's.
+  **Your predecessor's edit is in the tree and untested.** So: do not re-make it, do not revert it,
+  and do not read the absent movement as evidence it failed. Record in
+  `experiments/sarol-2024/optimizer/findings/iter-<n>.md` that iteration *n-1*'s prediction is
+  **still open**, carry it forward unchanged, and spend this iteration confirming it rather than
+  stacking a second untested edit on top of the first. Two untested edits are not twice the
+  progress; they are one unattributable result.
+  `experiments/sarol-2024/optimizer/context/release-format.md` has the recipe for finding out
+  whether the batch ran at all.
 - **A stage errored or timed out** → an infrastructure signal, not a program signal. Report it; do
   not edit prompts in response.
 - **`scored: false` in the release** → `primary_metric` is a placeholder, not a result. Read
@@ -214,8 +301,11 @@ show.
 
 Work the full iteration. If your leading hypothesis collapses on inspection, go back to the findings
 and take the next mode rather than ending the session with no edit. An iteration that makes no change
-still costs a full TRAIN+VAL+probe sweep — **VAL is charged twice, current and probe, on top of
-TRAIN** — so a wasted iteration is expensive even though it looks free from inside your session.
+still costs a full TRAIN+VAL+**probe** sweep, so a wasted iteration is expensive even though it
+looks free from inside your session. (*The **probe** is the second VAL run: the harness re-scores
+the frozen version against VAL after your edits, to confirm the pipeline still works. So VAL is
+charged twice per iteration — current and probe — on top of TRAIN, and VAL is by far the largest
+term in the bill.*)
 
 If you genuinely believe no edit is warranted, say why in
 `experiments/sarol-2024/optimizer/meta-learnings.md` explicitly. That is a

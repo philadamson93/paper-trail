@@ -27,7 +27,8 @@ So it is a complete census of *this batch's* errors, not a sample of them — wh
 **The TRAIN batch is re-drawn every iteration.** The draw seed is keyed on the iteration number;
 VAL is fixed, TRAIN is not. So a failure you fixed last iteration and cannot find this iteration may
 be fixed, or may simply not have been drawn. **Absence is not evidence.** Confirm a fix by watching
-`per_class_f1` move in the direction you predicted, never by failing to re-find the instance.
+`per_class_f1_9way` move in the direction you predicted, never by failing to re-find the instance.
+(`per_class_f1` has only the three collapsed buckets in it and cannot answer a nine-class question.)
 
 ## Choosing the draw
 
@@ -42,8 +43,10 @@ Then pick a draw. Use one, or several in parallel:
   you have a theory. The right opener when you do not yet know where the mass is. Vary which claims
   you take between iterations so you are not re-reading the same ones.
 - **By gold class.** Everything whose gold is `INDIRECT`, say. This is how you find out why a class
-  is scoring zero — and with a macro objective, a class with six gold instances moves the number as
-  much as one with two hundred.
+  is scoring zero. ⚠ **Weigh it by mass now.** Under the old macro objective a class with six gold
+  instances moved the number as much as one with two hundred; under accuracy it moves it thirty-three
+  times less. Reading a rare class is still worth doing — it is often where a mechanism is clearest —
+  but expect to spend the iteration's *score* on the classes that carry claims.
 - **By confusion cell.** Everything where gold is X and the prediction was Y. The most diagnostic
   draw once you suspect a specific boundary is being crossed, because every example in it failed the
   same way by construction.
@@ -65,12 +68,17 @@ One record per claim: `claim_id`, gold/pred (with whether the miss crossed a 3-w
 **blame** category, a one-sentence **mechanism**, an evidence cue, and a confidence. The categories,
 defined in the brief, are:
 
-`rubric` · `retrieval` · `decomposition` · `attribution` · `gold` · `unclear`
+`rubric` · `execution` · `retrieval` · `decomposition` · `attribution` · `gold` · `unclear`
 
-Three of those — `rubric`, `decomposition`, `attribution` — are defects in guidance you can edit.
-`retrieval` usually is not: see the reach caveat below. `gold` and `unclear` are neither, and a slice
-that comes back mostly `unclear` is telling you the corpus fields were not enough, not that the
-program is fine.
+Four of those — `rubric`, `execution`, `decomposition`, `attribution` — are defects in guidance you
+can edit, and the first two want **opposite** edits: `rubric` means the guidance is wrong or silent
+(write a rule), `execution` means the rule is already there and was skipped (make it harder to skip —
+move it earlier, state it as a check, give it a worked example). A cluster of `execution` blames that
+you treat as `rubric` produces an iteration spent re-writing a rule the judge already had.
+
+`retrieval` is reachable in one specific way and not another — see the reach test below. `gold` and
+`unclear` are neither, and a slice that comes back mostly `unclear` is telling you the corpus fields
+were not enough, not that the program is fine.
 
 ## Turning blames into modes
 
@@ -87,19 +95,43 @@ not
 
 > *"NOT_SUBSTANTIATE is over-predicted."* — which is a count, not a mechanism.
 
-Report each mode with the count that supports it and which blame categories it drew from. **A mode
-with one instance behind it is an anecdote** — record it, but say so, and do not spend the
-iteration's edit on it over a mode carrying seven.
+Report each mode with the count that supports it and which blame categories it drew from, and say
+what you are treating it as. The usable rule, since "one instance is an anecdote" only tells you the
+bottom of the scale:
+
+| Instances in the mode | Treat it as | What to do |
+|---|---|---|
+| 1 | anecdote | Record it. Do not edit for it |
+| 2-3 | candidate | Edit for it only if the mechanism is *clear enough to state in one sentence* and the fix is cheap. Otherwise record it and look for more instances next iteration |
+| 4+ | established | Edit for it. This is what an iteration is for |
+| ≥ 20% of the mistake list | dominant | Edit for it FIRST, whatever else you found |
+
+The 2-3 band is the one that needs judgement, and the tie-breaker is the mechanism rather than the
+count: three claims failing the same clearly-named step is worth more than three claims that merely
+share a gold class. When two modes tie, take the one whose claims are more common in the batch —
+under accuracy that is where the points are.
 
 Watch for two things the counts will not tell you:
 
 - **A mode that is really two.** If the instances split cleanly by gold class, or by whether the
   claim was multi-citation, they are probably two mechanisms sharing a symptom. Split them; a fix
   aimed at the merged version will address neither.
-- **A mode outside your reach.** `retrieval`-blamed modes may have no rubric-side fix at all when the
-  evidence is selected mechanically — see
-  `experiments/sarol-2024/optimizer/context/edit-surface.md`. Say so explicitly rather than proposing
-  a rubric edit that cannot bite. A mode you have correctly diagnosed and correctly declined to fix
-  is a real result, and the next iteration should not have to rediscover it.
+- **A mode outside your reach — and the reach test is narrower than it looks.** For a
+  `retrieval`-blamed mode, ask which of two questions it is:
+
+  **"The right passage was not retrieved."** Out of reach under `retrieval`, where BM25 does the
+  selecting and no prompt of yours runs before the judge. Say so and move on. (Under `agentic` /
+  `paperclip` the extractor prompt *is* yours, so the same mode is reachable there.)
+
+  **"The judge mishandled a thin window."** *In* reach on every profile, and it is a live target
+  rather than a consolation prize — the judge is never told its evidence is a subset, so it reports
+  a fact as absent from the paper when the fact was merely not retrieved. Teaching the rubric to
+  separate *the paper does not say it* from *what I was given does not say it* is a clarifications-
+  layer edit, it costs nothing, and it is documented as failure mode 2 in
+  `experiments/sarol-2024/optimizer/context/task-and-scoring.md`.
+
+  The distinction matters because these are the same blame label on the same claims. Earlier
+  iterations read "retrieval-blamed modes are out of reach under a mechanical profile" as covering
+  both, and dropped a mode that was fully editable. **Only the first question is out of reach.**
 
 Then go to Phase 3 in your standing instructions.

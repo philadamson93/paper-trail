@@ -19,14 +19,16 @@ spend an iteration re-deriving them.
 
 ## The shape of an iteration, from the engine's side
 
-One iteration is five steps. The engine (`agentic-label-opt`) drives all of them; **you are step 3.**
+One iteration is five steps **on the engine's side**. The engine (`agentic-label-opt`) drives all of
+them; **you are its step 3**, and your own six steps all happen inside it. (Neither of these is a
+"phase" — that word is reserved for a rung of the evidence ladder. See the standing instructions.)
 
 1. **Score the current version.** The dispatcher runs the frozen program over the TRAIN batch and
    over VAL, and scores both.
 2. **Build the release.** TRAIN gives you full per-example traces plus aggregates; VAL gives you a
    scalar and its breakdown, nothing else. See `experiments/sarol-2024/optimizer/context/release-format.md`.
-3. **You work the iteration.** Discover, categorize, propose, edit, record — the four phases in your
-   standing instructions. One pass, then you exit.
+3. **You work the iteration.** Check the last prediction, establish the numbers, draw and fan out,
+   cluster, edit, predict — the six steps in your standing instructions. One pass, then you exit.
 4. **The harness commits and tags** the result as a new version. You never commit.
 5. **The harness re-runs the frozen version against VAL** to confirm it still works, then the next
    iteration begins.
@@ -49,8 +51,19 @@ its clarifications layer are the whole surface.
 
 ## Standing decisions you do not need to relitigate
 
-- **Agent-only, no human in the loop.** No one is going to review your edit and approve it. The
-  loop is the reviewer: a bad edit scores worse and gets dropped.
+- **Agent-only, no human in the loop.** No one is going to review your edit and approve it.
+- **The loop is FORWARD-ONLY. A regressing edit is not reverted — it becomes the next baseline.**
+  This is the one standing decision most likely to catch you out, because the natural assumption is
+  the opposite. There is no step-back: this consumer hard-codes `attempting_step_back` to `False`,
+  so nothing compares your new version against the old one and rolls back the loser. Version *n+1*
+  is built on version *n* whatever version *n* scored.
+
+  Two things follow. **Declaring a step-back does nothing** — saying "the score regressed but I
+  believe the direction is right" is a note to your future self, not a signal to the engine; it
+  neither protects the edit nor triggers a revert. And **an edit you doubt is a liability you are
+  handing forward**, not a bet the harness will settle. If you think an edit was wrong, the way to
+  undo it is to edit it back yourself, next iteration, having written down in
+  `experiments/sarol-2024/optimizer/meta-learnings.md` that you intend to.
 - **The dispatcher is a Python script, not an agent.** All orchestrator-runtime decisions —
   verifier sampling, retry, bounce, schema validation — are static code, not runtime judgement. This
   is what makes a retrospective re-run of version N reproducible, and it is the same property that
@@ -74,7 +87,8 @@ systems on a different axis, not earlier versions of this one.
 
 So iteration 1's job is to *produce* the first real number, not to react to one. Do not open by
 proposing fixes to a failure mode you have not seen; the first release is the first evidence anyone
-has. Run Phase 1 against it and let the modes come from the data. From iteration 2 onward you have a
+has. Run the discovery fan-out (step 3) against it and let the modes come from the data. Step 1 has
+nothing to check on iteration 1; say so and move on. From iteration 2 onward you have a
 real prior and the normal loop applies.
 
 ## VAL is fixed; TRAIN is not
@@ -91,13 +105,10 @@ draw are the same; say which you are quoting.
 ## Continuity
 
 Each iteration runs in a fresh session with no recollection of the last one, deliberately — a
-retrospective evaluation of version N has to be blind to everything learned after N. Two records carry
-you forward, and they are not interchangeable:
+retrospective evaluation of version N has to be blind to everything learned after N. Two records
+carry you forward, and they are not interchangeable.
 
-- `experiments/sarol-2024/optimizer/meta-learnings.md` — across iterations. Confirmed fixes, pending
-  hypotheses, reverted attempts with the reason. Read it before iterating, append after.
-- `experiments/sarol-2024/optimizer/findings/iter-<n>.md` — within one iteration. The per-example
-  blames, the modes, the predictions.
-
-That file's own header defines the split. The short form: if it is about *these examples* it is a
-finding, if it is about *how to optimize this task* it is a meta-learning.
+**Which record takes what is defined in one place: the *"The two records, and what goes in which"*
+section of `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`.** That is the file
+injected into every iteration, so it is the copy you are guaranteed to have read. Do not look for a
+second answer here; there used to be five of them and they had drifted apart.
