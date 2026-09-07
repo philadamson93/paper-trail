@@ -687,6 +687,31 @@ def run_optimization(
                 )
             component_kwargs["canary"] = pinned
 
+        # S26: the tree must BE the version it says it is.
+        #
+        # `current_tag` names the baseline every number this run produces will be filed under, and
+        # it is the string `"program-v0"` by default. Nothing checked that the files on disk were
+        # actually v0's. They are not, today: an optimizer run rewrites the adjudicator and the
+        # rubric in place, so after any run the working tree carries v3's program while the tag
+        # still says v0. A curve built from mislabelled baselines is not wrong in a way anyone can
+        # see -- it is unreadable, and only afterwards, once the sessions are paid for.
+        #
+        # Only checked when the tag is the manifest's own frozen version: `program-v1` and up are
+        # minted by the engine mid-loop and there are no frozen hashes to check them against.
+        store = adapter.SarolProgramStore()
+        if current_tag == store.program_version:
+            drift = store.verify_tree_matches_tag()
+            if drift:
+                raise ValueError(
+                    f"the working tree does not match {current_tag!r}, which is the tag every "
+                    f"number from this run would be filed under:\n  "
+                    + "\n  ".join(str(v) for v in drift)
+                    + f"\n\nRestore the {len(drift)} file(s) to the frozen "
+                    f"{store.program_version} content before starting a baseline run, or pass a "
+                    "`current_tag` that names what the tree actually holds. Running as-is "
+                    "produces numbers that cannot be attributed to a program version."
+                )
+
     # The ramp's top rung, not its first: the affordability check has to describe the most
     # expensive iteration the run can reach. Checking rung 0 would clear a run that cannot pay for
     # its own last iteration -- and the engine stops nothing.
@@ -1600,6 +1625,85 @@ def _selftest() -> int:
             digest_a = program_digest(tree, [e["path"] for e in store.entries])
             digest_b = program_digest(tree, [e["path"] for e in store.entries])
             checks.append(("the program digest is stable", digest_a == digest_b))
+
+        # -- S26: the tag guard ---------------------------------------------------------------
+        # Two halves, because either alone gives false assurance: that the re-hash SEES a drifted
+        # editable file (`verify_contract_files` does not -- that is the whole reason the second
+        # method exists), and that `run_optimization` actually CALLS it before dispatching.
+        with tempfile.TemporaryDirectory() as tag_tmp:
+            tag_repo = pathlib.Path(tag_tmp) / "repo"
+            tag_repo.mkdir()
+            # Seeded from the manifest's own `source_refs`, NOT from the live tree. `_seed_repo`
+            # copies whatever is on disk today and tags it `program-v0` -- which is the very
+            # mislabelling this guard exists to catch, and the live tree does currently differ on
+            # the two files an optimizer run rewrites. A gate for "does the tree match the tag"
+            # cannot be seeded from a tree that does not.
+            _real = SarolProgramStore()
+            for _entry in _real.entries:
+                _dst = tag_repo / _entry["path"]
+                _dst.parent.mkdir(parents=True, exist_ok=True)
+                _blob = subprocess.run(
+                    ["git", "show",
+                     f"{_real.raw['source_refs'][_entry['source']]['commit']}:{_entry['path']}"],
+                    cwd=str(_real.repo_root), capture_output=True, check=True,
+                ).stdout
+                _dst.write_bytes(_blob)
+            tag_store = SarolProgramStore(repo_root=tag_repo)
+
+            pristine = not tag_store.verify_tree_matches_tag()
+
+            # Edit an EDITABLE, non-contract file -- exactly what an optimizer iteration does, and
+            # exactly what the contract re-hash is blind to by design.
+            editable = tag_repo / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
+            editable.write_text(
+                editable.read_text(encoding="utf-8") + "\n<!-- an iteration's edit -->\n",
+                encoding="utf-8",
+            )
+            drifted = tag_store.verify_tree_matches_tag()
+            contract_blind = tag_store.verify_contract_files()
+
+            checks += [
+                ("a pristine checkout matches the tag it names", pristine),
+                ("...and an edit to an EDITABLE file makes it stop matching",
+                 len(drifted) == 1
+                 and drifted[0].path == "experiments/sarol-2024/specs/verdict_schema_sarol.md"),
+                # The negative control, and the reason the tag guard is not just a second call to
+                # `verify_contract_files`: the contract re-hash is silent on exactly the files an
+                # optimizer run rewrites, so it can never answer "is this tree still v0?".
+                ("negative control: the CONTRACT re-hash is blind to that same edit, which is why "
+                 "a separate whole-tree check had to exist",
+                 contract_blind == []),
+            ]
+
+            # The wiring. Point `run_optimization` at the drifted checkout and check it refuses
+            # before it prices or dispatches anything.
+            _real_store_cls = adapter.SarolProgramStore
+            adapter.SarolProgramStore = lambda *a, **k: SarolProgramStore(repo_root=tag_repo)
+            try:
+                run_optimization(
+                    iterations=1, run_id="tagguard",
+                    train_input_ref="unused", val_input_ref="unused",
+                    max_budget_usd=1.0, train_n=1,
+                    materialize_root=pathlib.Path(tag_tmp) / "mat",
+                    train_output_root=pathlib.Path(tag_tmp) / "trainout",
+                    val_output_root=pathlib.Path(tag_tmp) / "valout",
+                    profile="retrieval", require_canary=False,
+                )
+                refusal = ""
+            except ValueError as exc:
+                refusal = str(exc)
+            except Exception as exc:  # noqa: BLE001 -- any other failure means the guard was passed
+                refusal = f"<wrong exception: {type(exc).__name__}: {exc}>"
+            finally:
+                adapter.SarolProgramStore = _real_store_cls
+
+            checks += [
+                ("run_optimization REFUSES a tree that does not match the tag it would file its "
+                 "numbers under",
+                 "does not match 'program-v0'" in refusal),
+                ("...naming the file that drifted, so the fix is obvious",
+                 "verdict_schema_sarol.md" in refusal),
+            ]
 
         checks += _integration_checks(schemas)
     else:

@@ -213,19 +213,16 @@ class SarolProgramStore:
 
     # -- the re-hash (layer ii) --------------------------------------------------------------
 
-    def verify_contract_files(self, tree_root: pathlib.Path | None = None) -> list[ContractViolation]:
-        """Re-hash every ``contract_file=True`` entry against its frozen ``sha256``.
+    @property
+    def program_version(self) -> str:
+        """The tag this manifest freezes, e.g. ``program-v0``. The tag guard keys off it (S26)."""
+        return self.raw["program_version"]
 
-        This is the *only* thing making those files immutable — the engine's own flag checks that a
-        contract file is present in the fileset, never that its bytes are unchanged. Returns the
-        violations rather than raising, so the caller decides the failure mode (the agent wrapper
-        turns them into a nonzero exit; the dispatcher preflight prints them).
-        """
+    def _rehash(self, entries, tree_root: pathlib.Path | None) -> list[ContractViolation]:
+        """Re-hash `entries` against the tree. One implementation, two scopes (see below)."""
         root = pathlib.Path(tree_root).resolve() if tree_root is not None else self.repo_root
         violations: list[ContractViolation] = []
-        for entry in self.entries:
-            if not entry.get("contract_file"):
-                continue
+        for entry in entries:
             target = root / entry["path"]
             if not target.exists():
                 violations.append(ContractViolation(entry["path"], entry["sha256"], None))
@@ -234,6 +231,32 @@ class SarolProgramStore:
             if actual != entry["sha256"]:
                 violations.append(ContractViolation(entry["path"], entry["sha256"], actual))
         return violations
+
+    def verify_contract_files(self, tree_root: pathlib.Path | None = None) -> list[ContractViolation]:
+        """Re-hash every ``contract_file=True`` entry against its frozen ``sha256``.
+
+        This is the *only* thing making those files immutable — the engine's own flag checks that a
+        contract file is present in the fileset, never that its bytes are unchanged. Returns the
+        violations rather than raising, so the caller decides the failure mode (the agent wrapper
+        turns them into a nonzero exit; the dispatcher preflight prints them).
+        """
+        return self._rehash(
+            [e for e in self.entries if e.get("contract_file")], tree_root
+        )
+
+    def verify_tree_matches_tag(self, tree_root: pathlib.Path | None = None) -> list[ContractViolation]:
+        """Re-hash **every** entry, contract or not — "is this tree really `program-v0`?" (S26).
+
+        Different question from `verify_contract_files`, which asks "has anything immutable been
+        touched?" and is therefore silent about the four editable files. Those four are exactly the
+        ones an optimizer run rewrites, so after any run the tree no longer matches the tag it
+        still names, and nothing noticed. A run labelled `program-v0` whose adjudicator is v3's is
+        an unreadable data point, and it is unreadable *afterwards*, when the money is spent.
+
+        Returns violations rather than raising, matching its sibling: the dispatcher decides the
+        failure mode.
+        """
+        return self._rehash(self.entries, tree_root)
 
 
 # =================================================================================================
@@ -946,6 +969,12 @@ class SarolScorer:
         gold is fully open to the optimizer (that is the mechanism by which it learns, not a leak);
         VAL gold is not, so nothing is written on a VAL call however the Scorer is configured.
 
+        **A claim is correct here only if its 9-class label matches** -- not its 3-way bucket. The
+        3-way comparison this used to make is the same collapse that makes `micro_f1` a weaker
+        number than it looks: it treats the five NOT_ACCURATE classes as interchangeable, which is
+        exactly the discrimination the rubric exists to make. `pred_3way` and `gold_3way` are still
+        written on every row, so a reader can see the collapse; they just no longer decide it.
+
         Two things deliberately withheld even on TRAIN. ``parse_verdict.parse`` also returns
         ``split``, ``claim_row_id`` and ``cited_paper_bucket`` -- raw benchmark provenance that the
         opaque-citekey staging design exists to keep out of the run. The optimizer needs the gold
@@ -958,7 +987,14 @@ class SarolScorer:
         rows = []
         n_correct = 0
         for record, resolved in joined:
-            if resolved.get("pred_3way") == resolved.get("gold_3way"):
+            # S25: 9-WAY, not 3-way. This compared `pred_3way` to `gold_3way` until 2026-09-07,
+            # which silently forgave every within-bucket confusion -- CONTRADICT answered for
+            # OVERSIMPLIFY collapses to NOT_ACCURATE on both sides and was banked as CORRECT. Five
+            # of the nine labels live inside NOT_ACCURATE, so the whole of the rubric's hardest
+            # discrimination was invisible in the corpus AND added to the `n_correct` the agent is
+            # told to read first. Under an accuracy objective those are plainly errors, and the
+            # optimizer cannot fix what it is never shown.
+            if resolved.get("pred_label") == resolved.get("gold_label"):
                 n_correct += 1
                 continue
             rows.append({
@@ -1681,6 +1717,57 @@ def _selftest() -> int:
                  built.ref == train_score.breakdown["mistakes_ref"]),
                 ("...while still carrying the counts the engine reads",
                  built.counts == train_score.breakdown["error_class_counts"]),
+            ]
+
+            # -- S25: the corpus filter is 9-WAY ------------------------------------------------
+            # The fixture above never exercises the case that matters, because both its claims
+            # differ (or agree) at 3-way resolution too. The interesting claim is the one whose
+            # LABELS differ while its BUCKETS agree: CONTRADICT answered for OVERSIMPLIFY. Five of
+            # the nine labels collapse into NOT_ACCURATE, so this is the whole of the rubric's
+            # hardest discrimination, and the old `pred_3way == gold_3way` filter banked every
+            # instance of it as CORRECT -- hiding it from the corpus and inflating `n_correct`.
+            def _within_bucket(root):
+                g = iter([
+                    {"pred_label": "CONTRADICT", "gold_label": "OVERSIMPLIFY",
+                     "pred_3way": "NOT_ACCURATE", "gold_3way": "NOT_ACCURATE", "citekey": "k1",
+                     "split": "train", "claim_row_id": 419, "cited_paper_bucket": 83},
+                    {"pred_label": "ACCURATE", "gold_label": "ACCURATE",
+                     "pred_3way": "ACCURATE", "gold_3way": "ACCURATE", "citekey": "k2",
+                     "split": "train", "claim_row_id": 420, "cited_paper_bucket": 84},
+                ])
+                return SarolScorer(gold_resolver=lambda _p: next(g),
+                                   mistakes_root=root).score(ok_artifacts, "train", {"_iter": 1})
+
+            _wb_score = _within_bucket(pathlib.Path(tmp) / "wbout")
+            _wb = json.loads(
+                pathlib.Path(_wb_score.breakdown["mistakes_ref"]).read_text(encoding="utf-8")
+            )
+            _wb_rows = _wb["claims"]
+            # Read defensively, for the reason the C6.8 block above records: under a revert this
+            # list is EMPTY, and a gate that indexes it raises instead of failing by name -- the
+            # crash then masks the negative control that is the point of the block. Verified by
+            # reverting the filter: these four report four clean failures, not one traceback.
+            _wb_row = _wb_rows[0] if _wb_rows else {}
+
+            checks += [
+                ("a within-bucket confusion is a MISTAKE: labels differ, so the claim is wrong "
+                 "however its 3-way buckets collapse",
+                 _wb["n_mistakes"] == 1 and len(_wb_rows) == 1),
+                ("...and it is NOT added to the n_correct the agent is told to read first",
+                 _wb["n_correct"] == 1 and _wb["n_scored"] == 2),
+                ("...and the row names the confusion the optimizer has to fix",
+                 _wb_row.get("pred_label") == "CONTRADICT"
+                 and _wb_row.get("gold_label") == "OVERSIMPLIFY"),
+
+                # NEGATIVE CONTROL, and the reason this block exists. The recorded row is one the
+                # OLD filter would have dropped: its buckets are equal. Re-deriving the old
+                # predicate here rather than describing it means this gate cannot go green on a
+                # silent revert to `pred_3way == gold_3way`.
+                ("negative control: the OLD 3-way filter would have called this same row correct "
+                 "and written no mistake at all",
+                 bool(_wb_rows)
+                 and _wb_row.get("pred_3way") == _wb_row.get("gold_3way")
+                 and not [r for r in _wb_rows if r.get("pred_3way") != r.get("gold_3way")]),
             ]
 
             failed = scorer.score(
