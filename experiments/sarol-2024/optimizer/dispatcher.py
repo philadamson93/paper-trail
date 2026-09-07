@@ -1219,25 +1219,41 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
 
     canary_refusal = None
     other_refusal = None
-    with _tempfile.TemporaryDirectory() as _tmp:
-        _val_root = pathlib.Path(_tmp) / "val-out"   # outside the repo, so C6.9 passes
-        _common = dict(
-            iterations=1, run_id="gate", train_input_ref="unused", val_input_ref="unused",
-            train_n=1, materialize_root=pathlib.Path(_tmp) / "mat",
-            train_output_root=pathlib.Path(_tmp) / "train-out", val_output_root=_val_root,
-            profile="retrieval",
-        )
-        try:
-            run_optimization(max_budget_usd=1000.0, **_common)
-        except Exception as exc:  # noqa: BLE001 -- the message is what is being asserted
-            canary_refusal = exc
-        # With the canary explicitly waived the run gets PAST that gate and fails later, on
-        # budget. Same call, one flag different -- so this proves the gate is the canary gate and
-        # not some earlier refusal standing in for it.
-        try:
-            run_optimization(max_budget_usd=0.0, require_canary=False, **_common)
-        except Exception as exc:  # noqa: BLE001
-            other_refusal = exc
+    # ISOLATE THE PRECONDITION. This gate asserts "a run refuses when NO canary is pinned", and it
+    # used to establish that condition by hoping none existed. It held only until someone actually
+    # pinned one: on 2026-09-07 the first real `--pin` turned this gate red, because the gate was
+    # reading whatever happened to be on the machine. A gate whose truth depends on an artifact
+    # outside the test is not testing what its name says. So hide any real pin for the duration
+    # and put it back afterwards -- the same save/restore the model-mismatch block below already
+    # does 40 lines down; this one simply never adopted it.
+    _gate_pin = canary_mod.pin_path("retrieval")
+    _gate_saved = _gate_pin.read_text(encoding="utf-8") if _gate_pin.exists() else None
+    if _gate_saved is not None:
+        _gate_pin.unlink()
+    try:
+        with _tempfile.TemporaryDirectory() as _tmp:
+            _val_root = pathlib.Path(_tmp) / "val-out"   # outside the repo, so C6.9 passes
+            _common = dict(
+                iterations=1, run_id="gate", train_input_ref="unused", val_input_ref="unused",
+                train_n=1, materialize_root=pathlib.Path(_tmp) / "mat",
+                train_output_root=pathlib.Path(_tmp) / "train-out", val_output_root=_val_root,
+                profile="retrieval",
+            )
+            try:
+                run_optimization(max_budget_usd=1000.0, **_common)
+            except Exception as exc:  # noqa: BLE001 -- the message is what is being asserted
+                canary_refusal = exc
+            # With the canary explicitly waived the run gets PAST that gate and fails later, on
+            # budget. Same call, one flag different -- so this proves the gate is the canary gate
+            # and not some earlier refusal standing in for it.
+            try:
+                run_optimization(max_budget_usd=0.0, require_canary=False, **_common)
+            except Exception as exc:  # noqa: BLE001
+                other_refusal = exc
+    finally:
+        if _gate_saved is not None:
+            _gate_pin.parent.mkdir(parents=True, exist_ok=True)
+            _gate_pin.write_text(_gate_saved, encoding="utf-8")
 
     # The other half of Bug 1: the RAMPED path stages and verifies its batch, but a fixed
     # --train-inputs file was handed to the engine unchecked while preflight priced --train-n.
