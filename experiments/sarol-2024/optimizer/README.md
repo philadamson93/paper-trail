@@ -59,14 +59,37 @@ write it down — do not fix it.
 - **Resetting the program to its null state** before a run — that is restoring the control, not
   improving it.
 
-## One file currently sits on neither side
+## One file that sits on neither side — resolved 2026-09-07
 
 `specs/verdict_definitions_sarol.md` is in **no** manifest entry, and the judge never loads it:
 `prompts/adjudicator-dispatch-sarol.md:21-22` reads only the enum contract and the rubric, and says
-"Nothing else." Yet several machinery docs describe it as the judge's operative definitions.
+"Nothing else." Several machinery docs used to describe it as the judge's operative definitions,
+which meant anything reasoning about it was reasoning about a document nothing reads.
 
-Until that is resolved it is neither program nor machinery, and anything reasoning about it is
-reasoning about a document nothing reads. See the open plan for the resolution.
+**Resolution: it is an optimizer-facing reference, and it says so at the top of itself.** Not
+program (no manifest entry, nothing hashes it, the judge never sees it) and not machinery the loop
+edits — it is what the *gold annotators* worked from, so it is the right thing to consult when
+asking whether a gold label is defensible, and the wrong thing to consult when asking why the judge
+decided something. The four docs that misdescribed it were corrected.
+
+⚠ **One thing is still owed on it:** the text is this repository's transcription of Sarol Table 1,
+not a verified verbatim read — the published benchmark ships annotation data, not the scheme. A
+one-time reconciliation against the paper is owed before anyone treats it as frozen-from-source.
+The caveat is recorded in the file itself.
+
+## The enum contract and the code must agree — a human's job, not the judge's
+
+`specs/verdict_enum_sarol.md` and `scripts/parse_verdict.py` are two copies of one contract: the
+nine labels are `SAROL_9`, the NOT_ACCURATE row is `NOT_ACCURATE_3WAY`, the IRRELEVANT row is
+`IRRELEVANT_3WAY`, and the collapse itself is `to_3way()`. `score_sarol3.py` imports those names
+rather than redefining them, so the collapse is single-sourced *in code*; what is not automatic is
+the doc agreeing with the code. **If the two ever disagree, `parse_verdict.py` is what actually
+scored the run — reconcile before trusting the number.**
+
+This used to be stated inside the enum file itself, where it did no good and cost something real:
+that file is loaded into the judge's context on every claim, roughly fifty times a run, and a
+classifier has no use for an instruction to an engineer about reconciling two source files. It was
+moved here in the 2026-09-07 trim, which took the file from 70 lines to 49.
 
 ## Where to look next
 

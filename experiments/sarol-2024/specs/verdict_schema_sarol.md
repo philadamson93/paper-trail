@@ -20,20 +20,6 @@ The adjudicator picks exactly one per sub-claim. The names below are the contrac
 - **ETIQUETTE** — citation style is ambiguous; unclear from the citing sentence what specifically is being cited to this paper. Predominantly a multi-citation issue.
 - **IRRELEVANT** — no information in the cited paper relevant to the claim.
 
-## How much of the claim must be substantiated
-
-**The evidence you are given is a keyword-retrieved subset of the cited paper, not a complete reading of it.** An element you cannot find in it may simply not have been retrieved. Treat a missing element as genuinely absent from the source only when it is core subject matter of the paper: lockdowns unmentioned across the retrieved chunks of a COVID-interventions paper is a retrieval gap; schizophrenia unmentioned in a stress-and-neurogenesis paper is real absence.
-
-`ACCURATE` therefore does not require every element to be independently located. Ask what the citing sentence asserts *on the strength of this source* — its central proposition — and whether the evidence supports that.
-
-- Central proposition supported, and one peripheral element neither found nor contradicted → **ACCURATE**. An element is peripheral only when the citing sentence states it **open-endedly**: an illustrative "such as" list, "various", "and others", or a hedge ("potentially", "can", "may"). Open-ended phrasing does not assert that any particular listed item is in this source, so failing to retrieve one costs nothing.
-- A **specific assertion is never peripheral**, however topical the paper is — a number, percentage or rate; a named magnitude, direction or comparison; a stated consequence or mechanism; a temporal or conditional finding. If the citing sentence positively asserts one of these on this source's strength and the retrieved evidence does not contain it, that is `NOT_SUBSTANTIATE`. Do not excuse it as a retrieval gap.
-- Central proposition unsupported, or a claimed element positively conflicting with the evidence → `NOT_SUBSTANTIATE` (or `CONTRADICT` where the source states the opposite).
-
-Evidence that fails to contradict an element is not evidence that supports it. "Consistent with" and "nowhere contradicted" can make an element peripheral; they can never make it substantiated.
-
-The "key element missing" in NOT_SUBSTANTIATE means the claim's substance is only half-made — not that the enumeration ran one item longer than the retrieved passages did.
-
 ## Rollup (per citation instance = per (claim, cited_paper) pair)
 
 When the citing claim is decomposed into multiple sub-claims, reduce to one paper-level label by **worst-wins** strictness order:
@@ -48,16 +34,9 @@ Exception: a single-sub-claim citation gets that sub-claim's label directly (pre
 
 ## Multi-citation handling (critical — 51% of Sarol data)
 
-When the evaluated citation is one of a `[1,2,3]`-style cluster (`multi_cit_context == "grouped"`), judge only the portion of the claim attributable to *this specific source*.
+When the citing sentence contains `<|multi_cit|>` — i.e., the evaluated citation is part of a `[1,2,3]`-style cluster — the adjudicator must verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
 
-**Fix that portion first — from the citing sentence alone, before you look at the evidence.** There are two cases and only two:
-
-1. **The sentence assigns.** Its syntax ties a particular clause to this citation's position: separate markers on separate clauses ("… in vitro ([OTHER_CIT]) and … in vivo ([CIT])"), or a named attribution ("Laflamme et al. showed X ([CIT])"). That clause is the attributable portion.
-2. **The sentence does not assign.** The cluster sits at the end and covers the whole statement. Then **the entire claim is attributable to this source** — every item of an enumeration, every conjunct of a compound claim. Do not carve elements out on the theory that a sibling citation might cover them. A shared citation asserts joint support, not a division of labour. That fixes what is *in scope*; how much of it must be verified is the sufficiency threshold above.
-
-Fixing the portion is the **only** thing the grouped context changes. Once it is fixed, judge it by exactly the standard a single citation gets — the same sufficiency threshold, no stricter and no softer. Grouping narrows *what* is judged. It never changes *how* it is judged, and it is never in itself a reason to prefer ACCURATE.
-
-Reach for ETIQUETTE only when case 1 seems to apply but the assignment is genuinely undecidable — not merely because the sentence is long or cites several sources. An end-of-sentence cluster is case 2, not ambiguity.
+When a citation is grouped ambiguously such that no sub-claim can clearly be attributed to a single source, prefer ETIQUETTE.
 
 ## 3-way collapse
 
