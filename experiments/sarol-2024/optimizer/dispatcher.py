@@ -700,6 +700,15 @@ def run_optimization(
         # minted by the engine mid-loop and there are no frozen hashes to check them against.
         store = adapter.SarolProgramStore()
         if current_tag == store.program_version:
+            # TWO checks, because they answer different questions and the run needs both.
+            #
+            # The working tree is what a human reads and edits. The TAG is what the engine
+            # materializes from -- `engine.materialize` resolves the tag to one `version_sha` and
+            # reads every entry out of it with `git show`, never off disk. So a tree that matches
+            # the manifest while the tag points at older bytes still runs the OLD program and files
+            # the numbers under the new name. Checking only the tree misses exactly that, which is
+            # how the 2026-09-07 re-freeze left `program-v0` on the pre-trim enum with every gate
+            # green (caught by a Codex audit, not by this guard's first version).
             drift = store.verify_tree_matches_tag()
             if drift:
                 raise ValueError(
@@ -710,6 +719,18 @@ def run_optimization(
                     f"{store.program_version} content before starting a baseline run, or pass a "
                     "`current_tag` that names what the tree actually holds. Running as-is "
                     "produces numbers that cannot be attributed to a program version."
+                )
+            tag_drift = store.verify_tag_tree(current_tag)
+            if tag_drift:
+                raise ValueError(
+                    f"the git tag {current_tag!r} does not carry the frozen "
+                    f"{store.program_version} content, and the tag is what the engine actually "
+                    f"materializes from -- so this run would evaluate the tagged bytes while "
+                    f"reporting under the manifest's identity:\n  "
+                    + "\n  ".join(str(v) for v in tag_drift)
+                    + f"\n\nRe-cut the tag onto a commit whose tree matches the manifest "
+                    f"(`git tag -f -a {current_tag} <commit>`), then confirm with "
+                    f"`freeze_program_v0.py --verify --tree {current_tag}`."
                 )
 
     # The ramp's top rung, not its first: the affordability check has to describe the most
@@ -1648,9 +1669,28 @@ def _selftest() -> int:
                     cwd=str(_real.repo_root), capture_output=True, check=True,
                 ).stdout
                 _dst.write_bytes(_blob)
+
+            # Make it a real repo and TAG it, because the tag is the half that matters most: the
+            # engine materializes from `git show <tag>:<path>`, never off disk.
+            def _g(*args: str) -> str:
+                return subprocess.run(
+                    ["git", "-C", str(tag_repo), *args], capture_output=True, text=True, check=True,
+                    env={"PATH": os.environ.get("PATH", ""), "HOME": str(tag_repo),
+                         "GIT_CONFIG_NOSYSTEM": "1"},
+                ).stdout.strip()
+
+            _g("init", "-q", "-b", "main")
+            _g("config", "user.email", "selftest@example.invalid")
+            _g("config", "user.name", "selftest")
+            _g("add", "-A")
+            _g("commit", "-q", "-m", "program-v0")
+            _g("tag", "-a", "program-v0", "-m", "program-v0")
+            _good_commit = _g("rev-parse", "HEAD")
+
             tag_store = SarolProgramStore(repo_root=tag_repo)
 
             pristine = not tag_store.verify_tree_matches_tag()
+            tag_pristine = not tag_store.verify_tag_tree("program-v0")
 
             # Edit an EDITABLE, non-contract file -- exactly what an optimizer iteration does, and
             # exactly what the contract re-hash is blind to by design.
@@ -1673,7 +1713,11 @@ def _selftest() -> int:
                 ("negative control: the CONTRACT re-hash is blind to that same edit, which is why "
                  "a separate whole-tree check had to exist",
                  contract_blind == []),
+                ("the TAG carries the frozen content too -- it is what the engine materializes "
+                 "from, and the tree check cannot speak for it",
+                 tag_pristine),
             ]
+
 
             # The wiring. Point `run_optimization` at the drifted checkout and check it refuses
             # before it prices or dispatches anything.
@@ -1703,6 +1747,81 @@ def _selftest() -> int:
                  "does not match 'program-v0'" in refusal),
                 ("...naming the file that drifted, so the fix is obvious",
                  "verdict_schema_sarol.md" in refusal),
+            ]
+            # The scenario a Codex audit actually found on 2026-09-07, reproduced: a CLEAN working
+            # tree matching the manifest, and a tag left behind on older bytes. The tree check
+            # reports no problem; the run would materialize the old program and file the numbers
+            # under the new identity. Only `verify_tag_tree` sees it.
+            editable.write_text(  # restore the tree so ONLY the tag is wrong
+                editable.read_text(encoding="utf-8").replace(
+                    "\n<!-- an iteration's edit -->\n", ""),
+                encoding="utf-8",
+            )
+            _g("add", "-A")
+            _g("commit", "-q", "--allow-empty", "-m", "later work")
+            # Move the tag onto a commit whose enum predates the freeze.
+            _stale = tag_repo / "experiments/sarol-2024/specs/verdict_enum_sarol.md"
+            _kept = _stale.read_text(encoding="utf-8")
+            _stale.write_text(_kept + "\nAN OLDER ENUM\n", encoding="utf-8")
+            _g("add", "-A")
+            _g("commit", "-q", "-m", "stale enum")
+            _stale_commit = _g("rev-parse", "HEAD")
+            _g("tag", "-f", "-a", "program-v0", _stale_commit, "-m", "stale")
+            _stale.write_text(_kept, encoding="utf-8")  # tree clean again, tag now wrong
+
+            _tree_says = tag_store.verify_tree_matches_tag()
+            _tag_says = tag_store.verify_tag_tree("program-v0")
+
+            checks += [
+                ("a stale TAG over a clean tree is caught -- the case the first version of this "
+                 "guard missed entirely",
+                 len(_tag_says) == 1
+                 and _tag_says[0].path
+                 == "experiments/sarol-2024/specs/verdict_enum_sarol.md"),
+                ("negative control: the TREE check calls that same repo clean, which is why "
+                 "checking the tree alone was not enough",
+                 _tree_says == []),
+                ("a tag that does not resolve at all is a violation, not a silent pass",
+                 len(tag_store.verify_tag_tree("program-v999")) == len(tag_store.entries)),
+            ]
+
+            _g("tag", "-f", "-a", "program-v0", _good_commit, "-m", "program-v0")
+
+            # ...and the same wiring for the TAG half. Restore the tree first so the tree check
+            # passes and execution actually REACHES the tag check -- otherwise this gate would go
+            # green off the tree refusal and prove nothing about the tag.
+            editable.write_text(
+                editable.read_text(encoding="utf-8").replace(
+                    "\n<!-- an iteration's edit -->\n", ""),
+                encoding="utf-8",
+            )
+            _g("tag", "-f", "-a", "program-v0", _stale_commit, "-m", "stale")
+            adapter.SarolProgramStore = lambda *a, **k: SarolProgramStore(repo_root=tag_repo)
+            try:
+                run_optimization(
+                    iterations=1, run_id="tagguard2",
+                    train_input_ref="unused", val_input_ref="unused",
+                    max_budget_usd=1.0, train_n=1,
+                    materialize_root=pathlib.Path(tag_tmp) / "mat2",
+                    train_output_root=pathlib.Path(tag_tmp) / "trainout2",
+                    val_output_root=pathlib.Path(tag_tmp) / "valout2",
+                    profile="retrieval", require_canary=False,
+                )
+                tag_refusal = ""
+            except ValueError as exc:
+                tag_refusal = str(exc)
+            except Exception as exc:  # noqa: BLE001
+                tag_refusal = f"<wrong exception: {type(exc).__name__}: {exc}>"
+            finally:
+                adapter.SarolProgramStore = _real_store_cls
+                _g("tag", "-f", "-a", "program-v0", _good_commit, "-m", "program-v0")
+
+            checks += [
+                ("run_optimization ALSO refuses when the tree is clean but the TAG is stale -- "
+                 "the engine materializes from the tag, so this is the one that decides what runs",
+                 "does not carry the frozen" in tag_refusal),
+                ("...naming the tag, and pointing at the re-cut that fixes it",
+                 "program-v0" in tag_refusal and "git tag -f" in tag_refusal),
             ]
 
         checks += _integration_checks(schemas)

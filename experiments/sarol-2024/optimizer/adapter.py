@@ -253,6 +253,39 @@ class SarolProgramStore:
             [e for e in self.entries if e.get("contract_file")], tree_root
         )
 
+    def verify_tag_tree(self, tag: str | None = None) -> list[ContractViolation]:
+        """Re-hash every entry as it exists in the COMMITTED tree `tag` names.
+
+        Different question again from its two siblings, and the one that decides what a run actually
+        evaluates. `verify_tree_matches_tag` asks about the files on disk; **the engine never reads
+        the files on disk.** `engine.materialize` does `git ls-tree`/`git show` against the single
+        `version_sha` the tag resolves to, so the bytes the judge sees come from the TAG. A working
+        tree that matches the manifest while the tag points at older content is the exact shape of
+        "the numbers say v0 and the program was something else" -- and the tree check alone reports
+        it as clean.
+
+        This was a real gap, not a hypothetical: the 2026-09-07 re-freeze rewrote the manifest and
+        restored the tree but left `program-v0` on the pre-trim enum, and every offline gate stayed
+        green. Found by a Codex implementation audit.
+
+        A tag that does not resolve is itself a violation -- reported with `actual_sha256=None`,
+        the same shape as a missing file, since the consequence is the same: nothing to materialize.
+        """
+        ref = tag or self.program_version
+        violations: list[ContractViolation] = []
+        for entry in self.entries:
+            proc = subprocess.run(
+                ["git", "-C", str(self.repo_root), "show", f"{ref}^{{commit}}:{entry['path']}"],
+                capture_output=True,
+            )
+            if proc.returncode != 0:
+                violations.append(ContractViolation(entry["path"], entry["sha256"], None))
+                continue
+            actual = hashlib.sha256(proc.stdout).hexdigest()
+            if actual != entry["sha256"]:
+                violations.append(ContractViolation(entry["path"], entry["sha256"], actual))
+        return violations
+
     def verify_tree_matches_tag(self, tree_root: pathlib.Path | None = None) -> list[ContractViolation]:
         """Re-hash **every** entry, contract or not — "is this tree really `program-v0`?" (S26).
 
@@ -1593,7 +1626,7 @@ def _selftest() -> int:
                  score.task_config.get("_split") == "val"),
                 ("a complete batch scores", score.breakdown["scored"] is True),
                 ("the metric is finite", math.isfinite(score.primary_metric.value)),
-                ("the frontier scalar is 3-way macro-F1",
+                ("the release names the metric the adapter and the prompt share",
                  score.primary_metric.name == PRIMARY_METRIC_NAME),
                 # The scorer sees only the OVERALL label, so a bad sub-claim verdict reaches
                 # error_class_counts only because the validator's counts are merged in.

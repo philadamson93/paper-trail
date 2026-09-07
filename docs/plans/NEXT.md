@@ -122,7 +122,10 @@ identity in the manifest and VAL release; `--model` is gated as reaching the run
 **4. Mistake corpus carries the judge's working** — `sub_claims` with evidence mapped per
 sub-claim (+`locator`), `claim_type`, `rubric_variant`.
 
-**5. Objective moved to 9-way** (Phil's call — "more signal"). Now `sarol_macro_f1_6class`: macro-F1
+**5. Objective moved to 9-way** (Phil's call — "more signal"). ⚠ **Superseded 2026-09-07** — the
+objective is now plain 9-way *accuracy* under the key `sarol_accuracy_9class`; the paragraph below
+records the 2026-09-03 state and its `sarol_macro_f1_6class` naming, both retired. Kept as history.
+Then: `sarol_macro_f1_6class`: macro-F1
 at 9-way resolution over the six classes dev can measure, renormalised over those present. Measured
 drawable-dev gold made the case: `INDIRECT_NOT_REVIEW` and `IRRELEVANT` have **zero** dev gold (raw
 macro-9 caps a perfect program at 0.778), `ETIQUETTE` has 3. And old macro-3 was worse than it
