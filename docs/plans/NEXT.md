@@ -176,11 +176,35 @@ per-iteration findings doc split from `meta-learnings.md`, widened edit surface 
 gold permission-locked**, canary kept as-is, label definitions frozen from source with an editable
 clarifications layer, and the rollup/ladder passage cut.
 
-Everything below this line predates the pause and is historical design context, not live status.
+### Session 2026-09-07b — prompt redesign applied, then re-scoped to the optimizer machinery
 
-> **Major reframe 2026-04-21: experiment is agent-only; infrastructure is the contribution.** Human decision: the optimizer is an agent (not human-in-the-loop). Paper-trail + Sarol is the case study; the framework is the primary contribution. See `docs/plans/agentic-pipeline-optimization-framework.md` for the authoritative plan (tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses). Everything downstream — contributions list, Task 5 eval-arm deliverables, hygiene rules — has been updated below.
+**UNCOMMITTED on `sarol-optimizer-impl`.** Gates green. Full detail:
+**`docs/plans/optimizer-instrument-repair.md`** (the plan) ·
+`docs/session/papertrail-optimizer-impl-readback.md` (state, git-ignored) ·
+`docs/plans/reviews/optimizer-instrument-repair-feedback.md` (Codex).
 
----
+**Landed.** Phil's 12 prompt annotations applied; the standing prompt now points at subfiles and the
+iteration runs as four phases. New: `context/subagent-blame-brief.md` (self-contained brief for blame
+subagents), `context/failure-mode-discovery.md`, `context/edit-surface.md`, `optimizer/README.md`,
+`specs/verdict_definitions_sarol.md`, `optimizer/findings/`.
+
+**The re-scope that matters.** A four-agent walkthrough plus a Codex pass drifted the work into
+experimental-design rigor (noise floors, a control arm, a TEST gate). Phil cut all of it. Two
+corrections define the current plan:
+
+1. **The objective is plain accuracy** — already computed (`score_sarol3.py:192` is `correct / scored`).
+   It removes the renormalising-denominator drift that made the first run unreadable. Cost: dominated
+   by common classes, so the do-nothing floor of **0.595** gets quoted beside every number, and macro
+   stays as a diagnostic. Consequences: **TRAIN stratification is off the plan** and **VAL
+   stratification must be turned off** — under accuracy you want the scored population, not a balanced
+   one. Four `score_sarol3` selftests encode the old choice and get rewritten.
+2. **We improve the OPTIMIZER, not the PROGRAM it optimizes.** The manifest defines the seam and the
+   engine enforces it (`commit_new_version` stages only manifest entries). Known rubric defects are
+   left in place deliberately — hand-fixing them conflates our edits with the optimizer's on any curve.
+   Documented in `experiments/sarol-2024/optimizer/README.md`.
+
+**Next:** S12e (rescue the buried rubric-rule guidance before the `meta-learnings.md` reset deletes it),
+then Slice 2 (4 code changes), then Slice 1 (35 doc items).
 
 ## Current phase
 

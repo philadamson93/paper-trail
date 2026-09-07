@@ -30,6 +30,7 @@ Only `/read-plan` or `/explain-plan` promotes a row to `Yes`.
 | [`experiment-sarol-runbook.md`](experiment-sarol-runbook.md) | — | No | Runbook: Sarol 2024 benchmark — Variant A smoketest (N=5) |
 | [`experiment-sarol-smoketest-handoff.md`](experiment-sarol-smoketest-handoff.md) | — | No | Handoff: run the Sarol 2024 smoketest (N=5) |
 | [`experimental-plan-of-record.md`](experimental-plan-of-record.md) | First-pass outline | No | Experimental plan of record |
+| [`optimizer-instrument-repair.md`](optimizer-instrument-repair.md) | Draft · re-scoped 2026-09-07 | No | Improve the OPTIMIZER machinery (not the program it optimizes): objective to plain accuracy, then 35 doc-consistency fixes; seam documented in optimizer/README.md |
 | [`paper-tool-validation.md`](paper-tool-validation.md) | — | No | paper-trail validation paper — experiment plan |
 | [`paper-trail-product-backlog.md`](paper-trail-product-backlog.md) | — | No | paper-trail product backlog |
 | [`paper-writeup-items.md`](paper-writeup-items.md) | — | No | Items to touch on in the paper / blog writeup |
