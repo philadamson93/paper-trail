@@ -19,9 +19,19 @@ text literally said:**
    removed a capability the discovery fan-out depends on; the path was already being written to the
    run manifest, so surfacing it cost four lines.
 
-**Still owed before a run** (not blockers for landing): the round-trip canary has never been
-pinned — `canary.py --pin` costs real sessions — and `run_optimization` refuses a real run without
-one unless `--no-canary` is passed.
+**The canary is now pinned** (2026-09-07, after the Codex audit): claim `1969-64` under
+`claude-haiku-4-5`, **3/3 observations agreed** on `ACCURATE`, recorded against
+`program_combined_hash 0a02710cbd88` — which independently confirms the re-freeze reached a live
+dispatch. That was the first end-to-end exercise of staging → BM25 evidence → headless judge →
+parse → validate; every other check in this plan is offline. `run_optimization` no longer refuses
+for canary reasons (it now refuses on budget, the next guard in line).
+
+⚠ **The pin file is deliberately UNCOMMITTED.** `canary-<profile>.json` is meant to be committed
+(the `.gitignore` says so), but the payload embeds an absolute `staging_dir` under the author's home
+directory and **this repo is public**. The path carries no information — it is always
+`canary/staging/<profile>/<claim_id>` — so the fix is to record it repo-relative in `canary.py`
+(`:235`, `:295`) and resolve it against `repo_root` on load (`adapter.py:547`). Do that, re-pin or
+hand-edit the field, then commit. Until then the pin works on this machine and nowhere else.
 
 ## Goal
 

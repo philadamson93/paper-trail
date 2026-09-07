@@ -210,8 +210,14 @@ subagents), `context/failure-mode-discovery.md`, `context/edit-surface.md`, `opt
 - **`meta-learnings.md` reset** 620 → 75 lines, explaining its own emptiness so the next agent does
   not read it as breakage.
 
-⚠ **Still owed before a run:** the round-trip canary has never been pinned (`canary.py --pin` costs
-real sessions), and `run_optimization` refuses a real run without one unless `--no-canary` is passed.
+**Canary PINNED 2026-09-07** — claim `1969-64`, `claude-haiku-4-5`, **3/3 agreed** on `ACCURATE`,
+bound to `program_combined_hash 0a02710cbd88`. First live exercise of the whole dispatch chain;
+everything else in this plan is offline. `run_optimization` now refuses on **budget**, not canary.
+
+⚠ **Two things before a real run.** (1) The pin file is uncommitted on purpose — it embeds an
+absolute home-dir path and this repo is public; make it repo-relative in `canary.py` first (details
+in the plan doc). (2) **Cost:** an iteration is ~**$636** even at TRAIN=1, because VAL=316 is charged
+twice. `--val-n` is the only lever that moves it — TRAIN=10/VAL=50 is ~$110.
 
 **The re-scope that matters.** A four-agent walkthrough plus a Codex pass drifted the work into
 experimental-design rigor (noise floors, a control arm, a TEST gate). Phil cut all of it. Two
