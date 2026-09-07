@@ -66,3 +66,4 @@ docs/session/
 # against, and a guard whose reference value is not under version control is not a guard.
 /experiments/sarol-2024/optimizer/canary/staging/
 /experiments/sarol-2024/optimizer/canary/pin-batch-*.json
+.explain-plan/
