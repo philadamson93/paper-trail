@@ -275,6 +275,6 @@ editable rubric, so it is fully in scope for you to improve.
 The error distribution mapped rather than sampled: failure **modes** with counts behind them, edits
 aimed at the mechanisms that carry mass, and a written prediction of which verdict classes should
 move and in which direction. Make as many edits as the evidence supports — there is no separability
-requirement, and an iteration costs a full TRAIN+VAL sweep whether it carries one edit or twelve.
+requirement, and the sweep costs the same whether an iteration carries one edit or twelve.
 The release reports movement per class, which is only informative if you said in advance which
 classes you were aiming at, so the prediction is the part that turns an iteration into a test.

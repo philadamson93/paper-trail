@@ -98,8 +98,9 @@ schema name for the split, not a rung.
 ## The iteration, in six steps
 
 **Do not work one failure at a time.** Fixing a single instance per iteration does not scale, and an
-iteration costs a full TRAIN+VAL sweep whether you found one problem or twelve. Spend the iteration
-understanding the error distribution, then fix what carries mass.
+iteration costs the same full sweep whether you found one problem or twelve (see *Never stop early*
+for what that sweep actually is — VAL is charged twice). Spend the iteration understanding the error
+distribution, then fix what carries mass.
 
 ### Step 1 — check last iteration's prediction
 
@@ -178,8 +179,8 @@ preferred. This loop has paid two iterations to learn that, once for a threshold
 scope the threshold applied to.
 
 **Make as many edits as the evidence supports.** There is no separability requirement and no limit.
-An iteration costs a full sweep whether it carries one edit or twelve, so a single-edit iteration is
-not the cautious choice, it is the expensive one. Edits aimed at the same verdict class will not be
+The sweep costs the same whether the iteration carries one edit or twelve, so a single-edit
+iteration is not the cautious choice, it is the expensive one. Edits aimed at the same verdict class will not be
 individually attributable next iteration — that is accepted; say in your predictions that you are
 testing them jointly and predict the joint movement.
 
