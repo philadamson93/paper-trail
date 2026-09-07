@@ -8,6 +8,15 @@ engine cannot.
 
 What is genuinely load-bearing here, and why (plan Parts C1/C4, engine @ `6d621ac`):
 
+* **The audit ledger is the engine's, and this consumer does not use it.** ``run_loop`` takes an
+  ``audit_ledger`` path (`loop.py:197`) and verifies a hash chain over it; `dispatcher.py` passes
+  none, and ``audit_ledger`` and ``policy_config`` appear zero times there. Recorded because four
+  optimizer-facing docs used to promise the agent that reaching for held-out gold was "logged to
+  the audit ledger, and a denied-call threshold pauses the run" — a guarantee nothing implemented.
+  Those docs now say the true thing instead: **VAL/TEST isolation here is by construction**, the
+  records living outside the repository tree entirely, which needs no watcher to hold. Wire the
+  ledger if a future run wants one; do not describe it as wired until it is.
+
 * **The contract-file re-hash is consumer-side, and it is the whole of "immutable".** The engine's
   ``contract_file=True`` enforces **presence only** (`versioning.py:86-90`, `materialize.py:72-79`):
   nothing in the engine stops the optimizer rewriting a contract file's bytes. So the frozen Sarol

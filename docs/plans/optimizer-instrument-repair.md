@@ -2,8 +2,26 @@ Reference: docs/claude_ops.md
 
 # Optimizer prompt consistency — switch the objective to accuracy, and make the instruction set say one thing
 
-**Status.** Draft, re-scoped 2026-09-07 after Phil's read. Not implemented.
+**Status: Implemented** (2026-09-07). Both slices landed on the branch; 433/433 offline gates green,
+every new guard negative-controlled. `Reviewed: No` — not yet read by Phil, and not yet `/land`ed.
 **Branch.** `sarol-optimizer-impl` (worktree `.claude/worktrees/optimizer-impl`).
+
+**Two decisions taken during implementation, both recorded because they are not what the plan's
+text literally said:**
+
+1. **S23 resolves to 9-way accuracy** (`pred_label == gold_label`), not the 3-way `correct / scored`
+   the Verification section named. The plan was internally inconsistent: S25 says within-bucket
+   confusions are "plainly errors ... under an accuracy objective", which is only true at 9-way
+   resolution. Under 3-way the optimizer would have been shown mistakes it could not be rewarded
+   for fixing. Confirmed with Phil before implementing. The 0.595 floor is identical either way.
+2. **S13's trace gap resolves by putting `trace_ref` on the mistake rows**, the first of the two
+   options the item offered, rather than deleting step 5 of the brief. Deleting it would have
+   removed a capability the discovery fan-out depends on; the path was already being written to the
+   run manifest, so surfacing it cost four lines.
+
+**Still owed before a run** (not blockers for landing): the round-trip canary has never been
+pinned — `canary.py --pin` costs real sessions — and `run_optimization` refuses a real run without
+one unless `--no-canary` is passed.
 
 ## Goal
 

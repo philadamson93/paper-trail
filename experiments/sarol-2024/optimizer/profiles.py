@@ -394,6 +394,9 @@ def _selftest() -> int:
         # with no brief at all.
         "subagent-blame-brief.md": (here / "context" / "subagent-blame-brief.md")
         .read_text(encoding="utf-8"),
+        # The findings dir's own README. Agent-facing (the optimizer writes `iter-<n>.md` to the
+        # shape it specifies) and it cites paths, so it belongs in the path check like the rest.
+        "findings/README.md": (here / "findings" / "README.md").read_text(encoding="utf-8"),
     }
     # The scope-and-cost claims live in `edit-surface.md` since the redesign; it is part of the
     # guidance corpus, not merely path-checked.
@@ -462,6 +465,28 @@ def _selftest() -> int:
         # file must SAY it is empty on purpose, or the next agent reads absence as breakage.
         ("the reset meta-learnings explains its own emptiness rather than just being empty",
          "deliberately empty of history" in docs["meta-learnings.md"]),
+
+        # -- the objective, pinned in the docs the way the scorer pins it in code ---------------
+        # These exist because the objective has now changed twice (3-way macro -> renormalised
+        # macro -> accuracy) and each time a doc was left describing the previous one. A doc that
+        # names the wrong objective sends the agent to hill-climb a number nothing computes.
+        ("the standing prompt states the objective as ACCURACY over the nine classes",
+         "Maximize accuracy over the nine classes" in docs["optimizer-instructions.md"]),
+        ("...and quotes the do-nothing floor beside it, since accuracy against zero is meaningless",
+         "0.595" in docs["optimizer-instructions.md"]
+         and "do_nothing_floor" in docs["optimizer-instructions.md"]),
+        ("...and no optimizer-facing doc still tells the agent to maximize a macro-F1",
+         not [name for name, text in docs.items()
+              if re.search(r"maximiz\w*\s+(?:\S+\s+){0,3}macro[- ]?F1", text, re.I)]),
+        ("...while the macro survives, named as the diagnostic it now is",
+         "macro_f1_renormalised" in docs["task-and-scoring.md"]
+         and "macro_f1_renormalised" in docs["optimizer-instructions.md"]),
+
+        # -- rendering. Not pedantry: these docs are re-wrapped by hand and by script, and a list
+        # that loses its preceding blank line silently renders as one run-on paragraph. This
+        # session's own re-wrap introduced exactly that, and no gate covered it.
+        ("no doc has a list or table that renders as a run-on paragraph",
+         not _markup_breaks(docs)),
         # C6.8 made `corpus.ref` point at the mistake corpus itself. The doc that tells the
         # optimizer where to look must say the same thing.
         ("release-format points the optimizer at the per-claim corpus, not the run manifest",
@@ -488,6 +513,32 @@ def _selftest() -> int:
         failed += 0 if ok else 1
     print(f"\n{len(checks) - failed}/{len(checks)} passed")
     return 1 if failed else 0
+
+
+def _markup_breaks(docs: dict) -> list[str]:
+    """Lists and tables that start immediately after a prose line, with no blank line between.
+
+    Markdown needs that blank line: without it the bullets are swallowed into the preceding
+    paragraph and the whole block renders as one run-on sentence. It is invisible in the source
+    and obvious in the output, which is the wrong way round for a file nobody renders before
+    shipping. Fenced code blocks are skipped -- a `|` inside one is not a table.
+    """
+    out: list[str] = []
+    starts_block = re.compile(r"^(\s*[-*+] |\s*\d+\. |\|)")
+    continues = re.compile(r"^(\s*[-*+] |\s*\d+\. |\||\s+\S|#|>)")
+    for name, text in docs.items():
+        lines = text.split("\n")
+        in_fence = False
+        for i, line in enumerate(lines):
+            if line.startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence or i == 0 or not starts_block.match(line):
+                continue
+            previous = lines[i - 1]
+            if previous.strip() and not continues.match(previous):
+                out.append(f"{name}:{i + 1}")
+    return out
 
 
 def _unqualified(pattern: str, text: str) -> list[str]:

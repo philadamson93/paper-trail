@@ -277,9 +277,14 @@ def stratified_draw(
     is the most support the split can give.
 
     Units whose gold is OUTSIDE `classes` are **excluded from the draw**, not merely unscored. Such
-    a claim cannot add recall to any scored class -- its gold class is not in the objective -- while
-    a prediction on it can only cost precision, so including it injects noise the metric has no way
-    to attribute. On dev that drops 3 ETIQUETTE claims out of 255.
+    a claim cannot add recall to any scored class while a prediction on it can only cost precision,
+    so including it would inject noise nothing can attribute.
+
+    ⚠ **As of 2026-09-07 this excludes nothing**, and both reasons it used to matter are gone:
+    `OBJECTIVE_CLASSES` is now all nine labels, so no gold class is outside it; and the pool repair
+    put ETIQUETTE and IRRELEVANT back, so the 3 stray ETIQUETTE claims this used to drop (out of the
+    then-255 dev rows) are 38 ordinary members of a 311-row pool. The clause is kept because
+    `classes` is a parameter and a caller may still narrow it.
     """
     import random  # noqa: PLC0415
 

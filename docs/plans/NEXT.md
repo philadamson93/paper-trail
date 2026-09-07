@@ -178,7 +178,8 @@ clarifications layer, and the rollup/ladder passage cut.
 
 ### Session 2026-09-07b — prompt redesign applied, then re-scoped to the optimizer machinery
 
-**UNCOMMITTED on `sarol-optimizer-impl`.** Gates green. Full detail:
+**IMPLEMENTED and committed on `sarol-optimizer-impl` (unmerged, 9 commits, HEAD `cc3674d`+).**
+433/433 offline gates green, every new guard negative-controlled. Full detail:
 **`docs/plans/optimizer-instrument-repair.md`** (the plan) ·
 `docs/session/papertrail-optimizer-impl-readback.md` (state, git-ignored) ·
 `docs/plans/reviews/optimizer-instrument-repair-feedback.md` (Codex).
@@ -188,11 +189,32 @@ iteration runs as four phases. New: `context/subagent-blame-brief.md` (self-cont
 subagents), `context/failure-mode-discovery.md`, `context/edit-surface.md`, `optimizer/README.md`,
 `specs/verdict_definitions_sarol.md`, `optimizer/findings/`.
 
+**Session 2026-09-07c implemented both slices.** Highlights, in the order they were done:
+
+- **S12e first, because it was time-sensitive** — the best rule any iteration produced ("when adding
+  a rubric rule, name the test that decides its terms") sat at line 618 of a `meta-learnings.md` that
+  step S6 then reset. It is now step 5 of the standing instructions, pinned by a gate.
+- **The objective is 9-way accuracy**, not the 3-way `correct / scored` the plan's Verification line
+  named. The plan contradicted itself: S25 calls within-bucket confusions "plainly errors under an
+  accuracy objective", which only holds at 9-way. Confirmed with Phil. Floor unchanged at 0.595.
+- **Three real defects the code carried**, each now gated and negative-controlled: the mistake corpus
+  banked every within-bucket confusion as *correct* (S25); a stratified dev VAL draw is **18.6%**
+  ACCURATE against the population's **59.5%**, so accuracy on it measured a population that does not
+  exist (S24); and nothing checked that the working tree matched the `program-v0` tag its numbers
+  would be filed under — it did not, on both editable files (S26).
+- **The tree is now genuinely pristine `v0`**, the enum contract is trimmed 70 → 49 lines, and
+  `program-v0` is re-frozen at `combined_hash` **`0a02710cbd88`** (was `391f54fae7c5`).
+- **`meta-learnings.md` reset** 620 → 75 lines, explaining its own emptiness so the next agent does
+  not read it as breakage.
+
+⚠ **Still owed before a run:** the round-trip canary has never been pinned (`canary.py --pin` costs
+real sessions), and `run_optimization` refuses a real run without one unless `--no-canary` is passed.
+
 **The re-scope that matters.** A four-agent walkthrough plus a Codex pass drifted the work into
 experimental-design rigor (noise floors, a control arm, a TEST gate). Phil cut all of it. Two
 corrections define the current plan:
 
-1. **The objective is plain accuracy** — already computed (`score_sarol3.py:192` is `correct / scored`).
+1. **The objective is plain accuracy** — 9-way (`pred_label == gold_label`); see the correction above.
    It removes the renormalising-denominator drift that made the first run unreadable. Cost: dominated
    by common classes, so the do-nothing floor of **0.595** gets quoted beside every number, and macro
    stays as a diagnostic. Consequences: **TRAIN stratification is off the plan** and **VAL
