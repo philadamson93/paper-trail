@@ -389,7 +389,9 @@ Everything runs on this machine (zero-PHI repo). Nothing in this plan costs mone
 
 ## Landing & cleanup
 
-- **Branch** — `sarol-optimizer-impl`, 5 commits off `sarol` (not `main`), unmerged; merges to `sarol`.
+- **Branch** — `sarol-optimizer-impl`, unmerged, merges to `sarol` (not `main`). **72 commits ahead
+  of `sarol` and 0 behind**, merge-base `d8f52f8` = `sarol`'s tip, so this lands as a fast-forward.
+  (This line read "5 commits off `sarol`" while the plan was in draft; it was never right.)
   Four other worktrees are live here, so re-verify the branch immediately before each commit.
 - **Order** — Slice 2 first this time (it is small and it decides what the docs must say), then Slice 1
   against the settled objective. Writing the docs first would mean rewriting the objective prose twice.
