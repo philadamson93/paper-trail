@@ -113,10 +113,19 @@ and exit.
 The nine emittable labels and their definitions come from the benchmark's own annotation scheme and
 are frozen:
 
-- `experiments/sarol-2024/specs/verdict_enum_sarol.md` — the emittable set and the 9→3 collapse.
+- `experiments/sarol-2024/specs/verdict_enum_sarol.md` — the emittable set and the 9→3 collapse. A
+  manifest entry, `contract_file: true`, loaded by the judge on every claim.
+
+And one file that is **not** part of the program at all, listed here because four documents used to
+say it was:
+
 - `experiments/sarol-2024/specs/verdict_definitions_sarol.md` — what each label *means*, from Sarol
-  et al. 2024 Table 1. This is what the gold annotators were working from, so editing it would not
-  change the program's behaviour toward the gold — it would change what you think the gold is.
+  et al. 2024 Table 1. **It is in no manifest entry and the judge never opens it.** It is a
+  reference for *you* and for your blame subagents: it is what the gold annotators were working
+  from, so it is the right thing to consult when asking "is this gold label defensible". It is not
+  the judge's operative guidance — the rubric is — so it can never itself be the cause of a wrong
+  verdict, and editing it would change what you think the gold means rather than how the program
+  behaves. Do not edit it.
 
 Above them sits the layer that **is** yours:
 

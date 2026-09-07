@@ -69,9 +69,15 @@ ACCURATE   OVERSIMPLIFY   NOT_SUBSTANTIATE   CONTRADICT   MISQUOTE
 INDIRECT   INDIRECT_NOT_REVIEW   ETIQUETTE   IRRELEVANT
 ```
 
-These are defined in `experiments/sarol-2024/specs/verdict_definitions_sarol.md`, frozen from the
-benchmark's own annotation scheme (Sarol et al. 2024, Table 1). You may not add, remove or rename a
-label, and you may not edit those definitions — they are what the gold means.
+The set itself is frozen in `experiments/sarol-2024/specs/verdict_enum_sarol.md`, which the judge
+loads on every claim. You may not add, remove or rename a label.
+
+What each label means to the benchmark's annotators is transcribed in
+`experiments/sarol-2024/specs/verdict_definitions_sarol.md`. ⚠ **The judge never opens that file** —
+it is not in the manifest and not in the judge's context. It is a reference for you and for your
+blame subagents, useful when asking whether a gold label is defensible, and useless as an explanation
+of why the judge decided anything. Do not edit it; it is what the gold means, not what the program
+was told.
 
 **The clarifications layer beside them is yours.**
 `experiments/sarol-2024/specs/verdict_schema_sarol.md` holds how to *apply* the definitions —

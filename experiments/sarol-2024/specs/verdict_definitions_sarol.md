@@ -1,5 +1,18 @@
 # Sarol 2024 label definitions — what each verdict means
 
+> **What this file is, and is not.** It is an **optimizer-facing reference**, not part of the
+> program. It is in no `program-v0` manifest entry, nothing hashes it, and **the adjudicator never
+> loads it** — the judge reads the enum and the rubric, and nothing else
+> (`adjudicator-dispatch-sarol.md:21-22`). Consult it to decide whether a *gold* label is
+> defensible; do not reason about it as guidance the judge followed, and do not edit it.
+>
+> ⚠ **Provenance, stated because the file reads like a primary source and is not one.** This text is
+> *this repository's transcription* of Sarol et al. 2024 Table 1, carried forward from
+> `verdict_schema_sarol.md` where it previously lived. It has **not** been reconciled verbatim
+> against the paper — the published benchmark ships annotation data only, not the scheme. A one-time
+> check against Table 1 is owed before anyone treats this as frozen-from-source.
+
+
 **Frozen contract. Not editable.**
 
 What the nine labels mean, as the benchmark's annotators understood them. The emittable set and the

@@ -447,8 +447,20 @@ def _selftest() -> int:
              for c in _objective_classes())),
         ("...and no longer present 3-way macro as the thing to maximize",
          "Maximize 3-way macro-F1" not in docs["optimizer-instructions.md"]),
-        ("meta-learnings warns that the P1 extractor-side fix is unreachable in Phase 1",
-         "unreachable under the `retrieval` profile" in docs["meta-learnings.md"]),
+        # The reach test for `retrieval`-blamed failures. This gate used to read `meta-learnings.md`,
+        # which was RESET on 2026-09-07 -- so it moved to the doc that now owns the fact rather
+        # than being deleted with the file that happened to hold it. The fact itself has teeth:
+        # earlier iterations read "retrieval modes are out of reach under a mechanical profile" as
+        # covering both halves of the blame and dropped a mode that was fully editable. Both halves
+        # are pinned, so a collapse back to the single undifferentiated claim turns this red.
+        ("the discovery doc splits retrieval blame into the half the rubric can fix and the half "
+         "it cannot",
+         "Out of reach under `retrieval`" in docs["failure-mode-discovery.md"]
+         and "*In* reach on every profile" in docs["failure-mode-discovery.md"]),
+        # The reset itself, pinned so a stale 620-line file cannot quietly come back: the fresh
+        # file must SAY it is empty on purpose, or the next agent reads absence as breakage.
+        ("the reset meta-learnings explains its own emptiness rather than just being empty",
+         "deliberately empty of history" in docs["meta-learnings.md"]),
         # C6.8 made `corpus.ref` point at the mistake corpus itself. The doc that tells the
         # optimizer where to look must say the same thing.
         ("release-format points the optimizer at the per-claim corpus, not the run manifest",

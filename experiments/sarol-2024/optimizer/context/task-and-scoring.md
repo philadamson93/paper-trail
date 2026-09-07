@@ -21,9 +21,12 @@ recording that bug, not the benchmark.)
 ## The output vocabulary
 
 Nine labels. The emittable set is frozen in
-`experiments/sarol-2024/specs/verdict_enum_sarol.md` and what each one *means* is frozen in
-`experiments/sarol-2024/specs/verdict_definitions_sarol.md`. You cannot change either. How to *apply*
-them is the editable clarifications layer — see `experiments/sarol-2024/optimizer/context/edit-surface.md`.
+`experiments/sarol-2024/specs/verdict_enum_sarol.md`, which the judge loads on every claim. What each
+label *means* to the benchmark's annotators is transcribed in
+`experiments/sarol-2024/specs/verdict_definitions_sarol.md` — a reference for you, **not** part of
+the program and never read by the judge. You cannot change either. How to *apply* the labels is the
+editable clarifications layer, and it is the only thing the judge reads besides the enum — see
+`experiments/sarol-2024/optimizer/context/edit-surface.md`.
 
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
