@@ -380,8 +380,23 @@ def _selftest() -> int:
         # was the one doc this gate did not read.
         "task-and-scoring.md": (here / "context" / "task-and-scoring.md")
         .read_text(encoding="utf-8"),
+        # Added with the 2026-09-07 prompt redesign, which split the standing instructions into
+        # a short prompt plus subfiles. The edit scope and the Phase 1 procedure MOVED into these
+        # two, so a gate reading only the old pair would have gone green on docs that no longer
+        # say anything about the scope -- the same false assurance the two additions above fixed.
+        "edit-surface.md": (here / "context" / "edit-surface.md").read_text(encoding="utf-8"),
+        "failure-mode-discovery.md": (here / "context" / "failure-mode-discovery.md")
+        .read_text(encoding="utf-8"),
+        # The subagent's brief. Split out of `failure-mode-discovery.md` on the need-to-know rule:
+        # a doc handed to a subagent must not carry the half addressed to the optimizer. Path-
+        # checked like the rest -- it is handed over BY PATH, so a broken one strands a subagent
+        # with no brief at all.
+        "subagent-blame-brief.md": (here / "context" / "subagent-blame-brief.md")
+        .read_text(encoding="utf-8"),
     }
-    guidance = docs["playbook.md"] + docs["optimizer-instructions.md"]
+    # The scope-and-cost claims live in `edit-surface.md` since the redesign; it is part of the
+    # guidance corpus, not merely path-checked.
+    guidance = docs["playbook.md"] + docs["optimizer-instructions.md"] + docs["edit-surface.md"]
     checks += [
         ("the optimizer's docs name every path the agentic scope grants",
          all(path in guidance for path in AGENTIC.editable)),
