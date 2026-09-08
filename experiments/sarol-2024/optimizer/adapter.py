@@ -373,6 +373,12 @@ def _parse_cost(stdout: str) -> float:
 #: "no --model was given" means without either restating it.
 DEFAULT_JUDGE_MODEL = "haiku"
 
+#: The predicted label recorded for a claim whose verdict could not be parsed at all. Deliberately
+#: NOT a member of the Sarol 9-class enum, so it can never accidentally match gold and is counted
+#: by `score_sarol3` exactly as any other wrong answer. A mangled verdict is a wrong answer -- it
+#: is not an absent one, and treating it as absent is what let 7 bad claims void 93 good ones.
+INVALID_OUTPUT_LABEL = "INVALID_OUTPUT"
+
 #: The frontier metric's name. One definition, shared by the scorer's output, the release payload
 #: and the gate that checks the optimizer's prompt names the objective the adapter reports -- so
 #: a rename cannot leave the prompt describing a metric nothing computes.
@@ -544,7 +550,11 @@ class ClaimRecord:
         return cls(
             claim_id=obj["claim_id"],
             citekey=obj["citekey"],
-            staging_dir=pathlib.Path(obj["staging_dir"]),
+            # Resolved against the repo, so a pin written repo-relative (`canary.py`'s
+            # `portable_staging_dir`, which keeps the committed pin free of an absolute home
+            # path) survives a move between checkouts. Joining an absolute path with a root
+            # yields the absolute path unchanged, so batches that still carry one are untouched.
+            staging_dir=REPO_ROOT / obj["staging_dir"],
             source_mode=obj.get("source_mode", "pdf"),
         )
 
@@ -847,10 +857,24 @@ class SarolRunner:
                 expect_claim_id=claim.claim_id,
                 rubric_path=rubric_path,
                 rollup_order=rollup_order,
+                # How the evidence was ACTUALLY acquired. The profile knows; the judge only
+                # echoes, and a dropped echo used to fail the claim (2026-09-07).
+                harness_selector=self.profile.selector,
             )
             record["validation"] = validation.as_dict()
             if not validation.ok:
-                record["status"] = "program_error"
+                # `invalid_output`, NOT `program_error`. The distinction is the whole point: the
+                # program ran and emitted something the contract rejects, which is a RESULT -- the
+                # rubric's own words are "scored as a miss and counted in error_class_counts, never
+                # a crash". `program_error` means the RUNNER broke, and `run()` escalates it to a
+                # run-level status the Scorer refuses to score at all.
+                #
+                # Conflating them cost a whole batch on 2026-09-07: 93 of 100 claims were fine and
+                # every number came back 0.0. And because the Scorer also demands 100% coverage,
+                # merely *skipping* the invalid ones zeroes it too -- so at any non-zero judge
+                # failure rate (~2% irreducible: malformed JSON, a missing field) the instrument
+                # could never produce a number. P(>=1 failure in 50) is ~64% at 2%.
+                record["status"] = "invalid_output"
             return record
 
         # The round-trip canary, BEFORE any scored claim (D46). A run whose instrument moved is
@@ -994,6 +1018,28 @@ class SarolScorer:
         # Where the per-claim TRAIN mistake corpus is written (C6.8). None disables it, which is
         # what every VAL call does implicitly -- see `_write_mistakes`.
         self.mistakes_root = pathlib.Path(mistakes_root) if mistakes_root else None
+
+    def _resolve_gold_only(self, staging_dir: pathlib.Path) -> str | None:
+        """Gold for a claim whose VERDICT is unreadable. Returns the label, or None.
+
+        Gold is keyed off `staging_info.json`'s citekey and never touches the verdict, so a claim
+        the judge mangled is still a claim we know the right answer to -- and therefore still
+        scoreable, as a miss. Goes through `_gold_resolver` first so the injection seam that keeps
+        this class testable without a gold tree is preserved.
+        """
+        if self._gold_resolver is not None:
+            try:
+                return self._gold_resolver(staging_dir)["gold_label"]
+            except (OSError, KeyError, RuntimeError, TypeError):
+                return None
+        import parse_verdict  # noqa: PLC0415 -- imported late; it reads gold
+
+        try:
+            info = json.loads((staging_dir / "staging_info.json").read_text(encoding="utf-8"))
+            gold = json.loads(parse_verdict.find_gold_file(info["citekey"]).read_text())
+            return parse_verdict.gold_paper_label(gold["gold_evidence"])
+        except (OSError, KeyError, RuntimeError, json.JSONDecodeError):
+            return None
 
     def _resolve(self, staging_dir: pathlib.Path) -> dict[str, Any]:
         if self._gold_resolver is not None:
@@ -1201,12 +1247,24 @@ class SarolScorer:
         unresolved = 0
         joined: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for record in run_manifest["claims"]:
-            if record.get("status") != "ok":
+            # `invalid_output` is SCORED, not skipped. The program emitted something the contract
+            # rejects, which is a result about the program -- and skipping it is not neutral here,
+            # because the coverage rule below demands n_total == requested, so a skip zeroes the
+            # whole batch exactly as the old `program_error` escalation did. Only a genuine
+            # infrastructure status (timeout, program_error) is still dropped.
+            if record.get("status") not in ("ok", "invalid_output"):
                 continue
             try:
                 resolved = self._resolve(pathlib.Path(record["staging_dir"]))
-            except (OSError, KeyError, RuntimeError):
-                unresolved += 1
+            except (OSError, KeyError, RuntimeError, json.JSONDecodeError):
+                # Unparseable verdict. Gold does NOT depend on the verdict -- it resolves from
+                # `staging_info.json`'s citekey -- so this claim is still scoreable, as a miss
+                # against a sentinel that is not in the 9-class enum and so can never match.
+                gold_only = self._resolve_gold_only(pathlib.Path(record["staging_dir"]))
+                if gold_only is None:
+                    unresolved += 1
+                    continue
+                pairs.append((INVALID_OUTPUT_LABEL, gold_only))
                 continue
             pairs.append((resolved["pred_label"], resolved["gold_label"]))
             # Kept, not discarded. Discarding it is what left the optimizer with counts only.

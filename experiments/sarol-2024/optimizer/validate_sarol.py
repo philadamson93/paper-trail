@@ -236,8 +236,12 @@ def validate_obj(
     path: str | None = None,
     rubric_path: pathlib.Path | None = None,
     rollup_order: Sequence[str] | None = None,
+    harness_selector: str | None = None,
 ) -> ValidationResult:
     """Validate an already-parsed verdict envelope. Never raises on bad *content*.
+
+    ``harness_selector`` is how the evidence was ACTUALLY acquired, supplied by the dispatcher from
+    the profile it ran under. It takes precedence over the verdict's own `attestation.selector`.
 
     ``rubric_path`` should point at the rubric the program actually ran under -- for a real run
     that is the copy inside the materialized tree, not the repo's working copy. ``rollup_order``
@@ -329,7 +333,13 @@ def validate_obj(
     # fabricating search effort that never happened. So the floor keys off `attestation.selector`
     # rather than assuming a search occurred (C6.2). A declared selector is exactly the signal that
     # no agent searched; its absence leaves the agentic rule untouched.
-    selector = attestation.get("selector") if isinstance(attestation, dict) else None
+    # The harness is authoritative about how evidence was acquired: it chose the profile and ran
+    # the producer. The judge's echoed copy is only a fallback, because asking a model to repeat a
+    # constant back so a rule can be switched off is a rule that fails ~10% of the time -- measured
+    # 2026-09-07, when 5 of 7 batch failures were `selector=None` on claims BM25 had retrieved
+    # identically to the 45 that passed. The judge had simply dropped the key.
+    verdict_selector = attestation.get("selector") if isinstance(attestation, dict) else None
+    selector = harness_selector or verdict_selector
     if selector:
         floor = DEFAULT_PHRASING_FLOOR
     else:
@@ -358,6 +368,7 @@ def validate_file(
     expect_variant: str = SAROL_VARIANT,
     rubric_path: pathlib.Path | None = None,
     rollup_order: Sequence[str] | None = None,
+    harness_selector: str | None = None,
 ) -> ValidationResult:
     """Read and validate one verdict file. A malformed file is a violation, not a traceback."""
     try:
@@ -381,6 +392,7 @@ def validate_file(
         path=str(path),
         rubric_path=rubric_path,
         rollup_order=rollup_order,
+        harness_selector=harness_selector,
     )
 
 
