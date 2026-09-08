@@ -148,9 +148,20 @@ def stage(
         for doc_id, anns in evidence.items()
         if int(doc_id) // 1000 == cited_paper_bucket
     }
-    if not evidence_for_bucket:
+    # An absent evidence annotation is NOT a reason to refuse. `ETIQUETTE` and `IRRELEVANT` are
+    # *defined* by having no evidence to point at, so the old rule refused exactly the two classes
+    # `sampling.recovered_gold` exists to put back -- 61/316 dev, 442/2141 TRAIN -- and refused
+    # nothing else. `sampling.claim_pool` has drawn them since S24; this gate had not been
+    # relaxed to match, so the first VAL draw that happened to include one aborted the run.
+    #
+    # What actually has to hold is that the bucket is a paper this claim CITES: that is what
+    # `build_source_text` reads, and it is the only thing the evidence annotation was ever
+    # standing in for. Nothing below this point touches `evidence_for_bucket`.
+    cited_buckets = {int(d) // 1000 for d in (row.get("cited_doc_ids") or [])}
+    if not evidence_for_bucket and cited_paper_bucket not in cited_buckets:
         raise ValueError(
-            f"claim {claim_row_id} has no evidence annotations on paper bucket {cited_paper_bucket}"
+            f"claim {claim_row_id} neither has evidence annotations on paper bucket "
+            f"{cited_paper_bucket} nor cites it: {sorted(cited_buckets)}"
         )
 
     corpus = load_corpus() if source_mode == "corpus" else {}
