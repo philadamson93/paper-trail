@@ -2660,6 +2660,92 @@ def _selftest() -> int:
                  dup_dispatched == []),
             ]
 
+            # ------------------------------------------------------------------------------
+            # Concurrency through the REAL invoker. Every gate above injects a Python callable
+            # for `invoke`, so `headless_claude_invoke` itself -- Popen, `start_new_session`,
+            # the pipe drain, stream-json parsing -- has never run on more than one thread at a
+            # time. `sh` stands in for `claude` so this costs nothing and touches no API, but
+            # the process machinery is the production path, not a stub.
+            # ------------------------------------------------------------------------------
+            real_batch = pathlib.Path(tmp) / "real.json"
+            real_batch.write_text(json.dumps({"claims": [
+                {"claim_id": f"R{i}", "citekey": "k", "staging_dir": str(staging)}
+                for i in range(8)
+            ]}), encoding="utf-8")
+            real_inflight = {"now": 0, "peak": 0}
+            real_lock = threading.Lock()
+
+            class _RealInvokerRunner(SarolRunner):
+                """Real `headless_claude_invoke`, with `sh` in place of the `claude` binary."""
+
+                def _stage_command(self, stage, claim, materialized_path):
+                    # Emits the same stream-json init + result lines the production parser reads
+                    # cost, session_id and the resolved model out of.
+                    return ["sh", "-c", (
+                        "sleep 0.2; "
+                        "printf '%s\\n' "
+                        "'{\"type\":\"system\",\"subtype\":\"init\","
+                        f"\"session_id\":\"S-{claim.claim_id}\","
+                        "\"model\":\"claude-haiku-4-5\"}'; "
+                        "printf '%s\\n' '{\"type\":\"result\",\"total_cost_usd\":0.125}'"
+                    )]
+
+            def counting_real_invoke(cmd, cwd, timeout):
+                """The PRODUCTION invoker, wrapped only to count overlap.
+
+                Passed as the `invoke` argument rather than overridden as a method: `__init__`
+                assigns `self.invoke` as an instance attribute, which shadows any class-level
+                method of the same name -- so a subclass override here is silently never called.
+                """
+                with real_lock:
+                    real_inflight["now"] += 1
+                    real_inflight["peak"] = max(real_inflight["peak"], real_inflight["now"])
+                try:
+                    return headless_claude_invoke(cmd, cwd, timeout)
+                finally:
+                    with real_lock:
+                        real_inflight["now"] -= 1
+
+            real_runner = _RealInvokerRunner(
+                store,
+                invoke=counting_real_invoke,
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+                profile="retrieval",
+                max_workers=4,
+                output_root=pathlib.Path(tmp) / "conc-real",
+            )
+            _t0 = time.monotonic()
+            real_res = real_runner.run(
+                pathlib.Path(tmp),
+                schemas.RunInputs(input_ref=str(real_batch), batch_id="rr", split="train"),
+            )
+            real_elapsed = time.monotonic() - _t0
+            real_man = json.loads(
+                pathlib.Path(real_res.artifact_refs[0].path).read_text(encoding="utf-8")
+            )
+            real_stages = [
+                st for rec in real_man["claims"] for st in (rec.get("stages") or {}).values()
+            ]
+            checks += [
+                ("the REAL invoker survives concurrent use -- 8 nested process trees spawned "
+                 "from 4 threads, each in its own process group",
+                 real_inflight["peak"] > 1 and len(real_man["claims"]) == 8),
+                ("...with every claim's cost parsed out of its OWN process's stdout, not "
+                 "cross-wired between concurrent pipes",
+                 len(real_stages) == 8
+                 and all(abs(st["cost_usd"] - 0.125) < 1e-9 for st in real_stages)),
+                ("...and every session id likewise, which is what makes a trace attributable "
+                 "to the claim it judged",
+                 sorted(st["session_id"] for st in real_stages)
+                 == sorted(f"S-R{i}" for i in range(8))),
+                ("...summing to the exact batch total, through the real parse path",
+                 abs(real_res.cost_usd - 1.0) < 1e-9 and real_res.sub_invocation_count == 8),
+                ("...and genuinely in parallel: 8 x 0.2s of real subprocess serialises to 1.6s, "
+                 "so four workers must come in well under that",
+                 real_elapsed < 1.2),
+            ]
+
             # An unexpected exception in one worker must stop the batch, not merely surface
             # after it. The serial loop failed fast for free; a thread pool does the opposite
             # by default -- `ThreadPoolExecutor.__exit__` calls `shutdown(wait=True)`, which
