@@ -513,6 +513,10 @@ def build_components(
     #: The JUDGE's model, not the optimizer's. Defaults to `adapter.SarolRunner`'s own default
     #: rather than restating it here -- one place knows what the judge runs on.
     model: str | None = None,
+    #: How many claims the Runner dispatches at once. Rides through to `adapter.SarolRunner`;
+    #: see its constructor for why the default is 1 and why raising it does not move the
+    #: instrument.
+    max_workers: int = 1,
 ):
     """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
 
@@ -557,6 +561,7 @@ def build_components(
             per_call_max_budget_usd=per_call_max_budget_usd,
             profile=prof,
             output_roots=roots,
+            max_workers=max_workers,
             **({"model": model} if model else {}),
         ),
         store,
@@ -1212,6 +1217,39 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
     parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False)
 
+    # argv -> run_optimization, with the real parser. `run_optimization` is stubbed so nothing
+    # is dispatched, materialized or spent: the assertion is purely that the flag survives the
+    # hop from `args` into the run's kwargs.
+    _cli_max_workers = None
+
+    def _capture_run_optimization(**kwargs):
+        nonlocal_holder["mw"] = kwargs.get("max_workers")
+        raise _StopCapture()
+
+    class _StopCapture(Exception):
+        pass
+
+    nonlocal_holder: dict[str, Any] = {}
+    _real_run_optimization = globals()["run_optimization"]
+    globals()["run_optimization"] = _capture_run_optimization
+    try:
+        main([
+            "--run", "--max-workers", "6",
+            "--max-budget-usd", "1", "--run-id", "gate", "--train-n", "1",
+            "--materialize-root", "/tmp/pt-gate-mat",
+            "--train-output-root", "/tmp/pt-gate-train",
+            "--val-output-root", "/tmp/pt-gate-val",
+            "--train-inputs", "/tmp/pt-gate-train.json",
+            "--val-inputs", "/tmp/pt-gate-val.json",
+        ])
+    except _StopCapture:
+        pass
+    except Exception:  # noqa: BLE001 -- a refusal before dispatch is still a failed capture
+        pass
+    finally:
+        globals()["run_optimization"] = _real_run_optimization
+    _cli_max_workers = nonlocal_holder.get("mw")
+
     # Finding 4: the canary must be priced from what is WIRED, and a real run must refuse to start
     # without one. The first optimization run priced three firings per iteration and executed
     # zero; these are the two checks that make that state unreachable rather than merely unlikely.
@@ -1334,6 +1372,23 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ("...and that model reaches the CANARY check too, so a run cannot be judged by one model "
          "against a pin measured with another",
          _model_reaches_canary),
+
+        # --max-workers is the same flag-plumbing hazard a third time, so it is gated at BOTH
+        # seams: the kwarg into the Runner, and argv into the run. Concurrency that silently
+        # stayed at 1 would look exactly like "the pool did not help" and would be debugged as
+        # a rate limit rather than as a dropped flag.
+        ("--max-workers reaches the constructed Runner",
+         build_components(
+             max_budget_usd=1e9, train_n=1, require_command=False, max_workers=6
+         )["runner"].inner.max_workers == 6),
+        ("...and the default is serial, so concurrency is opt-in and every existing baseline "
+         "was measured under the same dispatch the default still gives",
+         build_components(
+             max_budget_usd=1e9, train_n=1, require_command=False
+         )["runner"].inner.max_workers == 1),
+        ("...and the CLI flag reaches the RUN, not merely the parser -- the defect that shipped "
+         "for --profile and was nearly repeated for --model",
+         _cli_max_workers == 6),
         ("a run with no canary wired prices ZERO canary sessions, so 'priced but absent' cannot "
          "happen again", no_canary_model.canary_sessions() == 0),
         ("...while a wired one is priced at three firings per iteration, per OQ12",
@@ -1868,6 +1923,19 @@ def main(argv: "list[str] | None" = None) -> int:
     ap.add_argument("--max-budget-usd", type=float, default=None)
     ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
     ap.add_argument(
+        "--max-workers",
+        type=int,
+        default=1,
+        help=(
+            "claims dispatched concurrently (default 1 = serial). Claims are independent, so "
+            "this changes wall-clock only -- every session, prompt and materialized tree is "
+            "byte-identical, and a serially-measured baseline stays comparable. The useful "
+            "ceiling is empirical: each claim spawns a nested session which itself spawns a "
+            "subagent, so N here is ~2N concurrent API consumers. Ramp it and watch for "
+            "rate-limit errors."
+        ),
+    )
+    ap.add_argument(
         "--model",
         default=None,
         help=(
@@ -1984,6 +2052,9 @@ def main(argv: "list[str] | None" = None) -> int:
                     pathlib.Path(args.sampling_root) if args.sampling_root else None
                 ),
                 require_canary=not args.no_canary,
+                # Same lesson as --profile and --model: a flag that reaches the estimate and not
+                # the run is worse than no flag. Gated in `_selftest`.
+                max_workers=args.max_workers,
                 # Same lesson as --profile directly above: a flag that reaches the estimate and
                 # not the run is worse than no flag. `model` rides `**component_kwargs` into
                 # `build_components`, which hands it to the Runner.
