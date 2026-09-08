@@ -1006,10 +1006,9 @@ class SarolRunner:
         #   - by index rather than `claim_id`, so a duplicated id in a batch cannot silently
         #     collapse two records into one.
         #
-        # `as_completed` rather than `map` so the partial manifest is rewritten as each claim
-        # LANDS. That preserves the salvageability `write_manifest` exists for: `map` yields in
-        # order, so one slow first claim would hold back the manifest for every claim finishing
-        # behind it, and a kill in that window would lose them from the manifest.
+        # Salvageability is delivered by writing the manifest INSIDE the worker (see
+        # `process_and_record`), not by how finished futures are collected here -- which is why
+        # this loop is free to consume them in completion order for prompt failure detection.
         indexed: dict[int, dict[str, Any]] = {}
         # Guards BOTH the shared `indexed` dict and the manifest write. Held only for a JSON
         # dump, never across a dispatch, so it does not serialize the actual work.
@@ -1039,10 +1038,24 @@ class SarolRunner:
             futures = [
                 pool.submit(process_and_record, i, claim) for i, claim in enumerate(claims)
             ]
-            # `.result()` re-raises whatever a worker raised, preserving the old loop's behaviour
-            # of letting an unexpected exception out of `run` rather than burying it in a future.
-            for future in futures:
-                future.result()
+            try:
+                # `as_completed`, NOT submission order: this has to notice the first failure in
+                # TIME, because every claim still queued behind it is real money. Iterating
+                # `futures` in order would sit on a slow claim 0 while later failures went unseen.
+                for future in concurrent.futures.as_completed(futures):
+                    # Re-raises whatever a worker raised, rather than burying it in a future.
+                    future.result()
+            except BaseException:
+                # Fail fast, as the serial loop did. Cancelling is a no-op for a claim already
+                # running -- a dispatched nested session cannot be unsent -- but it stops every
+                # QUEUED claim from starting. Without this the executor's own shutdown drains the
+                # whole batch first, so an exception on claim 3 of 300 would still pay for the
+                # remaining 297. The old `for claim in claims:` loop stopped at claim 3, and
+                # matching that is the point: propagation alone was not the contract, not
+                # spending the rest of the batch was.
+                for pending in futures:
+                    pending.cancel()
+                raise
 
         results: list[dict[str, Any]] = [indexed[i] for i in sorted(indexed)]
         write_manifest(results, complete=True)
@@ -2609,6 +2622,66 @@ def _selftest() -> int:
                 ("two claims sharing a claim_id stay two records, so a duplicated id cannot "
                  "silently halve a batch and pass the Scorer's coverage check",
                  len(dup_man["claims"]) == 2 and dup_man["requested_count"] == 2),
+            ]
+
+            # An unexpected exception in one worker must stop the batch, not merely surface
+            # after it. The serial loop failed fast for free; a thread pool does the opposite
+            # by default -- `ThreadPoolExecutor.__exit__` calls `shutdown(wait=True)`, which
+            # DRAINS every already-submitted claim before the exception is allowed out. On a
+            # 300-claim paid batch that is 297 claims of spend after the failure.
+            fail_batch = pathlib.Path(tmp) / "fail.json"
+            fail_batch.write_text(json.dumps({"claims": [
+                {"claim_id": f"X{i}", "citekey": "k", "staging_dir": str(staging)}
+                for i in range(12)
+            ]}), encoding="utf-8")
+            dispatched_ids: list[str] = []
+            dispatch_lock = threading.Lock()
+
+            def exploding_invoke(cmd, cwd, t_):
+                cid = cmd[3].split("--claim ")[1].split()[0]
+                with dispatch_lock:
+                    dispatched_ids.append(cid)
+                if cid == "X1":
+                    raise RuntimeError("simulated unexpected worker failure")
+                time.sleep(0.05)
+                return InvocationResult(exit_code=0, cost_usd=0.1, duration_seconds=0.1)
+
+            fail_runner = SarolRunner(
+                store,
+                invoke=exploding_invoke,
+                output_root=pathlib.Path(tmp) / "conc-fail",
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+                profile="retrieval",
+                max_workers=2,
+            )
+            raised = None
+            try:
+                fail_runner.run(
+                    pathlib.Path(tmp),
+                    schemas.RunInputs(
+                        input_ref=str(fail_batch), batch_id="ff", split="train"
+                    ),
+                )
+            except RuntimeError as exc:
+                raised = exc
+            fail_man_path = (
+                pathlib.Path(tmp) / "conc-fail" / "train" / pathlib.Path(tmp).name
+                / "run_manifest.json"
+            )
+            fail_man = (
+                json.loads(fail_man_path.read_text(encoding="utf-8"))
+                if fail_man_path.exists() else {}
+            )
+            checks += [
+                ("an unexpected worker exception still escapes run(), as it did serially",
+                 isinstance(raised, RuntimeError)),
+                ("...and the claims queued behind it are NEVER dispatched, so a failure at "
+                 "claim 2 of 12 does not pay for the other 10",
+                 0 < len(dispatched_ids) <= 4),
+                ("...while claims that finished before the failure survive in the manifest, so "
+                 "the run is still salvageable",
+                 bool(fail_man.get("claims"))),
             ]
     else:
         checks.append((f"engine not found at {engine_path()} -- engine-facing checks SKIPPED", True))
