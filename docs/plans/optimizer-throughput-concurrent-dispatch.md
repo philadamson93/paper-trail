@@ -75,7 +75,31 @@ claim's cost and `session_id` are parsed from its *own* process's stdout rather 
 between concurrent pipes (negative-controlled by forcing a shared session id, and by changing the
 emitted cost). That closes the subprocess/threading half of the risk at zero cost and zero API use.
 
-**Still unproven: the API ceiling itself** — rate limits and node-process pressure at N concurrent
+**LIVE PROBE, 2026-09-08 — the API ceiling question is now answered at N=4.** 12 real claims
+(copies of `hillclimb-2026-09-07` train staging, verdicts wiped so a fresh write is provable),
+dispatched at `max_workers=4` against the same frozen `iter1-current` spec-root and the same
+`haiku` judge:
+
+| | Serial baseline | Probe @ 4 workers |
+|---|---|---|
+| Wall clock, 12 claims | ~27.7 min | **7.30 min** |
+| Per-claim mean | 138.3s (n=100) | **139.5s** (n=12) |
+| Cost per claim | ~$0.165 | $0.169 |
+| Claim statuses | — | **12/12 `ok`** |
+
+**3.82x**, peak concurrency exactly 4, manifest in input order, 12/12 verdicts freshly written and
+passing exit validation. The load-bearing number is **per-claim latency: 139.5s vs 138.3s —
+unchanged**, so the speed-up is real parallelism rather than throughput bought by slowing each
+session. It ran *alongside* the live `hillclimb-2026-09-08` job, i.e. ~5 concurrent judge sessions
+on one laptop, with no failure on either side — so the ceiling is comfortably above 4.
+
+Not established by this probe: **N=8**, and whether the two verdict differences vs the original run
+(10/12 agreement; `1266-54` ACCURATE->OVERSIMPLIFY, `1518-70` INDIRECT_NOT_REVIEW->ACCURATE) are
+anything but ordinary judge nondeterminism. They almost certainly are — every session is
+byte-identical under concurrency — but *demonstrating* it needs a serial re-run of the same 12
+claims as a control (~28 min, ~$2), which was not run.
+
+**Previously unproven, before that probe: the API ceiling itself** — rate limits and node-process pressure at N concurrent
 nested sessions, each of which spawns a subagent. That is the one thing no offline gate can answer,
 and it cannot be measured while a run holds the capacity, because a rate-limit storm would fail
 nested sessions that `/sarol-eval-item` is forbidden from retrying — landing them as
@@ -220,8 +244,9 @@ just cost — which is a stronger reason to test it than the batch discount.
 
 ## Open questions for Phil
 
-1. **Ramp `--max-workers` on the next real run?** Suggested: start at 4, watch for rate-limit
-   errors, then 8. This is the only untested part of lever 1.
+1. **Ramp `--max-workers` on the next real run?** **N=4 is now measured live: 3.82x, per-claim
+   latency unchanged, 12/12 ok** (see the probe above). N=8 is still unmeasured. A 5-iteration
+   TRAIN=50/VAL=50 run at N=4 should land near ~5h instead of ~20h.
 2. **Duplicate `claim_id`s — RESOLVED 2026-09-07.** Refused before dispatch with
    `DUPLICATE_CLAIM_IDS`; see the third bullet above.
 3. **Is the ~4% double-dispatch worth a fix now?** It is a real per-claim cost and variance leak.
