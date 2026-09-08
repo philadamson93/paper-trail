@@ -237,6 +237,115 @@ corrections define the current plan:
 **Next:** S12e (rescue the buried rubric-rule guidance before the `meta-learnings.md` reset deletes it),
 then Slice 2 (4 code changes), then Slice 1 (35 doc items).
 
+### Session 2026-09-07d — first hill-climb run launched; throughput is the next real constraint
+
+**Running:** 5 iterations, TRAIN=50 fixed (`--train-n-schedule 50,50,50,50,50 --draw-mode cumulative`,
+so iteration 1 draws 50 and 2-5 reuse the identical 50), `--val-n 50`, judge `haiku`, run-id
+`hillclimb-2026-09-07`. Phil's call: the point is to see hill-climbing, not to resolve a precise
+effect — a full-VAL baseline comes later. TRAIN is fixed rather than ramped precisely so the TRAIN
+curve is comparable rung-to-rung; the 2026-09-02 run's 0.720 -> 0.620 -> 0.680 could show nothing
+because the rung moved underneath it (25 -> 50 -> 50).
+
+**Two defects found and fixed before/while launching, both negative-controlled, both uncommitted:**
+
+- **The canary pin embedded an absolute `staging_dir`** under the author's home *and* inside
+  `.claude/worktrees/optimizer-impl`. The public-repo leak was the lesser half: `/land` prunes the
+  worktree, so the pin would have named a deleted tree and every run would have refused. Now written
+  repo-relative (`canary.portable_staging_dir`) and resolved against `REPO_ROOT` on load
+  (`adapter.ClaimRecord.from_dict`). +4 gates.
+- **`claim_pool` and `stage_claim` disagreed about which units exist.** S24 repaired the pool to
+  recover the ETIQUETTE/IRRELEVANT units — the two classes *defined* by having no evidence
+  annotations — but `scripts/stage_claim.py` still enforced the old evidence-annotation rule and
+  refused exactly those. The first live `--val-n` draw hit one on its first try (claim 89 / bucket
+  24, ETIQUETTE) and aborted the run at zero spend. `evidence_for_bucket` was read by nothing but
+  that refusal, so the precondition is now "the bucket is a paper this claim cites". +3 gates in
+  `sampling.py`, the sweep calling the **real** stager over all 311 dev units rather than restating
+  its rule. `stage_claim.py` is not in the frozen manifest, so `combined_hash 0a02710cbd88` is
+  unchanged.
+
+  ⚠ **The pattern, third time now.** The existing gates chase the S24 repair one step at a time —
+  gold map, then pool — and stop one seam short of the stager. Same shape as the 2026-09-03
+  post-mortem's cross-cutting lesson: each guard asserted on a local object, none on the artifact
+  the next stage actually consumes. When a repair widens a population, gate the *consumer*.
+
+**THROUGHPUT — the next real constraint, and the reason a full-VAL run is currently impractical.**
+
+Measured live, not estimated: **~2 min/claim wall-clock, ~$0.165/claim** under `haiku`. A
+5-iteration run is 561 sessions ~ **20 hours serial**; cost is a non-issue at ~$93. The dispatcher
+has **no concurrency anywhere** — `adapter.py` and `dispatcher.py` contain no thread pool, no
+`asyncio`, no `max_workers`. So wall-clock, not money, is what makes VAL=316 impractical
+— the same 5 iterations at full VAL are **2,157 sessions, ~72 hours** (computed from
+`CostModel.sessions_per_iteration`, probe-cache included) for ~$356 — and it is why the
+2026-09-02 run reached for VAL=50 and got no signal.
+
+Note the 2 min is **not** inference latency: `ps` sampling shows the judge session itself running
+~60-80s. The rest is per-claim overhead — process spawn, setting-source load, the `Bash` calls
+`/sarol-eval-item` makes, and the **subagent it spawns** before writing the verdict. Roughly half
+the wall-clock is dispatch machinery, not the model thinking.
+
+Three levers, ordered by **how much they perturb the instrument** — which is the axis that matters,
+not how much speed they buy:
+
+1. **Concurrency over independent claims — no instrument change. FEASIBILITY CHECKED 2026-09-07,
+   and the code is already shaped for it.** `SarolRunner.run` (`adapter.py:721`) ends in
+   literally `for claim in claims: results.append(process(claim))` where `process(claim)` is a
+   self-contained closure returning one record dict — the exact shape `ThreadPoolExecutor.map`
+   takes. Everything per-claim is already keyed by `claim_id`, not by position: the verdict at
+   `claim.staging_dir/ledger/claims/<claim_id>.json` (a per-claim directory), the trace at
+   `out_dir/traces/<claim_id>-<stage>.jsonl`, and `SarolScorer` iterating
+   `run_manifest["claims"]` keys on `record["claim_id"]`. **Threads, not processes** — the work is
+   waiting on a subprocess talking to an API, so the GIL is irrelevant.
+
+   **The only genuinely shared mutable state is `counter = {"cost": 0.0, "subs": 0}`**
+   (`adapter.py:777`), mutated per stage by `counter["subs"] += 1` / `counter["cost"] += ...`,
+   which is not atomic under threads. **Don't lock it — delete it.** Each record already carries
+   `cost_usd` per stage, so sum over the returned records at the end and the shared state stops
+   existing. (Fixing the default rather than guarding the call site.)
+
+   Two smaller items: `write_manifest(results, complete=False)` runs after **every** claim and
+   would need serializing — easiest is to write every k completions instead of every one, which
+   also relieves the O(n²) reserialization its own comment flags and accepts on the grounds that
+   claims are slow (that argument weakens exactly as concurrency makes them land faster). And use
+   `executor.map`, which preserves input order, so the manifest stays byte-deterministic even
+   though the scorer no longer requires it.
+
+   **Not in the way:** the canary fires per *Runner call*, not per claim; `BudgetGuard.check` and
+   `CachingRunner._cache` are likewise per Runner call, so neither is in the contended path.
+
+   **The real unknown is the concurrency ceiling, and it is empirical.** Each `claude -p` spawns a
+   subagent, so N workers is ~2N concurrent API consumers plus N node processes; on a laptop
+   expect 4-8 to be the practical limit, not 50. That still turns ~20h into ~3-5h. Ramp N and
+   watch for rate-limit errors. One accepted regression: on a budget refusal the overshoot becomes
+   the N claims in flight rather than 1.
+
+   **Why this is the one to do first:** every claim's session, subagent, prompt and materialized
+   tree stay byte-identical, so `program-v0`'s identity and every existing baseline survive
+   untouched. It buys ~5x wall-clock for ~20 lines and zero measurement risk.
+2. **Batch API / Vertex batch mode (instrument change, but a testable one).** Phil's question, and
+   it turns on whether adjudication *needs an agent*. Under `retrieval` the evidence envelope is
+   already staged by BM25 **before** dispatch, so the model's actual job may be pure text-in →
+   verdict-out, with the surrounding Claude Code session doing only file plumbing the harness could
+   do in Python. If so the model call is batch-eligible: massive parallelism plus the batch
+   discount, and — importantly — **per-claim isolation is preserved**, since each claim stays its
+   own request. But it is not a drop-in: `/sarol-eval-item` currently spawns a subagent, so moving
+   to one API call changes the dispatch path and therefore the program. Whether verdicts are
+   distributionally identical is an **empirical** question, and the canary is the right shape of
+   answer at larger n — run both paths over the same k claims and compare agreement before
+   trusting any number produced the new way. paper-trail has no PHI, so the Vertex-project
+   constraint that governs VISTA work does not apply here.
+3. **N verdicts per session (e.g. 10) — biggest win, worst for validity.** Cuts session count ~10x
+   and amortizes all the per-session overhead, but it **breaks per-claim independence**: a judge
+   that saw claim k's reasoning while judging claim k+1 is a different instrument, and the
+   contamination runs in the direction that flatters the model. It also breaks things the design
+   leans on — the canary fires per Runner call, mistake-corpus rows carry a per-claim `trace_ref`,
+   and the frozen prompts are written for single-claim dispatch, so it changes program identity and
+   invalidates existing baselines. Do this only as a deliberate, separately-validated decision, not
+   as a performance tweak.
+
+**Recommendation for a future session:** do (1) unconditionally — it is free in instrument terms.
+Investigate (2) next, and the first question to answer is narrow and cheap: *does the adjudicator
+subagent do anything a single model call could not?* Treat (3) as a last resort.
+
 ## Current phase
 
 **Designing the meta-experiment infrastructure — agent-only reframe landed 2026-04-21.** Framework plan doc is authoritative: `docs/plans/agentic-pipeline-optimization-framework.md`. We are in the pre-v1 design stage; no curve runs yet. Locked decisions through 2026-04-21:
