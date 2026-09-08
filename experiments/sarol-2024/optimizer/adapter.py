@@ -65,6 +65,7 @@ only after a batch's adjudications are complete — the Runner never imports it.
 
 from __future__ import annotations
 
+import concurrent.futures
 import dataclasses
 import hashlib
 import json
@@ -76,6 +77,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -589,6 +591,29 @@ def load_batch(input_ref: str | pathlib.Path) -> list[ClaimRecord]:
     return [ClaimRecord.from_dict(c) for c in obj["claims"]]
 
 
+def batch_totals(records: "Iterable[dict[str, Any]]") -> "tuple[int, float]":
+    """``(sub_invocation_count, cost_usd)`` summed from the records themselves.
+
+    This replaces a ``counter`` dict that the dispatch loop mutated in place with non-atomic
+    ``+=``. Under concurrent dispatch that was the one genuinely shared mutable object in the
+    Runner, and the fix is to delete the shared state rather than lock it: every stage record
+    already carries its own ``cost_usd``, and one stage entry is written per ``invoke`` call, so
+    both totals are recoverable from what the batch returns. A lock would have preserved a
+    variable that never needed to exist.
+
+    Exact, not approximate -- the old counter incremented once per ``invoke`` and added that
+    call's ``cost_usd``, which is one-to-one with the stage entries written beside them, including
+    on the timeout and non-zero-exit paths that return early.
+    """
+    subs = 0
+    cost = 0.0
+    for record in records:
+        for stage in (record.get("stages") or {}).values():
+            subs += 1
+            cost += float(stage.get("cost_usd") or 0.0)
+    return subs, cost
+
+
 class SarolRunner:
     """Dispatches the frozen program over a batch of claims and reports what happened.
 
@@ -612,6 +637,7 @@ class SarolRunner:
         require_command: bool = True,
         profile=None,
         output_roots: "dict[str, pathlib.Path] | None" = None,
+        max_workers: int = 1,
     ) -> None:
         self.program_store = program_store
         # A real checkout, not the materialized tree: that tree is chmod'd read-only, its `.claude/`
@@ -637,6 +663,16 @@ class SarolRunner:
         # the optimizer's readable mounts, and "outside" is not something a derived default can
         # promise -- `dispatcher.val_isolation_problem` is what checks it.
         self.output_roots = {k: pathlib.Path(v) for k, v in (output_roots or {}).items()}
+        # How many claims are dispatched at once. Claims are independent -- each is its own nested
+        # session writing to its own `claim_id`-keyed paths -- so this changes only wall-clock, not
+        # what any session sees. Every prompt, subagent and materialized tree stays byte-identical,
+        # which is why raising it does NOT move the instrument or invalidate an earlier baseline.
+        #
+        # Defaults to 1 (exactly the old serial dispatch) because the useful ceiling is EMPIRICAL,
+        # not architectural: each `claude -p` spawns a subagent, so N workers is ~2N concurrent API
+        # consumers plus N node processes. Ramp it on a real run and watch for rate-limit errors
+        # rather than inheriting an unverified default here.
+        self.max_workers = max(1, int(max_workers))
 
     # -- preflight ---------------------------------------------------------------------------
 
@@ -755,6 +791,30 @@ class SarolRunner:
         except (OSError, KeyError, json.JSONDecodeError) as exc:
             return artifacts("infra_error", code="BATCH_UNREADABLE", message=str(exc)[:300])
 
+        # Every per-claim artifact -- evidence envelope, verdict JSON, judge trace -- is keyed on
+        # `claim_id`, so two claims sharing one id write the SAME paths. Serially that was merely
+        # wasteful and deterministic (the second overwrote the first); under concurrent dispatch
+        # the two writes race, and the verdict that survives is whichever thread finished last.
+        # Concurrency is what turns a harmless duplicate into a corrupt one, so the refusal lands
+        # in the same change.
+        #
+        # No drawn batch can trip this: the pool is a dict keyed on `claim_id`, `cumulative` builds
+        # its batch with a set union and `fresh` uses `rng.sample` (without replacement). The
+        # exposed path is `--train-inputs` / `--val-inputs`, a hand-written batch JSON that
+        # bypasses the sampler entirely -- i.e. exactly where a typo comes from. Refuse loudly
+        # rather than race quietly.
+        _dupes = sorted({c.claim_id for c in claims if [x.claim_id for x in claims].count(c.claim_id) > 1})
+        if _dupes:
+            return artifacts(
+                "infra_error",
+                code="DUPLICATE_CLAIM_IDS",
+                message=(
+                    f"batch repeats claim_id(s) {', '.join(_dupes[:5])}"
+                    f"{' ...' if len(_dupes) > 5 else ''}; every per-claim artifact is keyed on "
+                    "claim_id, so duplicates would race on the same verdict and trace paths"
+                ),
+            )
+
         # Namespace every Runner call under the materialized version it actually ran (Bug 3).
         # The engine calls this Runner THREE times per iteration -- TRAIN and current-VAL against
         # `iter<n>-current`, then the post-commit probe against `iter<n>-<tag>` -- and
@@ -776,11 +836,6 @@ class SarolRunner:
         # the repo's working tree, which the optimizer may already have edited past this version.
         rubric_path = materialized_path / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
         rollup_order = validate_sarol.load_rollup_order(rubric_path)
-
-        # Per-call, closed over by `process` below -- deliberately NOT instance state: the
-        # engine calls this Runner three times per iteration and a counter on `self` would
-        # carry across those calls.
-        counter = {"cost": 0.0, "subs": 0}
 
         def process(claim: ClaimRecord) -> dict[str, Any]:
             record: dict[str, Any] = {
@@ -811,8 +866,6 @@ class SarolRunner:
             for stage in self.profile.stages:
                 cmd = self._stage_command(stage, claim, materialized_path)
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
-                counter["subs"] += 1
-                counter["cost"] += res.cost_usd
                 # Copy the judge's own reasoning trace in beside the manifests, rather than
                 # only pointing at `~/.claude/projects/`. That directory is a cache Claude Code
                 # owns and prunes; a trace cited as evidence for a result cannot live somewhere
@@ -893,8 +946,8 @@ class SarolRunner:
                         f"(status={canary_record['status']}) -- the scorer or pipeline moved; "
                         "numbers from this run are not comparable to earlier ones"
                     ),
-                    n=counter["subs"],
-                    cost=counter["cost"],
+                    n=batch_totals([canary_record])[0],
+                    cost=batch_totals([canary_record])[1],
                 )
 
         manifest_path = out_dir / "run_manifest.json"
@@ -917,6 +970,9 @@ class SarolRunner:
             # these rather than re-deriving them, because `parse_verdict` only ever sees the
             # OVERALL label: an invalid SUB-CLAIM verdict under a valid overall verdict would
             # otherwise score clean and disappear from error_class_counts entirely.
+            _subs, _cost = batch_totals(
+                ([canary_record] if canary_record is not None else []) + list(records)
+            )
             validator_counts: dict[str, int] = {}
             for rec in records:
                 for key, n in (
@@ -956,8 +1012,12 @@ class SarolRunner:
                         "claims": records,
                         "validator_error_class_counts": validator_counts,
                         "canary": canary_record,
-                        "sub_invocation_count": counter["subs"],
-                        "cost_usd": counter["cost"],
+                        # Derived from the records rather than read off a mutable counter.
+                        # The canary is included because the counter it replaces was incremented
+                        # by the canary's own dispatch too -- dropping it here would have silently
+                        # under-reported every run's cost by one claim.
+                        "sub_invocation_count": _subs,
+                        "cost_usd": _cost,
                     },
                     indent=2,
             )
@@ -976,16 +1036,83 @@ class SarolRunner:
             tmp_path.write_text(payload, encoding="utf-8")
             os.replace(tmp_path, manifest_path)
 
-        results: list[dict[str, Any]] = []
-        for claim in claims:
-            results.append(process(claim))
-            write_manifest(results, complete=False)
+        # Dispatch. Claims are independent units of work -- each one is its own nested session,
+        # writing its verdict under its OWN `claim.staging_dir` and its trace under its own
+        # `<claim_id>-<stage>.jsonl` -- so running several at once changes wall-clock and nothing
+        # else. Every session, prompt, subagent and materialized tree is byte-identical to what
+        # serial dispatch produced, which is the whole reason this is safe: it does not move the
+        # instrument, so baselines measured serially stay comparable.
+        #
+        # THREADS, not processes: `process` spends ~all of its time blocked in `communicate()`
+        # waiting on a `claude` subprocess, so the GIL is released throughout and processes would
+        # buy nothing while breaking the closure.
+        #
+        # Results are collected BY SUBMISSION INDEX, not by arrival and not by `claim_id`:
+        #   - by index, so the manifest stays in input order and byte-deterministic regardless of
+        #     which claim finishes first (`SarolScorer` keys on `record["claim_id"]` and does not
+        #     require order, but a manifest that reshuffles between runs is a diffing hazard);
+        #   - by index rather than `claim_id`, so a duplicated id in a batch cannot silently
+        #     collapse two records into one.
+        #
+        # Salvageability is delivered by writing the manifest INSIDE the worker (see
+        # `process_and_record`), not by how finished futures are collected here -- which is why
+        # this loop is free to consume them in completion order for prompt failure detection.
+        indexed: dict[int, dict[str, Any]] = {}
+        # Guards BOTH the shared `indexed` dict and the manifest write. Held only for a JSON
+        # dump, never across a dispatch, so it does not serialize the actual work.
+        ledger_lock = threading.Lock()
+
+        def process_and_record(index: int, claim: ClaimRecord) -> dict[str, Any]:
+            """Dispatch one claim, then fold it into the running manifest before releasing the
+            worker.
+
+            The manifest write lives HERE, in the worker, rather than in the main thread
+            collecting finished futures -- and that placement is load-bearing, not incidental.
+            Collecting on the main thread lets a worker pick up its next claim the instant the
+            previous one returns, i.e. BEFORE the manifest naming the finished one has been
+            written. At `max_workers=1` that silently weakens the incremental-manifest guarantee
+            the salvage path depends on, which is precisely what the two `seen_partials` gates
+            below caught when this was written the other way round. Writing inside the worker
+            restores the exact serial ordering at N=1 (dispatch, write, dispatch, write) and at
+            N>1 still lands each claim in the manifest as it finishes.
+            """
+            record = process(claim)
+            with ledger_lock:
+                indexed[index] = record
+                write_manifest([indexed[i] for i in sorted(indexed)], complete=False)
+            return record
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            futures = [
+                pool.submit(process_and_record, i, claim) for i, claim in enumerate(claims)
+            ]
+            try:
+                # `as_completed`, NOT submission order: this has to notice the first failure in
+                # TIME, because every claim still queued behind it is real money. Iterating
+                # `futures` in order would sit on a slow claim 0 while later failures went unseen.
+                for future in concurrent.futures.as_completed(futures):
+                    # Re-raises whatever a worker raised, rather than burying it in a future.
+                    future.result()
+            except BaseException:
+                # Fail fast, as the serial loop did. Cancelling is a no-op for a claim already
+                # running -- a dispatched nested session cannot be unsent -- but it stops every
+                # QUEUED claim from starting. Without this the executor's own shutdown drains the
+                # whole batch first, so an exception on claim 3 of 300 would still pay for the
+                # remaining 297. The old `for claim in claims:` loop stopped at claim 3, and
+                # matching that is the point: propagation alone was not the contract, not
+                # spending the rest of the batch was.
+                for pending in futures:
+                    pending.cancel()
+                raise
+
+        results: list[dict[str, Any]] = [indexed[i] for i in sorted(indexed)]
         write_manifest(results, complete=True)
 
         timed_out = any(r["status"] == "timeout" for r in results)
         errored = any(r["status"] == "program_error" for r in results)
-        total_cost = counter["cost"]
-        sub_invocations = counter["subs"]
+        sub_invocations, total_cost = batch_totals(
+            ([canary_record] if canary_record is not None else []) + results
+        )
         ref = schemas.ArtifactRef(
             path=str(manifest_path),
             sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
@@ -2439,6 +2566,302 @@ def _selftest() -> int:
                  retr_manifest["retrieval_k"] == 20),
                 ("...and the stages it actually ran",
                  retr_manifest["profile_stages"] == ["adjudicator"]),
+            ]
+
+            # ==========================================================================
+            # Concurrent dispatch. Claims are independent, so the ONLY thing `max_workers`
+            # may change is wall-clock -- not which sessions run, not what they are told,
+            # and not a single number in the manifest.
+            # ==========================================================================
+            conc_batch = pathlib.Path(tmp) / "conc.json"
+            conc_batch.write_text(json.dumps({"claims": [
+                {"claim_id": f"P{7 - i}", "citekey": f"k{i}", "staging_dir": str(staging)}
+                for i in range(8)
+            ]}), encoding="utf-8")
+
+            # Tracks how many dispatches are in flight at once, and dispatches claims with
+            # DESCENDING durations so the last-submitted claim finishes first. That ordering
+            # is what makes the determinism gate below meaningful: under a completion-ordered
+            # implementation the manifest would come back reversed.
+            inflight = {"now": 0, "peak": 0}
+            inflight_lock = threading.Lock()
+
+            def concurrent_invoke(cmd, cwd, t_):
+                claim_id = cmd[3].split("--claim ")[1].split()[0]
+                with inflight_lock:
+                    inflight["now"] += 1
+                    inflight["peak"] = max(inflight["peak"], inflight["now"])
+                # The FIRST-submitted claim (P7) is the slowest and the last (P0) the
+                # fastest, so completion order is the reverse of submission order.
+                time.sleep(0.05 * (1 + int(claim_id[1:])))
+                with inflight_lock:
+                    inflight["now"] -= 1
+                return InvocationResult(exit_code=0, cost_usd=0.25, duration_seconds=0.1)
+
+            def run_conc(workers, out_name):
+                inflight["now"] = 0
+                inflight["peak"] = 0
+                runner_ = SarolRunner(
+                    store,
+                    invoke=concurrent_invoke,
+                    output_root=pathlib.Path(tmp) / out_name,
+                    paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                    require_command=False,
+                    profile="retrieval",
+                    max_workers=workers,
+                )
+                t0 = time.monotonic()
+                res_ = runner_.run(
+                    pathlib.Path(tmp),
+                    schemas.RunInputs(
+                        input_ref=str(conc_batch), batch_id="cc", split="train"
+                    ),
+                )
+                elapsed = time.monotonic() - t0
+                man = json.loads(
+                    pathlib.Path(res_.artifact_refs[0].path).read_text(encoding="utf-8")
+                )
+                return man, res_, elapsed, inflight["peak"]
+
+            par_man, par_res, par_elapsed, par_peak = run_conc(4, "conc-par")
+            ser_man, ser_res, ser_elapsed, ser_peak = run_conc(1, "conc-ser")
+
+            checks += [
+                # The point of the change. Without a pool `peak` can never exceed 1.
+                ("max_workers>1 really dispatches claims concurrently", par_peak > 1),
+                ("...bounded BY max_workers, so the pool size is the actual throttle and a "
+                 "batch cannot open 300 sessions at once", par_peak <= 4),
+                ("...while the default stays strictly serial, so nothing changes for a caller "
+                 "that did not ask for concurrency", ser_peak == 1),
+                # A MARGIN, not `par < ser`. The batch sleeps 1.80s serially and ~0.55s over
+                # four workers, so a real speed-up clears 0.75x easily -- whereas bare
+                # `par < ser` is a coin flip once both paths are serial, and went green under
+                # the forced-serial negative control. A gate that passes on a coin flip is not
+                # a gate.
+                ("...and it is actually faster in wall-clock, which is the only reason to do "
+                 "any of this", par_elapsed < ser_elapsed * 0.75),
+
+                # Identity: concurrency must not perturb the instrument or the numbers.
+                ("every claim comes back exactly once under concurrency, none lost to a race",
+                 [c["claim_id"] for c in par_man["claims"]] == [f"P{7 - i}" for i in range(8)]),
+                # The ids are deliberately submitted P7..P0, so alphabetical order is the
+                # REVERSE of submission order. That makes this gate fail if records are ever
+                # collected keyed on `claim_id` instead of submission index, not only if they
+                # are collected in arrival order.
+                ("...in INPUT order even though they finished in reverse, so the manifest is "
+                 "byte-deterministic and diffable across runs",
+                 [c["claim_id"] for c in par_man["claims"]]
+                 == [c["claim_id"] for c in ser_man["claims"]]),
+                ("...and the concurrent manifest is otherwise identical to the serial one, "
+                 "which is what lets a serially-measured baseline stay comparable",
+                 {k: v for k, v in par_man.items() if k != "claims"}
+                 == {k: v for k, v in ser_man.items() if k != "claims"}),
+
+                # The deleted counter. A non-atomic `+=` across threads loses increments; the
+                # totals are now DERIVED from the records, so they are exact by construction.
+                ("the cost total survives concurrency exactly -- 8 claims x 1 adjudicator x "
+                 "$0.25, no increment lost to a racy +=",
+                 abs(par_res.cost_usd - 2.0) < 1e-9),
+                ("...and the sub-invocation count likewise",
+                 par_res.sub_invocation_count == 8),
+                ("...with the manifest agreeing with the returned artifacts, since both now "
+                 "read the same derivation rather than a shared mutable counter",
+                 abs(par_man["cost_usd"] - par_res.cost_usd) < 1e-9
+                 and par_man["sub_invocation_count"] == par_res.sub_invocation_count),
+                ("...and serial dispatch reports the identical totals",
+                 abs(ser_res.cost_usd - par_res.cost_usd) < 1e-9
+                 and ser_res.sub_invocation_count == par_res.sub_invocation_count),
+
+                # batch_totals is the whole derivation, so pin its contract directly.
+                ("batch_totals sums per-stage costs rather than trusting a counter",
+                 batch_totals([{"stages": {"a": {"cost_usd": 1.5}, "b": {"cost_usd": 0.25}}}])
+                 == (2, 1.75)),
+                ("...and counts a claim that failed before dispatching any stage as zero, not "
+                 "as one free session", batch_totals([{"stages": {}}]) == (0, 0.0)),
+            ]
+
+            # A duplicated claim_id in one batch must not collapse two records into one. This
+            # is why results are collected by SUBMISSION INDEX and not keyed on claim_id.
+            dup_batch = pathlib.Path(tmp) / "dup.json"
+            dup_batch.write_text(json.dumps({"claims": [
+                {"claim_id": "D1", "citekey": "k", "staging_dir": str(staging)},
+                {"claim_id": "D1", "citekey": "k", "staging_dir": str(staging)},
+            ]}), encoding="utf-8")
+            dup_dispatched: list[str] = []
+            dup_runner = SarolRunner(
+                store,
+                invoke=lambda cmd, cwd, t_: (
+                    dup_dispatched.append(cmd[3]),
+                    InvocationResult(exit_code=0, cost_usd=0.1, duration_seconds=0.1),
+                )[1],
+                output_root=pathlib.Path(tmp) / "conc-dup",
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+                profile="retrieval",
+                max_workers=4,
+            )
+            dup_res = dup_runner.run(
+                pathlib.Path(tmp),
+                schemas.RunInputs(input_ref=str(dup_batch), batch_id="dd", split="train"),
+            )
+            checks += [
+                # Every per-claim artifact is claim_id-keyed, so duplicates would race on the same
+                # verdict and trace paths once dispatch is concurrent. No DRAWN batch can contain
+                # one (set union / sample-without-replacement); a hand-written --train-inputs file
+                # can, which is exactly where a typo lives.
+                ("a batch repeating a claim_id is REFUSED, not raced -- two claims writing one "
+                 "verdict path would otherwise keep whichever thread finished last",
+                 dup_res.status == "infra_error"
+                 and dup_res.error is not None
+                 and dup_res.error.code == "DUPLICATE_CLAIM_IDS"),
+                ("...before a single claim is dispatched, so the refusal costs nothing",
+                 dup_dispatched == []),
+            ]
+
+            # ------------------------------------------------------------------------------
+            # Concurrency through the REAL invoker. Every gate above injects a Python callable
+            # for `invoke`, so `headless_claude_invoke` itself -- Popen, `start_new_session`,
+            # the pipe drain, stream-json parsing -- has never run on more than one thread at a
+            # time. `sh` stands in for `claude` so this costs nothing and touches no API, but
+            # the process machinery is the production path, not a stub.
+            # ------------------------------------------------------------------------------
+            real_batch = pathlib.Path(tmp) / "real.json"
+            real_batch.write_text(json.dumps({"claims": [
+                {"claim_id": f"R{i}", "citekey": "k", "staging_dir": str(staging)}
+                for i in range(8)
+            ]}), encoding="utf-8")
+            real_inflight = {"now": 0, "peak": 0}
+            real_lock = threading.Lock()
+
+            class _RealInvokerRunner(SarolRunner):
+                """Real `headless_claude_invoke`, with `sh` in place of the `claude` binary."""
+
+                def _stage_command(self, stage, claim, materialized_path):
+                    # Emits the same stream-json init + result lines the production parser reads
+                    # cost, session_id and the resolved model out of.
+                    return ["sh", "-c", (
+                        "sleep 0.2; "
+                        "printf '%s\\n' "
+                        "'{\"type\":\"system\",\"subtype\":\"init\","
+                        f"\"session_id\":\"S-{claim.claim_id}\","
+                        "\"model\":\"claude-haiku-4-5\"}'; "
+                        "printf '%s\\n' '{\"type\":\"result\",\"total_cost_usd\":0.125}'"
+                    )]
+
+            def counting_real_invoke(cmd, cwd, timeout):
+                """The PRODUCTION invoker, wrapped only to count overlap.
+
+                Passed as the `invoke` argument rather than overridden as a method: `__init__`
+                assigns `self.invoke` as an instance attribute, which shadows any class-level
+                method of the same name -- so a subclass override here is silently never called.
+                """
+                with real_lock:
+                    real_inflight["now"] += 1
+                    real_inflight["peak"] = max(real_inflight["peak"], real_inflight["now"])
+                try:
+                    return headless_claude_invoke(cmd, cwd, timeout)
+                finally:
+                    with real_lock:
+                        real_inflight["now"] -= 1
+
+            real_runner = _RealInvokerRunner(
+                store,
+                invoke=counting_real_invoke,
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+                profile="retrieval",
+                max_workers=4,
+                output_root=pathlib.Path(tmp) / "conc-real",
+            )
+            _t0 = time.monotonic()
+            real_res = real_runner.run(
+                pathlib.Path(tmp),
+                schemas.RunInputs(input_ref=str(real_batch), batch_id="rr", split="train"),
+            )
+            real_elapsed = time.monotonic() - _t0
+            real_man = json.loads(
+                pathlib.Path(real_res.artifact_refs[0].path).read_text(encoding="utf-8")
+            )
+            real_stages = [
+                st for rec in real_man["claims"] for st in (rec.get("stages") or {}).values()
+            ]
+            checks += [
+                ("the REAL invoker survives concurrent use -- 8 nested process trees spawned "
+                 "from 4 threads, each in its own process group",
+                 real_inflight["peak"] > 1 and len(real_man["claims"]) == 8),
+                ("...with every claim's cost parsed out of its OWN process's stdout, not "
+                 "cross-wired between concurrent pipes",
+                 len(real_stages) == 8
+                 and all(abs(st["cost_usd"] - 0.125) < 1e-9 for st in real_stages)),
+                ("...and every session id likewise, which is what makes a trace attributable "
+                 "to the claim it judged",
+                 sorted(st["session_id"] for st in real_stages)
+                 == sorted(f"S-R{i}" for i in range(8))),
+                ("...summing to the exact batch total, through the real parse path",
+                 abs(real_res.cost_usd - 1.0) < 1e-9 and real_res.sub_invocation_count == 8),
+                ("...and genuinely in parallel: 8 x 0.2s of real subprocess serialises to 1.6s, "
+                 "so four workers must come in well under that",
+                 real_elapsed < 1.2),
+            ]
+
+            # An unexpected exception in one worker must stop the batch, not merely surface
+            # after it. The serial loop failed fast for free; a thread pool does the opposite
+            # by default -- `ThreadPoolExecutor.__exit__` calls `shutdown(wait=True)`, which
+            # DRAINS every already-submitted claim before the exception is allowed out. On a
+            # 300-claim paid batch that is 297 claims of spend after the failure.
+            fail_batch = pathlib.Path(tmp) / "fail.json"
+            fail_batch.write_text(json.dumps({"claims": [
+                {"claim_id": f"X{i}", "citekey": "k", "staging_dir": str(staging)}
+                for i in range(12)
+            ]}), encoding="utf-8")
+            dispatched_ids: list[str] = []
+            dispatch_lock = threading.Lock()
+
+            def exploding_invoke(cmd, cwd, t_):
+                cid = cmd[3].split("--claim ")[1].split()[0]
+                with dispatch_lock:
+                    dispatched_ids.append(cid)
+                if cid == "X1":
+                    raise RuntimeError("simulated unexpected worker failure")
+                time.sleep(0.05)
+                return InvocationResult(exit_code=0, cost_usd=0.1, duration_seconds=0.1)
+
+            fail_runner = SarolRunner(
+                store,
+                invoke=exploding_invoke,
+                output_root=pathlib.Path(tmp) / "conc-fail",
+                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                require_command=False,
+                profile="retrieval",
+                max_workers=2,
+            )
+            raised = None
+            try:
+                fail_runner.run(
+                    pathlib.Path(tmp),
+                    schemas.RunInputs(
+                        input_ref=str(fail_batch), batch_id="ff", split="train"
+                    ),
+                )
+            except RuntimeError as exc:
+                raised = exc
+            fail_man_path = (
+                pathlib.Path(tmp) / "conc-fail" / "train" / pathlib.Path(tmp).name
+                / "run_manifest.json"
+            )
+            fail_man = (
+                json.loads(fail_man_path.read_text(encoding="utf-8"))
+                if fail_man_path.exists() else {}
+            )
+            checks += [
+                ("an unexpected worker exception still escapes run(), as it did serially",
+                 isinstance(raised, RuntimeError)),
+                ("...and the claims queued behind it are NEVER dispatched, so a failure at "
+                 "claim 2 of 12 does not pay for the other 10",
+                 0 < len(dispatched_ids) <= 4),
+                ("...while claims that finished before the failure survive in the manifest, so "
+                 "the run is still salvageable",
+                 bool(fail_man.get("claims"))),
             ]
     else:
         checks.append((f"engine not found at {engine_path()} -- engine-facing checks SKIPPED", True))
