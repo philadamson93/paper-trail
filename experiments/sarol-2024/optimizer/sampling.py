@@ -666,6 +666,78 @@ def _selftest() -> int:
 
     checks: list[tuple[str, bool]] = []
 
+    _seam_tmp = tempfile.mkdtemp(prefix="sampling-seam-")
+
+    def _stageable(unit, split: str) -> bool:
+        """Really run `stage_claim.stage`, rather than restate its precondition here.
+
+        A gate that re-implements the rule it is checking passes when the two drift apart, which
+        is the whole failure this exists to catch. ~30ms a unit, so the dev pool sweeps in ~9s.
+        """
+        try:
+            stage_claim.stage(
+                split=split,
+                claim_row_id=unit.claim_row_id,
+                cited_paper_bucket=unit.paper_bucket,
+                source_mode="corpus",
+                out_dir=pathlib.Path(_seam_tmp) / "sweep",
+            )
+            return True
+        except Exception:
+            return False
+
+    _gold_dev = gold_labels("dev")
+    _by_kind: dict[bool, Any] = {}
+    for _u in claim_pool("dev"):
+        _recovered = _gold_dev.get((_u.claim_row_id, _u.paper_bucket)) in {
+            "ETIQUETTE", "IRRELEVANT"
+        }
+        _by_kind.setdefault(_recovered, _u)
+    _staged_evidence_backed = (
+        False in _by_kind and _stageable(_by_kind[False], "dev")
+    )
+    _staged_recovered = True in _by_kind and _stageable(_by_kind[True], "dev")
+
+    # Cross-consumer gold agreement. Pure data -- no staging, no dispatch -- so it sweeps the
+    # whole pool in well under a second.
+    import parse_verdict as _pv  # noqa: PLC0415
+
+    _gold_map = gold_labels("dev")
+    _rows_by_id = {int(r["id"]): r for r in stage_claim.load_claims("dev")}
+    _gold_disagreements: list[str] = []
+    _gold_checked_recovered = 0
+    for _u in claim_pool("dev"):
+        _row = _rows_by_id.get(_u.claim_row_id)
+        if _row is None:
+            continue
+        _ev = {
+            d: a for d, a in (_row.get("evidence") or {}).items()
+            if int(d) // 1000 == _u.paper_bucket
+        }
+        if not _ev:
+            _gold_checked_recovered += 1
+        _grader = _pv.canonical_gold_label(
+            split="dev",
+            claim_row_id=_u.claim_row_id,
+            cited_paper_bucket=_u.paper_bucket,
+            evidence_for_bucket=_ev,
+        )
+        _drawn = _gold_map.get((_u.claim_row_id, _u.paper_bucket))
+        if _drawn is not None and _drawn != _grader:
+            _gold_disagreements.append(
+                f"{_u.claim_row_id}-{_u.paper_bucket}: draw={_drawn} grader={_grader}"
+            )
+
+    # The negative control for the relaxation: a bucket the claim neither has evidence for nor
+    # cites has no source text to stage, and must still be refused.
+    _stage_refuses_uncited = _raises(
+        lambda: stage_claim.stage(
+            split="dev", claim_row_id=89, cited_paper_bucket=999999,
+            source_mode="corpus", out_dir=pathlib.Path(_seam_tmp) / "uncited",
+        ),
+        ValueError,
+    )
+
     # -- the ramp ---------------------------------------------------------------------------------
     checks += [
         ("a ramp returns its rung for each iteration", ramp_for(0, [5, 10, 20]) == 5),
@@ -825,6 +897,34 @@ def _selftest() -> int:
              gold_labels("dev").get((u.claim_row_id, u.paper_bucket))
              for u in claim_pool("dev")
          }),
+        # ...and the seam the previous three gates stop one step short of. Being in the pool is
+        # worth nothing if `stage_claim.stage` then refuses the unit: the pool was repaired for
+        # the recovered classes and the stager's evidence-annotation gate was not, so a draw
+        # containing one aborted the run at staging time with every gate above green. The first
+        # live `--val-n` draw hit it on its first try (claim 89 / bucket 24, ETIQUETTE).
+        #
+        # This asserts what CROSSES the seam rather than what either side believes about itself,
+        # which is the 2026-09-03 post-mortem's own lesson about guards that pass locally.
+        ("every unit the pool yields can actually be STAGED -- the pool's promise is "
+         "'stageable', and nothing checked it against the stager",
+         all(_stageable(u, "dev") for u in claim_pool("dev"))),
+        ("...proven by really staging one of each kind through `stage_claim.stage`, not by "
+         "re-implementing its precondition here",
+         _staged_evidence_backed and _staged_recovered),
+        ("...while a bucket the claim neither has evidence for nor cites is STILL refused, so "
+         "the relaxation admitted the recovered classes and not everything",
+         _stage_refuses_uncited),
+        # The OTHER half of the same seam, and the one that cost a batch of real numbers. Being
+        # drawable and stageable is worth nothing if the GRADER then reads a different answer key:
+        # `parse_verdict` derives gold from supporting passages and falls back to ACCURATE when
+        # there are none, which is exactly backwards for the two classes defined by having none.
+        # S24 readmitted them here without updating that. Asserts agreement over the WHOLE pool,
+        # not a sample, because the disagreement is confined to ~18% of it.
+        ("every pool unit's gold agrees between the draw (`gold_labels`) and the grader "
+         "(`parse_verdict.canonical_gold_label`) -- one answer key, not two",
+         _gold_disagreements == []),
+        ("...and the check actually reaches the recovered classes, so it could have failed",
+         _gold_checked_recovered >= 40),
     ]
 
     # -- PRECISION CONTROL for the recovery join ------------------------------------------------
