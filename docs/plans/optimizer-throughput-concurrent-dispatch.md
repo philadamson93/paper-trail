@@ -63,6 +63,33 @@ Expected at N=4-8: ~20h → ~3-5h for a 5-iteration TRAIN=50/VAL=50 run.
 
 **Accepted regression:** on a budget refusal the overshoot becomes the N claims in flight, not 1.
 
+### Codex review (post-hoc) found one real bug — fixed
+
+`/review-implementation` was run **after** the first commit was already pushed, which is out of
+order per `docs/claude_ops.md` (implementation → review → commit). Codex's verdict was *"a follow-up
+commit is warranted"*, and it was right:
+
+**The first implementation drained the batch on failure instead of failing fast.** All claims are
+submitted to the pool up front, so an unexpected exception in one worker propagated only *after*
+`ThreadPoolExecutor.__exit__`'s `shutdown(wait=True)` had run every remaining submitted claim. The
+serial `for claim in claims:` loop stopped at the failing claim. On a 300-claim paid batch that is
+297 claims of spend after the failure — and the code comment asserting the old behaviour was
+preserved made it look deliberate. Propagation was preserved; **fail-fast was not**, and fail-fast
+was the part that cost money.
+
+Fixed by consuming futures via `as_completed` (so the first failure is noticed in *time*, not in
+submission order) and cancelling every still-queued future before re-raising. Cancelling is a no-op
+for a claim already running — a dispatched nested session cannot be unsent — so the in-flight
+overshoot matches the budget-refusal case above. Gated, and negative-controlled by reverting to the
+exact committed code that shipped the bug (`143/144`, the new gate red).
+
+Codex also caught a **stale comment** claiming `as_completed` was used for manifest ordering, left
+over from an earlier draft; salvageability actually comes from the in-worker manifest write. Fixed.
+
+Two Codex findings were judged not to need changes: the wall-clock gate is timing-based but backed
+by the non-timing `par_peak` gates that carry the real contract, and the `globals()` stub in the CLI
+gate is restored in a `finally` and fails closed (`_cli_max_workers` stays `None`).
+
 ### Verification
 
 `python3 adapter.py --selftest` → **141/141**. `python3 dispatcher.py --selftest` → **114/114**.
@@ -169,10 +196,16 @@ just cost — which is a stronger reason to test it than the batch discount.
 
 1. **Ramp `--max-workers` on the next real run?** Suggested: start at 4, watch for rate-limit
    errors, then 8. This is the only untested part of lever 1.
-2. **Is the ~4% double-dispatch worth a fix now?** It is a real per-claim cost and variance leak.
+2. **Are duplicate `claim_id`s ever valid input?** Codex's open question. Records no longer collapse
+   (they are collected by submission index), but the evidence file, verdict file and trace path are
+   all still `claim_id`-keyed, so two same-id claims would *race on the same paths* under
+   concurrency where serial dispatch merely overwrote deterministically. If duplicates cannot occur
+   by construction, the existing gate is a collector regression test and nothing more is owed; if
+   they can, a uniqueness precondition before dispatch is the cheap guard.
+3. **Is the ~4% double-dispatch worth a fix now?** It is a real per-claim cost and variance leak.
    Cheapest containment is a gate that refuses a second dispatch, but the command file cannot
    enforce its own rules — that would need the harness to detect two `Agent` calls in the trace.
-3. **Run the lever 2 agreement test?** ~50 claims down both paths, compare verdict agreement. The
+4. **Run the lever 2 agreement test?** ~50 claims down both paths, compare verdict agreement. The
    ambiguity above (does the 14KB schema enter context?) has to be resolved first, because it
    changes what "the same prompt" means.
 
