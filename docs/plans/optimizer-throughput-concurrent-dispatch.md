@@ -67,6 +67,20 @@ and the ramp belongs to the first session that can watch it.
 
 Expected at N=4-8: ~20h → ~3-5h for a 5-iteration TRAIN=50/VAL=50 run.
 
+**What is now proven, and what is still not.** The gates originally injected a Python callable for
+`invoke`, so `headless_claude_invoke` itself — `Popen`, `start_new_session`, the pipe drain,
+stream-json parsing — had never run on more than one thread. A gate now drives the **real** invoker
+concurrently with `sh` standing in for `claude`: 8 real process trees from 4 workers, asserting each
+claim's cost and `session_id` are parsed from its *own* process's stdout rather than cross-wired
+between concurrent pipes (negative-controlled by forcing a shared session id, and by changing the
+emitted cost). That closes the subprocess/threading half of the risk at zero cost and zero API use.
+
+**Still unproven: the API ceiling itself** — rate limits and node-process pressure at N concurrent
+nested sessions, each of which spawns a subagent. That is the one thing no offline gate can answer,
+and it cannot be measured while a run holds the capacity, because a rate-limit storm would fail
+nested sessions that `/sarol-eval-item` is forbidden from retrying — landing them as
+`program_error` and potentially voiding an iteration.
+
 **Accepted regression:** on a budget refusal the overshoot becomes the N claims in flight, not 1.
 
 ### Codex review (post-hoc) found one real bug — fixed
@@ -98,8 +112,8 @@ gate is restored in a `finally` and fails closed (`_cli_max_workers` stays `None
 
 ### Verification
 
-`python3 adapter.py --selftest` → **141/141**. `python3 dispatcher.py --selftest` → **114/114**.
-17 new gates. Each was negative-controlled — the mutation was applied, the red observed, the tree
+`python3 adapter.py --selftest` → **150/150**. `python3 dispatcher.py --selftest` → **114/114**.
+25 new gates. Each was negative-controlled — the mutation was applied, the red observed, the tree
 restored:
 
 | # | Mutation | Gate(s) that went red |
@@ -112,6 +126,12 @@ restored:
 | NC6 | manifest ordered by arrival | exactly-once; input-order determinism |
 | NC7 | drop `max_workers` before the Runner | `--max-workers` reaches the Runner |
 | NC8 | drop `args.max_workers` at the CLI | `--max-workers` reaches the RUN |
+| NC9 | revert to the shipped drain-then-raise loop | queued-claims-never-dispatch gate |
+| NC10 | keep `as_completed`, drop the cancel loop | same |
+| NC11 | remove the duplicate-batch guard | both `DUPLICATE_CLAIM_IDS` gates |
+| NC14 | real-invoker batch forced serial | real-invoker concurrency + wall-clock gates |
+| NC15b | every claim reports the same `session_id` | per-claim session attribution gate |
+| NC16 | emitted cost changed | per-claim cost + batch-total gates |
 
 NC1 also caught a **flaky gate of my own**: `par_elapsed < ser_elapsed` passed on a coin flip once
 both paths were serial. It is now a margin (`< ser * 0.75`) — the batch is 1.80s serial vs ~0.55s
