@@ -46,9 +46,15 @@ the cheap question gating lever 2.
    `...covering the claims finished so far, and growing`) went red on it. Writing inside the worker
    restores exact serial ordering at N=1 and still lands each claim as it finishes at N>1.
 
-3. **Results are collected by submission index, not by `claim_id`.** Keying on `claim_id` would let
-   a duplicated id in one batch collapse two records into one — which would then pass the Scorer's
-   coverage check at half the batch. Gated with a deliberately duplicated batch.
+3. **Results are collected by submission index, not by `claim_id`** — and a batch that repeats one
+   is now **refused**. Every per-claim artifact (evidence envelope, verdict JSON, judge trace) is
+   `claim_id`-keyed, so two claims sharing an id write the *same paths*. Serially that was harmless
+   and deterministic (the second overwrote the first); concurrency turns it into a race whose winner
+   is whichever thread finished last. Concurrency creates the hazard, so the refusal lands in the
+   same change. No *drawn* batch can trip it — the pool is a dict keyed on `claim_id`, `cumulative`
+   uses a set union (`sampling.py:435`), `fresh` uses `rng.sample` without replacement
+   (`sampling.py:440`). The exposed path is a hand-written `--train-inputs`/`--val-inputs` batch
+   JSON, which bypasses the sampler entirely. (Phil's call, 2026-09-07, on Codex's open question.)
 
 ### Why the default is 1
 
@@ -100,7 +106,7 @@ restored:
 |---|---|---|
 | NC1 | pool forced to 1 worker | concurrency gate; wall-clock gate |
 | NC2 | pool unbounded (64) | `max_workers` bound; default-is-serial; **both** incremental-manifest gates |
-| NC3 | collect keyed on `claim_id` | duplicate-id gate |
+| NC3 | collect keyed on `claim_id` | exactly-once/input-order gate (ids are submitted P7..P0, so alphabetical order is the reverse of submission order) |
 | NC4 | manifest in reverse order | exactly-once/input-order gate |
 | NC5 | totals stop summing per-stage cost | cost total; `batch_totals` contract |
 | NC6 | manifest ordered by arrival | exactly-once; input-order determinism |
@@ -196,12 +202,8 @@ just cost — which is a stronger reason to test it than the batch discount.
 
 1. **Ramp `--max-workers` on the next real run?** Suggested: start at 4, watch for rate-limit
    errors, then 8. This is the only untested part of lever 1.
-2. **Are duplicate `claim_id`s ever valid input?** Codex's open question. Records no longer collapse
-   (they are collected by submission index), but the evidence file, verdict file and trace path are
-   all still `claim_id`-keyed, so two same-id claims would *race on the same paths* under
-   concurrency where serial dispatch merely overwrote deterministically. If duplicates cannot occur
-   by construction, the existing gate is a collector regression test and nothing more is owed; if
-   they can, a uniqueness precondition before dispatch is the cheap guard.
+2. **Duplicate `claim_id`s — RESOLVED 2026-09-07.** Refused before dispatch with
+   `DUPLICATE_CLAIM_IDS`; see the third bullet above.
 3. **Is the ~4% double-dispatch worth a fix now?** It is a real per-claim cost and variance leak.
    Cheapest containment is a gate that refuses a second dispatch, but the command file cannot
    enforce its own rules — that would need the harness to detect two `Agent` calls in the trace.
