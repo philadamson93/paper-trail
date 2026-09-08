@@ -781,6 +781,30 @@ class SarolRunner:
         except (OSError, KeyError, json.JSONDecodeError) as exc:
             return artifacts("infra_error", code="BATCH_UNREADABLE", message=str(exc)[:300])
 
+        # Every per-claim artifact -- evidence envelope, verdict JSON, judge trace -- is keyed on
+        # `claim_id`, so two claims sharing one id write the SAME paths. Serially that was merely
+        # wasteful and deterministic (the second overwrote the first); under concurrent dispatch
+        # the two writes race, and the verdict that survives is whichever thread finished last.
+        # Concurrency is what turns a harmless duplicate into a corrupt one, so the refusal lands
+        # in the same change.
+        #
+        # No drawn batch can trip this: the pool is a dict keyed on `claim_id`, `cumulative` builds
+        # its batch with a set union and `fresh` uses `rng.sample` (without replacement). The
+        # exposed path is `--train-inputs` / `--val-inputs`, a hand-written batch JSON that
+        # bypasses the sampler entirely -- i.e. exactly where a typo comes from. Refuse loudly
+        # rather than race quietly.
+        _dupes = sorted({c.claim_id for c in claims if [x.claim_id for x in claims].count(c.claim_id) > 1})
+        if _dupes:
+            return artifacts(
+                "infra_error",
+                code="DUPLICATE_CLAIM_IDS",
+                message=(
+                    f"batch repeats claim_id(s) {', '.join(_dupes[:5])}"
+                    f"{' ...' if len(_dupes) > 5 else ''}; every per-claim artifact is keyed on "
+                    "claim_id, so duplicates would race on the same verdict and trace paths"
+                ),
+            )
+
         # Namespace every Runner call under the materialized version it actually ran (Bug 3).
         # The engine calls this Runner THREE times per iteration -- TRAIN and current-VAL against
         # `iter<n>-current`, then the post-commit probe against `iter<n>-<tag>` -- and
@@ -2493,7 +2517,7 @@ def _selftest() -> int:
             # ==========================================================================
             conc_batch = pathlib.Path(tmp) / "conc.json"
             conc_batch.write_text(json.dumps({"claims": [
-                {"claim_id": f"P{i}", "citekey": f"k{i}", "staging_dir": str(staging)}
+                {"claim_id": f"P{7 - i}", "citekey": f"k{i}", "staging_dir": str(staging)}
                 for i in range(8)
             ]}), encoding="utf-8")
 
@@ -2509,8 +2533,9 @@ def _selftest() -> int:
                 with inflight_lock:
                     inflight["now"] += 1
                     inflight["peak"] = max(inflight["peak"], inflight["now"])
-                # Descending sleeps: P0 is slowest, P7 fastest.
-                time.sleep(0.05 * (8 - int(claim_id[1:])))
+                # The FIRST-submitted claim (P7) is the slowest and the last (P0) the
+                # fastest, so completion order is the reverse of submission order.
+                time.sleep(0.05 * (1 + int(claim_id[1:])))
                 with inflight_lock:
                     inflight["now"] -= 1
                 return InvocationResult(exit_code=0, cost_usd=0.25, duration_seconds=0.1)
@@ -2560,7 +2585,11 @@ def _selftest() -> int:
 
                 # Identity: concurrency must not perturb the instrument or the numbers.
                 ("every claim comes back exactly once under concurrency, none lost to a race",
-                 [c["claim_id"] for c in par_man["claims"]] == [f"P{i}" for i in range(8)]),
+                 [c["claim_id"] for c in par_man["claims"]] == [f"P{7 - i}" for i in range(8)]),
+                # The ids are deliberately submitted P7..P0, so alphabetical order is the
+                # REVERSE of submission order. That makes this gate fail if records are ever
+                # collected keyed on `claim_id` instead of submission index, not only if they
+                # are collected in arrival order.
                 ("...in INPUT order even though they finished in reverse, so the manifest is "
                  "byte-deterministic and diffable across runs",
                  [c["claim_id"] for c in par_man["claims"]]
@@ -2600,11 +2629,13 @@ def _selftest() -> int:
                 {"claim_id": "D1", "citekey": "k", "staging_dir": str(staging)},
                 {"claim_id": "D1", "citekey": "k", "staging_dir": str(staging)},
             ]}), encoding="utf-8")
+            dup_dispatched: list[str] = []
             dup_runner = SarolRunner(
                 store,
-                invoke=lambda cmd, cwd, t_: InvocationResult(
-                    exit_code=0, cost_usd=0.1, duration_seconds=0.1
-                ),
+                invoke=lambda cmd, cwd, t_: (
+                    dup_dispatched.append(cmd[3]),
+                    InvocationResult(exit_code=0, cost_usd=0.1, duration_seconds=0.1),
+                )[1],
                 output_root=pathlib.Path(tmp) / "conc-dup",
                 paperclip_version_probe=lambda: "paperclip, version 0.5.11",
                 require_command=False,
@@ -2615,13 +2646,18 @@ def _selftest() -> int:
                 pathlib.Path(tmp),
                 schemas.RunInputs(input_ref=str(dup_batch), batch_id="dd", split="train"),
             )
-            dup_man = json.loads(
-                pathlib.Path(dup_res.artifact_refs[0].path).read_text(encoding="utf-8")
-            )
             checks += [
-                ("two claims sharing a claim_id stay two records, so a duplicated id cannot "
-                 "silently halve a batch and pass the Scorer's coverage check",
-                 len(dup_man["claims"]) == 2 and dup_man["requested_count"] == 2),
+                # Every per-claim artifact is claim_id-keyed, so duplicates would race on the same
+                # verdict and trace paths once dispatch is concurrent. No DRAWN batch can contain
+                # one (set union / sample-without-replacement); a hand-written --train-inputs file
+                # can, which is exactly where a typo lives.
+                ("a batch repeating a claim_id is REFUSED, not raced -- two claims writing one "
+                 "verdict path would otherwise keep whichever thread finished last",
+                 dup_res.status == "infra_error"
+                 and dup_res.error is not None
+                 and dup_res.error.code == "DUPLICATE_CLAIM_IDS"),
+                ("...before a single claim is dispatched, so the refusal costs nothing",
+                 dup_dispatched == []),
             ]
 
             # An unexpected exception in one worker must stop the batch, not merely surface
