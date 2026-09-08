@@ -97,6 +97,55 @@ def gold_paper_label(evidence_for_bucket: dict[str, list[dict[str, Any]]]) -> st
     return "ACCURATE"
 
 
+_RECOVERED_CACHE: dict[str, dict[tuple[int, int], str]] = {}
+
+
+def _recovered_gold(split: str) -> dict[tuple[int, int], str]:
+    """The labels that live in the annotation files rather than in `claims-*.jsonl`.
+
+    Lazily imported from `optimizer/sampling.py`, mirroring the lazy `import stage_claim` that
+    module already uses in the other direction. Cached because it walks the annotation tree.
+    A failure to import is not fatal -- it degrades to the evidence-only answer, which is what
+    this function is correcting, so it must never take the grader down with it.
+    """
+    if split in _RECOVERED_CACHE:
+        return _RECOVERED_CACHE[split]
+    try:
+        opt = str(pathlib.Path(__file__).resolve().parent.parent / "optimizer")
+        if opt not in sys.path:
+            sys.path.insert(0, opt)
+        import sampling  # noqa: PLC0415
+
+        _RECOVERED_CACHE[split] = sampling.recovered_gold(split)
+    except Exception:  # noqa: BLE001 -- see docstring; never take the grader down
+        _RECOVERED_CACHE[split] = {}
+    return _RECOVERED_CACHE[split]
+
+
+def canonical_gold_label(
+    *,
+    split: str,
+    claim_row_id: int,
+    cited_paper_bucket: int,
+    evidence_for_bucket: dict[str, list[dict[str, Any]]],
+) -> str:
+    """THE answer key. One resolver, so the draw and the grader cannot hold different answers.
+
+    `gold_paper_label` derives the label from which passages support the claim, and returns
+    ACCURATE when there are none. For seven of the nine classes that is right. For `ETIQUETTE`
+    ("unclear what is being cited") and `IRRELEVANT` ("nothing in the cited paper is relevant")
+    having no supporting passage is the DEFINITION, so the same fallback silently relabels them
+    ACCURATE -- and those two classes were readmitted to the pool in S24 without this being
+    updated. Measured 2026-09-07: 12% of a TRAIN batch and 14% of a VAL batch graded against the
+    wrong answer, including a claim the judge got RIGHT (`300-39`, predicted IRRELEVANT, gold
+    IRRELEVANT, scored wrong).
+    """
+    if evidence_for_bucket:
+        return gold_paper_label(evidence_for_bucket)
+    label = _recovered_gold(split).get((int(claim_row_id), int(cited_paper_bucket)))
+    return label if label is not None else gold_paper_label(evidence_for_bucket)
+
+
 def load_usage(staging_dir: pathlib.Path, claim_id: str) -> list[dict[str, Any]]:
     path = staging_dir / "ledger" / "usage" / f"{claim_id}.jsonl"
     if not path.exists():
@@ -175,7 +224,12 @@ def parse(staging_dir: pathlib.Path) -> dict[str, Any]:
     if pred not in SAROL_9:
         print(f"[warn] adjudicated label {pred!r} not in Sarol 9-class enum", file=sys.stderr)
 
-    gold_label = gold_paper_label(gold["gold_evidence"])
+    gold_label = canonical_gold_label(
+        split=gold["split"],
+        claim_row_id=gold["claim_row_id"],
+        cited_paper_bucket=gold["cited_paper_bucket"],
+        evidence_for_bucket=gold["gold_evidence"],
+    )
 
     claim_id = verdict.get("claim_id", "C???")
     usage_records = load_usage(staging_dir, claim_id)
