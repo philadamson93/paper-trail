@@ -66,6 +66,23 @@ CANARY_DIR = _HERE / "canary"
 CANARY_SEED = 20260903
 
 
+def portable_staging_dir(staging: pathlib.Path) -> str:
+    """Serialize a staging path so the pin survives leaving this checkout.
+
+    `canary-<profile>.json` is committed, and this repo is public, so an absolute path both leaks
+    the author's home directory and hard-binds the pin to one worktree -- pruning that worktree
+    after a land would leave the pin pointing at a deleted tree and every run refusing. The path
+    itself carries no information: it is always `canary/staging/<profile>/<claim_id>` under the
+    repo. Anything outside the repo (the gates stage into a tmpdir) is written absolute, since
+    there is nothing to be relative TO.
+    """
+    staging = pathlib.Path(staging)
+    try:
+        return str(staging.resolve().relative_to(adapter.REPO_ROOT.resolve()))
+    except ValueError:
+        return str(staging)
+
+
 def pin_path(profile: str) -> pathlib.Path:
     return CANARY_DIR / f"canary-{profile}.json"
 
@@ -232,7 +249,7 @@ def pin(
     batch_path.write_text(
         json.dumps({"claims": [{
             "claim_id": claim.claim_id, "citekey": claim.citekey,
-            "staging_dir": str(staging), "source_mode": source_mode,
+            "staging_dir": portable_staging_dir(staging), "source_mode": source_mode,
         }]}, indent=2),
         encoding="utf-8",
     )
@@ -292,7 +309,7 @@ def pin(
         "claim": {
             "claim_id": claim.claim_id,
             "citekey": claim.citekey,
-            "staging_dir": str(staging),
+            "staging_dir": portable_staging_dir(staging),
             "source_mode": source_mode,
         },
         "note": (
@@ -470,6 +487,37 @@ def _selftest() -> int:
             _mpath.unlink(missing_ok=True)
         else:
             _mpath.write_text(_saved, encoding="utf-8")
+
+    # The committed pin lands in a PUBLIC repo and must survive leaving this checkout: an
+    # absolute path leaks a home directory AND dies with the worktree it names, which after a
+    # land means every run refuses on a canary whose staging tree no longer exists.
+    _in_repo = adapter.REPO_ROOT / "experiments/sarol-2024/optimizer/canary/staging/retrieval/X"
+    _written = portable_staging_dir(_in_repo)
+    _outside = pathlib.Path(tempfile.gettempdir()).resolve() / "not-in-the-repo"
+    _round_trip = adapter.ClaimRecord.from_dict(
+        {"claim_id": "P1", "citekey": "k", "staging_dir": _written}
+    ).staging_dir
+    _abs_untouched = adapter.ClaimRecord.from_dict(
+        {"claim_id": "P1", "citekey": "k", "staging_dir": str(_outside)}
+    ).staging_dir
+
+    checks.extend((
+        ("an in-repo staging dir serializes RELATIVE, so the committed pin carries no home path",
+         _written == "experiments/sarol-2024/optimizer/canary/staging/retrieval/X"
+         and not pathlib.Path(_written).is_absolute()),
+        ("...and the live pin file on disk has none either, which is the artifact that actually "
+         "gets committed",
+         (lambda _o: _o is None or not pathlib.PurePosixPath(
+             _o["claim"]["staging_dir"]).is_absolute())(
+             json.loads(pin_path("retrieval").read_text(encoding="utf-8"))
+             if pin_path("retrieval").exists() else None)),
+        ("...the relative form resolves back to the same absolute path on load, so relativizing "
+         "changed the serialization and not the tree the Runner reads",
+         _round_trip == _in_repo),
+        ("...a path OUTSIDE the repo stays absolute rather than being silently reparented under "
+         "it -- the gates stage into a tmpdir and there is nothing to be relative to",
+         _abs_untouched == _outside),
+    ))
 
     checks.extend((
         ("a pin measured under the SAME model loads", _same_model_ok),

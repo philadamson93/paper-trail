@@ -1,0 +1,21 @@
+{
+  "profile": "retrieval",
+  "model_requested": "haiku",
+  "model": "claude-haiku-4-5-20251001",
+  "expected_verdict": "ACCURATE",
+  "observations": [
+    "ACCURATE",
+    "ACCURATE",
+    "ACCURATE"
+  ],
+  "pinned_at_utc": "2026-09-07T22:38:51.469948+00:00",
+  "program_combined_hash": "0a02710cbd884125f801c3120ffd92aef33580edbe102998ee2fd469d64a3ebd",
+  "split": "train",
+  "claim": {
+    "claim_id": "1969-64",
+    "citekey": "ref_ae8978",
+    "staging_dir": "experiments/sarol-2024/optimizer/canary/staging/retrieval/1969-64",
+    "source_mode": "corpus"
+  },
+  "note": "Measured, not asserted: this is the verdict the real Runner produced under the program at program_combined_hash. It is one observation of a nondeterministic judge -- see this module's docstring."
+}
