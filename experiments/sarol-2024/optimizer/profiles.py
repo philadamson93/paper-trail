@@ -14,9 +14,9 @@ manifest, and that is all this is. Three named profiles, checked against the fre
 time. Anything more elaborate would be scaffolding for a generality nobody has asked for.
 
 It is **not profile-awareness in the freeze.** `program-v0` stays 9 entries at ``combined_hash``
-``0a02710cbd88`` under every profile (re-frozen 2026-09-07 when the enum contract was trimmed;
-it read ``391f54fae7c5`` before that); the engine's materializer still sees all 8 and
-``commit_new_version()`` still stages all 8. A profile narrows what the *optimizer* is allowed to
+``8d8fe097b4ab`` under every profile (re-frozen 2026-09-09 when the paper-verbatim definitions
+became a ninth, frozen entry; it read ``0a02710cbd88`` before that); the engine's materializer
+still sees all 9 and ``commit_new_version()`` still stages all 9. A profile narrows what the *optimizer* is allowed to
 touch, which is a consumer-side policy question, not a property of the frozen program. No engine
 change is needed and none is requested.
 
@@ -461,10 +461,16 @@ def _selftest() -> int:
          "it cannot",
          "Out of reach under `retrieval`" in docs["failure-mode-discovery.md"]
          and "*In* reach on every profile" in docs["failure-mode-discovery.md"]),
-        # The reset itself, pinned so a stale 620-line file cannot quietly come back: the fresh
-        # file must SAY it is empty on purpose, or the next agent reads absence as breakage.
-        ("the reset meta-learnings explains its own emptiness rather than just being empty",
-         "deliberately empty of history" in docs["meta-learnings.md"]),
+        # Superseded 2026-09-09. This used to pin the string "deliberately empty of history" --
+        # correct while the 2026-09-07 reset left the file empty, and FALSE once the 2026-09-09 run
+        # added five iterations of lessons. The hazard inverted with it: the risk is no longer an
+        # agent reading absence as breakage, it is an agent reading PRE-RESET entries as settled
+        # results. Those entries were measured on a program P0 has since deleted, at step sizes
+        # inside the instrument's own 0.06 scatter. So the guard now requires the qualification,
+        # not the emptiness.
+        ("meta-learnings qualifies its pre-reset history instead of presenting it as settled",
+         "measured pre-reset" in docs["meta-learnings.md"]
+         and "inside the instrument's scatter" in docs["meta-learnings.md"]),
 
         # -- the objective, pinned in the docs the way the scorer pins it in code ---------------
         # These exist because the objective has now changed twice (3-way macro -> renormalised

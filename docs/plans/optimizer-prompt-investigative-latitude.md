@@ -2,7 +2,11 @@ Reference: docs/claude_ops.md
 
 # Plan A — Paper-verbatim reset, canonical baseline recut, and optimizer investigative latitude
 
-**Status: Draft** (2026-09-09; revised after Phil's HTML review round, then after the Codex review) · **Reviewed: No**
+**Status: In progress** (2026-09-09; revised after Phil's HTML review round, then after the Codex review) · **Reviewed: Yes**
+**Approved** 2026-09-09 at plan-sha256 `2f099e956d23…`, zero open questions (`docs/plans/README.md`
+already recorded the approval; this header lagged it). **P0's definitions half, the
+definitions-only manifest rehash, and Steps 0–6 are IMPLEMENTED** on branch
+`feat/optimizer-prompt-latitude`. Step 7, the ledger recut, the canary re-pin and Gate E remain.
 **Split from a single plan on Codex's recommendation** (feedback: `docs/plans/reviews/optimizer-prompt-investigative-latitude-feedback.md`, verdict *Blocked* on scope entanglement). This is **Plan A**; evidence-acquisition programmability moved to **Plan B**, `docs/plans/phase2-evidence-acquisition-programmability.md`.
 **Findings this plan is built on:** `docs/session/2026-09-09-optimizer-loop-and-isolation-findings.md`
 (git-ignored; read it first — §8 carries the Table 1 reconciliation that reshaped this plan).

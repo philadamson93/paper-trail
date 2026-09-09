@@ -37,7 +37,11 @@ editable clarifications layer, and it is the only thing the judge reads besides 
 gold label, over the nine emittable labels. Nothing is collapsed and nothing is renormalised.
 Reported as `primary_metric`, under the name `sarol_accuracy_9class`.
 
-**Compare it against 0.595, never against zero.** See *The one table* below: that is what a program
+**Compare it against the release's `do_nothing_floor`, never against zero — and never against a
+remembered number.** ⚠ *The one table* below reports **0.595**, which is the floor over the whole
+311-claim dev *pool*; on the 50-claim VAL batch actually scored it is **0.70** (gold ACCURATE 35/50).
+Read `do_nothing_floor` from your release, which is computed from your own batch's gold. What the
+table shows is what a program
 scores by answering `ACCURATE` every time and doing no work at all. The release computes the floor
 from each batch's own gold and reports it as `do_nothing_floor`, so it is always beside the number
 it calibrates.
@@ -116,7 +120,7 @@ by `score_sarol3.py --selftest`.
 
 | Axis | Do-nothing scores | What it is |
 |---|---:|---|
-| **`primary_metric`** (accuracy, 9-class) | **0.595** | **The objective. This is the floor to beat.** |
+| **`primary_metric`** (accuracy, 9-class) | **0.595** | **The objective.** ⚠ Pool figure — NOT your floor; read `do_nothing_floor` (0.70 on the VAL 50). |
 | `micro_f1` (accuracy, after the 3-way collapse) | 0.595 | Diagnostic. Equal to the objective *only* for this program |
 | `macro_f1_renormalised` (9-way, classes present) | 0.093 | Diagnostic. The collapse detector |
 | `macro_f1_3way` | 0.249 | Comparability with the published baselines |

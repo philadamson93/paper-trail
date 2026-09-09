@@ -9,6 +9,13 @@ script is the guard: it asserts the eight paper-defined classes appear verbatim 
 can read them, that the ninth is marked as house text, and that none of the three retired divergent
 clauses has crept back.
 
+⚠ WHAT THIS GATE DOES NOT DO. The plan's Verification Step A asks for an allowlist -- "no clause
+present that is not either paper text, marked house text, or the re-applied evidence-array rule."
+This is a DENYLIST: it catches a reworded definition and it catches the six named retired clauses
+returning, but it cannot see a *brand new* clause the optimizer invents. That is deliberate, because
+P0 explicitly licenses the loop to re-derive house guidance under measurement -- but it means a green
+run here is not proof that Step A's allowlist holds. Judging new house text is a human review job.
+
 Run:  ~/.local/bin/python3.13 scripts/check_paper_fidelity.py
 Exit: 0 all checks pass; 1 any check fails.
 """
@@ -22,12 +29,21 @@ HERE = pathlib.Path(__file__).resolve().parent
 EXPERIMENT = HERE.parent
 
 # Sarol MJ, Schneider J, Kilicoglu H. Bioinformatics 40(7):btae420, 2024. Sec 2.2 / Table 1.
-# https://pmc.ncbi.nlm.nih.gov/articles/PMC11231046/ -- reconciled verbatim 2026-09-09.
+# https://pmc.ncbi.nlm.nih.gov/articles/PMC11231046/
+#
+# Reconciled 2026-09-09, then INDEPENDENTLY DOUBLE-READ against the PMC full text the same day.
+# The double-read mattered: the repository's own working transcription had dropped text from TWO of
+# the eight definitions -- CONTRADICT lost "This statement is annotated as the evidence segment.",
+# and ETIQUETTE lost the leading "This category, unique to our work, indicates that". Six matched
+# exactly. That is the SECOND transcription defect found in this table, after the three inverted
+# clauses P0 removed, which is the whole reason these strings are pinned in code rather than trusted
+# in prose. Re-verify against the paper -- not against another copy in this repo -- before editing.
 PAPER_DEFINITIONS = {
     "ACCURATE":
         "The citation context is consistent with an evidence segment in the reference article.",
     "CONTRADICT":
-        "The citation context contradicts a statement made in the reference article.",
+        "The citation context contradicts a statement made in the reference article. This statement "
+        "is annotated as the evidence segment.",
     "NOT_SUBSTANTIATE":
         "The citation is relevant to the content of the reference article but the cited reference "
         "fails to substantiate all statements made in the citing paper.",
@@ -41,13 +57,16 @@ PAPER_DEFINITIONS = {
         "The evidence segment includes a citation to other articles, indicating that the reference "
         "article is not the original source of the cited information.",
     "ETIQUETTE":
-        "The citation style is ambiguous and it is unclear what is being cited from the reference "
-        "article.",
+        "This category, unique to our work, indicates that the citation style is ambiguous and it "
+        "is unclear what is being cited from the reference article.",
 }
 
 # The ninth class is ours and must say so wherever it is defined.
 HOUSE_CLASS = "INDIRECT_NOT_REVIEW"
+# Matched dash-insensitively: the marker is authored with an em-dash, and a hyphen or en-dash
+# variant is the same statement by a human author but would fail a literal compare confusingly.
 HOUSE_MARKER = "house definition — not in Table 1"
+_DASHES = str.maketrans({"—": "-", "–": "-"})
 
 # Every file the judge can read that carries the class definitions. The rubric is the operative
 # source; the dispatch prompt inlines the same text because the judge reads both in one session, so
@@ -72,8 +91,12 @@ RETIRED_CLAUSES = (
 
 
 def _normalize(text: str) -> str:
-    """Collapse markdown line-wrapping so a wrapped quote still matches the paper's sentence."""
-    return " ".join(text.split())
+    """Collapse markdown line-wrapping so a wrapped quote still matches the paper's sentence.
+
+    Dashes are folded too, so an em-dash / en-dash / hyphen variant of the same authored sentence
+    compares equal rather than failing on a character nobody can see in a rendered doc.
+    """
+    return " ".join(text.translate(_DASHES).split())
 
 
 def main() -> int:

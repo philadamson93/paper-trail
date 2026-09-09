@@ -9,7 +9,7 @@ do not delete them. A reverted attempt is as useful as a confirmed one, and more
 retried by accident.
 
 **What belongs here rather than in `findings/iter-<n>.md`** is defined in one place: the
-*"The two records, and what goes in which"* section of
+*"The three record surfaces, and what goes in which"* section of
 `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`. The short form is that this
 file is about *how to optimize this task* and that one is about *these examples* — but do not
 carry a second copy of the rule in your head from here.
@@ -18,9 +18,16 @@ carry a second copy of the rule in your head from here.
 
 ## Status
 
-**No iteration has run against the current objective.** This file was reset on 2026-09-07 and is
-deliberately empty of history. That is not a bug and nothing is missing: **the next iteration to
-run is iteration 1**, and it establishes the first baseline rather than reacting to one.
+**Five iterations have now run against the current objective** (`hillclimb-vm-2026-09-09`), and
+their lessons are below. This file was reset on 2026-09-07 — the note about it being "deliberately
+empty of history" applied to that reset and stopped being true when the 2026-09-09 run landed.
+
+⚠ **Read everything below against two facts, both measured 2026-09-09.** First, the program those
+five iterations tuned **no longer exists**: P0 reset the eight class definitions to the paper's
+verbatim text, deleting three clauses the whole run had hill-climbed on. Second, the instrument's
+own scatter is **0.06** — a byte-identical program re-scored 0.48 vs 0.42 on the same 50 claims.
+Most single-iteration deltas recorded below are 0.02–0.04, i.e. **inside that scatter**. Treat them
+as hypotheses that were seen once, not as settled results.
 
 ### Why it was reset, so nobody goes looking for the old entries
 
@@ -28,7 +35,9 @@ Three iterations ran on 2026-09-02 and everything they established was denominat
 have since changed underneath it:
 
 - **The objective was macro-F1**, renormalised over the classes present in the batch. It is now
-  plain **accuracy** over the nine labels, quoted against a 0.595 do-nothing floor. Every score,
+  plain **accuracy** over the nine labels, quoted against the release's `do_nothing_floor`. (An
+earlier version of this line said 0.595; that is the 311-claim *pool* figure. On the 50-claim VAL
+batch the floor is **0.70**. Read the key, not a remembered number.) Every score,
   every comparison and every "this edit helped" in the old log was in the retired unit — and the
   renormalising denominator moved with the batch's class mix, which manufactured a −0.15 TRAIN
   decline across three iterations for a program that never changed. Those numbers cannot be
@@ -50,6 +59,13 @@ read every iteration:
   It is now in `experiments/sarol-2024/optimizer/context/failure-mode-discovery.md`.
 
 ## Confirmed
+
+⚠ **(2026-09-09) These were measured pre-reset, on a program that no longer exists, at step sizes
+inside the instrument's scatter.** This section's own bar is "moved the number in a predicted
+direction **and been seen again**"; most entries below were seen once. They are preserved because
+they are the only record of what five iterations learned about the *rubric* — but several of them
+reason about clauses P0 has since deleted. Re-derive before relying on one; do not treat this
+heading as a warrant.
 
 - **Enriching the terse rubric with boundary tests cures over-strictness (iter1→iter2).** iter1 added
   ACCURATE-substance, OVERSIMPLIFY-materiality, NS-vs-IRRELEVANT and empty-window tests. On iter2's

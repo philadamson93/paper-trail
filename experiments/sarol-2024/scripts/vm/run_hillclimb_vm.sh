@@ -62,7 +62,13 @@ ENG_SHA="$(git -C "$AGENTIC_LABEL_OPT" rev-parse --short HEAD 2>/dev/null || ech
 # with `'function' object has no attribute 'batch_id'` while satisfying every feature probe.
 #
 # So assert ANCESTRY, not equality: 82f547d must be reachable from HEAD. That still permits a
-# forward re-pin (the whole point of the contract check above) while making divergence loud.
+# forward re-pin (the whole point of the contract check above).
+#
+# Be precise about what this does and does not catch. It detects an engine that PREDATES or FORKED
+# BELOW the declared-compatible commit -- the common real failure, e.g. a checkout parked on another
+# session's branch. It does NOT catch a branch cut FROM 82f547d that later broke the adapter seam:
+# the pin is still an ancestor and this passes cleanly. For that, the feature probe above and the
+# dispatcher selftest are the backstop.
 # Deliberate override: SAROL_ALLOW_ENGINE_DIVERGENCE=1.
 ENGINE_PIN="82f547dac49394005781df62892d41d9b26dfb09"
 if [ "${SAROL_ALLOW_ENGINE_DIVERGENCE:-0}" != "1" ]; then
@@ -77,6 +83,19 @@ if [ "${SAROL_ALLOW_ENGINE_DIVERGENCE:-0}" != "1" ]; then
 else
   echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK; ENGINE PIN CHECK OVERRIDDEN)"
 fi
+
+# Program-integrity gates. These run BEFORE any money is spent, and they fail closed.
+#
+# The optimizer edits `verdict_schema_sarol.md` every iteration and the eight class definitions live
+# in that same file. Nothing in the engine, the manifest, or the selftests can tell a reworded
+# definition from a sharpened boundary test -- `validate_against_manifest` and the freeze both pass
+# either way. These two scripts are the ONLY barrier between the loop and the paper-verbatim reset it
+# was given, so a run that skips them can silently undo it and score the result as progress.
+"$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_paper_fidelity.py" \
+  || fail "GATE A FAILED: the Sarol class definitions no longer match the paper verbatim, or a retired divergent clause is back. Fix the definitions before spending money on a sweep -- see experiments/sarol-2024/specs/verdict_definitions_sarol.md for the reconciled text."
+"$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_empty_window_regression.py" \
+  || fail "GATE D FAILED: the empty-window contract regressed. An empty BM25 window must still emit \"evidence\": [] or the exit validator rejects the whole file and the claim scores as a miss regardless of verdict."
+echo "  gates:   paper-fidelity OK, empty-window OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"

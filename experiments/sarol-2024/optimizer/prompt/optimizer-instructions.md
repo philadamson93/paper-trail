@@ -108,7 +108,7 @@ loads on every claim. You may not add, remove or rename a label.
 
 The paper's own definitions, verbatim and with their provenance, are in
 `experiments/sarol-2024/specs/verdict_definitions_sarol.md`. ⚠ **The judge never opens that file** —
-it is not in the manifest and not in the judge's context. It is a reference for you and for your
+it is a frozen manifest entry (so you cannot edit it) but it is **not in the judge's context**. It is a reference for you and for your
 blame subagents, useful when asking whether a gold label is defensible, and useless as an explanation
 of why the judge decided anything. **Do not edit it, and do not treat a divergence from it as
 harmless:** the rubric carries the same eight definitions verbatim and is the operative copy the

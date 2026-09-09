@@ -1,9 +1,17 @@
 # Sarol 2024 label definitions — the paper's verbatim annotation scheme
 
-> **What this file is, and is not.** It is an **optimizer-facing reference**, not part of the
-> program. It is in no `program-v0` manifest entry and **the adjudicator never loads it** — the judge
-> reads the enum and the rubric, and nothing else (`adjudicator-dispatch-sarol.md`). Consult it to
-> check what the scheme actually says; do not reason about it as guidance the judge followed.
+> **What this file is, and is not.** It is a **frozen manifest entry that the judge never reads.**
+> Those are two separate facts and both matter:
+> - It **is** part of the program freeze — `program-v0` manifest entry, `contract_file: true`,
+>   `freeze_policy: committed`, its bytes hashed into `combined_hash`. Changing a byte here changes
+>   the program's identity and requires a re-freeze. That is deliberate: the reconciled scheme must
+>   not be editable without cutting a version.
+> - The **adjudicator never loads it** — the judge reads the enum and the rubric, and nothing else
+>   (`adjudicator-dispatch-sarol.md`). So it is never itself the cause of a judge's mistake, and it
+>   cannot explain why the judge decided anything.
+>
+> Consult it to check what the scheme actually says; do not reason about it as guidance the judge
+> followed.
 >
 > **Frozen contract. Not editable.** The rubric (`verdict_schema_sarol.md`) is the single *operative*
 > source of these definitions — it carries the same verbatim text and is what the judge reads. This
@@ -16,7 +24,20 @@
 **Source:** Sarol MJ, Schneider J, Kilicoglu H. "Assessing citation integrity in biomedical
 publications: corpus annotation and NLP models." *Bioinformatics* 40(7):btae420, 2024.
 Definitions are in **§2.2 / Table 1**. Open access: `https://pmc.ncbi.nlm.nih.gov/articles/PMC11231046/`.
-Reconciled verbatim against the paper on **2026-09-09**.
+Reconciled verbatim against the paper on **2026-09-09**, then **independently double-read against
+the PMC full text** the same day.
+
+⚠ **The double-read found a second defect, and it is why this file is pinned in a gate.** The
+repository's own working transcription had *dropped text* from two of the eight definitions:
+`CONTRADICT` lost its second sentence ("This statement is annotated as the evidence segment."), and
+`ETIQUETTE` lost its leading clause ("This category, unique to our work, indicates that"). Six
+matched exactly. Both omissions are restored below. Note that CONTRADICT's restored sentence is
+substantive, not decorative: it says the contradicted statement is itself the annotated evidence
+segment, which is the scheme's own basis for our house rule that a CONTRADICT must quote an opposing
+excerpt.
+
+**Verify against the paper, never against another copy in this repository.** This table has now been
+mis-transcribed twice in two different ways — three inverted clauses, then two truncations.
 
 ⚠ **This reconciliation was the fix for a real defect.** Before 2026-09-09 this repository's
 transcription diverged from the paper in three places, all by *our* additions, and all in the judge's
@@ -39,7 +60,7 @@ Eight are the paper's, quoted verbatim. The ninth is ours.
 - **NOT_SUBSTANTIATE** — "The citation is relevant to the content of the reference article but the
   cited reference fails to substantiate all statements made in the citing paper."
 
-- **CONTRADICT** — "The citation context contradicts a statement made in the reference article."
+- **CONTRADICT** — "The citation context contradicts a statement made in the reference article. This statement is annotated as the evidence segment."
 
 - **MISQUOTE** — "The numbers or percentages are misquoted."
 
@@ -52,8 +73,8 @@ Eight are the paper's, quoted verbatim. The ninth is ours.
   0 in dev. The data uses a finer vocabulary than Table 1's eight-row presentation, so our enum is
   right to carry it.
 
-- **ETIQUETTE** — "The citation style is ambiguous and it is unclear what is being cited from the
-  reference article."
+- **ETIQUETTE** — "This category, unique to our work, indicates that the citation style is ambiguous and it is
+  unclear what is being cited from the reference article."
 
 - **IRRELEVANT** — "There is no information in the reference article relevant to the citation."
 

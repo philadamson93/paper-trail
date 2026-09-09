@@ -81,23 +81,30 @@ write it down — do not fix it.
 - **Resetting the program to its null state** before a run — that is restoring the control, not
   improving it.
 
-## One file that sits on neither side — resolved 2026-09-07
+## One file that sits on neither side — resolved 2026-09-07, re-resolved 2026-09-09
 
-`specs/verdict_definitions_sarol.md` is in **no** manifest entry, and the judge never loads it:
-`prompts/adjudicator-dispatch-sarol.md:21-22` reads only the enum contract and the rubric, and says
-"Nothing else." Several machinery docs used to describe it as the judge's operative definitions,
-which meant anything reasoning about it was reasoning about a document nothing reads.
+`specs/verdict_definitions_sarol.md` is **frozen program the judge never reads.** Those are two
+separate facts and the file's history is a record of getting the pair wrong in both directions:
 
-**Resolution: it is an optimizer-facing reference, and it says so at the top of itself.** Not
-program (no manifest entry, nothing hashes it, the judge never sees it) and not machinery the loop
-edits — it is what the *gold annotators* worked from, so it is the right thing to consult when
-asking whether a gold label is defensible, and the wrong thing to consult when asking why the judge
-decided something. The four docs that misdescribed it were corrected.
+- **It IS in the manifest** (since 2026-09-09): entry 8 of 9, `contract_file: true`, hashed into
+  `combined_hash`. Editing it changes the program's identity and forces a re-freeze. That is the
+  point — the reconciled scheme must not be reworded without cutting a version.
+- **The judge never loads it:** `prompts/adjudicator-dispatch-sarol.md` reads only the enum contract
+  and the rubric, and says "Nothing else." So it is never itself the cause of a judge's mistake.
 
-⚠ **One thing is still owed on it:** the text is this repository's transcription of Sarol Table 1,
-not a verified verbatim read — the published benchmark ships annotation data, not the scheme. A
-one-time reconciliation against the paper is owed before anyone treats it as frozen-from-source.
-The caveat is recorded in the file itself.
+⚠ Until 2026-09-09 this section, the file's own header, and two other docs all said it was in **no**
+manifest entry. That was true when written and was falsified by the freeze in the same change that
+reconciled the text. It is called out here because a stale self-description inside a `contract_file`
+is the exact defect class the optimizer's Step 6 duty exists to delete — and this one had been
+hashed into the freeze.
+
+It is the right thing to consult when asking whether a gold label is defensible, and the wrong thing
+to consult when asking why the judge decided something.
+
+✅ **The reconciliation it used to owe is DONE (2026-09-09).** The text is now the paper's verbatim
+§2.2 / Table 1 wording with provenance recorded in the file. Three definitions had diverged — all by
+our own additions, all in the judge's read path — and `scripts/check_paper_fidelity.py` now guards
+against their return.
 
 ## The enum contract and the code must agree — a human's job, not the judge's
 

@@ -4,7 +4,9 @@
 
 **Source:** Sarol, Schneider, Kilicoglu 2024, *"Assessing Citation Integrity in Biomedical Publications"* (Bioinformatics btae420), Table 1 (annotation scheme).
 
-**The label set is not defined here.** The emittable labels and the 3-way collapse are a frozen contract in `verdict_enum_sarol.md` beside this file — that file is authoritative and is not editable. **This file is the editable half:** how to *choose* between those labels. Everything below — class definitions and boundaries, the worst-wins rollup order, multi-citation handling — is optimizer-editable, and improving it is the point of the optimization loop. What you may not do here is add, remove, or rename a label; the enum contract governs that, and the Scorer will charge an out-of-enum label as a miss.
+**The label set is not defined here.** The emittable labels and the 3-way collapse are a frozen contract in `verdict_enum_sarol.md` beside this file — that file is authoritative and is not editable. **This file is the mostly-editable half:** how to *choose* between those labels. The boundary tests, the worst-wins rollup order, multi-citation handling and any guidance a later iteration adds are optimizer-editable, and sharpening them is the point of the optimization loop.
+
+⚠ **Two things you may not do here.** You may not add, remove, or rename a label — the enum contract governs that, and the Scorer will charge an out-of-enum label as a miss. And you may not reword the **eight paper-verbatim class definitions** below: they are quoted from Sarol et al. 2024 Table 1, they are the scheme gold was annotated under, and rewording them is how this program acquired the three inverted definitions that five iterations then hill-climbed on. `scripts/check_paper_fidelity.py` enforces this. Everything you add is house text and must be marked as house text.
 
 ## Choosing among the 9 classes
 
@@ -23,12 +25,17 @@ mark it as house text so a future reader can always tell the scheme from our rea
 - **ACCURATE** — "The citation context is consistent with an evidence segment in the reference article."
 - **OVERSIMPLIFY** — "The findings of the reference article are oversimplified or overgeneralized."
 - **NOT_SUBSTANTIATE** — "The citation is relevant to the content of the reference article but the cited reference fails to substantiate all statements made in the citing paper."
-- **CONTRADICT** — "The citation context contradicts a statement made in the reference article."
+- **CONTRADICT** — "The citation context contradicts a statement made in the reference article. This statement is annotated as the evidence segment."
 - **MISQUOTE** — "The numbers or percentages are misquoted."
 - **INDIRECT** — "The evidence segment includes a citation to other articles, indicating that the reference article is not the original source of the cited information."
 - **INDIRECT_NOT_REVIEW** — the same indirect-attribution pattern as INDIRECT, where the reference article is not a review article. *(house definition — not in Table 1. The class is real in the released gold data: 25 occurrences in `claims-train.jsonl`, 9 in `claims-test.jsonl`, 0 in dev.)*
-- **ETIQUETTE** — "The citation style is ambiguous and it is unclear what is being cited from the reference article."
+- **ETIQUETTE** — "This category, unique to our work, indicates that the citation style is ambiguous and it is unclear what is being cited from the reference article."
 - **IRRELEVANT** — "There is no information in the reference article relevant to the citation."
+
+*House routing notes (ours, not the paper's, carried over from `program-v0`):* CONTRADICT requires a
+verbatim source excerpt that opposes the claim — a source that is merely *silent* is not a
+contradiction. MISQUOTE is numerical only; non-numerical strength drift goes to OVERSIMPLIFY.
+INDIRECT vs INDIRECT_NOT_REVIEW turns on whether the reference article is itself a review.
 
 ## Rollup (per citation instance = per (claim, cited_paper) pair) — house text
 

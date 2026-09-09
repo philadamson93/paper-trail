@@ -34,16 +34,18 @@ defect to report.
 - `ACCURATE` — "The citation context is consistent with an evidence segment in the reference article."
 - `OVERSIMPLIFY` — "The findings of the reference article are oversimplified or overgeneralized."
 - `NOT_SUBSTANTIATE` — "The citation is relevant to the content of the reference article but the cited reference fails to substantiate all statements made in the citing paper."
-- `CONTRADICT` — "The citation context contradicts a statement made in the reference article."
+- `CONTRADICT` — "The citation context contradicts a statement made in the reference article. This statement is annotated as the evidence segment."
 - `MISQUOTE` — "The numbers or percentages are misquoted."
 - `INDIRECT` — "The evidence segment includes a citation to other articles, indicating that the reference article is not the original source of the cited information."
 - `INDIRECT_NOT_REVIEW` — the same indirect-attribution pattern as INDIRECT, where the reference article is not a review article. *(house definition — not in Table 1.)*
-- `ETIQUETTE` — "The citation style is ambiguous and it is unclear what is being cited from the reference article."
+- `ETIQUETTE` — "This category, unique to our work, indicates that the citation style is ambiguous and it is unclear what is being cited from the reference article."
 - `IRRELEVANT` — "There is no information in the reference article relevant to the citation."
 
 *House routing notes (ours, not the paper's):* MISQUOTE is numerical only — non-numerical strength
 drift goes to OVERSIMPLIFY. For INDIRECT, use the extractor's `indirect_attribution_check`; if the
-cited paper is itself a review, prefer INDIRECT, otherwise INDIRECT_NOT_REVIEW.
+cited paper is itself a review, prefer INDIRECT, otherwise INDIRECT_NOT_REVIEW. CONTRADICT requires a
+verbatim source excerpt that opposes the claim — a source that is merely *silent* is not a
+contradiction.
 
 **3. Populate `paper_value` and `claim_value` for MISQUOTE and OVERSIMPLIFY sub-claims where a number drifted** (extractor may have pre-filled these; confirm or correct).
 

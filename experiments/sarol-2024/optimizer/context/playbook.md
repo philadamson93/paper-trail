@@ -121,7 +121,7 @@ Each iteration runs in a fresh session with no recollection of the last one, del
 retrospective evaluation of version N has to be blind to everything learned after N. Two records
 carry you forward, and they are not interchangeable.
 
-**Which record takes what is defined in one place: the *"The two records, and what goes in which"*
+**Which record takes what is defined in one place: the *"The three record surfaces, and what goes in which"*
 section of `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`.** That is the file
 injected into every iteration, so it is the copy you are guaranteed to have read. Do not look for a
 second answer here; there used to be five of them and they had drifted apart.

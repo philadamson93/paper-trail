@@ -14,7 +14,7 @@ tell you about until it breaks:
    entries additionally carry `source` and `sha256` (we need two source refs; the engine models
    one). Splatting a raw entry raises TypeError -- asserted here so nobody "simplifies" the
    adapter's strip step away later.
-2. **materialize() writes all 8 files from the single tag SHA**, and every file's bytes hash to
+2. **materialize() writes all 9 files from the single tag SHA**, and every file's bytes hash to
    what the manifest recorded -- i.e. the composed tree is faithful.
 
 Usage:  materialize_smoke.py [--tree program-v0] [--engine <path to agentic-label-opt>]
