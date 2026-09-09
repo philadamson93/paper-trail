@@ -1736,15 +1736,18 @@ def _selftest() -> int:
         )
 
     # -- paperclip pin negative control ------------------------------------------------------
-    pinned_ok = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.5.11")
-    pinned_bad = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.5.10")
+    # Probe the manifest's OWN pin for the match cases so a future pin bump (e.g. 0.5.11 -> 0.7.48)
+    # doesn't turn these into spurious failures; the mismatch case uses a version the pin can never be.
+    _pin = store.runtime_pins["paperclip_cli"]
+    pinned_ok = SarolRunner(store, paperclip_version_probe=lambda: _pin)
+    pinned_bad = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.0.0")
     pinned_absent = SarolRunner(store, paperclip_version_probe=lambda: None)
     checks += [
         ("the pinned paperclip version passes preflight", pinned_ok.paperclip_pin_error() is None),
         ("a wrong version is caught", pinned_bad.paperclip_pin_error() is not None),
         ("a missing CLI is caught", pinned_absent.paperclip_pin_error() is not None),
         ("a cosmetic banner change is not a spurious mismatch",
-         SarolRunner(store, paperclip_version_probe=lambda: "0.5.11").paperclip_pin_error() is None),
+         SarolRunner(store, paperclip_version_probe=lambda: _normalize_version(_pin)).paperclip_pin_error() is None),
     ]
 
     # -- version normalisation ---------------------------------------------------------------
@@ -2108,7 +2111,7 @@ def _selftest() -> int:
         # The nested command must exist before a run spends anything looking for it. Tested
         # against a checkout that genuinely lacks it -- the repo itself now ships the command, so
         # pointing this at REPO_ROOT would assert nothing.
-        ok_pin = lambda: "paperclip, version 0.5.11"  # noqa: E731
+        ok_pin = lambda: store.runtime_pins["paperclip_cli"]  # noqa: E731
         with tempfile.TemporaryDirectory() as empty_checkout:
             missing_cmd = SarolRunner(
                 store,
@@ -2195,7 +2198,7 @@ def _selftest() -> int:
                 store,
                 invoke=timeout_invoke,
                 output_root=pathlib.Path(tmp) / "out",
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
             )
             res = r.run(
@@ -2217,7 +2220,7 @@ def _selftest() -> int:
                 store,
                 invoke=timeout_invoke,
                 output_roots={"val": ns_root},
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
             )
             mat_current = pathlib.Path(tmp) / "iter1-current"
@@ -2282,7 +2285,7 @@ def _selftest() -> int:
                 store,
                 invoke=spy_invoke,
                 output_roots={"train": inc_root},
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
             )
             mat_m = pathlib.Path(tmp) / "m"
@@ -2344,7 +2347,7 @@ def _selftest() -> int:
                     exit_code=0, cost_usd=0.0, duration_seconds=0.1
                 ),
                 output_roots={"train": crash_root},
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
             )
             mat_c = pathlib.Path(tmp) / "c"
@@ -2403,7 +2406,7 @@ def _selftest() -> int:
                 store,
                 invoke=_trace_invoke,
                 output_roots={"train": _trace_out},
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
             )
             _mat_t = pathlib.Path(tmp) / "t"
@@ -2502,7 +2505,7 @@ def _selftest() -> int:
                 store,
                 invoke=canary_invoke,
                 output_root=pathlib.Path(tmp) / "out2",
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
                 canary=CanarySpec(claim=canary_claim, expected_verdict="ACCURATE"),
             )
@@ -2535,7 +2538,7 @@ def _selftest() -> int:
                     store,
                     invoke=stage_spy,
                     output_root=pathlib.Path(tmp) / f"out-{profile_name}",
-                    paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                    paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                     require_command=False,
                     profile=profile_name,
                 )
@@ -2605,7 +2608,7 @@ def _selftest() -> int:
                     store,
                     invoke=concurrent_invoke,
                     output_root=pathlib.Path(tmp) / out_name,
-                    paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                    paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                     require_command=False,
                     profile="retrieval",
                     max_workers=workers,
@@ -2695,7 +2698,7 @@ def _selftest() -> int:
                     InvocationResult(exit_code=0, cost_usd=0.1, duration_seconds=0.1),
                 )[1],
                 output_root=pathlib.Path(tmp) / "conc-dup",
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
                 profile="retrieval",
                 max_workers=4,
@@ -2767,7 +2770,7 @@ def _selftest() -> int:
             real_runner = _RealInvokerRunner(
                 store,
                 invoke=counting_real_invoke,
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
                 profile="retrieval",
                 max_workers=4,
@@ -2830,7 +2833,7 @@ def _selftest() -> int:
                 store,
                 invoke=exploding_invoke,
                 output_root=pathlib.Path(tmp) / "conc-fail",
-                paperclip_version_probe=lambda: "paperclip, version 0.5.11",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
                 profile="retrieval",
                 max_workers=2,
