@@ -7,6 +7,9 @@ One row per plan in `docs/plans/`. **Status** is the plan's own state; **Reviewe
 in-sync `/explain-plan` HTML) · `No` (never) · `Stale` (was `Yes`, edited substantively since).
 Only `/read-plan` or `/explain-plan` promotes a row to `Yes`.
 
+Approved-SHA notes (for `/explain-plan <path> --since <sha>` after a sign-off):
+`optimizer-prompt-investigative-latitude.md` approved 2026-09-09 at plan-sha `2f099e956d23`.
+
 `docs/plans/NEXT.md` is the live state doc, not a plan — it is deliberately not listed below.
 
 | Plan | Status | Reviewed | Description |
@@ -30,6 +33,8 @@ Only `/read-plan` or `/explain-plan` promotes a row to `Yes`.
 | [`experiment-sarol-runbook.md`](experiment-sarol-runbook.md) | — | No | Runbook: Sarol 2024 benchmark — Variant A smoketest (N=5) |
 | [`experiment-sarol-smoketest-handoff.md`](experiment-sarol-smoketest-handoff.md) | — | No | Handoff: run the Sarol 2024 smoketest (N=5) |
 | [`experimental-plan-of-record.md`](experimental-plan-of-record.md) | First-pass outline | No | Experimental plan of record |
+| [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md) | **Draft, review-complete** 2026-09-09 · 0 open questions · lands on `sarol-optimizer-concurrent` AFTER the isolation plan | Yes | **Plan A** — reset the rubric's class definitions to Sarol Table 1 verbatim (ours were inverted, and predate `program-v0`), re-cut the canonical baseline, and give the optimizer investigative latitude: read the judge's traces, verify inherited harness facts, halt instead of forcing an edit |
+| [`phase2-evidence-acquisition-programmability.md`](phase2-evidence-acquisition-programmability.md) | Draft — **scoping only**, design deferred · blocked behind Plan A + the isolation plan | No | **Plan B** — make evidence acquisition programmable. `ACQUISITION_SCOPE` is already editable; the blocker is the driver aborting `extractor`/`verifier` with `STAGE_NOT_IMPLEMENTED` |
 | [`optimizer-instrument-repair.md`](optimizer-instrument-repair.md) | **Implemented** 2026-09-07 · unmerged on `sarol-optimizer-impl` | No | Improve the OPTIMIZER machinery (not the program it optimizes): objective to plain accuracy, then 35 doc-consistency fixes; seam documented in optimizer/README.md |
 | [`paper-tool-validation.md`](paper-tool-validation.md) | — | No | paper-trail validation paper — experiment plan |
 | [`paper-trail-product-backlog.md`](paper-trail-product-backlog.md) | — | No | paper-trail product backlog |

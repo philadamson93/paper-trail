@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="plan-sha256" content="2f099e956d23">
+<title>Plan explainer — Plan A: paper-verbatim reset + optimizer latitude</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1b1f24; --muted:#5b6572; --line:#d8dee6; --card:#f6f8fa;
+  --accent:#b0246b; --accent-bg:#fdeaf3; --cyan:#0b7285; --cyan-bg:#e3f6fa;
+  --amber:#8a5a00; --amber-bg:#fdf3dd; --grey:#6b7280; --ok:#1a7f37; --stop:#b42318;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1216; --fg:#e6edf3; --muted:#9aa5b1; --line:#2b333d; --card:#161b22;
+    --accent:#ff7ab6; --accent-bg:#3a1229; --cyan:#56d4dd; --cyan-bg:#0c2b30;
+    --amber:#e3b341; --amber-bg:#32270c; --grey:#8b949e; --ok:#3fb950; --stop:#ff7b72;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+ font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 22px 120px}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:19px;margin:34px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:15px;margin:18px 0 6px}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{background:var(--card);padding:1px 5px;border-radius:4px;font-size:12.5px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font-size:12.5px}
+a{color:var(--cyan)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
+.hdr{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 22px;margin-top:12px}
+.hdr div{font-size:13px}
+.hdr b{display:block;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.chip{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;
+ border:1px solid var(--line);background:var(--bg);vertical-align:middle}
+.chip.stop{color:var(--stop);border-color:var(--stop)}
+.chip.pend{color:var(--amber);border-color:var(--amber)}
+.chip.new{color:var(--accent);border-color:var(--accent)}
+.banner{border-left:4px solid var(--cyan);background:var(--cyan-bg);padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+.warn{border-left:4px solid var(--stop);background:var(--card);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.fig{border:1px solid var(--line);border-radius:10px;margin:14px 0;background:var(--card)}
+.fig .bar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.fig .bar .t{font-weight:700;font-size:13px}
+.fig .bar .hint{font-size:11px;color:var(--muted);margin-left:auto}
+.fig button{font:inherit;font-size:11px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);
+ background:var(--bg);color:var(--fg);cursor:pointer}
+.fig button:hover{border-color:var(--cyan)}
+.mmbox{height:520px;overflow:hidden;position:relative}
+.mmbox.full{position:fixed;inset:0;height:100vh;width:100vw;z-index:9000;background:var(--bg)}
+pre.mermaid{margin:0;border:0;background:transparent;padding:0}
+details{border:1px solid var(--line);border-radius:9px;margin:9px 0;background:var(--card)}
+details>summary{cursor:pointer;padding:11px 14px;font-weight:600;font-size:14px;list-style:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"▸ ";color:var(--muted)}
+details[open]>summary::before{content:"▾ "}
+.body{padding:2px 16px 16px;border-top:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+th{background:var(--bg);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+textarea{width:100%;min-height:66px;margin-top:8px;padding:8px;border:1px solid var(--line);
+ border-radius:7px;background:var(--bg);color:var(--fg);font:inherit;font-size:13px;resize:vertical}
+label.fb{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:12px}
+select{font:inherit;font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.oq{border:1px solid var(--line);border-radius:9px;padding:14px 16px;margin:10px 0;background:var(--card)}
+.oq .q{font-weight:600;margin:6px 0}
+.oq.block{border-left:4px solid var(--stop)}
+.foot{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);
+ padding:10px 22px;display:flex;gap:14px;align-items:center;z-index:8000}
+.foot button{font:inherit;font-weight:700;font-size:13px;padding:8px 16px;border-radius:8px;
+ border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+.foot .note{font-size:11.5px;color:var(--muted)}
+.toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);
+ padding:9px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .25s;z-index:9500;pointer-events:none}
+.toast.on{opacity:1}
+.chgbar{position:sticky;top:0;z-index:7000;background:var(--card);border:1px solid var(--line);
+ border-radius:9px;padding:8px 14px;margin:14px 0;display:flex;gap:12px;align-items:center;font-size:12.5px}
+.chgbar button{font:inherit;font-size:11.5px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);
+ background:var(--bg);color:var(--fg);cursor:pointer}
+.chgbar button:hover{border-color:var(--accent)}
+body.changes-only details:not([data-changed]){display:none}
+body.changes-only .recedable{opacity:.35}
+details:not([data-changed]) > summary{opacity:.72}
+ul.tight{margin:6px 0;padding-left:20px}
+ul.tight li{margin:3px 0}
+.kv{font-size:13px}
+.kv b{color:var(--muted);font-weight:600}
+.neg{color:var(--muted);font-style:italic;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Plan A — Paper-verbatim reset, canonical baseline recut, and optimizer investigative latitude</h1>
+<div class="hdr">
+  <div><b>Status</b> Draft <span class="chip pend">Reviewed: No</span></div>
+  <div><b>Branch (plan lives on)</b> <code>sarol-optimizer-concurrent</code></div>
+  <div><b>Lands onto</b> <code>sarol-optimizer-concurrent</code> (NOT main — see Landing)</div>
+  <div><b>Source plan</b> <a href="optimizer-prompt-investigative-latitude.md">optimizer-prompt-investigative-latitude.md</a></div>
+  <div><b>Plan SHA-256</b> <code>2f099e956d23</code></div>
+  <div><b>Generated</b> 2026-09-09 on phil-sllm-01 (2nd pass, post-Codex)</div>
+</div>
+
+<div class="banner">
+  <b>What changed since you last looked.</b> Baseline: <code>fb2e49f298c8</code>, the version you
+  read after the Codex pass. This round is small and is entirely your three answers — D5 resolved, the
+  offline-gate question closed, and the comparability question dropped. <b>Open Questions is now
+  empty.</b> Last round moved 9 sections; this one moves <b>2</b> &mdash; the new Decisions card and the
+  now-empty Open Questions, both flagged and open below &mdash; plus one line in Landing (the gate no
+  longer defers D5). No step changed.
+</div>
+
+<div class="chgbar">
+  <b id="chgcount">changes</b>
+  <span class="note" id="chgbase" style="color:var(--muted)"></span>
+  <button id="chgonly" style="margin-left:auto">Show changed only</button>
+  <button id="chgprev">&#8593; Prev change</button>
+  <button id="chgnext">&#8595; Next change</button>
+</div>
+
+<h2>Review history</h2>
+<table>
+  <tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>Key findings surfaced</th><th>Applied</th></tr>
+  <tr><td>1</td><td>Phil (HTML review)</td><td><span class="chip new">Pivot</span></td>
+    <td>Gold is the absolute target, not a suspect. Retrieval is the optimizer's problem. Journal
+      instead of new report files. Driver into the editable surface. No one-edit rule; trends are
+      signal. Reset the rubric to paper-verbatim.</td><td>Yes — all six</td></tr>
+  <tr><td>2</td><td>Codex (<code>codex-cli 0.149.1</code>)</td><td><span class="chip stop">Blocked</span></td>
+    <td>Retrieval capability grant was false (prose cannot make <code>profiles.py</code> editable);
+      comparability rule unexecutable; P0 hash/tag mechanics incomplete (the freeze generator was
+      missing); a journal-only iteration is a terminal LoopStop, not a complete iteration; whole-driver
+      editability exposes measurement contracts; ff-only landing impossible.</td>
+    <td>Yes — split into Plan A + Plan B; 1 fix declined with evidence</td></tr>
+</table>
+<p class="neg">Full critique: <a href="reviews/optimizer-prompt-investigative-latitude-feedback.md">reviews/optimizer-prompt-investigative-latitude-feedback.md</a>
+(its Adjudication section records the two findings I disagreed with and why).</p>
+
+<div class="card">
+  <h3 style="margin-top:4px">TL;DR</h3>
+  <p>The rubric's class definitions were never the paper's. We transcribed Sarol Table 1 and added
+  three clauses of our own — and two of them are <i>inverted</i> relative to how gold actually uses
+  those labels. Those clauses were already in <code>program-v0</code>, so all five iterations
+  hill-climbed on a wrong premise, and the two classes we mis-transcribed are exactly the two with the
+  worst precision (NS 0.17, OVERSIMPLIFY 0.04).</p>
+  <p>So Plan A resets the definitions to the paper's verbatim wording, re-cuts the canonical baseline,
+  and makes six prose changes that let the optimizer investigate rather than only rewrite — read the
+  judge's traces, distrust its own inherited facts, report a defect instead of forcing an edit. Gold is
+  the absolute target throughout. Evidence-acquisition programmability moved to
+  <a href="phase2-evidence-acquisition-programmability.md">Plan B</a>; it needs driver stage coverage,
+  not prose.</p>
+</div>
+
+<h2>Repo map — where this sits in the loop</h2>
+<div class="fig">
+  <div class="bar"><span class="t">What P0 resets, what stays frozen, what the optimizer may edit</span>
+    <button data-act="reset" data-i="0">Reset view</button>
+    <button data-act="full" data-i="0">Fullscreen</button>
+    <span class="hint">scroll to zoom &middot; drag to pan &middot; ESC exits fullscreen</span>
+  </div>
+  <div class="mmbox"><pre class="mermaid">
+flowchart LR
+  subgraph reset["P0 resets these, to paper verbatim"]
+    rub["verdict_schema_sarol.md<br/>8 definitions become paper text<br/>INDIRECT_NOT_REVIEW marked house"]
+    disp["adjudicator-dispatch-sarol.md<br/>back to the program-v0 blob<br/>plus ONE re-applied clause"]
+    mani["program-v0 manifest<br/>regenerated combined_hash<br/>tag re-cut, v1 to v5 archived"]
+  end
+  subgraph frozen["Frozen, NOT editable"]
+    enum["verdict_enum_sarol.md<br/>9 labels plus 3-way collapse<br/>the only part from the paper"]
+    defs["verdict_definitions_sarol.md<br/>NOW FROZEN, reference only<br/>was going to be editable"]
+    shell["driver, contract shell<br/>gold ban, one dispatch, no retry,<br/>abort codes, output ownership"]
+  end
+  subgraph opted["The optimizer edits these"]
+    oi["optimizer-instructions.md<br/>Steps 0 to 6"]
+    ctx["context docs, 6 files<br/>trace duty, trend framing,<br/>2 false facts corrected"]
+    ml["meta-learnings.md<br/>reusable heuristics only, dated"]
+    dcomp["driver, dispatch component<br/>narrow, invariant-tested"]
+  end
+  subgraph rec["Records, mutually exclusive"]
+    fnd["findings iter-N.md<br/>run-local detail"]
+    jrn["docs journal<br/>curated, human promotes"]
+  end
+  subgraph pb["Plan B territory"]
+    acq["ACQUISITION_SCOPE<br/>extractor and verifier prompts<br/>already editable, NOT runnable"]
+    blk["driver aborts extractor<br/>STAGE_NOT_IMPLEMENTED"]
+  end
+  subgraph iso["Sibling plan, lands FIRST"]
+    isod["isolation protocol<br/>rewrites the same driver"]
+  end
+  rub --> mani
+  disp --> mani
+  oi --> optag["opus optimizer"]
+  ctx --> optag
+  ml --> optag
+  optag -->|edits| rub
+  optag -->|edits| disp
+  optag -->|edits| dcomp
+  optag -->|writes every iteration| fnd
+  optag -.->|no edit warranted, run HALTS| jrn
+  enum -.->|contract| optag
+  defs -.->|reference, judge never loads it| optag
+  shell -.->|invariants enforced after each edit| dcomp
+  blk -.->|blocks| acq
+  isod -->|rebase onto it| dcomp
+  mani --> judge["haiku judge, 50 claims"]
+  subgraph legend["Color legend"]
+    lg1["P0 resets, rose"]
+    lg2["Optimizer-editable, cyan"]
+    lg3["Frozen or untouched, grey"]
+    lg4["Plan B or sibling plan, amber dashed"]
+  end
+  classDef add fill:#fdeaf3,stroke:#b0246b,stroke-width:3px,color:#1b1f24
+  classDef ed fill:#e3f6fa,stroke:#0b7285,stroke-width:2px,color:#1b1f24
+  classDef fz fill:#eceff3,stroke:#8b949e,stroke-dasharray:4 3,color:#4b5563
+  classDef df fill:#fdf3dd,stroke:#8a5a00,stroke-dasharray:5 3,color:#4b5563
+  class rub,disp,mani,lg1 add
+  class oi,ctx,ml,dcomp,fnd,lg2 ed
+  class enum,defs,shell,optag,judge,jrn,lg3 fz
+  class acq,blk,isod,lg4 df
+</pre></div>
+</div>
+<p class="neg">Negative space is the point: the two markdown files the judge actually reads are grey.
+This plan changes how the optimizer reasons, not what the judge is told — so the frozen program's
+<code>combined_hash</code> must come out unchanged (Verify B).</p>
+
+<h2>The P0 recut sequence</h2>
+<div class="fig">
+  <div class="bar"><span class="t">P0 baseline recut &mdash; the order is load-bearing</span>
+    <button data-act="reset" data-i="1">Reset view</button>
+    <button data-act="full" data-i="1">Fullscreen</button>
+    <span class="hint">scroll to zoom &middot; drag to pan</span>
+  </div>
+  <div class="mmbox"><pre class="mermaid">
+flowchart LR
+  g1["1. edit freeze_program_v0.py FILESET<br/>add driver component plus definitions"]
+  g2["2. commit the intended baseline bytes"]
+  g3["3. advance source_refs to those commits"]
+  g4["4. regenerate every entry sha256<br/>and combined_hash"]
+  g5["5. cut the program-v0 tag<br/>archive v1 to v5 plus their run ledger"]
+  g6["6. re-pin canary, repeat 3<br/>ASSERT recorded hash equals manifest hash"]
+  g7["7. update count and scope selftests<br/>adapter 1668, 1682, 1767<br/>profiles 261, 275"]
+  ok["baseline is canonical<br/>next run mints program-v1 again"]
+  g1 -->|generator BEFORE generated| g2
+  g2 -->|combined_hash is over COMMITTED refs,<br/>not working-tree bytes| g3
+  g3 --> g4
+  g4 -->|write-then-verify idempotence| g5
+  g5 --> g6
+  g6 --> g7
+  g7 --> ok
+  w1["skip step 1 and a later --write<br/>SILENTLY drops both entries"]
+  w2["skip step 6 and the canary passes<br/>while its provenance hash is stale"]
+  w3["engine treats combined_hash as OPAQUE<br/>our generator is the only guard"]
+  g1 -.-> w1
+  g6 -.-> w2
+  g4 -.-> w3
+  classDef stepc fill:#e3f6fa,stroke:#0b7285,stroke-width:2px,color:#1b1f24
+  classDef warn fill:#fde8e6,stroke:#b42318,stroke-dasharray:4 3,color:#4b5563
+  classDef okc fill:#eaf7ee,stroke:#1a7f37,stroke-width:2px,color:#1b1f24
+  class g1,g2,g3,g4,g5,g6,g7 stepc
+  class w1,w2,w3 warn
+  class ok okc
+</pre></div>
+</div>
+
+<h2>Order of operations</h2>
+<div class="fig">
+  <div class="bar"><span class="t">Three plans, five gates, and what is owed but out of scope</span>
+    <button data-act="reset" data-i="2">Reset view</button>
+    <button data-act="full" data-i="2">Fullscreen</button>
+    <span class="hint">scroll to zoom &middot; drag to pan</span>
+  </div>
+  <div class="mmbox"><pre class="mermaid">
+flowchart TD
+  iso["🛑 FIRST, sibling plan<br/>isolation protocol<br/>rewrites the same driver"]
+  dirty["⏳ commit or stash the dirty tree<br/>meta-learnings plus 5 untracked findings<br/>never reset --hard"]
+  br["⏳ cut feat/optimizer-prompt-latitude<br/>off 9309434, rebased on isolation"]
+  p0["⏳ P0 reset plus baseline recut"]
+  steps["⏳ Steps 0 to 7, prose plus driver split"]
+  va["⏳ Gate A, paper fidelity<br/>no unmarked clause survives"]
+  vb["⏳ Gate B, harness claims audited"]
+  vc["⏳ Gate C, recut mechanically clean<br/>vs the MEASURED suite baseline"]
+  vd["⏳ Gate D, empty-window regression<br/>proves the evidence-array rule survived"]
+  ve["⏳ Gate E, one live iteration, 25 dollars"]
+  gate["decision gate<br/>trace opened, prediction written,<br/>edited or halted"]
+  land["⏳ merge --no-ff into<br/>sarol-optimizer-concurrent"]
+  pb["🛑 THEN Plan B<br/>Phase 2 acquisition<br/>OQ-B1 blocking"]
+  owed["⚠ OWED, out of scope here<br/>reconcile 162 branch-only vs<br/>40 main-only commits"]
+  iso --> dirty
+  dirty --> br
+  br --> p0
+  p0 --> steps
+  steps --> va
+  va -->|any unmarked clause survives, HALT| vb
+  vb --> vc
+  vc -->|canary flips or a suite regresses, HALT| vd
+  vd -->|MISSING_FIELD class rejection, HALT| ve
+  ve --> gate
+  gate -->|behaviours present| land
+  gate -->|any absent, one revision then re-probe| steps
+  land --> pb
+  land -.->|separate project decision| owed
+  classDef pend fill:#fdf3dd,stroke:#8a5a00,stroke-width:2px,color:#1b1f24
+  classDef block fill:#fde8e6,stroke:#b42318,stroke-width:3px,color:#1b1f24
+  classDef gatec fill:#e3f6fa,stroke:#0b7285,stroke-width:2px,color:#1b1f24
+  classDef owedc fill:#eceff3,stroke:#8b949e,stroke-dasharray:4 3,color:#4b5563
+  class dirty,br,p0,steps,va,vb,vc,vd,ve,land pend
+  class iso,pb block
+  class gate gatec
+  class owed owedc
+</pre></div>
+</div>
+
+<h2>Contracts and invariants</h2>
+<div class="card">
+  <h3 style="margin-top:4px">The reset algorithm — exact, not "drop the accretion"</h3>
+  <ol class="tight">
+    <li>Start from the <b><code>program-v0</code> blobs</b> of both operative files.</li>
+    <li>Replace <b>only</b> the eight class-definition bullets with the paper's verbatim text.</li>
+    <li><code>INDIRECT_NOT_REVIEW</code> keeps a house definition, marked
+      <code>(house definition — not in Table 1)</code>. It is real in the gold data: 25 occurrences in
+      <code>claims-train.jsonl</code>, 9 in <code>claims-test.jsonl</code>.</li>
+    <li>Re-apply <b>exactly one</b> post-v0 clause: the <code>### Output contract</code> evidence-array
+      rule (<code>adjudicator-dispatch-sarol.md:99</code>, <code>:107</code>), independently required by
+      <code>validate_sarol.py:127</code>. It recovered 5 <code>MISSING_FIELD</code> failures and is the
+      only statistically real gain of the whole run.</li>
+    <li><b>No other post-v0 clause is retained.</b> Anything else worth keeping gets re-derived under
+      measurement, not carried over on intuition.</li>
+  </ol>
+
+  <h3>Primary source, cited here so it survives the findings doc's retirement</h3>
+  <p class="kv">Sarol MJ, Schneider J, Kilicoglu H. "Assessing citation integrity in biomedical
+  publications: corpus annotation and NLP models." <i>Bioinformatics</i> 40(7):btae420, 2024.
+  Definitions in <b>§2.2 / Table 1</b>. Open access:
+  <code>pmc.ncbi.nlm.nih.gov/articles/PMC11231046/</code>. Accessed 2026-09-09.</p>
+
+  <h3>Three record surfaces, mutually exclusive scopes</h3>
+  <table>
+    <tr><th>Surface</th><th>Scope</th><th>Who writes</th><th>Committed</th></tr>
+    <tr><td><code>findings/iter-N.md</code></td><td>run-local per-iteration detail: metrics, blames,
+      modes, edits, predictions</td><td>optimizer, every iteration</td><td>no</td></tr>
+    <tr><td><code>meta-learnings.md</code></td><td><b>verified reusable</b> heuristics only — dated</td>
+      <td>optimizer, when a lesson generalizes</td><td>yes</td></tr>
+    <tr><td><code>docs/journal/</code></td><td>curated cross-run decisions and postmortems</td>
+      <td><b>human / landing promotes</b>, not the optimizer per-defect</td><td>yes</td></tr>
+  </table>
+  <p class="kv">Codex's catch: a third surface without a routing rule just duplicates the two that
+  exist. <code>findings/README.md</code> is the authority and gets updated in lockstep.
+  <code>docs/journal/</code> holds <b>14</b> entries, not the five an earlier draft claimed.</p>
+
+  <h3>Prediction record — three outcomes, no partial credit</h3>
+  <pre>per edit:  the class or boundary you expect to move
+           the direction
+           the observable you will read next time
+
+next iteration:  held  |  did not hold  |  could not tell</pre>
+
+  <h3>Invariants</h3>
+  <ul class="tight">
+    <li>The engine treats <code>combined_hash</code> as <b>opaque</b> and never verifies it — our
+      generator is the only guard.</li>
+    <li>The canary's recorded <code>program_combined_hash</code> must equal the new manifest hash. It is
+      provenance only today: <code>canary.py</code> keys on profile + model + split + expected verdict.</li>
+    <li>Driver invariants re-asserted after <i>every</i> optimizer edit: one dispatch, no retry, no gold
+      or source-paper read, orchestrator never authors the verdict, stage/profile consistency.</li>
+    <li>Do not add unresolvable backticked <code>.md</code> paths to the optimizer docs —
+      <code>profiles.py</code> gates that, and it is the one currently-red assertion.</li>
+  </ul>
+</div>
+
+<h2>Decisions &mdash; resolved, do not relitigate <span class="chip new">&#10022; new</span></h2>
+<details data-section="decisions" data-changed open>
+<summary>All eight decisions, and where each came from</summary>
+<div class="body">
+<p class="kv"><b>What changed this round:</b> D5 and the offline-gate question moved here from Open
+Questions, which is now empty. This card was missing from the previous HTML entirely.</p>
+<table>
+  <tr><th>Decision</th><th>Resolution</th></tr>
+  <tr><td><b>D1</b> journal semantics</td><td>Three mutually exclusive record surfaces. The optimizer
+    does not auto-write <code>docs/journal/</code>; promotion happens at landing.</td></tr>
+  <tr><td><b>D2</b> evidence acquisition</td><td>Your ruling stands, but the lever is Phase 2's
+    <code>ACQUISITION_SCOPE</code>, not a retrieval-config schema. Moved to Plan B.</td></tr>
+  <tr><td><b>D3</b> instrument-fact preflight</td><td>No. Over-engineering.</td></tr>
+  <tr><td><b>D4</b> dated meta-learnings</td><td>Yes.</td></tr>
+  <tr><td><b>D5</b> ETIQUETTE <span class="chip new">&#10022; new</span></td>
+    <td><b>No special or upfront testing</b> — "this is part of the experiment." One class among nine;
+      the optimizer meets it under measurement like any other. No targeted iteration, no
+      ETIQUETTE-specific verification.</td></tr>
+  <tr><td><b>D6</b> baseline ledger</td><td>Re-cut <code>program-v0</code>, archive
+    <code>v1</code>–<code>v5</code>.</td></tr>
+  <tr><td><b>No-edit iteration</b></td><td>Deliberate terminal stop for human triage; no engine
+    change.</td></tr>
+  <tr><td><b>Driver</b></td><td>Editable in its split form only; the contract shell stays frozen.</td></tr>
+  <tr><td><b>Definitions file</b></td><td>Stays frozen; the rubric is the single operative source.</td></tr>
+  <tr><td><b>Offline-gate failure</b> <span class="chip new">&#10022; new</span></td>
+    <td><b>Accepted and named, not a prerequisite.</b> <code>profiles.py</code> is 47/48 — the
+      doc-path gate trips on template placeholders and README-relative paths, neither a real defect.
+      Gate C measures against the recorded baseline. Fix in passing if cheap. My call; override freely.</td></tr>
+</table>
+</div>
+</details>
+
+<h2>The steps</h2>
+
+<details data-section="step-p0">
+<summary>Step P0 — Paper-verbatim reset and canonical baseline recut </summary>
+<div class="body">
+<p>The three divergences, all our additions, all in the judge's read path:</p>
+<table>
+  <tr><th></th><th>paper says</th><th>we said</th><th>cost</th></tr>
+  <tr><td><b>NOT_SUBSTANTIATE</b></td><td>"the citation <b>is relevant to the content</b> … but fails
+    to substantiate all statements"</td><td>"partial support but <b>key element missing</b>"</td>
+    <td>we deleted <i>relevance</i> — the paper's actual NS-vs-IRRELEVANT boundary. 115 predictions,
+      precision <b>0.17</b>.</td></tr>
+  <tr><td><b>OVERSIMPLIFY</b></td><td>"oversimplified or overgeneralized." Full stop.</td>
+    <td>+ "narrower-in-source than claimed, or qualified-in-source but unqualified"</td>
+    <td>45 predictions, <b>2 hits</b> (0.04).</td></tr>
+  <tr><td><b>ACCURATE</b></td><td>"consistent with an <b>evidence segment</b>"</td>
+    <td>"<b>directly supports</b> the claim as stated"</td>
+    <td>stricter than source; ACCURATE→NS is the largest confusion cell, 36 of 226.</td></tr>
+</table>
+<div class="warn"><b>These clauses were already in <code>program-v0</code></b> (verified via
+<code>git show</code>). They are not optimizer accretion — so "reset to v0" is <b>not</b> the fix, and
+all five iterations hill-climbed on an inverted definition. The two classes we mis-transcribed are
+exactly the two with the worst precision.</div>
+<p><b>Ledger:</b> re-cut <code>program-v0</code> and archive <code>v1</code>–<code>v5</code> plus their
+run ledger, so the next run mints <code>program-v1</code> again. A <code>program-p0</code> prefix is
+not supported — <code>engine/versioning.py</code> and <code>engine/resume.py</code> both assume the
+contiguous <code>v0..vN</code> convention. Old run summaries and materialized snapshots become
+historical, not resumable.</p>
+<p class="kv"><b>Mechanics:</b> see the P0 sequence diagram above — the order is load-bearing.</p>
+<label class="fb" for="fb-step-p0">Your notes on P0</label>
+<textarea class="section-feedback" id="fb-step-p0" data-id="step-p0" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-0">
+<summary>Step 0 — Gold is the absolute target </summary>
+<div class="body">
+<p>Your ruling, made the plan's opening instruction: gold is the objective, always. The nine label
+names and the 3-way collapse come from the benchmark and are frozen; <b>every class definition is
+ours</b> — a hypothesis about what gold means, not an authority. Where a definition and gold disagree,
+the definition is wrong.</p>
+<p>The optimizer has full per-claim gold for the TRAIN batch and has never once derived a boundary
+empirically — it reasoned from inherited words. If it believes a specific gold label is indefensible it
+logs that one label with its evidence and moves on; it does not build rules around the belief that gold
+is wrong.</p>
+<label class="fb" for="fb-step-0">Your notes on Step 0</label>
+<textarea class="section-feedback" id="fb-step-0" data-id="step-0" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-1">
+<summary>Step 1 — Ground blame in traces</summary>
+<div class="body">
+<p>The optimizer opened <b>zero</b> traces in five iterations, so it inferred "the judge skipped my
+rule" from wrong labels. The traces show 92% ordered-gate compliance and the forced-nuance artifact at
+31/31. Four iterations went to hardening rules already being obeyed — 1,716 added words for a move
+inside the scatter.</p>
+<p>New duty: open the trace before blaming non-compliance; if you cannot point to where the procedure
+was abandoned, it was not skipped. Sample correct-answer traces too. Fourth remedy added alongside the
+three additive ones: <b>delete the competing guidance</b>.</p>
+<p class="kv">⚠ Codex caveat now in the plan: <code>trace_ref</code> may legitimately be null, and the
+mistake corpus lists only errors — correct-answer traces come from the per-iteration
+<code>run_manifest.json</code>. The prose names that artifact and a fallback.</p>
+<p class="kv"><b>Files:</b> <code>optimizer-instructions.md</code>,
+<code>failure-mode-discovery.md</code>, <code>subagent-blame-brief.md</code> — the last two because
+the <b>blame subagents</b> are what read individual failures, which was your point.</p>
+<label class="fb" for="fb-step-1">Your notes on Step 1</label>
+<textarea class="section-feedback" id="fb-step-1" data-id="step-1" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-2">
+<summary>Step 2 — A no-edit iteration is a terminal stop </summary>
+<div class="body">
+<div class="warn"><b>Codex caught that my earlier version was impossible.</b>
+<code>commit_new_version</code> stages only manifest entries and raises <code>EmptyCommitError</code>
+when none changed; <code>loop.py:411</code> converts that to a terminal <code>LoopStop</code>.
+<code>docs/journal/</code> is outside the manifest and the optimizer cannot commit. So "file a report
+and make no edit, that's a complete iteration" would have <b>halted the run</b> while producing no
+committed record.</div>
+<p>Your ruling: <b>terminal stop for human triage</b>, no engine change. The optimizer writes its
+findings entry, states plainly that no program edit is warranted and why, and stops. The run halts for
+triage — a legitimate reportable outcome, not a failure. It does not invent a cosmetic edit to keep the
+loop alive.</p>
+<p>The three <code>reports/</code> files are gone; see the record-surface table above.</p>
+<label class="fb" for="fb-step-2">Your notes on Step 2</label>
+<textarea class="section-feedback" id="fb-step-2" data-id="step-2" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-3">
+<summary>Step 3 — The evidence surface, named honestly </summary>
+<div class="body">
+<p><b>Your ruling stands</b> — acquisition is the optimizer's problem, and the original paper-trail had
+an agent read the whole paper. The architecture already reflects that, and my earlier draft was
+<b>false about where the lever is</b>:</p>
+<table>
+  <tr><th>profile</th><th>evidence producer</th><th>edit scope</th><th>runnable?</th></tr>
+  <tr><td><code>retrieval</code></td><td>BM25 top-20, one query, k=20</td><td><code>JUDGE_SCOPE</code></td><td>yes</td></tr>
+  <tr><td><code>agentic</code></td><td><b>extractor agent reading the paper</b></td>
+    <td><code>+ ACQUISITION_SCOPE</code></td><td><b>no</b></td></tr>
+  <tr><td><code>paperclip</code></td><td>conversational query</td><td><code>+ ACQUISITION_SCOPE</code></td><td><b>no</b></td></tr>
+</table>
+<p><code>ACQUISITION_SCOPE</code> is three prompts that are <b>already manifest-owned and already
+optimizer-editable.</b> The blocker is <code>profiles.py:59-61</code> — the driver aborts
+<code>extractor</code>/<code>verifier</code> with <code>STAGE_NOT_IMPLEMENTED</code>. And BM25's fixity
+under <code>retrieval</code> is <b>deliberate</b>: it isolates judgment from acquisition for Phase 1.</p>
+<p class="kv">So Plan A <b>declines</b> Codex's proposed fix (a versioned retrieval-config schema with
+<code>query_strategy</code>/<code>k</code>/<code>ranker</code>/<code>bm25_k1</code>/<code>bm25_b</code>)
+— it would engineer around a deliberate constraint and duplicate a Phase-2 capability. Retrieval
+latitude moves to <a href="phase2-evidence-acquisition-programmability.md">Plan B</a>, whose real
+content is driver stage coverage.</p>
+<label class="fb" for="fb-step-3">Your notes on Step 3</label>
+<textarea class="section-feedback" id="fb-step-3" data-id="step-3" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-4">
+<summary>Step 4 — Trends, not single steps; and record the prediction</summary>
+<div class="body">
+<p>Your position, and the data agrees: v0→v5 is significant at p=0.021 while every individual step
+sits at p ≥ 0.69. So the guidance is trend framing, not a threshold that discards information. The
+scatter is stated as measured — a byte-identical program scored 0.48 and 0.42 on the same 50 claims,
+changing 16 of 50 labels.</p>
+<p>The one thing a single sub-band step does not license is a <b>reversal of direction</b> — iteration 4
+reversed the program's whole direction on a −0.02 move it had itself labelled inside the band. And the
+constraint loosens as TRAIN and VAL grow, so check the current <code>n_total</code>.</p>
+<label class="fb" for="fb-step-4">Your notes on Step 4</label>
+<textarea class="section-feedback" id="fb-step-4" data-id="step-4" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-5">
+<summary>Step 5 — Bundle freely, but separably</summary>
+<div class="body">
+<p>Your economics: the sweep is ~$20 and the optimizer session ~$5, so forcing one edit per sweep
+multiplies the expensive thing to buy attribution of the cheap thing. The one-edit-per-iteration
+recommendation is dropped. What replaces it is a habit — target different label boundaries so per-class
+movement attributes them for free; isolate only after a bundle regresses; a repeat measurement of an
+unchanged program is a legitimate iteration.</p>
+<label class="fb" for="fb-step-5">Your notes on Step 5</label>
+<textarea class="section-feedback" id="fb-step-5" data-id="step-5" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-6">
+<summary>Step 6 — Verify inherited instrument facts</summary>
+<div class="body">
+<table>
+  <tr><th>Doc</th><th>Says</th><th>Truth</th></tr>
+  <tr><td><code>playbook.md:96-98</code></td><td>"each iteration sees a different TRAIN batch"</td>
+    <td><b>False.</b> Rosters byte-identical, Jaccard 1.000</td></tr>
+  <tr><td><code>release-format.md</code></td><td>a "release is not there at all" fallback</td>
+    <td>bug fixed months ago; releases written before each session</td></tr>
+  <tr><td><code>meta-learnings.md:183</code></td><td>"no release files are written — now the norm"</td>
+    <td>False; delete it and the notes derived from it</td></tr>
+</table>
+<p>Plus the standing duty — verify before relying on an inherited harness claim, delete what you
+falsify and say so — and the artifact pointers it never had. <b>Date every entry</b> (D4).</p>
+<div class="warn"><b>Preserve the iter-1..5 rubric lessons</b> in <code>meta-learnings.md</code>; that
+file is modified-uncommitted in the working tree right now.</div>
+<label class="fb" for="fb-step-6">Your notes on Step 6</label>
+<textarea class="section-feedback" id="fb-step-6" data-id="step-6" placeholder="..."></textarea>
+</div>
+</details>
+
+<details data-section="step-7">
+<summary>Step 7 — Widen the surface SAFELY: split the driver </summary>
+<div class="body">
+<p>You said make the driver editable. Codex flagged that making the <i>whole</i> command editable also
+makes measurement and isolation contracts editable — argument parsing, the gold and source-paper
+prohibitions, one-dispatch/no-retry, stage topology, output ownership, abort semantics. An optimizer
+could raise its score or cut cost by weakening those while staying inside its declared scope. That is a
+reward-hacking surface, so the directive ships in its safe form:</p>
+<ul class="tight">
+  <li><b>Frozen shell</b> — parsing/validation, the hard prohibitions, one dispatch no retry, output
+    ownership, abort codes.</li>
+  <li><b>Narrowly editable component</b> — which frozen prompt is dispatched and how slots are filled.</li>
+  <li><b>Invariant tests after every optimizer edit</b> — a profile's stage count and the budget/release
+    claims are lies if these can drift.</li>
+</ul>
+<div class="warn"><b>Reversal from the last revision:</b> <code>verdict_definitions_sarol.md</code> stays
+<b>frozen</b>. The judge reads only the enum and the rubric, so an editable definitions file that also
+duplicates the eight paper definitions becomes either inert or a silently drifting second authority.
+The rubric is the single operative source.</div>
+<div class="warn"><b>Coordination:</b> the isolation plan also rewrites this driver. These branches are
+<b>not</b> independent — isolation lands <b>first</b> and Plan A rebases onto it.</div>
+<label class="fb" for="fb-step-7">Your notes on Step 7</label>
+<textarea class="section-feedback" id="fb-step-7" data-id="step-7" placeholder="..."></textarea>
+</div>
+</details>
+
+<h2>Gotchas</h2>
+
+<details data-section="gotcha-notinplan">
+<summary>Deliberately not in this plan</summary>
+<div class="body">
+<ul class="tight">
+  <li><b>No one-edit-per-iteration rule</b> and <b>no hard noise-band veto</b> — both your overrules.</li>
+  <li><b>No objective change, no eval resize</b> — the metric sits below its own always-ACCURATE floor
+    of 0.70 while the best program scored 0.62. Biggest problem in the system, and a separate plan,
+    because macro-F1 at n=50 is <i>noisier</i> than accuracy (SD 0.082 vs 0.070).</li>
+  <li><b>No judge-model swap</b> — haiku is ~30–38% of current error; it ranks after the instrument work.</li>
+  <li><b>Reconciling with <code>main</code></b> — 162 vs 40 divergent commits is a project call, not a
+    landing step.</li>
+</ul>
+</div>
+</details>
+
+<details data-section="gotcha-baseline">
+<summary>The suite baseline is not all-green </summary>
+<div class="body">
+<p>Measured 2026-09-09 with <code>~/.local/bin/python3.13</code> (default <code>python3</code> is 3.10;
+this code needs ≥3.11): adapter 150/150, dispatcher 114/114, sampling <b>50/50</b>, validate_sarol
+33/33, profiles <b>47/48</b>, canary 24/24.</p>
+<p>The profiles failure is the <code>_unresolvable_doc_paths</code> gate tripping on template
+placeholders (<code>iter-&lt;n&gt;.md</code>) and README-relative paths — pre-existing, and plausibly
+fixable in passing since Plan A edits those docs. "Any suite regresses" is measured against <i>that</i>
+baseline, not an imagined all-green one.</p>
+<p class="kv">Codex also reported sampling at 48/50; <b>that is wrong</b> — it is 50/50 under both
+interpreters. Its run was sandbox-restricted.</p>
+</div>
+</details>
+
+<details data-section="gotcha-cannotverify">
+<summary>This plan cannot verify an accuracy gain, and does not claim to</summary>
+<div class="body">
+<p>The instrument's minimum detectable effect is ±0.155 against a six-version spread of 0.20, and the
+objective sits below its own floor. Plan A buys a <i>correct baseline</i> plus better reasoning; the
+measurement redesign is what makes outcome claims possible.</p>
+</div>
+</details>
+
+<h2>Open questions <span class="chip pend">&#9679; changed</span></h2>
+<div class="card" data-section="oqs-empty" data-changed>
+  <p><b>None.</b> All three closed by your feedback this round: D5 resolved (no special testing), the
+  offline-gate question closed (accepted as pre-existing), and the comparability question dropped
+  ("nope don't care about this at all") — that one is recorded in Plan B, where it removes what Codex
+  called its blocking design question.</p>
+  <p class="kv">Nothing gates implementation. The remaining path is <code>/read-plan</code> sign-off,
+  and the isolation plan landing first.</p>
+  <label class="fb" for="fb-oqs">Notes</label>
+  <textarea class="section-feedback" id="fb-oqs" data-id="open-questions" placeholder="..."></textarea>
+</div>
+
+<h2>Verification</h2>
+<div class="card">
+  <table>
+    <tr><th>Gate</th><th>What runs</th><th>Expected</th><th>Stop</th></tr>
+    <tr><td><b>A</b> paper fidelity</td><td>Diff the reset definitions against §2.2/Table 1</td>
+      <td>All eight match verbatim; <code>INDIRECT_NOT_REVIEW</code> marked as house text; no clause
+        present that is not paper text, marked house text, or the re-applied evidence-array rule</td>
+      <td>Any silent addition survives — the exact defect this reset removes</td></tr>
+    <tr><td><b>B</b> harness claims</td><td>Audit every new assertion about the harness</td>
+      <td>Releases present; identical rosters confirmed; <code>trace_ref</code> per record; the
+        0.48/0.42 replicate reproduces</td><td>Any claim fails to reproduce</td></tr>
+    <tr><td><b>C</b> recut clean</td><td>Generator → commit → source_refs → hashes → tag → canary →
+        selftests</td>
+      <td>Write-then-verify idempotent; <code>program-v0</code> verifies against its tag;
+        <code>v1</code>–<code>v5</code> archived; canary re-pinned <code>--repeat 3</code> with its
+        recorded hash <b>equal to</b> the manifest hash; both new entries materialize</td>
+      <td>Canary flips, hash still mismatches, or any suite regresses below the <i>measured</i> baseline</td></tr>
+    <tr><td><b>D</b> empty-window regression</td><td>One-claim empty-window fixture, offline</td>
+      <td>The <code>"evidence": []</code> rule survived the reset — validator accepts, a stripped
+        variant fails. This is the only clause P0 re-applies by hand, so it is the likeliest to be lost</td>
+      <td>A <code>MISSING_FIELD</code>-class rejection</td></tr>
+    <tr><td><b>E</b> live probe (~$25)</td><td>One real iteration on the recut baseline</td>
+      <td>Opens a <code>trace_ref</code>; writes a prediction record with a named observable; either
+        edits the program <b>or</b> states no edit is warranted and halts; shows its check for any
+        repeated harness claim</td>
+      <td>Still reports "no release files were written", or claims a skip with no trace quote</td></tr>
+  </table>
+  <p class="kv"><b>Not verified:</b> whether any of this raises held-out accuracy. It cannot be, at
+  ±0.155 MDE with the objective below its own floor.</p>
+  <label class="fb" for="fb-verification">Your notes on verification</label>
+  <textarea class="section-feedback" id="fb-verification" data-id="verification" placeholder="..."></textarea>
+</div>
+
+<h2>Landing and cleanup <span class="chip pend">&#9679; changed</span></h2>
+<div class="card">
+  <div class="warn"><b><code>ff-only</code> to <code>main</code> is impossible</b> and an earlier draft
+  asserted it. Measured: <code>main</code> is <b>not</b> an ancestor of <code>9309434</code>; the branch
+  carries <b>162</b> commits <code>main</code> lacks, and <code>main</code> carries <b>40</b> the branch
+  lacks.</div>
+  <ul class="tight">
+    <li><b>Integration target:</b> <code>sarol-optimizer-concurrent</code> — the live experiment line.
+      Plan A lands there with <code>--no-ff</code>, <b>not</b> on <code>main</code>.</li>
+    <li><b>Order:</b> isolation plan → Plan A → Plan B. All three touch the driver.</li>
+    <li><b>Dirty tree first:</b> commit or stash the modified <code>meta-learnings.md</code> and eight
+      untracked docs <i>before</i> cutting the branch. Never <code>git reset --hard</code> — unstaged
+      edits have no blob to restore.</li>
+    <li><b>Gate:</b> A–E clean, this review's findings applied, <code>/read-plan</code> sign-off. No open questions remain.</li>
+    <li><b>Cleanup:</b> prune branch/worktree; promote findings §8 into
+      <code>docs/journal/2026-09-09-table-1-reconciliation.md</code>; archive the <code>v1</code>–<code>v5</code>
+      tags; retire the session findings doc only once all three plans land.</li>
+  </ul>
+  <label class="fb" for="fb-landing">Your notes on landing</label>
+  <textarea class="section-feedback" id="fb-landing" data-id="landing" placeholder="..."></textarea>
+</div>
+
+<h2>Anything else</h2>
+<div class="card">
+  <label class="fb" for="fb-overall">Global feedback</label>
+  <textarea class="section-feedback" id="fb-overall" data-id="Overall" style="min-height:110px" placeholder="..."></textarea>
+</div>
+
+</div>
+
+<div class="foot">
+  <button id="copybtn">Copy all feedback as Claude prompt</button>
+  <span class="note" id="pending">no notes yet</span>
+  <span class="note" style="margin-left:auto">Saved to this browser as you type &middot; plan <code>2f099e956d23</code></span>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const PLAN_PATH = "docs/plans/optimizer-prompt-investigative-latitude.md";
+const PLAN_SHA  = "2f099e956d23";
+const BRANCH    = "sarol-optimizer-concurrent";
+const STEM      = "optimizer-prompt-investigative-latitude";
+
+const CHANGES = {
+  round: "diff",
+  baseline: "the version you reviewed at fb2e49f298c8 - this round is your 3-answer feedback pass only"
+};
+
+const OQS = [];
+
+const oqWrap = document.getElementById('oqs');
+OQS.forEach(o => {
+  const d = document.createElement('div');
+  d.className = 'oq' + (o.blocking ? ' block' : '');
+  d.id = 'oq-' + o.n;
+  d.innerHTML =
+    '<div><span class="chip' + (o.blocking ? ' stop' : '') + '">' + o.key +
+      (o.blocking ? ' &middot; blocking' : '') + '</span></div>' +
+    '<div class="q">' + o.q + '</div>' +
+    '<ul class="tight">' + o.opts.map(x => '<li>' + x + '</li>').join('') + '</ul>' +
+    '<label class="fb" for="oqs-' + o.n + '">Status</label>' +
+    '<select id="oqs-' + o.n + '" data-oq="' + o.n + '">' +
+      '<option>Pending</option><option>Resolved</option><option>Deferred</option></select>' +
+    '<label class="fb" for="oqn-' + o.n + '">Decision / notes</label>' +
+    '<textarea id="oqn-' + o.n + '" data-oqnote="' + o.n + '" placeholder="..."></textarea>';
+  oqWrap.appendChild(d);
+});
+
+// ---- localStorage persistence, wiped when the plan SHA changes ----
+const LS = k => 'ep::' + STEM + '::' + k;
+if (localStorage.getItem(LS('__sha')) !== PLAN_SHA) {
+  Object.keys(localStorage).filter(k => k.startsWith('ep::' + STEM + '::')).forEach(k => localStorage.removeItem(k));
+  localStorage.setItem(LS('__sha'), PLAN_SHA);
+}
+function fields(){
+  return [...document.querySelectorAll('textarea[data-id],textarea[data-oqnote],select[data-oq]')];
+}
+fields().forEach(el => {
+  const key = el.id;
+  const saved = localStorage.getItem(LS(key));
+  if (saved !== null) el.value = saved;
+  el.addEventListener('input', () => { localStorage.setItem(LS(key), el.value); badge(); });
+  el.addEventListener('change', () => { localStorage.setItem(LS(key), el.value); badge(); });
+});
+function pendingCount(){
+  let n = 0;
+  document.querySelectorAll('textarea').forEach(t => { if (t.value.trim()) n++; });
+  document.querySelectorAll('select[data-oq]').forEach(s => { if (s.value !== 'Pending') n++; });
+  return n;
+}
+function badge(){
+  const n = pendingCount();
+  document.getElementById('pending').textContent = n ? (n + ' note' + (n>1?'s':'') + ' pending') : 'no notes yet';
+  document.getElementById('copybtn').textContent = n
+    ? 'Copy all feedback as Claude prompt (' + n + ')' : 'Copy all feedback as Claude prompt';
+}
+badge();
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+document.getElementById('copybtn').addEventListener('click', async () => {
+  let out = '# Resume: apply explain-plan feedback\n';
+  out += 'Plan: ' + PLAN_PATH + ' · branch: ' + BRANCH + ' · plan-sha: ' + PLAN_SHA.slice(0,12) + '\n';
+  out += '→ If you are picking this up in a fresh session, read the plan doc above (plus any related docs / memory it points to) first. Then apply the feedback below.\n\n';
+  out += '# Feedback on Optimizer prompt: investigative latitude\n\n';
+  document.querySelectorAll('textarea[data-id]').forEach(t => {
+    if (t.value.trim()) out += '## ' + t.dataset.id + '\n' + t.value.trim() + '\n\n';
+  });
+  OQS.forEach(o => {
+    const s = document.querySelector('select[data-oq="' + o.n + '"]').value;
+    const nt = document.querySelector('textarea[data-oqnote="' + o.n + '"]').value.trim();
+    if (s !== 'Pending' || nt) {
+      out += '## ' + o.key + ' (OQ' + o.n + ')\nStatus: ' + s + '\n' + (nt ? nt + '\n' : '') + '\n';
+    }
+  });
+  if (pendingCount() === 0) out += '_(no notes entered)_\n';
+  try { await navigator.clipboard.writeText(out); toast('Feedback copied — paste into Claude'); }
+  catch (e) { console.log(out); toast('Clipboard blocked — feedback logged to console'); }
+});
+
+// ---- change-since-last-review toolbar ----
+(function(){
+  const changed=[...document.querySelectorAll('details[data-changed]')];
+  const nNew=[...document.querySelectorAll('.chip.new')].length;
+  document.getElementById('chgcount').textContent =
+    changed.length + ' section' + (changed.length===1?'':'s') + ' moved';
+  document.getElementById('chgbase').textContent = 'since ' + CHANGES.baseline;
+  let i=-1;
+  const jump = d => { d.open=true; d.scrollIntoView({behavior:'smooth',block:'center'}); };
+  document.getElementById('chgnext').addEventListener('click',()=>{
+    if(!changed.length) return; i=(i+1)%changed.length; jump(changed[i]); });
+  document.getElementById('chgprev').addEventListener('click',()=>{
+    if(!changed.length) return; i=(i-1+changed.length)%changed.length; jump(changed[i]); });
+  const btn=document.getElementById('chgonly');
+  btn.addEventListener('click',()=>{
+    document.body.classList.toggle('changes-only');
+    btn.textContent = document.body.classList.contains('changes-only')
+      ? 'Show all sections' : 'Show changed only';
+  });
+})();
+
+// ---- Mermaid + pan/zoom ----
+mermaid.initialize({ startOnLoad:false, theme:'base', flowchart:{ useMaxWidth:false } });
+const insts = [];
+mermaid.run({ querySelector:'pre.mermaid' }).then(() => {
+  document.querySelectorAll('.mmbox').forEach((box, i) => {
+    const svg = box.querySelector('svg');
+    if (!svg) return;
+    svg.removeAttribute('style');
+    svg.style.width = '100%'; svg.style.height = '100%';
+    insts[i] = svgPanZoom(svg, { zoomEnabled:true, controlIconsEnabled:false, fit:true,
+      center:true, minZoom:0.3, maxZoom:8, zoomScaleSensitivity:0.35 });
+  });
+  document.querySelectorAll('.fig button').forEach(b => {
+    b.addEventListener('click', () => {
+      const i = +b.dataset.i, box = document.querySelectorAll('.mmbox')[i], inst = insts[i];
+      if (b.dataset.act === 'reset') { if (inst) { inst.resize(); inst.fit(); inst.center(); } }
+      else {
+        box.classList.toggle('full');
+        setTimeout(() => { if (inst) { inst.resize(); inst.fit(); inst.center(); } }, 80);
+      }
+    });
+  });
+});
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.mmbox.full').forEach((b, i) => {
+    b.classList.remove('full');
+    setTimeout(() => { const inst = insts[[...document.querySelectorAll('.mmbox')].indexOf(b)];
+      if (inst) { inst.resize(); inst.fit(); inst.center(); } }, 80);
+  });
+});
+window.addEventListener('resize', () => insts.forEach(i => { if (i) { i.resize(); i.fit(); i.center(); } }));
+</script>
+</body>
+</html>
