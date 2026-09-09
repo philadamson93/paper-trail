@@ -43,6 +43,11 @@ FILESET: list[tuple[str, str, bool]] = [
     ("src/specs/verdict_schema.md", "main", True),
     ("experiments/sarol-2024/specs/verdict_enum_sarol.md", "sarol", True),
     ("experiments/sarol-2024/specs/verdict_schema_sarol.md", "sarol", False),
+    # Added by Plan A P0. The paper-verbatim definitions plus their provenance. Frozen
+    # (contract_file=True): the rubric is the single OPERATIVE copy of the eight definitions,
+    # and an editable second copy would be either inert or a silently drifting authority.
+    # It is in the manifest so the reconciled text cannot be changed without cutting a version.
+    ("experiments/sarol-2024/specs/verdict_definitions_sarol.md", "sarol", True),
     ("src/specs/verifier_results.md", "main", True),
 ]
 

@@ -1,0 +1,72 @@
+{
+  "claim_id": "EW001",
+  "schema_version": "1.1",
+  "run_id": "run_20260901T1200Z",
+  "citekey": "hammernik2021",
+  "handle": "pdfs/hammernik2021/",
+  "source_mode": "pdf",
+  "paperclip_handle": null,
+  "ingest_mode": "grobid",
+  "source_ref_urls": [
+    "file:///fixtures/hammernik2021.pdf#page=5"
+  ],
+  "rubric_variant": "sarol_2024_9class",
+  "claim_text": "Prophylactic anticoagulation is recommended for all hospitalised patients with the condition under study.",
+  "manuscript_section": "2.2.3",
+  "claim_type": {
+    "type": "PARAPHRASED",
+    "confidence": "medium"
+  },
+  "sub_claims": [
+    {
+      "sub_claim_id": "EW001.a",
+      "text": "Prophylactic anticoagulation is recommended for all hospitalised patients with the condition under study.",
+      "evidence": [],
+      "figures_checked": [],
+      "verdict": "ACCURATE",
+      "paper_value": null,
+      "claim_value": null,
+      "nuance": "BM25 returned no passages for this sub-claim. An empty window is retrieval silence, not paper-absence, so the ordinary factual claim is not downgraded on it."
+    }
+  ],
+  "overall_verdict": "ACCURATE",
+  "overall_flag": "REVIEW",
+  "remediation": {
+    "category": "RESCOPE",
+    "suggested_edit": "Narrow 'across all anatomies' to 'in knee and brain imaging'."
+  },
+  "attestation": {
+    "phrasings_tried": [
+      "fourfold acceleration diagnostic quality",
+      "acquisition time reduction all anatomies",
+      "deep learning reconstruction anatomy generalisation"
+    ],
+    "section_checklist": [
+      {
+        "section": "Abstract",
+        "read": true
+      },
+      {
+        "section": "Methods",
+        "read": true
+      },
+      {
+        "section": "Results",
+        "read": true
+      },
+      {
+        "section": "Discussion",
+        "read": true
+      }
+    ],
+    "closest_adjacent": null,
+    "indirect_attribution_check": "Source reports its own experiments; no onward attribution.",
+    "out_of_context_check": "Usage matches the source's framing."
+  },
+  "stage": "adjudication",
+  "timing": {
+    "wall_clock_seconds": 44,
+    "tokens_in": null,
+    "tokens_out": null
+  }
+}

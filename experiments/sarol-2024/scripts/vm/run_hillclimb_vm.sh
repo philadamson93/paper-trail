@@ -54,7 +54,29 @@ assert "reason" in inspect.signature(LoopStop.__init__).parameters, "LoopStop ha
 raise SystemExit(0)
 PYENG
 ENG_SHA="$(git -C "$AGENTIC_LABEL_OPT" rev-parse --short HEAD 2>/dev/null || echo '?')"
-echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK)"
+
+# Plan A declares 82f547d the compatible engine: the SHA the five-iteration run actually used.
+# The feature check above catches an engine that is too OLD, but not one that has DIVERGED -- a
+# checkout parked on an unrelated feature branch can carry LoopStop.reason and EmptyCommitError and
+# still break the adapter seam. Measured 2026-09-09: a sibling branch crashed dispatcher --selftest
+# with `'function' object has no attribute 'batch_id'` while satisfying every feature probe.
+#
+# So assert ANCESTRY, not equality: 82f547d must be reachable from HEAD. That still permits a
+# forward re-pin (the whole point of the contract check above) while making divergence loud.
+# Deliberate override: SAROL_ALLOW_ENGINE_DIVERGENCE=1.
+ENGINE_PIN="82f547dac49394005781df62892d41d9b26dfb09"
+if [ "${SAROL_ALLOW_ENGINE_DIVERGENCE:-0}" != "1" ]; then
+  if ! git -C "$AGENTIC_LABEL_OPT" cat-file -e "$ENGINE_PIN^{commit}" 2>/dev/null; then
+    fail "the engine checkout does not contain the declared-compatible commit $ENGINE_PIN at all -- wrong repo, or a shallow clone. Fetch it, or set SAROL_ALLOW_ENGINE_DIVERGENCE=1 to proceed anyway."
+  fi
+  if ! git -C "$AGENTIC_LABEL_OPT" merge-base --is-ancestor "$ENGINE_PIN" HEAD 2>/dev/null; then
+    ENG_BRANCH="$(git -C "$AGENTIC_LABEL_OPT" branch --show-current 2>/dev/null || echo 'detached')"
+    fail "engine at $ENG_SHA (branch '$ENG_BRANCH') has DIVERGED from the declared-compatible $ENGINE_PIN, which is not an ancestor of HEAD. This is usually a checkout left on another session's feature branch. Check out a commit containing the pin, or set SAROL_ALLOW_ENGINE_DIVERGENCE=1 if the divergence is intended."
+  fi
+  echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK; contains pin ${ENGINE_PIN:0:7})"
+else
+  echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK; ENGINE PIN CHECK OVERRIDDEN)"
+fi
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"

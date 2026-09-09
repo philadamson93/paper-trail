@@ -1665,10 +1665,16 @@ def _selftest() -> int:
     contracts = store.contract_paths()
     editable = store.editable_paths()
     checks += [
-        ("manifest has 8 entries", len(store.entries) == 8),
-        ("three of them are contract files", len(contracts) == 3),
+        ("manifest has 9 entries", len(store.entries) == 9),
+        ("four of them are contract files", len(contracts) == 4),
         ("the enum contract is one of them",
          "experiments/sarol-2024/specs/verdict_enum_sarol.md" in contracts),
+        # Plan A P0: the paper-verbatim definitions are frozen, so the reconciled scheme
+        # cannot be reworded without cutting a version. The rubric stays editable.
+        ("the paper-verbatim definitions are a contract file",
+         "experiments/sarol-2024/specs/verdict_definitions_sarol.md" in contracts),
+        ("...and are therefore NOT optimizer-editable",
+         "experiments/sarol-2024/specs/verdict_definitions_sarol.md" not in editable),
         ("the rubric GUIDANCE is editable, per OQ8",
          "experiments/sarol-2024/specs/verdict_schema_sarol.md" in editable),
         ("edit scope and contract scope partition the globset",
@@ -1764,7 +1770,7 @@ def _selftest() -> int:
         schemas = _import_engine()
         manifest = store.manifest()
         checks += [
-            ("manifest builds against the engine's ManifestEntry", len(manifest.entries) == 8),
+            ("manifest builds against the engine's ManifestEntry", len(manifest.entries) == 9),
             ("combined_hash is carried through",
              manifest.combined_hash == store.combined_hash),
         ]

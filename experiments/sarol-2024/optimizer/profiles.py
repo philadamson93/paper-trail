@@ -13,7 +13,7 @@ It is **not a plugin registry.** The plan asks for typed constants plus validati
 manifest, and that is all this is. Three named profiles, checked against the freeze at import-test
 time. Anything more elaborate would be scaffolding for a generality nobody has asked for.
 
-It is **not profile-awareness in the freeze.** `program-v0` stays 8 entries at ``combined_hash``
+It is **not profile-awareness in the freeze.** `program-v0` stays 9 entries at ``combined_hash``
 ``0a02710cbd88`` under every profile (re-frozen 2026-09-07 when the enum contract was trimmed;
 it read ``391f54fae7c5`` before that); the engine's materializer still sees all 8 and
 ``commit_new_version()`` still stages all 8. A profile narrows what the *optimizer* is allowed to
@@ -258,7 +258,7 @@ def _selftest() -> int:
         # remembered copy of it. A manifest change that renames a prompt fails here.
         ("every profile's edit scope validates against the freeze",
          validate_against_manifest(entries) == []),
-        ("...and the freeze is the 8-entry program-v0", len(entries) == 8),
+        ("...and the freeze is the 9-entry program-v0", len(entries) == 9),
 
         # The ladder's shape.
         ("the ladder is retrieval -> agentic -> paperclip",
