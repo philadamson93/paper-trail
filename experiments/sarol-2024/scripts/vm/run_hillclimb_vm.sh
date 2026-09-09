@@ -15,6 +15,11 @@ RUN_ID="${1:-hillclimb-$(date +%F)}"
 MAX_WORKERS="${2:-4}"
 ITERATIONS="${3:-5}"
 
+# Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
+# resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
+# PAPER_TRAIL_PYTHON if this box installs it elsewhere.
+PY="${PAPER_TRAIL_PYTHON:-$HOME/.local/bin/python3.13}"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 OPT="$REPO_ROOT/experiments/sarol-2024/optimizer"
 DATA_TGZ_BUCKET="gs://su-vista-uscentral1/chaudhari_lab/phil/paper-trail-data/sarol-data.tgz"
@@ -26,11 +31,33 @@ fail() { printf '\nSTOP: %s\n' "$*" >&2; exit 1; }
 # ---------------------------------------------------------------- preconditions
 say "Preconditions"
 
-command -v python3 >/dev/null || fail "python3 not on PATH"
-python3 - <<'PY' || fail "python >= 3.11 required (the code uses X | Y unions and match-era syntax)"
+[ -x "$PY" ] || fail "interpreter not found/executable at $PY (set PAPER_TRAIL_PYTHON to the right python3.13)"
+# Verify it can actually run the code, not just report a version tuple: a 3.13 that can't import
+# the engine (wrong AGENTIC_LABEL_OPT, half-installed deps) fails just as hard as a 3.9.
+"$PY" - <<'PYCHK' || fail "python >= 3.11 required at $PY (the code uses X | Y unions and match-era syntax)"
 import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
-PY
-echo "  python3: $(python3 -V)"
+PYCHK
+echo "  python:  $("$PY" -V) ($PY)"
+
+# The engine seam must resolve to an agentic-label-opt checkout that carries the mid-run
+# failure-handling hardening (LoopStop.reason + EmptyCommitError). A run against a pre-hardening
+# engine would abort on a bad probe with a bare traceback and lose the partial-run summary -- the
+# exact failure this runner exists to prevent. Contract-checked (feature presence), not SHA-pinned,
+# so it survives an engine re-pin.
+: "${AGENTIC_LABEL_OPT:?STOP: AGENTIC_LABEL_OPT must point at the agentic-label-opt engine checkout (its DEFAULT_ENGINE is a Mac-only path)}"
+[ -d "$AGENTIC_LABEL_OPT" ] || fail "AGENTIC_LABEL_OPT=$AGENTIC_LABEL_OPT is not a directory"
+PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" - <<'PYENG' || fail "the engine at AGENTIC_LABEL_OPT lacks the LoopStop-hardening contract -- re-pin to the landed hardening SHA"
+import inspect
+from engine.loop import LoopStop
+from engine.versioning import EmptyCommitError  # noqa: F401  (must exist)
+assert "reason" in inspect.signature(LoopStop.__init__).parameters, "LoopStop has no reason kwarg"
+raise SystemExit(0)
+PYENG
+ENG_SHA="$(git -C "$AGENTIC_LABEL_OPT" rev-parse --short HEAD 2>/dev/null || echo '?')"
+echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK)"
+
+command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
+echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
 
 command -v claude >/dev/null || fail "the 'claude' CLI is not installed -- the judge is a nested 'claude -p' session per claim"
 echo "  claude:  $(claude --version 2>&1 | head -1)"
@@ -38,7 +65,9 @@ echo "  claude:  $(claude --version 2>&1 | head -1)"
 # Auth is the failure that costs the most: it surfaces only on the first paid dispatch, after
 # staging has run. Force it now, cheaply, with a prompt whose answer we do not care about.
 if command -v timeout >/dev/null; then AUTH_TIMEOUT=(timeout 120); else AUTH_TIMEOUT=(); fi
-if ! printf 'say OK' | "${AUTH_TIMEOUT[@]}" claude -p --max-budget-usd 0.05 >/dev/null 2>&1; then
+# Budget cap only bounds this probe's cost; keep it comfortably above one trivial prompt on the
+# default model (a $0.05 cap false-fails an authed CLI — the prompt alone exceeds it).
+if ! printf 'say OK' | "${AUTH_TIMEOUT[@]}" claude -p --max-budget-usd 1.00 >/dev/null 2>&1; then
   fail "the 'claude' CLI is installed but not authenticated (or has no budget). Run 'claude' once interactively on this box first."
 fi
 echo "  claude auth: OK"
@@ -68,15 +97,59 @@ echo "  gold=$GOLD_N benchmarks=$BENCH_N"
 say "Instrument checks (offline, free)"
 cd "$OPT"
 for m in adapter dispatcher sampling validate_sarol profiles canary; do
-  out=$(python3 "$m.py" --selftest 2>&1 | tail -1)
+  out=$("$PY" "$m.py" --selftest 2>&1 | tail -1)
   case "$out" in *"passed"*) : ;; *) fail "$m selftest did not pass: $out";; esac
   echo "  $m: $out"
 done
 
 cd "$REPO_ROOT/experiments/sarol-2024"
-python3 scripts/freeze_program_v0.py --verify --tree program-v0 >/dev/null 2>&1 \
+"$PY" scripts/freeze_program_v0.py --verify --tree program-v0 >/dev/null 2>&1 \
   || fail "program-v0 does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
 echo "  program-v0 verifies against its tag"
+
+# ---------------------------------------------------------------- canary staging
+# The canary's runtime staging tree is git-ignored, so it is ABSENT on a fresh clone -- and the
+# Runner refuses to dispatch a canary whose staged files are gone. Rebuild it deterministically
+# (offline, free: corpus source_mode, no LLM) from the seeded pinned claim, idempotently.
+say "Canary staging (offline, free)"
+cd "$OPT"
+PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" - <<'PYCAN' || fail "could not rebuild/verify the canary staging tree -- see the reason it printed"
+import sys
+import canary
+import stage_claim
+
+PROFILE = "retrieval"
+spec = canary.load(PROFILE)
+if spec is None:
+    print(f"  no pinned canary for {PROFILE!r} -- expected canary/canary-{PROFILE}.json in the checkout")
+    raise SystemExit(1)
+
+unit = canary.choose_claim("train")  # seeded draw -> the pinned claim, deterministically
+if unit.claim_id != spec.claim.claim_id:
+    print(f"  seeded claim {unit.claim_id!r} != pinned {spec.claim.claim_id!r} -- pool/pin drift")
+    raise SystemExit(1)
+
+staging = canary.canary_staging_dir(PROFILE) / unit.claim_id
+# Rebuild when the staged tree is absent or lacks its manifest (a fresh clone, or a half-write).
+# Presence-checked, not counted: the exact file set is stage_claim's business, not this guard's.
+if not (staging / "staging_info.json").is_file():
+    info = stage_claim.stage(
+        split="train",
+        claim_row_id=unit.claim_row_id,
+        cited_paper_bucket=unit.paper_bucket,
+        source_mode=spec.claim.source_mode,
+        out_dir=staging,
+    )
+    if info["citekey"] != spec.claim.citekey:
+        print(f"  staged citekey {info['citekey']!r} != pinned {spec.claim.citekey!r}")
+        raise SystemExit(1)
+
+n = sum(1 for p in staging.rglob("*") if p.is_file())
+if not (staging / "staging_info.json").is_file() or n == 0:
+    print(f"  canary staging incomplete at {staging} ({n} files, no staging_info.json)")
+    raise SystemExit(1)
+print(f"  canary {unit.claim_id} ({spec.claim.citekey}) staged: {n} files under {staging.name}/")
+PYCAN
 
 # ---------------------------------------------------------------- run
 say "Run: $RUN_ID (workers=$MAX_WORKERS, iterations=$ITERATIONS)"
@@ -85,7 +158,7 @@ cd "$OPT"
 # errexit off across the run itself: we want the post-run assertions to report the failure in
 # terms of what is missing, not a bare non-zero from the pipeline.
 set +e
-python3 -u dispatcher.py --run \
+"$PY" -u dispatcher.py --run \
   --profile retrieval \
   --iterations "$ITERATIONS" \
   --train-n-schedule 50,50,50,50,50 \
@@ -108,7 +181,7 @@ say "Post-run assertions"
 REL="$REPO_ROOT/iter/$ITERATIONS/release_val.json"
 [ -s "$REL" ] || fail "no release payload at $REL -- the loop did not reach iteration $ITERATIONS"
 
-python3 - "$REL" <<'PY' || fail "the final release did not carry a scored metric -- see the reason it printed"
+"$PY" - "$REL" <<'PYREL' || fail "the final release did not carry a scored metric -- see the reason it printed"
 import json, sys, pathlib
 d = json.loads(pathlib.Path(sys.argv[1]).read_text())
 m = d.get("metrics") or {}
@@ -119,7 +192,7 @@ if not b.get("scored"):
     print(f"  NOT SCORED: {b.get('reason')}"); raise SystemExit(1)
 if pm is None or not (0.0 <= float(pm) <= 1.0):
     print(f"  metric out of range: {pm!r}"); raise SystemExit(1)
-PY
+PYREL
 
 echo
 echo "OK: run $RUN_ID completed. Results under $RUNS ; releases under $REPO_ROOT/iter/."
