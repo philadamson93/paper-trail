@@ -9,9 +9,9 @@
 Three plans now exist for the optimizer work. **The landing order is isolation → Plan A → Plan B**
 (all three edit `.claude/commands/sarol-eval-item.md`; Codex flagged the collision).
 
-- **Plan A — APPROVED, ready to implement.** [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md)
-  · `Reviewed: Yes` @ `2f099e956d23` · 0 open questions.
-  next: implement · resume from [`../session/plan-a-implementation-readback.md`](../session/plan-a-implementation-readback.md)
+- **Plan A — P0 + Steps 0–6 IMPLEMENTED & REVIEWED 2026-09-09.** [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md)
+  · branch `feat/optimizer-prompt-latitude`, 7 commits `b20debd`..`97cddcf`, pushed · gates + suite green.
+  next: Step 7 (driver split) — **blocked until the isolation plan lands** · then ledger recut (needs go-ahead), canary re-pin, Gate E · resume from [`../session/plan-a-implementation-readback.md`](../session/plan-a-implementation-readback.md)
 - **Isolation plan — NOT YET WRITTEN. This is the gap.** Spec is findings §4g.
   next: author `docs/plans/isolation-protocol.md` · resume from [`../session/isolation-plan-authoring-readback.md`](../session/isolation-plan-authoring-readback.md)
 - **Plan B — scoping only, parked.** [`phase2-evidence-acquisition-programmability.md`](phase2-evidence-acquisition-programmability.md)
@@ -25,6 +25,25 @@ objective is anti-informative and the measurement redesign is the next plan afte
 
 ⚠ **This file is 750+ lines of prose and violates its own pointer contract** (≤3 lines per item,
 substance in the plan doc). A dedicated consolidation pass is owed — out of scope for `/wrapup`.
+
+### Surfaced 2026-09-09 by the Plan A implementation + review
+
+- ⚠ **The Sarol test split is UNSEALED.** `~/.paper-trail/benchmarks/sarol-2024/claims-test.jsonl`
+  sits in the benchmarks dir, not `$HOME/.paper-trail-sealed/sarol-2024-test/` as `CLAUDE.md` Rule 2
+  requires. Pre-existing; no test labels were read. **Benchmark-integrity gap — fix before any
+  reported evaluation.**
+- ⚠ **Table 1 has now been mis-transcribed twice.** Three inverted clauses (found 2026-09-09), then
+  two truncations (CONTRADICT, ETIQUETTE) found by double-reading PMC11231046 the same day.
+  Rule: verify against the paper, never against another copy in this repo.
+  Guard: `experiments/sarol-2024/scripts/check_paper_fidelity.py`.
+- **Re-run the Codex implementation review before `/land`.** It failed mid-run with
+  "workspace is out of credits" (and exited 0 having written nothing); a fresh Claude subagent
+  substituted. See `docs/plans/reviews/optimizer-prompt-investigative-latitude-implementation-feedback.md`.
+- **No `.claude/references/implementation-review-checklist.md` exists.** Both review skills look for
+  one; a repo-grounded checklist would sharpen every future audit here.
+- **Open question for Phil:** the judge-read program shrank −56%, but `optimizer-instructions.md`
+  grew +52%. Does it need the subtractive pass P0 gave the rubric? Nothing measures optimizer
+  instruction-following, and Gate E is the only probe that would.
 
 ---
 
