@@ -28,10 +28,18 @@ substance in the plan doc). A dedicated consolidation pass is owed — out of sc
 
 ### Surfaced 2026-09-09 by the Plan A implementation + review
 
-- ⚠ **The Sarol test split is UNSEALED.** `~/.paper-trail/benchmarks/sarol-2024/claims-test.jsonl`
-  sits in the benchmarks dir, not `$HOME/.paper-trail-sealed/sarol-2024-test/` as `CLAUDE.md` Rule 2
-  requires. Pre-existing; no test labels were read. **Benchmark-integrity gap — fix before any
-  reported evaluation.**
+- ✅ **The Sarol test split is SEALED again** (2026-09-09). It had been sitting unsealed in the
+  benchmarks dir; all three artifacts `CLAUDE.md` Rule 2 covers are now at
+  `$HOME/.paper-trail-sealed/sarol-2024-test/` — `claims-test.jsonl`, `annotations.zip`, and the
+  extracted `annotations/Test/` (moved to `annotations-Test/`). Checksums verified identical across
+  the move; no test labels were read at any point. **Seal proven load-bearing, not merely configured:**
+  `stage_claim.py --split test` now raises `FileNotFoundError` in `load_claims` (`:69`) at file-open,
+  while the identical call on `--split dev` gets *past* the open and fails at `KeyError` on the dummy
+  id — a real negative-control pair. Full suite re-run green after the move.
+  ⚠ **Re-break vector, not yet closed:** `data/benchmarks/sarol-2024/download.sh:33,35` re-fetches
+  `claims-test.jsonl` and `annotations.zip` into the benchmarks dir on any future run. The unzip is
+  guarded (`! -d annotations`) but the fetches are not. The seal is a filesystem fact with no gate
+  behind it — a candidate for the isolation plan's Phase 0 integrity floor.
 - ⚠ **Table 1 has now been mis-transcribed twice.** Three inverted clauses (found 2026-09-09), then
   two truncations (CONTRADICT, ETIQUETTE) found by double-reading PMC11231046 the same day.
   Rule: verify against the paper, never against another copy in this repo.
