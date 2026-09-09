@@ -96,8 +96,9 @@
     "why_no_collapse_needed": "This variant emits Sarol's gold vocabulary directly, so every gold label is reachable and 3-way macro-F1 is directly comparable to the published baselines. The mainline-plus-collapse alternative left 17 of IRRELEVANT's 34 instances structurally unreachable -- see the plan's Part A2."
   },
   "runtime_pins": {
-    "paperclip_cli": "paperclip, version 0.5.11",
-    "why": "The extractor prompt loads the paperclip command reference at run time via `paperclip skill`; the in-repo SKILL.md is a 10-line stub. That reference is outside the frozen fileset, so without this pin two runs of one program version could diverge with no manifest diff."
+    "paperclip_cli": "paperclip, version 0.7.48",
+    "why": "The extractor prompt loads the paperclip command reference at run time via `paperclip skill`; the in-repo SKILL.md is a 10-line stub. That reference is outside the frozen fileset, so without this pin two runs of one program version could diverge with no manifest diff.",
+    "pin_history": "0.5.11 -> 0.7.48 on 2026-09-08 (Phil): gxl.ai serves only the latest wheel and 0.5.11 is no longer downloadable; the retrieval profile does not invoke the paperclip CLI at runtime (BM25 corpus, adjudicator-only), so the pin is bumped to the installed version rather than blocking. Load-bearing only for the paperclip/agentic profiles."
   },
   "deliberately_excluded": {
     "src/prompts/adjudicator-dispatch.md": "superseded by the Sarol variant for this experiment (OQ1)",
