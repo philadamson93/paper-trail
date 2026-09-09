@@ -20,6 +20,74 @@ The adjudicator picks exactly one per sub-claim. The names below are the contrac
 - **ETIQUETTE** — citation style is ambiguous; unclear from the citing sentence what specifically is being cited to this paper. Predominantly a multi-citation issue.
 - **IRRELEVANT** — no information in the cited paper relevant to the claim.
 
+## Applying the labels — boundary tests
+
+These tests decide the boundaries the one-line definitions above leave open. They exist because the
+most common error on this task is **over-strictness**: downgrading a citation the source actually
+supports. Read them before assigning any label other than ACCURATE.
+
+### The ACCURATE test — substance, not wording
+
+A citation is **ACCURATE** when the source substantively supports the proposition the citing
+sentence attributes to it. Apply this three-step test before considering any downgrade:
+
+1. **Name the proposition** the citing sentence attributes to *this* source (only this source — see
+   the attribution procedure under multi-citation below).
+2. **Look for a passage** in the retrieved evidence that a careful reader would plainly accept as
+   asserting that proposition.
+3. If such a passage exists, the verdict is **ACCURATE** — even when the citing sentence is more
+   concise, paraphrases, drops a hedge, or uses broader everyday framing — *unless* the dropped
+   detail is load-bearing (see the OVERSIMPLIFY test).
+
+Do not require the claim to restate the source's caveats, and do not require the source to prove more
+than the claim asserts. Concretely: naming a drug, mechanism, or association that the source
+documents is ACCURATE even if the claim omits the source's qualifiers; a hedged claim ("may be",
+"could be", "candidate") is supported by a source that reports the phenomenon as observed; and do not
+invent a stronger assertion than the sentence actually makes (e.g. do not demand proof of clinical
+efficacy when the claim only names a drug, or proof of statistical independence when the claim only
+calls something a candidate predictor).
+
+### OVERSIMPLIFY vs ACCURATE — the materiality test
+
+**OVERSIMPLIFY applies only when the gap between what the source supports and what the claim asserts
+is *material*** — i.e. when restoring the source's qualifier, scope, or degree would change whether
+the source supports the claim. Decision test: *would a reader of the claim alone believe something
+the source does not support?*
+
+- If **no** — the omitted detail (a percentage, a hedge, a broader framing) does not reverse or
+  materially weaken the asserted proposition — the verdict is **ACCURATE**. Examples: source
+  "restores activity to 10–50%", claim "restores activity" → ACCURATE, the degree is not load-bearing
+  to the asserted fact; source "protective association, consistently observed (with dose-response
+  caveats)", claim cites the protective association → ACCURATE.
+- If **yes** — the source's finding holds only under a condition, scope, or degree the claim drops —
+  the verdict is **OVERSIMPLIFY**. Example: source shows an effect only in rodents, claim states it
+  as a general fact about mammals without qualification → OVERSIMPLIFY, the species restriction is
+  load-bearing.
+
+### NOT_SUBSTANTIATE vs IRRELEVANT — is there partial support at all?
+
+**NOT_SUBSTANTIATE requires that the source actually addresses the claim's specific subject and gives
+*partial* support** — some parts confirmed, a key element missing. It is not the default label for a
+citation you cannot confirm.
+
+Test: can you point to a passage in *this* source that supports at least one part of the claim's
+specific proposition? If **no such passage exists — even when the source is on a topically adjacent
+subject** (claim about stroke, source about coronary heart disease; claim about a chemotherapy-induced
+change, source about a drug's metabolic mechanism) — there is no partial support, and the verdict is
+**IRRELEVANT**, not NOT_SUBSTANTIATE. Topical adjacency is not partial support.
+
+### Empty or off-topic evidence window
+
+The evidence you are given was selected by keyword retrieval, not by you, and it can be empty or miss
+the relevant passage even when the paper contains it. An empty or off-topic window is **not** evidence
+that the paper contradicts or fails the claim.
+
+- If the window is empty or contains no passage on the claim's subject: you have no basis to assert a
+  not-accurate verdict. If the citing sentence states an ordinary factual claim and nothing retrieved
+  opposes it, prefer **ACCURATE** over manufacturing NOT_SUBSTANTIATE, OVERSIMPLIFY, or ETIQUETTE.
+- If the window contains on-topic passages that genuinely fail to support the claim: the not-accurate
+  labels apply as usual.
+
 ## Rollup (per citation instance = per (claim, cited_paper) pair)
 
 When the citing claim is decomposed into multiple sub-claims, reduce to one paper-level label by **worst-wins** strictness order:
@@ -36,7 +104,15 @@ Exception: a single-sub-claim citation gets that sub-claim's label directly (pre
 
 When the citing sentence contains `<|multi_cit|>` — i.e., the evaluated citation is part of a `[1,2,3]`-style cluster — the adjudicator must verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
 
-When a citation is grouped ambiguously such that no sub-claim can clearly be attributed to a single source, prefer ETIQUETTE.
+**Attribution procedure — do this before assigning any verdict on a multi-citation sentence.** First split the sentence into propositions and decide which belong to *this* source. Signals that a proposition belongs to a **sibling** citation and must be excluded from this source's verdict:
+
+- it is tied to a specific other citation marker or author name inside the citation group (e.g. "…as shown by Maezawa and Jin, [CIT];" — the named authors and the trailing semicolon mark a sibling's proposition);
+- it concerns a subject that none of the passages retrievable from this source address, while a sibling plausibly covers it;
+- it reports an aggregate the citing review itself computed ("4 of 27 studies…"), which is the citing author's synthesis, not a claim this single source makes.
+
+Do **not** count such a proposition against this source. Judge this source only on the propositions attributable to it; if those are supported, the verdict is **ACCURATE**.
+
+When a citation is grouped so ambiguously that no proposition can be confidently attributed to a single source — **including a single-citation sentence where it is unclear which clause the marker attaches to** — the verdict is **ETIQUETTE**. Despite the "predominantly a multi-citation issue" note above, ETIQUETTE is not restricted to multi-citation clusters.
 
 ## 3-way collapse
 

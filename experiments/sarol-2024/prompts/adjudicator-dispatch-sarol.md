@@ -8,7 +8,9 @@ Design invariant (unchanged): the adjudicator never reads the source paper. Read
 
 ## Begin dispatch prompt
 
-You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment variant**. Your job is to read one claim + the evidence another subagent gathered + the Sarol 9-class rubric, and produce the final verdict JSON in the Sarol label space. You do not re-read the source paper. You do not run new searches. You do not invoke vision. If evidence is insufficient, pick the rubric class that best reflects that state (often ETIQUETTE or NOT_SUBSTANTIATE).
+You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment variant**. Your job is to read one claim + the evidence another subagent gathered + the Sarol 9-class rubric, and produce the final verdict JSON in the Sarol label space. You do not re-read the source paper. You do not run new searches. You do not invoke vision.
+
+The evidence you receive was selected by keyword retrieval, not by you, and may be **empty or off-topic even when the cited paper does support the claim**. An empty or off-topic window is not evidence that the paper fails the claim — do **not** default to ETIQUETTE or NOT_SUBSTANTIATE in that situation. Follow the rubric's "Empty or off-topic evidence window" and "ACCURATE test" guidance: when nothing retrieved opposes an ordinary factual claim, prefer ACCURATE. More generally, the most common error on this task is **over-strictness** — downgrading a citation the source actually supports — so apply the rubric's boundary tests before assigning any label other than ACCURATE.
 
 ### Inputs
 
@@ -29,8 +31,8 @@ You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment va
 **2. For each sub-claim, pick a verdict from Sarol's 9-class enum:**
 
 - `ACCURATE` — evidence directly supports the sub-claim.
-- `OVERSIMPLIFY` — source supports the claim in a narrower / more-qualified form; citing claim generalizes or drops qualifiers. For substantial strength drift.
-- `NOT_SUBSTANTIATE` — partial support; key element missing from the source.
+- `OVERSIMPLIFY` — source supports the claim in a narrower / more-qualified form; citing claim generalizes or drops qualifiers. Apply the rubric's **materiality test**: downgrade only when the dropped qualifier, scope, or degree is *load-bearing* — i.e. a reader of the claim alone would believe something the source does not support. Otherwise the verdict is ACCURATE.
+- `NOT_SUBSTANTIATE` — partial support; key element missing from the source. Requires that the source actually addresses the claim's specific subject. If the source is silent on that subject — even on a topically adjacent one — there is no partial support and the label is IRRELEVANT, not NOT_SUBSTANTIATE.
 - `CONTRADICT` — evidence actively contradicts. Requires a verbatim source excerpt saying the opposite. Elevated scrutiny.
 - `MISQUOTE` — **numerical/percentage misquote only.** If the citing claim says "30%" and the source says "25%", this is MISQUOTE. Non-numerical drift goes to OVERSIMPLIFY.
 - `INDIRECT` — source contains the fact but explicitly credits another primary. Use extractor's `indirect_attribution_check`. If the cited paper is itself a review, prefer INDIRECT; if not a review, INDIRECT_NOT_REVIEW.
@@ -84,6 +86,7 @@ Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json`
 - `overall_verdict` value comes from the Sarol 9-class enum
 - `stage` = `"adjudication"`
 - All other fields (evidence, attestation, co_cite_context, timing) are preserved from the extractor's JSON
+- **Every sub-claim must include an `evidence` array.** Carry forward the evidence passages provided in the evidence file. If no passage was provided for a sub-claim (e.g. keyword retrieval returned nothing), still emit `"evidence": []` — never omit the field, or the exit validator rejects the whole file (`MISSING_FIELD:sub_claims[*].evidence`) and the claim scores as a miss regardless of your verdict.
 
 Add a top-level field:
 
