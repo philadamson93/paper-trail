@@ -27,8 +27,30 @@ This is enforced, not merely conventional: `commit_new_version` stages **only** 
 | | Files | Who edits it |
 |---|---|---|
 | **Program, editable** | `prompts/adjudicator-dispatch-sarol.md`, `specs/verdict_schema_sarol.md`, and the 3 extractor/verifier prompts under `src/prompts/` | **The optimizer**, during a run |
-| **Program, frozen** | `specs/verdict_enum_sarol.md`, `src/specs/verdict_schema.md`, `src/specs/verifier_results.md` | Nobody during a run; humans between runs |
+| **Program, frozen** | `specs/verdict_enum_sarol.md`, `specs/verdict_definitions_sarol.md`, `src/specs/verdict_schema.md`, `src/specs/verifier_results.md` | Nobody during a run; humans between runs |
 | **Machinery** | `prompt/`, `context/` (6 docs), `findings/`, `meta-learnings.md`, and the `.py` files beside this README | **Us** |
+
+⚠ **"Program, editable" is not editable all the way down.** The rubric's **eight class definitions are
+the paper's verbatim text** (Sarol et al. 2024 §2.2 / Table 1) and are not the optimizer's to reword;
+what is editable is the house layer around them — boundaries, tie-breaks, decomposition,
+multi-citation attribution, rollup — and that layer is marked as house text in the file. The same
+eight definitions are inlined in the dispatch prompt, because the judge reads both documents in one
+session and a divergence between them would silently defeat the scheme. `verdict_definitions_sarol.md`
+holds the same text plus its provenance and is frozen; the rubric is the single *operative* copy.
+
+This distinction is not decorative. Three of those definitions had silently diverged from the paper —
+all by our own additions — and five optimizer iterations hill-climbed on top of them before the
+divergence was found. `scripts/check_paper_fidelity.py` is the guard: it asserts the eight verbatim
+definitions everywhere the judge can read them, and fails if a retired clause reappears.
+
+### Three record surfaces, not two
+
+`findings/iter-<n>.md` is run-local per-iteration detail and is not committed. `meta-learnings.md`
+carries **verified reusable** heuristics only, dated, and is committed. `docs/journal/` is the curated
+cross-run record — **the optimizer never writes it**; promotion out of `findings/` happens at landing,
+under human curation. The routing rule lives in
+`experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`; the other two files restate it
+and must be kept in step.
 
 A run's **profile** narrows the program further. Under `retrieval` — the only profile any run has used
 — just the adjudicator and the rubric are live; the three extractor/verifier prompts are

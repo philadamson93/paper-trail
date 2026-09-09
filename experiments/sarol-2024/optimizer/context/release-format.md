@@ -270,8 +270,30 @@ a guess. The automation is what is missing, not the discipline.
 
 ## When the release is not there at all
 
-**All three iterations of the 2026-09-02 run landed here**, and each reconstructed the same recipe
-from scratch, so it is written down now. If `iter/<n>/release_train.json` does not exist:
+⚠ **First, verify the absence — do not infer it.** Five consecutive iterations of the 2026-09-09 run
+reported "no release files were written" and every one of them was **wrong**: the files were on
+disk the whole time, and the sessions had looked in the wrong place. Reaching this section on a false
+absence costs an entire iteration, so the check comes before the recipe.
+
+**Where the releases actually are:** `iter/<n>/release_{train,val}.json`, relative to **the loop
+clone — your own working directory, the repository root you are editing in.** The engine writes both
+before your session starts (`engine/loop.py`, immediately after it builds the payloads), and the
+dispatcher passes the `loop_ops` handle that enables the write on every real run, with a
+negative-controlled regression test guarding that seam.
+
+**Where they are not:** the persisted run tree under `~/.paper-trail/runs/<run-id>/`. That tree keeps
+`run_summary.json`, `train/`, `val/`, `mistakes/` and the materialized program snapshots — it does
+**not** retain the per-iteration release payloads. Not finding them there is expected and is **not**
+evidence of absence. That is precisely the wrong root the five iterations searched.
+
+So before you conclude the release is missing, run the check from your working directory:
+
+```
+ls iter/<n>/release_train.json iter/<n>/release_val.json
+```
+
+If that resolves, the release exists — read it and carry on; nothing below applies. **Only if that
+check fails** does the recipe below apply:
 
 1. **Do not treat it as a zero, a regression, or a signal about the program.** A release that was
    never written says nothing about how the program scored. It is the same class of event as
@@ -289,8 +311,11 @@ from scratch, so it is written down now. If `iter/<n>/release_train.json` does n
    number is a fact the next iteration needs, and it is invisible in the frontier.
 
 The underlying cause of the 2026-09-02 instances has since been fixed — `run_optimization` was
-calling `run_loop` without `loop_ops`, so the release files were never written. It is recorded here
-because a missing release will happen again for some other reason, and the recipe is the same.
+calling `run_loop` without `loop_ops`, so the release files were never written. **That bug is closed
+and regression-tested**; do not carry forward any inherited note claiming that missing releases are
+normal or expected. They are not, and treating them as normal is what produced the five false
+absences above. The recipe is kept because a missing release will happen again for some *other*
+reason — but it is now gated behind the verify-absence check at the top of this section.
 
 ## Schema stability
 

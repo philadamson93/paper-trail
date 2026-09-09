@@ -95,6 +95,16 @@ The nine labels: `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADI
      `execution` says the rule exists and needs to be made harder to skip (moved earlier, stated as
      a check, given a worked example). Collapsing them is how an iteration adds a rule that was
      already there.
+
+     ⚠ **This is the one blame you may not assign from the fields alone. Open the trace first**
+     (step 5 below) **and quote the point where the procedure was abandoned.** If you cannot find
+     that point in the trace, the rule was *not* skipped — and the blame is `rubric`, or the rule
+     was followed and is wrong. This is a hard requirement because the alternative has already been
+     measured: five iterations blamed execution without opening a single trace, and when the traces
+     were finally read they showed **92% ordered-gate compliance**. Four iterations of "state the
+     rule more forcefully" went into rules that were already being obeyed. Restating an obeyed rule
+     cannot help. An `execution` record without a trace quote in its `evidence_cue` will be read as
+     `unclear`.
    - **retrieval** — the evidence needed to reach the gold label was not in the window the judge
      saw. On this pipeline the judge is handed a keyword-retrieved subset of the cited paper and is
      **not told that it is a subset**, so it can report a fact as absent from the paper when the
@@ -110,12 +120,22 @@ The nine labels: `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADI
      be described as "rare", and that word alone was enough to break a tie the evidence did not.
    - **unclear** — the record does not tell you. Better than a guess.
 
-5. **Open a reasoning trace only if you must.** Each corpus row carries `trace_ref`: a path to the
-   judge's own session transcript for that claim, openable directly. It is the full reasoning and it
-   is large. Open one when the fields above genuinely cannot tell you why the judge concluded what
-   it did — one or two across your whole slice, not one per claim. Opening them by default will
-   exhaust your budget before it teaches you anything. When `trace_ref` is `null` the transcript was
-   not captured; that is not a finding, just an absence.
+5. **Open a reasoning trace when the blame turns on what the judge did.** Each corpus row carries
+   `trace_ref`: a path to the judge's own session transcript for that claim, openable directly. It
+   is the full reasoning and it is large, so this is not a read-everything instruction — it is a
+   read-the-deciding-ones instruction:
+
+   - **Mandatory** before you record an `execution` blame. Quote the point where the procedure was
+     abandoned, in `evidence_cue`. No quote, no `execution`.
+   - **Worth it** whenever the fields above cannot tell you why the judge concluded what it did, and
+     whenever `rubric` and `execution` both look plausible — that is precisely the pair the trace
+     separates and the fields cannot.
+   - **Not needed** when the record is already unambiguous (a clean `retrieval` keyhole, an obvious
+     `decomposition`).
+
+   Budget it: a few across your slice, concentrated on the blames that turn on judge behaviour, not
+   one per claim. When `trace_ref` is `null` the transcript was not captured — say so and fall back
+   to `rubric` or `unclear`; a missing trace is never itself evidence of a skip.
 
 ## What to return
 

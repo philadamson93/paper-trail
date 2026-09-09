@@ -212,6 +212,29 @@ Two consequences you will meet in the failures:
   and the indirect-attribution check is null. Both are real differences from the agentic profile, not
   oversights, and both are confounds when a cross-profile delta is quoted.
 
+### A thin evidence window is not automatically a ceiling
+
+Stated plainly because the largest single error mode in this loop — roughly **31% of misses, in both
+directions** — is window-silence read as paper-absence, and because the obvious response to it is the
+one thing you cannot do.
+
+**Under the `retrieval` profile the window is a fixed experimental condition and is not yours to
+change.** BM25, top-20, one query. That fixity is deliberate: it isolates judgment from acquisition so
+that Phase 1 measures the adjudicator alone. It is not an oversight to be engineered around, and
+proposing a different `k`, a different ranker, or a second query is proposing to leave the experiment
+rather than to improve the program.
+
+**So ask the question you can actually act on: can the program decide correctly *given* an incomplete
+window?** That is program work and it is entirely yours. A judge that distinguishes "the retrieved
+passages do not mention X" from "the paper does not contain X" scores better on the same window — no
+extra evidence required. `sub_claims[].evidence[].locator` is how you tell a keyhole from broad
+coverage.
+
+**When the window itself is genuinely the binding constraint, say so and stop there.** Name it in your
+findings entry as a Phase-2 question. Do not work around it by bending the rubric — a rule that tells
+the judge to assume absence means failure, or to assume it means support, is a rule tuned to a
+retrieval artifact rather than to the annotation scheme, and it will not survive the window changing.
+
 ## Per-claim budget
 
 Cost per claim follows the profile: one nested session under `retrieval` (the adjudicator alone),

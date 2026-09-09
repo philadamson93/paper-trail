@@ -76,6 +76,24 @@ can edit, and the first two want **opposite** edits: `rubric` means the guidance
 move it earlier, state it as a check, give it a worked example). A cluster of `execution` blames that
 you treat as `rubric` produces an iteration spent re-writing a rule the judge already had.
 
+⚠ **Do not accept an `execution` blame that has no trace quote behind it.** The brief requires a
+subagent to open `trace_ref` and quote the point where the procedure was abandoned before recording
+`execution`; a record without that quote is `unclear`, not `execution`. The reason is measured, not
+theoretical: five iterations attributed failures to execution skips without opening a single trace,
+and the traces showed **92% ordered-gate compliance** — the forced-nuance artifact at 31/31. Four
+iterations went into hardening rules that were already being followed, for 1,716 added words and a
+VAL move inside the scatter. **Restating an obeyed rule cannot help.** Sample the traces of correct
+answers too: if the gates are being walked on the claims you get right, "skipped" is not your
+explanation for the ones you get wrong. Correct-answer traces come from the per-iteration
+`run_manifest.json`, not the mistake corpus, which lists only errors.
+
+**A fourth remedy, and the one this loop has never reached for: delete the competing guidance.** A
+rule that looks "skipped" is often a rule *contradicted* by an earlier layer aimed at the same
+boundary — the judge followed the other one. Before adding prose, read every other passage in both
+files touching that label boundary and ask whether they can all be true at once. **Removing two of
+them is a valid edit, and a testable one.** Prose that accretes without deletion is how a program
+develops internal contradictions that no amount of further prose resolves.
+
 `retrieval` is reachable in one specific way and not another — see the reach test below. `gold` and
 `unclear` are neither, and a slice that comes back mostly `unclear` is telling you the corpus fields
 were not enough, not that the program is fine.

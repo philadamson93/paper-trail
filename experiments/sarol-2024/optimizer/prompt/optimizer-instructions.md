@@ -8,6 +8,34 @@ iteration actually needs.
 **Every path in this document, and in the documents it names, is relative to your working
 directory, which is the repository root.**
 
+## Gold is the objective; every definition is a hypothesis
+
+**Gold is the objective. Always target the gold labels.** The nine label *names* and the 9→3 collapse
+come from the benchmark and are frozen. Everything that says what those names *mean* is a
+**hypothesis about how gold uses them** — never an authority over gold. Where a definition and gold
+disagree, the definition is what is wrong.
+
+Two layers, and you should know which you are reading:
+
+- **The eight paper definitions are quoted verbatim** from Sarol et al. 2024 §2.2 / Table 1 — the
+  annotation scheme gold was produced under. They are reconciled against the paper and are not
+  yours to reword. (`INDIRECT_NOT_REVIEW` is a ninth, house definition, marked as such where it
+  appears.) They are still only a hypothesis: annotators applied the scheme, and how they applied it
+  is what gold records.
+- **Everything else in the rubric is house text** — ours, editable, and the point of this loop. It is
+  marked as house text. That is the layer you sharpen.
+
+⚠ This distinction exists because we got it wrong once, expensively. Three of our definitions had
+silently diverged from the paper — all by our own additions, all in the judge's read path — and five
+iterations hill-climbed on top of them. The two worst-precision classes were exactly the two we had
+mis-transcribed. So: **do not "improve" a paper definition by appending a test the paper does not
+make.** If you add a clause, it is house text and must be marked as house text where it lives.
+
+You have full per-claim gold for the TRAIN batch: **derive the boundaries from how gold actually uses
+them** rather than reasoning from the words you inherited. If you believe a specific gold label is
+indefensible, log it in this iteration's findings entry — one label, with the evidence quote and your
+reasoning — and move on. Do not build rules around the belief that gold is wrong.
+
 ## The program and the task
 
 Given a citing sentence and one paper it cites, the program emits one verdict from a fixed
@@ -37,10 +65,16 @@ predicted label equals the gold label — nothing collapsed, nothing renormalise
 reported as `primary_metric` under the name `sarol_accuracy_9class`. It is the key the adapter
 emits, so it is the key you read.
 
-**Compare it against 0.595, never against zero.** Gold is 59.5% ACCURATE on the dev pool, so a
-program that answers ACCURATE every time and does no work scores 0.595. The release reports that
-floor as `do_nothing_floor`, computed from the batch's own gold, so you never have to remember it.
-An accuracy of 0.62 is not "62% right", it is **2.5 points of work** on top of a free 59.5.
+**Compare it against `do_nothing_floor`, never against zero — and read that key, do not remember a
+number.** A program that answers ACCURATE every time and does no work scores the floor. The release
+computes it from *your batch's own gold*, so it is right for the batch you are actually on.
+
+⚠ **Do not carry forward 0.595.** That is the floor over the whole 311-claim dev *pool*; your 50-claim
+VAL batch is drawn from it and is not distribution-preserving. On the 2026-09-09 VAL roster gold is
+ACCURATE 35 of 50, so the floor there is **0.70**. The best program this loop has produced scored
+**0.62** — *below its own floor*. An accuracy of 0.62 is not "62% right" and it is not eleven points
+of work; on that batch it is eight points behind doing nothing. Read `do_nothing_floor` every
+iteration and state the gap against it, signed.
 
 **The cost of this objective, stated plainly so you can plan around it.** Accuracy is dominated by
 the common classes. MISQUOTE and INDIRECT have six dev instances each, so getting both perfectly
@@ -72,17 +106,19 @@ INDIRECT   INDIRECT_NOT_REVIEW   ETIQUETTE   IRRELEVANT
 The set itself is frozen in `experiments/sarol-2024/specs/verdict_enum_sarol.md`, which the judge
 loads on every claim. You may not add, remove or rename a label.
 
-What each label means to the benchmark's annotators is transcribed in
+The paper's own definitions, verbatim and with their provenance, are in
 `experiments/sarol-2024/specs/verdict_definitions_sarol.md`. ⚠ **The judge never opens that file** —
 it is not in the manifest and not in the judge's context. It is a reference for you and for your
 blame subagents, useful when asking whether a gold label is defensible, and useless as an explanation
-of why the judge decided anything. Do not edit it; it is what the gold means, not what the program
-was told.
+of why the judge decided anything. **Do not edit it, and do not treat a divergence from it as
+harmless:** the rubric carries the same eight definitions verbatim and is the operative copy the
+judge reads. If the two ever differ, that is a defect to report, not a change to keep.
 
-**The clarifications layer beside them is yours.**
-`experiments/sarol-2024/specs/verdict_schema_sarol.md` holds how to *apply* the definitions —
-boundaries, worked examples, tie-breaks, decomposition, multi-citation handling — and sharpening it
-is much of the point of this loop. See `experiments/sarol-2024/optimizer/context/edit-surface.md`.
+**The house layer around those definitions is yours.**
+`experiments/sarol-2024/specs/verdict_schema_sarol.md` holds how to *apply* them — boundaries, worked
+examples, tie-breaks, decomposition, multi-citation handling — and sharpening it is much of the point
+of this loop. What you may not do there is reword one of the eight paper definitions. See
+`experiments/sarol-2024/optimizer/context/edit-surface.md`.
 
 An out-of-enum label is not a crash: it is charged as a miss against whatever the gold class was
 and counted under `invalid_label`. It will not break the run, it will just cost you.
@@ -110,9 +146,12 @@ edit, which verdict classes it predicted would move and in which direction. Chec
 `per_class_f1_9way` in the release you have just been handed. (`per_class_f1` carries only the three
 collapsed buckets and cannot answer a nine-class prediction.)
 
-Write down, for each prediction: **held / did not hold / not drawn.** "Not drawn" is a real third
-answer — TRAIN is re-drawn every iteration, so a class with no instances this time was not tested,
-and absence is not evidence of a fix.
+Write down, for each prediction: **held / did not hold / could not tell.** The third answer is real
+and is not a cop-out — use it when the class had too little support to say (check `support_9way`), or
+when the move was inside the instrument's own scatter. ⚠ Do **not** reach for it on the assumption
+that the class "was not drawn": TRAIN has in practice been the *same* 50 claims every iteration
+(pairwise Jaccard 1.000 across the 2026-09-09 run), so absence is usually a real absence. Read
+`train/draw_history.json` rather than assuming either way.
 
 This is the step that makes the loop a loop. Skip it and you are running the first iteration again
 with more history. On iteration 1 there is no predecessor: say so and go to step 2.
@@ -166,6 +205,22 @@ four or more is established; the band in between takes judgement.
 `experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` has the table and the
 tie-breakers.
 
+**Before you attribute a failure to the judge not following the program, open the trace.** Every
+record in the mistake corpus carries `trace_ref` — the judge's full session. Read it. Two failures
+look identical in the label and need opposite fixes: the judge *ignored* a rule, or the judge
+*followed* it and the rule was wrong. If you cannot point to where in the trace the procedure was
+abandoned, it was not skipped — and restating the rule more forcefully cannot help, because it was
+already obeyed. Sample the traces of correct answers too: if the gates are being walked on the claims
+you get right, "skipped" is not your explanation for the ones you get wrong.
+
+⚠ This is not hypothetical. Five iterations attributed failures to execution skips without opening a
+single trace; when the traces were finally read they showed **92% ordered-gate compliance**, and four
+iterations' worth of hardening had gone into rules that were already being followed. `trace_ref` may
+legitimately be null, and the mistake corpus lists **only errors** — for a correct-answer trace, read
+the per-iteration `run_manifest.json`, which carries the verdict for every claim in the batch, not
+just the misses. If neither is available for a claim, say the trace was unavailable; do not silently
+fall back to assuming a skip.
+
 ### Step 5 — propose, then edit
 
 For the modes that carry real mass, brainstorm fixes that address the **mechanism** — a fix that
@@ -183,6 +238,26 @@ The sweep costs the same whether the iteration carries one edit or twelve, so a 
 iteration is not the cautious choice, it is the expensive one. Edits aimed at the same verdict class will not be
 individually attributable next iteration — that is accepted; say in your predictions that you are
 testing them jointly and predict the joint movement.
+
+**Bundle freely, but prefer a separable shape.** If two edits target *different* label boundaries,
+per-class movement attributes them for free — that shape costs you nothing and buys you attribution,
+so reach for it when the evidence allows. If a bundle regresses, spend the next iteration isolating
+rather than adding. **A repeat measurement of an unchanged program is also a legitimate iteration**;
+it is the only thing that separates a real move from scatter.
+
+**Fourth remedy — delete the competing guidance.** A rule that looks "skipped" is often a rule
+contradicted by earlier layers aimed at the same boundary. Before adding prose, read every other
+passage in both files touching that label boundary and ask whether they can all be true at once.
+Removing two of them is a valid edit, and a testable one. Subtractive edits are under-used here: the
+single highest-value change made to this program was the deletion of three clauses, not an addition.
+
+⚠ **Not every defect is a prompt defect, and a no-edit iteration is a terminal stop.** When this
+iteration's highest-mass failure mode is not fixable by editing the program, **write your findings
+entry, state plainly that no program edit is warranted and why, and stop.** The run halts for human
+triage — that is a legitimate, reportable outcome, not a failure. Do not invent a cosmetic edit to
+keep the loop alive. Know what this costs before you choose it: the engine stages only manifest
+entries, so an iteration that changes none of them raises `EmptyCommitError`, which the loop converts
+into a terminal stop. The run ends there. That is the intended behaviour, not a crash.
 
 ⚠ **The loop is forward-only.** Nothing reverts a regressing edit; version *n+1* is built on version
 *n* whatever it scored, and declaring a step-back does nothing. An edit you doubt is a liability you
@@ -202,37 +277,92 @@ Nothing scores your predictions back to you — there is no automated channel an
 check happens because step 1 of the next iteration does it by hand. That is why the prediction has
 to be specific enough to be wrong: "accuracy should improve" cannot fail.
 
-## The two records, and what goes in which
+**Write it as a prediction record**, not a sentence of hope. Per edit: the class or boundary you
+expect to move, the direction, and **the observable you will read next time** — a named
+`per_class_f1_9way` entry, the VAL trend, or a specific `claim_id`'s label. Next iteration resolve
+each as **held / did not hold / could not tell** — three outcomes, and the third is not a cop-out.
+"Could not tell" is the honest answer when the class had too little support (check `support_9way`) or
+the move was inside the instrument's scatter. A prediction you can only half-grade was not specific
+enough; say so, and write a sharper one.
+
+## The three record surfaces, and what goes in which
+
+Three places, mutually exclusive scopes. Route by scope, not by how important the thing feels.
+
+| surface | scope | who writes | committed |
+|---|---|---|---|
+| `experiments/sarol-2024/optimizer/findings/iter-<n>.md` | run-local per-iteration detail: metrics, blames, modes, edits, predictions | you, every iteration | no |
+| `experiments/sarol-2024/optimizer/meta-learnings.md` | **verified reusable** optimization heuristics only, each dated | you, when a lesson generalizes | yes |
+| `docs/journal/` | curated cross-run decisions and postmortems | a human, or the landing process promoting a finding | yes |
 
 - **`experiments/sarol-2024/optimizer/findings/iter-<n>.md` — this iteration.** Per-example blames,
   the modes you clustered, the hypotheses, the edits, the predictions. It may be long; it is one
-  iteration's working notes and nothing reads it in bulk.
+  iteration's working notes and nothing reads it in bulk. **This is also where a defect you cannot
+  fix goes** — a suspected-wrong gold label, a harness bug, a window you could not work around.
 - **`experiments/sarol-2024/optimizer/meta-learnings.md` — across iterations.** What is and is not
   working about optimizing *this task*: which kinds of edit have moved the number and whether the
   previous
   iteration's prediction held, what you deleted and whether it mattered. Keep it concise — it is
   injected reading for every future iteration, and a log of per-example blames in here makes it
-  useless.
+  useless. **Date every entry.**
+- **`docs/journal/` — the committed cross-run record.** ⚠ **You do not write here.** Promotion out of
+  `findings/` into the journal happens at landing, under human curation. Writing a journal entry per
+  suspected defect would duplicate `findings/` and bypass that curation.
 
 The test: if it is about *these examples*, it is a finding. If it is about *how to optimize this
-task*, it is a meta-learning.
+task*, it is a meta-learning. If it is about *this run's harness* rather than the task, it is a
+finding too — harness observations are never promoted into
+`experiments/sarol-2024/optimizer/meta-learnings.md`.
+
+## Verify what you inherited
+
+**`experiments/sarol-2024/optimizer/meta-learnings.md` was written by your predecessors and nothing
+checks it.** Before relying on any claim in it about where a file is, what the harness wrote, or how
+batches are drawn, verify it — one `ls` is cheaper than an iteration. If an inherited claim is false,
+**delete it and say you deleted it.**
+
+This is not a precaution, it is a bill already paid: three false instrument facts propagated across
+five iterations, and one of them ("no release files are written — this is now the norm") caused every
+iteration to skip an artifact that was sitting on disk the whole time.
+
+Lessons about the rubric and the judge belong in
+`experiments/sarol-2024/optimizer/meta-learnings.md`. Observations about *this run's*
+harness belong in this iteration's findings entry and are **never** promoted.
+
+**The artifacts you actually have** — check these exist before concluding one is missing:
+
+- `iter/<n>/release_{train,val}.json` — this iteration's release payloads, under the repository root,
+  written **before** your session starts.
+- `run_summary.json` — every version's VAL scalar, so you can read a trend rather than a step.
+- the per-iteration `run_manifest.json` — per-claim cost, duration, status, and the verdict for
+  **all** claims in the batch, not just the misses. This is the only source of correct-answer traces.
+- `train/draw_history.json` — which claims each iteration actually drew.
+- `trace_ref`, per record in the mistake corpus — the judge's full session for that claim.
 
 ## Simplicity criterion
 
 Prefer the simpler program when two versions score the same. Prompt length is a cost: it raises
 per-claim tokens, slows every run, and makes the next failure harder to localize.
 
-**"The same" needs a number, since nobody has measured this program's noise floor and nobody is
-going to.** Use the sampling error of the batch you are looking at: for accuracy on *n* claims that
-is roughly `1/sqrt(n)` — about **0.14 at n=50, 0.10 at n=100, 0.06 at n=311**. Treat a difference
-smaller than that as no difference at all.
+**The noise floor is measured, not derived.** It has now been measured directly, so do not estimate
+it from a sampling formula. Re-scoring a **byte-identical** program on the **same 50 VAL claims**
+produced **0.48 and 0.42** — the two `iter1-current` snapshots hash the same over all eight program
+files, drew the same roster, and still disagreed on **16 of 50 labels** (32% churn). A single
+iteration's move is usually smaller than the instrument's own scatter.
 
-Two things follow, and the first is uncomfortable. **At n=50 almost nothing you do is individually
-measurable**; a single iteration's move is usually inside the band. That is an argument for judging
-edits on their mechanism and their direction over several iterations, not for chasing a number that
-cannot resolve them — and for reading the rare-class movement in `per_class_f1_9way`, which is
-noisier still but at least tells you *what* moved. And an edit that adds thirty lines of guidance
-for a gain inside the band is not an improvement, it is a cost you have not noticed paying.
+**This does not make the metric useless.** A trend across several iterations is real signal even when
+no single step is: v0→v5 is significant at p=0.021 while every individual step is not. So read
+direction off the trend across **three or more** iterations, and off per-class movement in
+`per_class_f1_9way` where support allows (check `support_9way` — that field is what tells you whether
+a class had enough instances to say anything).
+
+**What a single sub-band step does not license is a reversal of direction.** If VAL fell by less than
+the scatter, you have **no information** about that edit — not evidence against it. Do not undo an
+edit on a sub-band dip; the loop is forward-only and the undo is itself an untested change.
+
+This loosens as TRAIN and VAL grow — check the current `n_total` rather than assuming n=50 forever.
+And an edit that adds thirty lines of guidance for a gain inside the scatter is not an improvement,
+it is a cost you have not noticed paying.
 
 When you delete something, say so in `experiments/sarol-2024/optimizer/meta-learnings.md` — a
 shrinking prompt that scores the same

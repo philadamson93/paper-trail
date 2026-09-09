@@ -106,6 +106,10 @@ unmatched rows stay excluded. Pools are now **2076 TRAIN / 311 dev**.
 
 ### The one table: what a do-nothing program scores, on every axis
 
+⚠ **Read the warning under this table before you use any number in it.** The table is computed over
+the whole **drawable dev pool, n=311** — roughly six times the batch you are actually scored on — and
+the do-nothing floor on your real batch is materially *higher* than the 0.595 below.
+
 One fixture, one pool, every number in one place — the **repaired drawable dev pool, n=311**. The
 program is "emit `ACCURATE` for every claim and do no work". All measured, not estimated, and pinned
 by `score_sarol3.py --selftest`.
@@ -122,6 +126,19 @@ The 3-way gold distribution underlying it — `ACCURATE` **185 (59.5%)**, `NOT_A
 (21.5%)**, `IRRELEVANT` **59 (19.0%)**. The `IRRELEVANT` row used to read 1.8%; that was the
 deleted-classes bug, not the benchmark, since `ETIQUETTE` and `IRRELEVANT` both collapse into it and
 both were being filtered out.
+
+⚠ **This pool is not your eval set, and the difference is the whole ballgame.** You are scored on a
+**50-claim VAL batch drawn from this pool**, and the draw is not distribution-preserving. Measured on
+the 2026-09-09 VAL roster: gold is `ACCURATE` **35 of 50**, so the always-`ACCURATE` do-nothing floor
+on that batch is **0.70**, not 0.595.
+
+**The best program this loop has produced scored 0.62 — below its own do-nothing floor.** Treating
+0.595 as the bar makes a 0.62 look like eleven points of work when it is in fact eight points
+*behind* answering `ACCURATE` every time. Do not quote 0.595 as your floor.
+
+**Always read `do_nothing_floor` from the release instead.** It is computed from *your batch's own
+gold*, so it is right by construction and it moves when the draw moves. The number in the table above
+is a property of the pool, useful for understanding the task's shape and useless as a target.
 
 **Why `micro_f1` reads the same as the objective here, and will not once you do any work.** Both are
 accuracy; they differ only in whether the labels are compared before or after the 3-way collapse. A

@@ -91,16 +91,29 @@ has. Run the discovery fan-out (step 3) against it and let the modes come from t
 nothing to check on iteration 1; say so and move on. From iteration 2 onward you have a
 real prior and the normal loop applies.
 
-## VAL is fixed; TRAIN is not
+## VAL is fixed — and so, in practice, is TRAIN
 
 The VAL draw is seeded once and stays the same across iterations, so the VAL curve is a comparison of
-programs. The TRAIN draw is keyed on the iteration number, so **each iteration sees a different TRAIN
-batch.**
+programs.
 
-Two consequences worth holding onto. A failure you fixed and cannot find next iteration may be fixed,
-or may simply not have been drawn — confirm fixes by predicted per-class movement, never by absence.
-And two TRAIN numbers from different iterations are not a paired comparison unless the batch size and
-draw are the same; say which you are quoting.
+⚠ **TRAIN has been identical too — this file used to claim otherwise, and the claim was false.**
+Measured over the 2026-09-09 run's `train/draw_history.json`: all five iterations drew the **same 50
+claims**, pairwise Jaccard **1.000** on every pair. The draw is keyed on the iteration number, so a
+*different* roster is possible in principle, but do not assume it happened — **read
+`train/draw_history.json` for this run and check.**
+
+The consequences flip with the fact, so hold the right ones:
+
+- **The real hazard is overfitting a fixed 50, not incomparability.** When the roster does not
+  change, every iteration is tuning against the same examples, and TRAIN gains stop generalizing long
+  before they stop appearing. Weigh VAL accordingly.
+- **On an identical roster, two TRAIN numbers ARE a paired comparison** — same claims, different
+  program — which makes them more informative than the old text allowed, not less.
+- **Absence is still not proof of a fix**, but for a different reason: on a fixed roster a failure
+  that has disappeared has genuinely been fixed *on these examples*, which is weaker evidence than it
+  looks. Confirm by predicted per-class movement.
+- If `draw_history.json` shows the roster *did* change between the iterations you are comparing, the
+  old caution applies again: say which draw you are quoting.
 
 ## Continuity
 
