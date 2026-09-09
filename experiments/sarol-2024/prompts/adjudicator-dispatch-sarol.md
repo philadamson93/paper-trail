@@ -28,7 +28,18 @@ The evidence you receive was selected by keyword retrieval, not by you, and may 
 
 **1. Read the evidence file, the enum contract, and the Sarol rubric.** Nothing else.
 
-**2. For each sub-claim, pick a verdict from Sarol's 9-class enum:**
+**2. For each sub-claim, walk this mandatory ordered gate before you emit its verdict.** The most common failure on this task is not a missing rule but a *skipped* one: the judge anchors on the first label a passage suggests and never runs the boundary checks below. Do not skip a step because the verdict "looks obvious" — run all of them, in order, for every sub-claim.
+
+- **Gate 0 — attribution.** Is the proposition actually attributable to *this* source? If it is tied to a named sibling inside the citation group (an author name followed by `[CIT]` and a semicolon, e.g. "…Maezawa and Jin, [CIT];"), or if it is the citing review's own computed aggregate ("4 of 27 studies…"), it does **not** belong to this source — exclude it. If, after excluding sibling propositions, it is genuinely unclear which clause of the citing sentence this marker attaches to (including a single-citation sentence where the marker's clause is ambiguous), the verdict is **ETIQUETTE** — stop here. Do not judge a sibling's proposition against this source.
+- **Gate 1 — find support.** Look for a retrieved passage a careful reader would plainly accept as asserting this source's proposition.
+- **Gate 2 — if a supporting passage exists, you may NOT emit ACCURATE until you have run all three downgrade checks:**
+  - *Numerical?* If the only discrepancy is a number/percentage (claim "at least 50%" vs source "at least 41%"), the verdict is **MISQUOTE**, never OVERSIMPLIFY.
+  - *Materiality?* Restore the source's qualifier, scope, or degree. If doing so would change whether the source supports the claim (an effect the source scopes to "in mammals"/"in rodents", a recommendation the source scopes to a subset, a finding the source only *proposes* for the future), the verdict is **OVERSIMPLIFY** (or NOT_SUBSTANTIATE if the source never establishes the element at all — see next). If restoring it changes nothing material (a dropped percentage range, a dropped hedge on a phenomenon the source reports as observed), it stays **ACCURATE**.
+  - *More specific than source?* If the claim asserts a narrower entity/subtype than the source establishes (source "low IFN-I", claim "low IFN-alpha"), the specific element is unsubstantiated → **NOT_SUBSTANTIATE**.
+  - If all three checks pass, emit **ACCURATE**. Do not require the source to prove more than the claim asserts, and do not re-add caveats the claim was entitled to drop.
+- **Gate 3 — if NO supporting passage was retrieved,** decide *why* before you downgrade. The window is a keyword-retrieved subset and is not told to be complete. If it is empty, methods-only, or plainly a keyhole and the claim is an ordinary factual statement on the paper's own subject, prefer **ACCURATE** over asserting an absence you cannot verify. Emit **NOT_SUBSTANTIATE** only when on-topic passages are present and genuinely fail one part of the claim. Emit **IRRELEVANT** only as a last resort, when the source is positively about a *different subject* than the claim — never merely because support was not in the retrieved window.
+
+The enum, for reference (the gate above decides *which* to pick):
 
 - `ACCURATE` — evidence directly supports the sub-claim.
 - `OVERSIMPLIFY` — source supports the claim in a narrower / more-qualified form; citing claim generalizes or drops qualifiers. Apply the rubric's **materiality test**: downgrade only when the dropped qualifier, scope, or degree is *load-bearing* — i.e. a reader of the claim alone would believe something the source does not support. Otherwise the verdict is ACCURATE.

@@ -47,6 +47,13 @@ invent a stronger assertion than the sentence actually makes (e.g. do not demand
 efficacy when the claim only names a drug, or proof of statistical independence when the claim only
 calls something a candidate predictor).
 
+The tolerance runs one way only. A claim may be **broader** than the source (paraphrase, dropped
+hedge, everyday framing) and still be ACCURATE. A claim that is **more specific** than the source is
+not: if the source establishes a class-level or general finding and the claim asserts a narrower
+member of it (source "low type-I interferon", claim "low IFN-alpha"; source "a signalling defect",
+claim "a defect in kinase K"), the source does not establish the specific element the claim asserts,
+and the verdict is **NOT_SUBSTANTIATE**, not ACCURATE.
+
 ### OVERSIMPLIFY vs ACCURATE — the materiality test
 
 **OVERSIMPLIFY applies only when the gap between what the source supports and what the claim asserts
@@ -75,6 +82,14 @@ specific proposition? If **no such passage exists — even when the source is on
 subject** (claim about stroke, source about coronary heart disease; claim about a chemotherapy-induced
 change, source about a drug's metabolic mechanism) — there is no partial support, and the verdict is
 **IRRELEVANT**, not NOT_SUBSTANTIATE. Topical adjacency is not partial support.
+
+**IRRELEVANT is a last-resort label, and a thin retrieved window is not grounds for it.** Choose it
+only when the retrieved passages positively show the source is about a *different subject* than the
+claim — a paper on drug X's metabolism cited for a claim about disease Y. Do **not** choose IRRELEVANT
+merely because the window is empty, methods-only, or a keyhole that did not happen to contain the
+supporting passage: that is retrieval silence, not evidence of a different subject (see "Empty or
+off-topic evidence window" below). When you are unsure between IRRELEVANT and either ACCURATE on a
+thin window or NOT_SUBSTANTIATE on a partially-supported claim, do not choose IRRELEVANT.
 
 ### Empty or off-topic evidence window
 
