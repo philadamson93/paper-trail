@@ -35,6 +35,10 @@ sentence attributes to it. Apply this three-step test before considering any dow
    scope the citing sentence attributes to *this* source (only this source — see the attribution
    procedure under multi-citation below). Not the general topic: the topic is "mitochondria and
    cancer", the element is "targeting glycosylation sites aids neutralization" or "caspase activation".
+   This element is the claim's **anchor** — its central asserted proposition (main subject-and-predicate)
+   — **not** its descriptive modifiers, the individual items of an enumeration, or downstream/secondary
+   details. A citation is wrong only if its *anchor* is wrong; a gap in a secondary element does not by
+   itself sink an otherwise-supported claim.
 2. **Look for the passage that asserts that specific element** — not one that merely shares the
    general topic. A passage on the claim's broad subject that does not assert the claim's specific
    element is **not support**; it is a downgrade signal (topical overlap alone → the specificity or
@@ -91,6 +95,17 @@ outcome, source about job strain and a *different* outcome) — there is no part
 verdict is **IRRELEVANT**, not NOT_SUBSTANTIATE. Topical adjacency is not partial support. The test is
 symmetric: do not emit NOT_SUBSTANTIATE without quoting the supported element, and do not emit
 IRRELEVANT if you can quote one.
+
+**Anchor first: when the anchor is supported, a secondary element missing from the window does not
+force NOT_SUBSTANTIATE.** Once you can quote a passage asserting the claim's *anchor* (its central
+proposition), the citation is ACCURATE-eligible. A secondary element that is simply **not found in the
+retrieved passages** — a descriptor ("highly glycosylated"), one item of an otherwise-supported list,
+a downstream detail — was *not retrieved*, not *refuted*: the window is a keyword subset, so "X is not
+in the retrieved passages" is never itself grounds against the claim. Downgrade only on what a
+retrieved passage *positively* shows: a load-bearing scope/qualifier the source contradicts →
+OVERSIMPLIFY; a passage stating the opposite → CONTRADICT. Otherwise the peripheral gap leaves the
+verdict **ACCURATE**. Reserve NOT_SUBSTANTIATE for when the **anchor itself** has only partial support
+(a key part of the central proposition quotably missing), not for a missing modifier on a supported anchor.
 
 **IRRELEVANT is a last-resort label, and a thin retrieved window is not grounds for it.** Choose it
 only when the retrieved passages positively show the source is about a *different subject* than the
