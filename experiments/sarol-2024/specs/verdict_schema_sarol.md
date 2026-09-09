@@ -13,7 +13,7 @@ The adjudicator picks exactly one per sub-claim. The names below are the contrac
 - **ACCURATE** — cited paper directly supports the claim as stated.
 - **OVERSIMPLIFY** — source findings are oversimplified or overgeneralized in the citing claim. Narrower-in-source than claimed, or qualified-in-source but unqualified in claim.
 - **NOT_SUBSTANTIATE** — cited paper fails to substantiate all parts of the claim. Partial support but key element missing.
-- **CONTRADICT** — citation context contradicts a statement made in the cited paper. Requires a verbatim source excerpt that opposes the claim.
+- **CONTRADICT** — citation context contradicts a statement made in the cited paper. Requires a verbatim source excerpt that opposes the claim. Decidable test: you must be able to quote a source span that is logically *incompatible* with the claim (source asserts *not-X* where the claim asserts *X*, or assigns the claim's property to a *different* entity and gives this one an incompatible property). A source that is merely silent, reports a *different or later state* (claim "approved for emergency use"; source "currently being evaluated in clinical trials"), or just fails to establish the element is **NOT_SUBSTANTIATE**, not CONTRADICT.
 - **MISQUOTE** — numbers or percentages misquoted. Narrow, numerical-specific. Not for non-numerical strength drift (use OVERSIMPLIFY).
 - **INDIRECT** — cited paper itself cites other articles for the claim; claim's attribution goes through a review or secondary source rather than the primary.
 - **INDIRECT_NOT_REVIEW** — same pattern as INDIRECT but cited paper is not a review article.
@@ -81,11 +81,16 @@ the source does not support?*
 *partial* support** — some parts confirmed, a key element missing. It is not the default label for a
 citation you cannot confirm.
 
-Test: can you point to a passage in *this* source that supports at least one part of the claim's
-specific proposition? If **no such passage exists — even when the source is on a topically adjacent
-subject** (claim about stroke, source about coronary heart disease; claim about a chemotherapy-induced
-change, source about a drug's metabolic mechanism) — there is no partial support, and the verdict is
-**IRRELEVANT**, not NOT_SUBSTANTIATE. Topical adjacency is not partial support.
+Decidable test: can you **quote** a passage in *this* source that supports at least one *specific
+element* of the claim's proposition — not merely its general topic or field? If **you can quote one**,
+the verdict is **NOT_SUBSTANTIATE** (partial support, a key element still missing); name and quote the
+element that is supported. If **no such passage exists — even when the source is on a topically
+adjacent subject** (claim about stroke, source about coronary heart disease; claim about a
+chemotherapy-induced change, source about a drug's metabolic mechanism; claim about job strain and one
+outcome, source about job strain and a *different* outcome) — there is no partial support, and the
+verdict is **IRRELEVANT**, not NOT_SUBSTANTIATE. Topical adjacency is not partial support. The test is
+symmetric: do not emit NOT_SUBSTANTIATE without quoting the supported element, and do not emit
+IRRELEVANT if you can quote one.
 
 **IRRELEVANT is a last-resort label, and a thin retrieved window is not grounds for it.** Choose it
 only when the retrieved passages positively show the source is about a *different subject* than the
@@ -127,7 +132,7 @@ When the citing sentence contains `<|multi_cit|>` — i.e., the evaluated citati
 
 - it is tied to a specific other citation marker or author name inside the citation group (e.g. "…as shown by Maezawa and Jin, [CIT];" — the named authors and the trailing semicolon mark a sibling's proposition);
 - it concerns a subject that none of the passages retrievable from this source address, while a sibling plausibly covers it;
-- it reports an aggregate the citing review itself computed ("4 of 27 studies…"), which is the citing author's synthesis, not a claim this single source makes.
+- it reports an aggregate or literature-scope synthesis the citing review itself made ("4 of 27 studies…", "the focus of the overwhelming majority of studies", "most studies to date"), which is the citing author's synthesis, not a claim this single source makes — exclude the field-wide count and judge only this source's own specific contribution.
 
 Do **not** count such a proposition against this source. Judge this source only on the propositions attributable to it; if those are supported, the verdict is **ACCURATE**.
 
