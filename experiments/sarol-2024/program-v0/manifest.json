@@ -8,7 +8,7 @@
       "note": "mainline extractors + verifier + native schema/verifier contracts"
     },
     "sarol": {
-      "commit": "4257824ce8ecffba317b54f8b688d71262a55931",
+      "commit": "1e9f09533206ffc9d32d105fedb7d23848eb1349",
       "note": "Sarol-variant adjudicator + the enum contract and rubric guidance it was split into (OQ8 resolved 2026-09-01)"
     }
   },
