@@ -195,6 +195,18 @@ def estimate_cost_usd(usage_records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def object_field(verdict: dict, key: str, subkey: str) -> Any:
+    """Read ``verdict[key][subkey]`` when ``verdict[key]`` really is an object, else return None.
+
+    A judge occasionally emits an object-valued field (``remediation``/``timing``) as a bare string
+    (or null). The original ``(verdict.get(key) or {}).get(subkey)`` kept a non-empty *string* — a
+    truthy non-dict — so ``.get`` raised ``AttributeError`` in an unguarded scoring path and aborted
+    a paid run (the crash this whole change hardens). Coerce only when it is actually a dict.
+    """
+    value = verdict.get(key)
+    return value.get(subkey) if isinstance(value, dict) else None
+
+
 def parse(staging_dir: pathlib.Path) -> dict[str, Any]:
     staging_info = json.loads((staging_dir / "staging_info.json").read_text())
     citekey = staging_info["citekey"]
@@ -249,22 +261,55 @@ def parse(staging_dir: pathlib.Path) -> dict[str, Any]:
         "sub_claim_verdicts": [s.get("verdict") for s in verdict.get("sub_claims", [])],
         "claim_text": gold["claim_text_original"],
         "overall_flag": verdict.get("overall_flag"),
-        "remediation_category": (verdict.get("remediation") or {}).get("category"),
-        "timing_seconds": (verdict.get("timing") or {}).get("wall_clock_seconds"),
+        # A judge occasionally emits `remediation`/`timing` as a bare string rather than an
+        # object; object_field returns the subkey only when the field really is a dict (see its
+        # docstring for the crash this guards).
+        "remediation_category": object_field(verdict, "remediation", "category"),
+        "timing_seconds": object_field(verdict, "timing", "wall_clock_seconds"),
         "usage": usage_summary,
     }
 
 
+def _selftest() -> int:
+    """Regression for the object_field coercion — the parser crash that aborted the 2026-09-08 run.
+    str -> None (the crash case), dict -> value, None -> None, {} -> None, absent -> None."""
+    cases = [
+        ({"remediation": {"category": "REWORD"}}, "REWORD"),  # dict -> value
+        ({"remediation": "just prose, not an object"}, None),  # str -> None (the real crash)
+        ({"remediation": None}, None),  # null -> None
+        ({"remediation": {}}, None),  # empty dict, no subkey -> None
+        ({}, None),  # field absent -> None
+    ]
+    checks = [
+        (f"remediation={v.get('remediation')!r} -> {expected!r}",
+         object_field(v, "remediation", "category") == expected)
+        for v, expected in cases
+    ]
+    # timing rides the same helper; one case is enough to prove the wiring.
+    checks.append(("timing string -> None", object_field({"timing": "5s"}, "timing", "wall_clock_seconds") is None))
+    failed = 0
+    for label, ok in checks:
+        print(f"  {'PASS' if ok else 'FAIL'}  {label}")
+        failed += 0 if ok else 1
+    print(f"\n{len(checks) - failed}/{len(checks)} passed")
+    return 1 if failed else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--staging", required=True, type=pathlib.Path)
+    ap.add_argument("--selftest", action="store_true", help="run the object_field regression and exit")
+    ap.add_argument("--staging", type=pathlib.Path)
     ap.add_argument(
         "--out",
-        required=True,
         type=pathlib.Path,
         help="predictions.jsonl — appended to, not overwritten",
     )
     args = ap.parse_args()
+
+    if args.selftest:
+        return _selftest()
+    if args.staging is None or args.out is None:
+        ap.error("--staging and --out are required unless --selftest is given")
 
     record = parse(args.staging)
     args.out.parent.mkdir(parents=True, exist_ok=True)
