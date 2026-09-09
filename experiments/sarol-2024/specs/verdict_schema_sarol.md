@@ -31,10 +31,14 @@ supports. Read them before assigning any label other than ACCURATE.
 A citation is **ACCURATE** when the source substantively supports the proposition the citing
 sentence attributes to it. Apply this three-step test before considering any downgrade:
 
-1. **Name the proposition** the citing sentence attributes to *this* source (only this source — see
-   the attribution procedure under multi-citation below).
-2. **Look for a passage** in the retrieved evidence that a careful reader would plainly accept as
-   asserting that proposition.
+1. **Name the claim's most-specific element** — the exact mechanism, entity, subtype, magnitude, or
+   scope the citing sentence attributes to *this* source (only this source — see the attribution
+   procedure under multi-citation below). Not the general topic: the topic is "mitochondria and
+   cancer", the element is "targeting glycosylation sites aids neutralization" or "caspase activation".
+2. **Look for the passage that asserts that specific element** — not one that merely shares the
+   general topic. A passage on the claim's broad subject that does not assert the claim's specific
+   element is **not support**; it is a downgrade signal (topical overlap alone → the specificity or
+   IRRELEVANT test below, not ACCURATE).
 3. If such a passage exists, the verdict is **ACCURATE** — even when the citing sentence is more
    concise, paraphrases, drops a hedge, or uses broader everyday framing — *unless* the dropped
    detail is load-bearing (see the OVERSIMPLIFY test).
