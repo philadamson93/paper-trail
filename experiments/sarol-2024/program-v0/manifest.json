@@ -8,11 +8,11 @@
       "note": "mainline extractors + verifier + native schema/verifier contracts"
     },
     "sarol": {
-      "commit": "e71739708a18a848572069cb6549f8af9d030ad6",
+      "commit": "4257824ce8ecffba317b54f8b688d71262a55931",
       "note": "Sarol-variant adjudicator + the enum contract and rubric guidance it was split into (OQ8 resolved 2026-09-01)"
     }
   },
-  "combined_hash": "8d8fe097b4ab0cc2244c4a069a4af9275bc4afe4d9134f9f4ee2e2e1f997aa3f",
+  "combined_hash": "f3cb88c9e6fe2534ffec6eecac9a2a87f7cfeafd93a7f7fbd3537f5633a952a3",
   "combined_hash_recipe": "sha256 over the concatenation, in ascending path order, of '<path>\\0<sha256>\\n' for every entry. Each entry sha256 is over the raw bytes of `git show <source_refs[entry.source].commit>:<entry.path>`.",
   "entries": [
     {
@@ -37,7 +37,7 @@
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
-      "sha256": "404fdf6570df2561a26ad662a6f378b5cb2dd4e62b43703d471728f338fc52f0"
+      "sha256": "77c5ed52ec9830971cebd3be543cedfd0d5230260c0660afbdf9eeab476c16f9"
     },
     {
       "path": "src/prompts/verifier-dispatch.md",
@@ -69,7 +69,7 @@
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
-      "sha256": "b0e91dc1c07b6f4d16d50f4587e367246ad53d6d684372530b8292412dd3fe2d"
+      "sha256": "038c0be92fe3f996b3abfdd737ed443e5c32303a230beab982c07859072a231e"
     },
     {
       "path": "experiments/sarol-2024/specs/verdict_definitions_sarol.md",
@@ -77,7 +77,7 @@
       "freeze_policy": "committed",
       "contract_file": true,
       "optional": false,
-      "sha256": "4f54a6d8f4bbf067a433486d2cf8887ba4186ecf20a3bc3e35102bc0669394b0"
+      "sha256": "cfea62d3e60fc6da0ce897f53532eec14ec4ac1bed69bc0a43f753e47e0ce4b8"
     },
     {
       "path": "src/specs/verifier_results.md",

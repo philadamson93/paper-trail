@@ -13,10 +13,11 @@ It is **not a plugin registry.** The plan asks for typed constants plus validati
 manifest, and that is all this is. Three named profiles, checked against the freeze at import-test
 time. Anything more elaborate would be scaffolding for a generality nobody has asked for.
 
-It is **not profile-awareness in the freeze.** `program-v0` stays 9 entries at ``combined_hash``
-``8d8fe097b4ab`` under every profile (re-frozen 2026-09-09 when the paper-verbatim definitions
-became a ninth, frozen entry; it read ``0a02710cbd88`` before that); the engine's materializer
-still sees all 9 and ``commit_new_version()`` still stages all 9. A profile narrows what the *optimizer* is allowed to
+It is **not profile-awareness in the freeze.** `program-v0` is the same set of entries under every
+profile; the engine's materializer sees all of them and ``commit_new_version()`` stages all of them.
+The authoritative entry count and ``combined_hash`` live in ``program-v0/manifest.json`` and are
+deliberately NOT repeated here -- a hash duplicated in a docstring goes stale on the next re-freeze,
+which it already did twice (2026-09-07 enum trim, 2026-09-09 paper-verbatim definitions). A profile narrows what the *optimizer* is allowed to
 touch, which is a consumer-side policy question, not a property of the frozen program. No engine
 change is needed and none is requested.
 
