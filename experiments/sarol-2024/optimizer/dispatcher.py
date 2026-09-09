@@ -607,6 +607,8 @@ def run_optimization(
     val_n: int | None = None,
     sampling_root: pathlib.Path | None = None,
     require_canary: bool = True,
+    run_summary_path: pathlib.Path | None = None,
+    resume: bool = False,
     **component_kwargs,
 ):
     """Drive the engine's ``run_loop``. This is the entrypoint the plan's Files-to-create names.
@@ -629,7 +631,7 @@ def run_optimization(
     engine_root = adapter.engine_path()
     if str(engine_root) not in sys.path:
         sys.path.insert(0, str(engine_root))
-    from engine.loop import run_loop  # noqa: PLC0415
+    from engine.loop import LoopStop, run_loop  # noqa: PLC0415
     from engine.loop_ops import LocalLoopOps  # noqa: PLC0415
     from engine.schemas import RunInputs  # noqa: PLC0415
 
@@ -763,7 +765,15 @@ def run_optimization(
     if not ok:
         raise BudgetExceeded(message)
 
-    return run_loop(
+    # Always write the durable resume ledger (cheap, no downside — the load-bearing half of #4):
+    # every iteration the engine rewrites it, so a mid-run crash stays resumable via `--resume`.
+    # Default it under the VAL output root's run dir — outside the optimizer's readable tree, the
+    # same C6.9 boundary VAL's own per-claim outputs sit behind — when no explicit path was named.
+    effective_run_summary = run_summary_path
+    if effective_run_summary is None and val_output_root is not None:
+        effective_run_summary = pathlib.Path(val_output_root).parent / "run_summary.json"
+
+    loop_kwargs = dict(
         iterations=iterations,
         run_id=run_id,
         repo_root=parts["program_store"].repo_root,
@@ -817,6 +827,19 @@ def run_optimization(
             "retrieval_k": parts["profile"].retrieval_k,
             "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
         },
+        # Provenance-only drift (warns, never STOPs): a resume under a different judge is worth a
+        # note but not a hard stop the way a profile/rubric change is.
+        soft_fields={
+            "model": component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL,
+        },
+        # #4 resume wiring. `metric_field` names the ledger key the engine stores each frozen
+        # version's VAL scalar under and that `--resume` reads back; it must be stable across the
+        # original run and its resume. `resume=True` reconstructs the frontier from the ledger +
+        # the program-v0..vk tag chain and continues at k+1, re-checking `hard_fields` (a profile /
+        # rubric mismatch STOPs — the C6.5 guarantee the comment above always intended).
+        metric_field="sarol_accuracy_9class",
+        run_summary_path=effective_run_summary,
+        resume=resume,
         materialize_root=pathlib.Path(materialize_root),
         build_mistake_corpus=parts["build_mistake_corpus"],
         current_tag=current_tag,
@@ -843,6 +866,18 @@ def run_optimization(
         # here: they require `corpus_ref`, which this consumer does not supply.
         loop_ops=LocalLoopOps(parts["program_store"].repo_root),
     )
+
+    # #3 consumer half: a mid-run LoopStop carries the partial run (best-so-far frontier) for
+    # `main` to summarize. Attach the BudgetGuard so `main` can report the REAL Runner/judge spend
+    # (`parts["budget"].spent_usd`) separately from the optimizer-agent spend the engine tracks on
+    # `LoopRun.spent_usd`; the guard is a run_optimization local and would otherwise be unreachable
+    # from `main`. The stop still re-raises loud — never swallowed.
+    try:
+        run = run_loop(**loop_kwargs)
+    except LoopStop as exc:
+        exc.budget = parts["budget"]
+        raise
+    return run, parts["budget"]
 
 
 def _static_train_inputs(RunInputs, train_input_ref, *, run_id: str, train_n: int | None):
@@ -1907,6 +1942,24 @@ def _selftest() -> int:
     return 1 if failed else 0
 
 
+def _run_summary_json(run, budget, *, stopped: bool) -> dict:
+    """The dispatcher's stdout run summary. Reports Runner/judge spend (the ``BudgetGuard``)
+    SEPARATELY from the optimizer-agent spend the engine tracks on ``LoopRun.spent_usd`` — labeling
+    agent-only cost as the total is the defect the plan flags. ``run`` may be None for a stop that
+    fired before any iteration completed (e.g. a resume-precondition mismatch)."""
+    return {
+        "run_id": getattr(run, "run_id", None),
+        "best_tag": getattr(run, "best_tag", None),
+        "best_metric_value": getattr(run, "best_metric_value", None),
+        "stop_reason": getattr(run, "stop_reason", None) or ("stopped" if stopped else None),
+        "iterations_completed": len(run.results) if run is not None else 0,
+        # Real Runner/judge dollars (what the run actually paid the LLM judge).
+        "runner_spent_usd": getattr(budget, "spent_usd", None),
+        # Optimizer-agent dollars only (the Claude Code editing sessions) — NOT the total.
+        "agent_spent_usd": getattr(run, "spent_usd", None),
+    }
+
+
 def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
@@ -1999,6 +2052,21 @@ def main(argv: "list[str] | None" = None) -> int:
              "iteration and executed none, silently. This flag makes that choice explicit and "
              "reprices the run to match.",
     )
+    ap.add_argument(
+        "--run-summary",
+        default=None,
+        help="path to the durable resume ledger (rewritten every iteration). Defaults to "
+             "run_summary.json in the VAL output root's parent dir. Must be the SAME path on the "
+             "original run and its --resume continuation.",
+    )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue an interrupted run from its last cleanly-committed program-v<k>: "
+             "reconstruct the frontier from the --run-summary ledger + the program-v0..vk tag "
+             "chain and resume at iteration k+1. STOPs if the profile / rubric differ from the "
+             "recorded run (a curve must not mix two systems).",
+    )
     args = ap.parse_args(argv)
 
     if args.selftest:
@@ -2028,8 +2096,14 @@ def main(argv: "list[str] | None" = None) -> int:
         if missing:
             print(f"--run requires: {', '.join(missing)}", file=sys.stderr)
             return 2
+        # LoopStop lives in the shared engine; put its root on the path (run_optimization does the
+        # same lazily) so the `except LoopStop` below can name it.
+        _eng = adapter.engine_path()
+        if str(_eng) not in sys.path:
+            sys.path.insert(0, str(_eng))
+        from engine.loop import LoopStop  # noqa: PLC0415
         try:
-            run = run_optimization(
+            run, budget = run_optimization(
                 iterations=args.iterations,
                 run_id=args.run_id,
                 train_input_ref=args.train_inputs,
@@ -2058,18 +2132,23 @@ def main(argv: "list[str] | None" = None) -> int:
                 # Same lesson as --profile directly above: a flag that reaches the estimate and
                 # not the run is worse than no flag. `model` rides `**component_kwargs` into
                 # `build_components`, which hands it to the Runner.
+                run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
+                resume=args.resume,
                 **({"model": args.model} if args.model else {}),
             )
         except BudgetExceeded as exc:
             print(f"REFUSED  {exc}", file=sys.stderr)
             return 1
-        print(json.dumps({
-            "run_id": run.run_id,
-            "best_tag": run.best_tag,
-            "best_metric_value": run.best_metric_value,
-            "stop_reason": run.stop_reason,
-            "spent_usd": run.spent_usd,
-        }, indent=2))
+        except LoopStop as exc:
+            # A mid-run hard stop (bad probe, no-edit iteration, a resume config mismatch, a
+            # security trip-wire, budget). Print the partial-run summary the engine attached — the
+            # completed iterations' frontier-best survives — and exit non-zero. NOT swallowed.
+            run = exc.run
+            budget = getattr(exc, "budget", None)
+            print(f"STOP ({exc.reason or 'loop_stop'}): {exc}", file=sys.stderr)
+            print(json.dumps(_run_summary_json(run, budget, stopped=True), indent=2))
+            return 3
+        print(json.dumps(_run_summary_json(run, budget, stopped=False), indent=2))
         return 0
 
     # The preflight table prices what a run would ACTUALLY do: a canary term only if one is
