@@ -6,7 +6,9 @@ Reference: docs/claude_ops.md
 **Approved** 2026-09-09 at plan-sha256 `2f099e956d23…`, zero open questions (`docs/plans/README.md`
 already recorded the approval; this header lagged it). **P0's definitions half, the
 definitions-only manifest rehash, and Steps 0–6 are IMPLEMENTED** on branch
-`feat/optimizer-prompt-latitude`. Step 7, the ledger recut, the canary re-pin and Gate E remain.
+`feat/optimizer-prompt-latitude`. Step 7 (**RESCOPED 2026-09-10** — most of it migrated to the
+isolation plan; only the driver's manifest classification is still Plan A's, and isolation's OQ1 may
+delete even that), the ledger recut, the canary re-pin and Gate E remain.
 **Split from a single plan on Codex's recommendation** (feedback: `docs/plans/reviews/optimizer-prompt-investigative-latitude-feedback.md`, verdict *Blocked* on scope entanglement). This is **Plan A**; evidence-acquisition programmability moved to **Plan B**, `docs/plans/phase2-evidence-acquisition-programmability.md`.
 **Findings this plan is built on:** `docs/session/2026-09-09-optimizer-loop-and-isolation-findings.md`
 (git-ignored; read it first — §8 carries the Table 1 reconciliation that reshaped this plan).
@@ -275,7 +277,47 @@ Plus the artifact pointers it never had: `trace_ref` per record;
 `run_manifest.json` (per-claim cost, duration, status, and the verdict for all 50 — not just misses);
 `train/draw_history.json`.
 
-### Step 7 — Widen the editable surface SAFELY: split the driver, single definitions source
+### Step 7 — RESCOPED 2026-09-10: only the manifest classification is still Plan A's
+
+⚠ **This step was scoped before `docs/plans/isolation-protocol.md` existed, and that plan has since
+claimed most of its content on better grounds.** The original text is preserved below the line so a
+future session can see what moved and why, rather than re-deriving it. Rescoped with Phil, 2026-09-10.
+
+**What is still Plan A's — the whole of the remaining step.** Does
+`.claude/commands/sarol-eval-item.md` become a manifest fileset entry, and with which
+`contract_file` flag? This is Phil's "make the driver editable" directive, and it is an
+**optimizer-latitude** question, not an isolation one: the consequence is that a driver edit enters
+`combined_hash` and therefore **re-versions the program**. The driver is absent from all 9 current
+entries (verified 2026-09-10). Adding it is the 10th entry and forces the final `combined_hash`
+regeneration, which is why it is coupled to the ledger recut.
+
+**What migrated to the isolation plan** — it makes these *structural* rather than prose the optimizer
+is merely told not to edit, which is strictly stronger:
+- *never read gold / never read the source paper* → isolation Phase 1 scopes the judge so it **cannot**,
+  rather than instructing it not to.
+- *one dispatch, no retry* → isolation **OQ5(a)** explicitly bends the "never retry a stage" rule; the
+  retry semantics are now that plan's decision to make.
+- *output ownership, abort codes* → isolation 0b restates `VERDICT_NOT_WRITTEN` against the OQ5 policy.
+- *argument parsing, slot tables, "how slots are filled"* → isolation 0c moves them into
+  `dispatch_prompt.py`. This is the load-bearing one: **"how slots are filled" was this step's
+  editable component**, and after 0c it is Python, i.e. harness-side and not optimizer-editable.
+- *the invariant tests* → the invariants they would assert are isolation's; isolation already adds
+  its own `_selftest()` checks over the same surface.
+
+⚠ **This step may not survive isolation's OQ1 at all.** OQ1 asks whether the driver session survives
+Phase 0c; its option (ii) **eliminates the driver**, in which case there is no prompt file to classify
+and this step is deleted rather than implemented. **Do not implement this step before OQ1 resolves.**
+
+✅ **The second half of the original step is already DONE**, landed with P0's definitions half:
+`verdict_definitions_sarol.md` is a manifest entry at `contract_file=True` (verified in
+`program-v0/manifest.json`, 2026-09-10) and the rubric is the single operative source. It did **not**
+become optimizer-editable. Nothing remains of that half.
+
+---
+
+<details>
+<summary>Original Step 7 text, superseded 2026-09-10 — kept for provenance</summary>
+
 Phil's directive was to make the driver editable. Codex flagged that making the *whole* command
 editable also makes measurement and isolation contracts editable — argument parsing, the gold and
 source-paper prohibitions, one-dispatch/no-retry, stage topology, output ownership, abort semantics
@@ -302,6 +344,8 @@ definitions file keeps the **verbatim paper text plus provenance** as an optimiz
 stays `contract_file=True` (frozen), and the rubric references it rather than re-deriving it. It does
 *not* become optimizer-editable — which supersedes the earlier draft of this step.
 
+</details>
+
 ## Files to Modify
 
 **P0 — reset + baseline recut (do the generator before the generated):**
@@ -321,7 +365,10 @@ stays `contract_file=True` (frozen), and the rubric references it rather than re
   `optimizer/profiles.py` (:261, :275).
 - `experiments/sarol-2024/scripts/run_baseline.py` (:166), `scripts/materialize_smoke.py`,
   `scripts/vm/run_hillclimb_vm.sh` (:42 engine preflight — add the `82f547d` SHA assertion).
-- `.claude/commands/sarol-eval-item.md` — split into frozen shell + narrow editable component (Step 7).
+- `.claude/commands/sarol-eval-item.md` — ⚠ **the frozen-shell/editable-component split moved to the
+  isolation plan** (2026-09-10). Plan A's residue is only whether this file becomes a manifest entry
+  and with which `contract_file` flag (rescoped Step 7), and isolation's OQ1 may remove the file's
+  LLM role entirely.
 
 **Optimizer prose (Steps 0–6):**
 - `optimizer/prompt/optimizer-instructions.md` — Steps 0, 1, 2, 3, 4, 5, 6 + artifact pointers.
@@ -349,8 +396,10 @@ record; sister file `docs/journal/2026-09-03-first-optimization-attempt-postmort
 - **D4** — date `meta-learnings.md` entries. Yes.
 - **D6** — baseline ledger: re-cut `program-v0`, archive `v1`–`v5` (P0).
 - **No-edit iteration** — a deliberate terminal stop for human triage; no engine change (Step 2).
-- **Driver** — editable in its split form only; the contract-bearing shell stays frozen (Step 7).
-- **Definitions file** — stays frozen; the rubric is the single operative source (Step 7).
+- **Driver** — ⚠ superseded 2026-09-10: the split itself is now the isolation plan's; Plan A decides
+  only whether editing the driver re-versions the program (rescoped Step 7), pending isolation OQ1.
+- **Definitions file** — ✅ DONE: frozen at `contract_file=True` in `program-v0/manifest.json`; the
+  rubric is the single operative source (was Step 7's second half, landed with P0).
 - **D5 — ETIQUETTE gets no special or upfront testing** (Phil, 2026-09-09): "this is part of the
   experiment, we don't need any upfront or special testing of this." It is one class among nine; the
   optimizer meets it under measurement like any other. No targeted iteration is scheduled and no
