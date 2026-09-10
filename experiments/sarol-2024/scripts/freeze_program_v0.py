@@ -49,6 +49,18 @@ FILESET: list[tuple[str, str, bool]] = [
     # It is in the manifest so the reconciled text cannot be changed without cutting a version.
     ("experiments/sarol-2024/specs/verdict_definitions_sarol.md", "sarol", True),
     ("src/specs/verifier_results.md", "main", True),
+    # Added 2026-09-10 (Phil's ruling, Plan A Step 7 residue). The per-claim driver. It was the
+    # one component in the judge path that no version covered: it could change without the
+    # program version changing, so two runs both labelled program-v0 could have had different
+    # drivers with nothing detecting it -- and it is the layer that produced two observed
+    # failures (an invented 4-class scheme, and hallucinated claim text).
+    # contract_file=False -- EDITABLE, per Phil's standing directive that the optimizer may
+    # repair this layer. ACCEPTED RISK, recorded rather than reasoned away: this file also
+    # carries the measurement's integrity rules (one dispatch / no retry / never author the
+    # verdict / never re-score), so an editable driver is a reward-hacking surface. The
+    # invariant tests that would bound it migrated to the isolation plan and are NOT YET
+    # IMPLEMENTED -- they must land before the next armed run.
+    (".claude/commands/sarol-eval-item.md", "sarol", False),
 ]
 
 COMBINED_HASH_RECIPE = (
