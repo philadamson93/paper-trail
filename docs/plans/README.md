@@ -9,10 +9,10 @@ Only `/read-plan` or `/explain-plan` promotes a row to `Yes`.
 
 Approved-SHA notes (for `/explain-plan <path> --since <sha>` after a sign-off):
 `optimizer-prompt-investigative-latitude.md` approved 2026-09-09 at plan-sha `2f099e956d23`.
-⚠ **Edited past that baseline 2026-09-10** (now `89e632dcd710`): Step 7 rescoped with Phil after the
-isolation plan claimed most of its content. Scope SHRANK — no new work added — so the 2026-09-09
-approval is not reopened, but `--since 2f099e956d23` is the right diff for a re-read, and the `.html`
-companion is now STALE.
+⚠ **Edited past that baseline 2026-09-10** (now `c0f12afb6394`): Step 7 first rescoped, then RESOLVED
+by Phil's ruling that the driver is optimizer-editable — implemented same day. Scope only SHRANK or
+recorded a decision Phil made directly, so the 2026-09-09 approval is not reopened; `--since
+2f099e956d23` is the right diff for a re-read, and the `.html` companion is STALE.
 
 `docs/plans/NEXT.md` is the live state doc, not a plan — it is deliberately not listed below.
 
@@ -37,7 +37,7 @@ companion is now STALE.
 | [`experiment-sarol-runbook.md`](experiment-sarol-runbook.md) | — | No | Runbook: Sarol 2024 benchmark — Variant A smoketest (N=5) |
 | [`experiment-sarol-smoketest-handoff.md`](experiment-sarol-smoketest-handoff.md) | — | No | Handoff: run the Sarol 2024 smoketest (N=5) |
 | [`experimental-plan-of-record.md`](experimental-plan-of-record.md) | First-pass outline | No | Experimental plan of record |
-| [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md) | **P0 + Steps 0–6 IMPLEMENTED & reviewed** 2026-09-09 on `feat/optimizer-prompt-latitude` (9 commits, pushed) · implementation review applied · **remaining: Step 7 RESCOPED 2026-09-10 to the driver's manifest classification only (the frozen-shell/editable split migrated to the isolation plan; its OQ1 may delete the residue), ledger recut, canary re-pin, Gate E** · lands on `sarol-optimizer-concurrent` AFTER the isolation plan | Yes | **Plan A** — reset the rubric's class definitions to Sarol Table 1 verbatim (ours were inverted, and predate `program-v0`), re-cut the canonical baseline, and give the optimizer investigative latitude: read the judge's traces, verify inherited harness facts, halt instead of forcing an edit |
+| [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md) | **P0 + Steps 0–6 IMPLEMENTED & reviewed** 2026-09-09 on `feat/optimizer-prompt-latitude` (13 commits, pushed) · implementation review applied · **Step 7 RESOLVED + IMPLEMENTED 2026-09-10 (driver is optimizer-editable, 10th manifest entry, hash `5e773ef55dbb`; its invariant tests are owed by the isolation plan) · remaining: ledger recut, canary re-pin, Gate E** · lands on `sarol-optimizer-concurrent` AFTER the isolation plan | Yes | **Plan A** — reset the rubric's class definitions to Sarol Table 1 verbatim (ours were inverted, and predate `program-v0`), re-cut the canonical baseline, and give the optimizer investigative latitude: read the judge's traces, verify inherited harness facts, halt instead of forcing an edit |
 | [`phase2-evidence-acquisition-programmability.md`](phase2-evidence-acquisition-programmability.md) | Draft — **scoping only**, design deferred · blocked behind Plan A + the isolation plan | No | **Plan B** — make evidence acquisition programmable. `ACQUISITION_SCOPE` is already editable; the blocker is the driver aborting `extractor`/`verifier` with `STAGE_NOT_IMPLEMENTED` |
 | [`optimizer-instrument-repair.md`](optimizer-instrument-repair.md) | **Implemented** 2026-09-07 · unmerged on `sarol-optimizer-impl` | No | Improve the OPTIMIZER machinery (not the program it optimizes): objective to plain accuracy, then 35 doc-consistency fixes; seam documented in optimizer/README.md |
 | [`paper-tool-validation.md`](paper-tool-validation.md) | — | No | paper-trail validation paper — experiment plan |

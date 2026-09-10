@@ -6,9 +6,11 @@ Reference: docs/claude_ops.md
 **Approved** 2026-09-09 at plan-sha256 `2f099e956d23…`, zero open questions (`docs/plans/README.md`
 already recorded the approval; this header lagged it). **P0's definitions half, the
 definitions-only manifest rehash, and Steps 0–6 are IMPLEMENTED** on branch
-`feat/optimizer-prompt-latitude`. Step 7 (**RESCOPED 2026-09-10** — most of it migrated to the
-isolation plan; only the driver's manifest classification is still Plan A's, and isolation's OQ1 may
-delete even that), the ledger recut, the canary re-pin and Gate E remain.
+`feat/optimizer-prompt-latitude`. **Step 7 is now RESOLVED AND IMPLEMENTED** (2026-09-10): most of
+it migrated to the isolation plan, and Phil ruled the residue — the driver is optimizer-**editable**,
+now the 10th manifest entry, `combined_hash` `5e773ef55dbb`. ⚠ Its invariant tests live in the
+isolation plan and are unimplemented, so the reward-hacking guard is prose until they land. **The
+ledger recut, the canary re-pin and Gate E remain.**
 **Split from a single plan on Codex's recommendation** (feedback: `docs/plans/reviews/optimizer-prompt-investigative-latitude-feedback.md`, verdict *Blocked* on scope entanglement). This is **Plan A**; evidence-acquisition programmability moved to **Plan B**, `docs/plans/phase2-evidence-acquisition-programmability.md`.
 **Findings this plan is built on:** `docs/session/2026-09-09-optimizer-loop-and-isolation-findings.md`
 (git-ignored; read it first — §8 carries the Table 1 reconciliation that reshaped this plan).
@@ -277,7 +279,42 @@ Plus the artifact pointers it never had: `trace_ref` per record;
 `run_manifest.json` (per-claim cost, duration, status, and the verdict for all 50 — not just misses);
 `train/draw_history.json`.
 
-### Step 7 — RESCOPED 2026-09-10: only the manifest classification is still Plan A's
+### Step 7 — ✅ RESOLVED AND IMPLEMENTED 2026-09-10
+
+**Phil's ruling: the driver is optimizer-EDITABLE.** Implemented the same day — it is now the 10th
+manifest entry at `contract_file=False`, and it sits in `JUDGE_SCOPE` (not only `AGENTIC`'s scope)
+so the ruling is not inert on `retrieval`, the only runnable profile today. `combined_hash` advanced
+to `5e773ef55dbb`; suite back to 447/447 with the partition invariant (`contracts + editable ==
+entries`) holding automatically at 4 + 6 = 10.
+
+⚠ **ACCEPTED RISK, recorded rather than reasoned away.** The driver also carries the measurement's
+integrity rules — one dispatch, never retry, never author or repair the verdict, never read gold or
+the source paper, never validate the subagent's content. An editable driver is therefore a
+reward-hacking surface: the optimizer can raise a score by loosening a rule instead of improving the
+program. Two mitigations are in place and one is **owed**:
+- *In place:* `optimizer/context/edit-surface.md` now names the driver editable AND states the
+  prohibitions as non-negotiable, telling the optimizer to log a complaint in its findings entry
+  rather than edit one.
+- *In place:* the driver is in the manifest, so any edit re-versions the program and is visible in
+  the diff between versions.
+- ⚠ **OWED:** the invariant tests that would *mechanically* bound this (exactly one dispatch, no
+  retry, no gold read, orchestrator never writes the verdict) migrated to the isolation plan and are
+  **NOT YET IMPLEMENTED**. Until they land, the guard is prose. **They must land before the next
+  armed run.**
+
+**Also fixed 2026-09-10 — a live contradiction found while answering this question.**
+`adjudicator-dispatch-sarol.md`'s `## Orchestrator notes` instructed the dispatching session to
+*"Validate the exit JSON"*, which the driver's step 4 forbids in as many words, and which its own
+next bullet contradicts. The dispatching session reads both files every run. Latent, not observed —
+no trace evidence it ever fired — but had it, the driver would have produced exactly the fabricated
+data point its rules exist to prevent. The instruction is removed, with the correction marked inline.
+⚠ The same `## Orchestrator notes` pattern exists in three other prompt files and has **not** been
+swept.
+
+<details>
+<summary>Rescoping note from earlier the same day — how the step shrank to this one question</summary>
+
+#### RESCOPED 2026-09-10: only the manifest classification is still Plan A's
 
 ⚠ **This step was scoped before `docs/plans/isolation-protocol.md` existed, and that plan has since
 claimed most of its content on better grounds.** The original text is preserved below the line so a
@@ -314,6 +351,8 @@ and this step is deleted rather than implemented. **Do not implement this step b
 become optimizer-editable. Nothing remains of that half.
 
 ---
+
+</details>
 
 <details>
 <summary>Original Step 7 text, superseded 2026-09-10 — kept for provenance</summary>
