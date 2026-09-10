@@ -47,10 +47,15 @@ RUBRIC_GUIDANCE = "experiments/sarol-2024/specs/verdict_schema_sarol.md"
 EXTRACTOR_PDF = "src/prompts/extractor-dispatch-pdf.md"
 EXTRACTOR_PAPERCLIP = "src/prompts/extractor-dispatch-paperclip.md"
 VERIFIER = "src/prompts/verifier-dispatch.md"
+DRIVER = ".claude/commands/sarol-eval-item.md"
 
-#: The judge, and the guidance it reads. Editable under **every** profile — optimizing the
-#: adjudicator is the one thing common to the whole ladder.
-JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE)
+#: The judge, the guidance it reads, and the driver that dispatches it. Editable under **every**
+#: profile — optimizing the adjudicator is the one thing common to the whole ladder, and the driver
+#: is on that same every-profile path (2026-09-10: Phil's ruling that the driver is optimizer-
+#: editable; it is in JUDGE_SCOPE rather than only in AGENTIC's so the ruling is not inert on
+#: `retrieval`, which is the only runnable profile today). ⚠ The driver also carries the
+#: measurement's integrity rules — see the warning in `optimizer/context/edit-surface.md`.
+JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER)
 
 #: Everything the agentic profiles add: the evidence-acquisition surface.
 ACQUISITION_SCOPE = (EXTRACTOR_PDF, EXTRACTOR_PAPERCLIP, VERIFIER)
@@ -259,7 +264,7 @@ def _selftest() -> int:
         # remembered copy of it. A manifest change that renames a prompt fails here.
         ("every profile's edit scope validates against the freeze",
          validate_against_manifest(entries) == []),
-        ("...and the freeze is the 9-entry program-v0", len(entries) == 9),
+        ("...and the freeze is the 10-entry program-v0", len(entries) == 10),
 
         # The ladder's shape.
         ("the ladder is retrieval -> agentic -> paperclip",
@@ -273,8 +278,8 @@ def _selftest() -> int:
          all("adjudicator" in p.stages for p in PROFILES.values())),
 
         # Edit scope. The invariant with teeth: you may not optimize a stage you do not run.
-        ("retrieval may edit only the judge and its rubric",
-         set(RETRIEVAL.editable) == {ADJUDICATOR, RUBRIC_GUIDANCE}),
+        ("retrieval may edit the judge, its rubric, and the driver that dispatches it",
+         set(RETRIEVAL.editable) == {ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER}),
         ("...and may NOT touch the extractor it does not run",
          EXTRACTOR_PDF not in RETRIEVAL.editable and VERIFIER not in RETRIEVAL.editable),
         ("agentic's scope is every non-contract entry",

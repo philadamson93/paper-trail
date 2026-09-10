@@ -1665,7 +1665,7 @@ def _selftest() -> int:
     contracts = store.contract_paths()
     editable = store.editable_paths()
     checks += [
-        ("manifest has 9 entries", len(store.entries) == 9),
+        ("manifest has 10 entries", len(store.entries) == 10),
         ("four of them are contract files", len(contracts) == 4),
         ("the enum contract is one of them",
          "experiments/sarol-2024/specs/verdict_enum_sarol.md" in contracts),
@@ -1685,10 +1685,11 @@ def _selftest() -> int:
         # optimize a stage you do not run.
         ("the default edit scope is unchanged by profiles landing",
          editable == store.editable_paths("agentic")),
-        ("retrieval narrows the scope to the judge and its rubric",
+        ("retrieval narrows the scope to the judge, its rubric, and the driver",
          set(store.editable_paths("retrieval")) == {
              "experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md",
-             "experiments/sarol-2024/specs/verdict_schema_sarol.md"}),
+             "experiments/sarol-2024/specs/verdict_schema_sarol.md",
+             ".claude/commands/sarol-eval-item.md"}),
         ("...so Phase 1 cannot edit the extractor it never runs",
          "src/prompts/extractor-dispatch-pdf.md" not in store.editable_paths("retrieval")),
         ("no profile's scope reaches a contract file",
@@ -1770,7 +1771,7 @@ def _selftest() -> int:
         schemas = _import_engine()
         manifest = store.manifest()
         checks += [
-            ("manifest builds against the engine's ManifestEntry", len(manifest.entries) == 9),
+            ("manifest builds against the engine's ManifestEntry", len(manifest.entries) == 10),
             ("combined_hash is carried through",
              manifest.combined_hash == store.combined_hash),
         ]
