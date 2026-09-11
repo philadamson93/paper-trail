@@ -120,7 +120,9 @@ Exit after writing the verdict JSON. Final message: absolute path + one line lik
 
 ## Orchestrator notes (not sent to subagent)
 
-- ⚠ **Corrected 2026-09-10 — this bullet used to say "Validate the exit JSON."** It contradicted
+- ⚠ **Corrected 2026-09-10 — this bullet used to carry an exit-JSON *checking* instruction.**
+  (Deliberately described, not quoted: restating a forbidden imperative verbatim leaves it
+  actionable to anyone skimming, and Gate F flags it for exactly that reason.) It contradicted
   `.claude/commands/sarol-eval-item.md` step 4, which forbids the dispatching session from validating
   or repairing the verdict ("a second opinion here can only disagree with the validator of record"),
   and it contradicted the very next bullet. The dispatching session must **not** check the enum, the
