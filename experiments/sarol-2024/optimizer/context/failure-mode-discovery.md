@@ -24,9 +24,11 @@ Two properties of it that change how you plan:
 So it is a complete census of *this batch's* errors, not a sample of them — which is what makes
 "how much mass does this mode carry" a real number rather than an impression.
 
-**The TRAIN batch is re-drawn every iteration.** The draw seed is keyed on the iteration number;
-VAL is fixed, TRAIN is not. So a failure you fixed last iteration and cannot find this iteration may
-be fixed, or may simply not have been drawn. **Absence is not evidence.** Confirm a fix by watching
+**Do not assume the TRAIN batch was re-drawn.** The draw is keyed on the iteration number, so a
+different roster is possible in principle — but measured over the last run's
+`train/draw_history.json`, all five iterations drew the **same 50 claims** (pairwise Jaccard 1.000).
+**Read `train/draw_history.json` for this run and check** before treating a missing failure as
+either fixed or undrawn. If the roster really did change, absence is not evidence. Confirm a fix by watching
 `per_class_f1_9way` move in the direction you predicted, never by failing to re-find the instance.
 (`per_class_f1` has only the three collapsed buckets in it and cannot answer a nine-class question.)
 

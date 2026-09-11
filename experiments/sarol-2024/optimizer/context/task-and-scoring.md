@@ -23,8 +23,7 @@ annotation" below — not the benchmark.)
 Nine labels. The emittable set is frozen in
 `experiments/sarol-2024/specs/verdict_enum_sarol.md`, which the judge loads on every claim. What each
 label *means* to the benchmark's annotators is transcribed in
-`experiments/sarol-2024/specs/verdict_definitions_sarol.md` — a reference for you, **not** part of
-the program and never read by the judge. You cannot change either. How to *apply* the labels is the
+`experiments/sarol-2024/specs/verdict_definitions_sarol.md` — a reference for you. It is a **frozen manifest entry** that the judge never loads. You cannot change either. How to *apply* the labels is the
 editable clarifications layer, and it is the only thing the judge reads besides the enum — see
 `experiments/sarol-2024/optimizer/context/edit-surface.md`.
 
@@ -252,9 +251,7 @@ error mass on the leniency side, and no mistake in the three 2026-09-02 corpora 
   single-citation claims and 2.8% of multi-citation ones, but `OVERSIMPLIFY` and
   `NOT_SUBSTANTIATE` instances frequently carry an indirect-attribution component too.
 
-Note the collapse: `INDIRECT` → NOT_ACCURATE but `INDIRECT_NOT_REVIEW` → IRRELEVANT. That used to
-be the reason this confusion was worth attention — it crossed two 3-way buckets while its neighbours
-did not. **Under accuracy that argument is retired**: every wrong label costs exactly one claim,
+Note the collapse: `INDIRECT` → NOT_ACCURATE but `INDIRECT_NOT_REVIEW` → IRRELEVANT. Under 3-way that crossing was the reason this confusion drew attention. **Under accuracy that argument does not apply**: every wrong label costs exactly one claim,
 whatever bucket it collapses into. The distinction is worth getting right on its own merits now, not
 because of where it lands.
 
@@ -269,9 +266,8 @@ Two honest caveats, both of which should temper how much effort you spend here:
 
 - **N=5 is within noise.** Whether the adjudicator *systematically* under-commits needs N≥50 to
   say. Do not treat it as established. This caveat stands.
-- ~~**Both misses are 3-way hits**, so this pattern costs nothing on the frontier.~~ **No longer
-  true, and the reversal matters.** That was written when the objective was 3-way; `OVERSIMPLIFY`,
-  `NOT_SUBSTANTIATE` and `CONTRADICT` all collapse into NOT_ACCURATE, so a slip among them was free.
+- **A slip inside the NOT_ACCURATE group is a full miss, not a free one.** Under 3-way it would have
+  been free — `OVERSIMPLIFY`, `NOT_SUBSTANTIATE` and `CONTRADICT` all collapse into NOT_ACCURATE.
   **Under accuracy every one of them is a full miss.** These three plus `MISQUOTE` and `INDIRECT`
   hold 67 of dev's 311 claims, and confusions *inside* that group are now scored — they are exactly
   the mass that `micro_f1` still forgives and `primary_metric` does not.

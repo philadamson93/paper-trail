@@ -254,9 +254,8 @@ on.
 
 ## Checking your own predictions
 
-There is **no `followups` key and nothing scores your predictions back to you.** An earlier version
-of this document promised one; no code ever emitted it, so the promise is removed rather than left
-standing.
+There is **no `followups` key and nothing scores your predictions back to you.** No code emits one,
+so do not wait for one.
 
 What you do instead, and where: **write the prediction into
 `experiments/sarol-2024/optimizer/findings/iter-<n>.md`** when you make the edit — which verdict

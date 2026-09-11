@@ -444,6 +444,8 @@ the frozen version against VAL after your edits, to confirm the pipeline still w
 charged twice per iteration — current and probe — on top of TRAIN, and VAL is by far the largest
 term in the bill.*)
 
-If you genuinely believe no edit is warranted, say why in
-`experiments/sarol-2024/optimizer/meta-learnings.md` explicitly. That is a
-result. Silence is not.
+If you genuinely believe no edit is warranted, say why in **your findings entry** — that is where a
+per-run observation about *these examples* belongs, per the three-record-surfaces rule above. Do not
+route it to `experiments/sarol-2024/optimizer/meta-learnings.md`; that file is for what generalises about *how to optimize this task*,
+and mixing the two is what made the inherited lessons unreadable. Stating the reason is a result.
+Silence is not.

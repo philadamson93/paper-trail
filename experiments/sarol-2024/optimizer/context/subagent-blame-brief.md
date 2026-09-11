@@ -116,8 +116,7 @@ The nine labels: `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADI
      portion of it to this one.
    - **gold** — you believe the benchmark's label is wrong or genuinely ambiguous. Legitimate. Say
      why in one sentence, against the definitions file. It is not a catch-all for a miss you cannot
-     explain — that is `unclear` — but do not talk yourself out of it either: this category used to
-     be described as "rare", and that word alone was enough to break a tie the evidence did not.
+     explain — that is `unclear` — but do not talk yourself out of it either: do not let a frequency word decide it — a bare adjective like "rare" is not evidence, and a tie broken on one is a guess wearing a reason.
    - **unclear** — the record does not tell you. Better than a guess.
 
 5. **Open a reasoning trace when the blame turns on what the judge did.** Each corpus row carries

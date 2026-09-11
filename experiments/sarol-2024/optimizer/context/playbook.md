@@ -96,7 +96,7 @@ real prior and the normal loop applies.
 The VAL draw is seeded once and stays the same across iterations, so the VAL curve is a comparison of
 programs.
 
-⚠ **TRAIN has been identical too — this file used to claim otherwise, and the claim was false.**
+⚠ **TRAIN has been identical too.**
 Measured over the 2026-09-09 run's `train/draw_history.json`: all five iterations drew the **same 50
 claims**, pairwise Jaccard **1.000** on every pair. The draw is keyed on the iteration number, so a
 *different* roster is possible in principle, but do not assume it happened — **read

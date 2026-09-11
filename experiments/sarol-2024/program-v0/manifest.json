@@ -108,7 +108,7 @@
       "ETIQUETTE",
       "IRRELEVANT"
     ],
-    "contract": "FIXED. The optimizer may edit every part of the rubric that makes it good -- definitions, boundaries, worked examples, tie-breaks, the worst-wins ordering -- but NOT the set of emittable labels, because the benchmark defines it and the scorer consumes it. The optimizer prompt must state this enum explicitly. A prediction outside it is an invalid output: scored as a miss and counted in error_class_counts, never a crash and never silently re-bucketed.",
+    "contract": "FIXED. The optimizer may edit every part of the rubric that makes it good -- boundaries, worked examples, tie-breaks, the worst-wins ordering -- but NOT the eight paper-verbatim class definitions (frozen in verdict_definitions_sarol.md and asserted verbatim in both judge-path files by check_paper_fidelity.py), and NOT the set of emittable labels, because the benchmark defines it and the scorer consumes it. The optimizer prompt must state this enum explicitly. A prediction outside it is an invalid output: scored as a miss and counted in error_class_counts, never a crash and never silently re-bucketed.",
     "why_no_collapse_needed": "This variant emits Sarol's gold vocabulary directly, so every gold label is reachable and 3-way macro-F1 is directly comparable to the published baselines. The mainline-plus-collapse alternative left 17 of IRRELEVANT's 34 instances structurally unreachable -- see the plan's Part A2."
   },
   "runtime_pins": {
