@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -55,12 +56,38 @@ def _rel(p: Path) -> str:
         return str(p)
 
 
+def stub_bytes() -> bytes | None:
+    """The stub as COMMITTED, not as it sits in the worktree.
+
+    Comparing the sheet to the working-tree stub is not a stable anchor: both are ordinary
+    optimizer-side files, so one session that rewrote *both* to the same inherited content would
+    pass this gate trivially. The committed blob is the anchor -- it cannot be changed by the same
+    edit that dirties the sheet. Falls back to the worktree copy only outside a git checkout (the
+    selftest), and says so rather than silently degrading.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(REPO), "show", f"HEAD:{STUB.relative_to(REPO)}"],
+            capture_output=True, check=True,
+        )
+        return out.stdout
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+        return None
+
+
 def inherited() -> list[str]:
     """What this checkout would hand a 'fresh' run that does not belong to it."""
     problems = []
     if not STUB.exists():
         problems.append(f"{_rel(STUB)} is missing -- there is no clean sheet to reset to")
         return problems
+    committed = stub_bytes()
+    if committed is not None and hashlib.sha256(committed).hexdigest() != _sha(STUB):
+        problems.append(
+            f"{_rel(STUB)} differs from its COMMITTED bytes. The clean sheet is the anchor this "
+            "gate compares against, so an edited stub would let inherited content pass. Commit the "
+            "stub change deliberately, or revert it."
+        )
     if not SHEET.exists():
         problems.append(f"{_rel(SHEET)} is missing entirely; reset it from the stub")
     elif _sha(SHEET) != _sha(STUB):
@@ -122,6 +149,9 @@ def main() -> int:
         )
         return 1
     print("Gate H passed -- the optimizer's sheet is clean; this run starts from scratch.")
+    print(f"  checkout inspected: {REPO}")
+    print("  ⚠ scoped to THIS checkout only -- it resolves from its own location, so a pass here "
+          "says nothing about a sibling worktree.")
     return 0
 
 

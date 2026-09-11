@@ -82,19 +82,19 @@ DISPATCH_PATH_FILES: tuple[Path, ...] = (
 #: (file stem, prohibition, why it is inert today, the stage that would arm it).
 #: NOT a suppression list: `--selftest`'s third control asserts every armed-by stage is still
 #: absent from `profiles.IMPLEMENTED_STAGES`. Implementing that stage fails this gate by design.
+#: (file stem, prohibition, EXACT offending text, arming stage). The offending text is pinned
+#: per-occurrence on purpose: keying only on (file, prohibition) would suppress a DIFFERENT forbidden
+#: sentence later added to the same file under the same prohibition -- a register that grows silently
+#: is the suppression list it was meant not to be.
 KNOWN_DEFERRED: tuple[tuple[str, str, str, str], ...] = (
     ("extractor-dispatch-pdf", "never validate the subagent's content",
-     "shipped-tool orchestrator text; the experiment driver aborts this stage", "extractor"),
-    ("extractor-dispatch-pdf", "never retry a stage",
-     "shipped-tool orchestrator text; the experiment driver aborts this stage", "extractor"),
+     "Validate the extractor's exit JSON", "extractor"),
+    ("extractor-dispatch-pdf", "never retry a stage", "retry", "extractor"),
     ("extractor-dispatch-paperclip", "never validate the subagent's content",
-     "shipped-tool orchestrator text; the experiment driver aborts this stage", "extractor"),
-    ("extractor-dispatch-paperclip", "never retry a stage",
-     "shipped-tool orchestrator text; the experiment driver aborts this stage", "extractor"),
-    ("verifier-dispatch", "never retry a stage",
-     "shipped-tool bounce semantics; the experiment driver aborts this stage", "verifier"),
-    ("verifier-dispatch", "never author or repair the verdict",
-     "shipped-tool flag-patch semantics; the experiment driver aborts this stage", "verifier"),
+     "Validate the extractor's exit JSON", "extractor"),
+    ("extractor-dispatch-paperclip", "never retry a stage", "retry", "extractor"),
+    ("verifier-dispatch", "never retry a stage", "bounce", "verifier"),
+    ("verifier-dispatch", "never author or repair the verdict", "flag-patch", "verifier"),
 )
 
 
@@ -133,7 +133,7 @@ def main() -> int:
                 "A prohibition is the contract this gate enforces; removing one is a contract change."
             )
 
-    deferred = {(stem, proh) for stem, proh, _, _ in KNOWN_DEFERRED}
+    deferred = {(stem, proh, text.lower()) for stem, proh, text, _ in KNOWN_DEFERRED}
     seen_deferred: set[tuple[str, str]] = set()
 
     for path in DISPATCH_PATH_FILES:
@@ -142,7 +142,7 @@ def main() -> int:
             failures.append(f"{path.relative_to(REPO)} is missing from the dispatch path")
             continue
         for proh, matched in violations_in(path):
-            key = (path.stem, proh)
+            key = (path.stem, proh, matched.lower())
             if key in deferred:
                 seen_deferred.add(key)
                 continue
@@ -210,7 +210,44 @@ def selftest() -> int:
     print(f"  {'PASS' if not hit else 'FAIL'}  benign orchestrator prose is left alone")
     ok &= not hit
 
-    print(f"\n{'4/4 passed' if ok else 'SELFTEST FAILED'}")
+    # The four above exercise the regex helper. These three exercise main() -- the gate's real
+    # decision path -- because the advertised allowlist and prohibition claims were previously
+    # asserted only in a comment. A control that tests the helper does not test the gate.
+    import copy
+    real_stages = None
+    try:
+        sys.path.insert(0, str(EXPERIMENT / "optimizer"))
+        import profiles as _pf
+        real_stages = _pf.IMPLEMENTED_STAGES
+        _pf.IMPLEMENTED_STAGES = tuple(list(real_stages) + ["extractor"])
+        armed = main() == 1
+    finally:
+        if real_stages is not None:
+            _pf.IMPLEMENTED_STAGES = real_stages
+    print(f"  {'PASS' if armed else 'FAIL'}  implementing a deferred stage ARMS its contradictions "
+          "and fails the gate (the allowlist is tripwired, not a suppression list)")
+    ok &= armed
+
+    real_def = KNOWN_DEFERRED
+    globals()["KNOWN_DEFERRED"] = real_def + (
+        ("verifier-dispatch", "never retry a stage", "a sentence that is not present", "verifier"),)
+    stale = main() == 1
+    globals()["KNOWN_DEFERRED"] = real_def
+    print(f"  {'PASS' if stale else 'FAIL'}  a deferral whose exact text is absent fails "
+          "(occurrence-level, so swapping in a different violation cannot hide behind it)")
+    ok &= stale
+
+    real_proh = PROHIBITIONS
+    globals()["PROHIBITIONS"] = tuple(
+        (n, "a phrase the driver does not contain", pats) if i == 0 else (n, ph, pats)
+        for i, (n, ph, pats) in enumerate(real_proh))
+    deleted = main() == 1
+    globals()["PROHIBITIONS"] = real_proh
+    print(f"  {'PASS' if deleted else 'FAIL'}  deleting a hard prohibition from the driver fails "
+          "(the contract cannot be quietly narrowed)")
+    ok &= deleted
+
+    print(f"\n{'7/7 passed' if ok else 'SELFTEST FAILED'}")
     return 0 if ok else 1
 
 

@@ -148,7 +148,11 @@ def cmd_write(args) -> int:
 
     MANIFEST.write_text(json.dumps(ordered, indent=2) + "\n")
     n_contract = sum(1 for e in entries if e["contract_file"])
-    print(f"wrote {MANIFEST.relative_to(REPO)}")
+    try:
+        shown = MANIFEST.relative_to(REPO)
+    except ValueError:
+        shown = MANIFEST  # --selftest round-trips against a copy outside the repo
+    print(f"wrote {shown}")
     print(f"  entries        {len(entries)} ({n_contract} contract_file)")
     print(f"  main   @ {refs['main'][:12]}")
     print(f"  sarol  @ {refs['sarol'][:12]}")
@@ -197,6 +201,8 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=False)
     p.add_argument("--write", action="store_true", help="rewrite manifest.json")
     p.add_argument("--verify", action="store_true", help="verify manifest.json")
+    p.add_argument("--selftest", action="store_true",
+                   help="round-trip a COPY and assert runtime_pins survives a re-freeze")
     p.add_argument("--tree", help="also verify every entry against this composed tree/tag")
     p.add_argument("--main-ref", default="main")
     p.add_argument("--sarol-ref", default="HEAD")
@@ -205,10 +211,71 @@ def main() -> int:
 
     if args.write:
         return cmd_write(args)
+    if getattr(args, "selftest", False):
+        return cmd_selftest(args)
     if args.verify:
         return cmd_verify(args)
     p.print_help()
     return 2
+
+
+def cmd_selftest(args) -> int:
+    """Assert the properties two gates now DEPEND on, rather than assuming them.
+
+    `runtime_pins` is where a dependency outside the frozen fileset gets recorded -- the paperclip
+    CLI today, and (proposed) the BM25 evidence producer, whose bytes decide every passage the judge
+    reads while `combined_hash` stays identical. Two gates would then read pins out of this file.
+    Neither gate writes it, and nothing asserted it survives a re-freeze: `cmd_write` preserves it
+    only because it does `dict(old)`. A later tidy-up that rebuilt the manifest from a literal would
+    silently empty the container, and every gate keyed on it would report green-by-absence.
+
+    So this is a real round-trip against a COPY, not an inspection of the source for `dict(old)` --
+    that structural form would itself break on a rename and is green-by-absence-prone in the same way.
+    """
+    import shutil
+    import tempfile
+
+    global MANIFEST
+    real = MANIFEST
+    checks: list[tuple[str, bool]] = []
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            copy = Path(td) / "manifest.json"
+            shutil.copyfile(real, copy)
+            before = json.loads(copy.read_text())
+            MANIFEST = copy
+            rc = cmd_write(args)
+            after = json.loads(copy.read_text())
+
+        checks.append(("the re-freeze itself succeeds against a copy", rc == 0))
+        checks.append((
+            "`runtime_pins` is byte-identical after a re-freeze -- the container two gates read "
+            "out of this file is not emptied by rewriting it",
+            after.get("runtime_pins") == before.get("runtime_pins") and bool(after.get("runtime_pins")),
+        ))
+        checks.append((
+            "...and it is NON-EMPTY, so the assertion above cannot pass by both sides being absent",
+            bool(after.get("runtime_pins")),
+        ))
+        checks.append((
+            "`output_vocabulary` and `deliberately_excluded` survive too (same mechanism)",
+            after.get("output_vocabulary") == before.get("output_vocabulary")
+            and after.get("deliberately_excluded") == before.get("deliberately_excluded"),
+        ))
+        checks.append((
+            "the re-freeze DID rewrite what it owns, so the test is not passing on a no-op",
+            after.get("combined_hash_recipe") == COMBINED_HASH_RECIPE and "entries" in after,
+        ))
+    finally:
+        MANIFEST = real
+
+    ok = True
+    for label, passed in checks:
+        ok &= passed
+        print(f"  {'PASS' if passed else 'FAIL'}  {label}")
+    n = len(checks)
+    print(f"\n{f'{n}/{n} passed' if ok else 'SELFTEST FAILED'}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

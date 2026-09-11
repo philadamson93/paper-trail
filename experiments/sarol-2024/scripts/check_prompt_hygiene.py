@@ -28,6 +28,7 @@ all its operative force as "Why not 3-way".
 
 from __future__ import annotations
 
+import pathlib
 import re
 import sys
 from pathlib import Path
@@ -37,8 +38,10 @@ EXPERIMENT = REPO / "experiments" / "sarol-2024"
 
 #: Changelog phrasing. Each is a way of telling the reader the file changed, which no agent needs.
 FORBIDDEN: tuple[tuple[str, str], ...] = (
-    ("retrospective-wording", r"\bused to (be|say|carry|have|read)\b"),
-    ("retrospective-wording", r"\bearlier (revisions?|drafts?)\b"),
+    ("retrospective-wording", r"\bused to (be|say|carry|have|read|claim|promise|require|mean)\b"),
+    ("retrospective-wording", r"\b(an|the) earlier (revisions?|drafts?|versions?)\b"),
+    ("retrospective-wording", r"\bthis (file|document|section) (used to|once)\b"),
+    ("superseded-instruction", r"~~[^~]{10,}~~"),
     ("retrospective-wording", r"\bpreviously (said|read|was|were)\b"),
     ("retrospective-wording", r"\bno longer (says|reads|claims)\b"),
     ("retrospective-wording", r"\bhas since been (fixed|changed|corrected|removed)\b"),
@@ -62,17 +65,37 @@ def agent_read_files() -> list[Path]:
     files += sorted((EXPERIMENT / "optimizer" / "context").glob("*.md"))
     return [f for f in files if f.exists()]
 
-#: Sourced from `main`, so an experiment branch must not edit them. Registered, not ignored:
-#: the gate still asserts each is exactly as known, so a change there surfaces here.
-KNOWN_DEFERRED: tuple[tuple[str, str], ...] = (
-    ("src/specs/verdict_schema.md", "shipped schema version history; file is sourced from `main`"),
-)
+#: Sourced from `main`, so an experiment branch must not edit them. Registered, not ignored: the
+#: gate asserts each entry is a REAL, still-present violation, so a stale entry fails rather than
+#: drifting. Empty is the correct state today -- and the register's logic is still exercised by
+#: selftest's injected-stale-entry control, so it cannot rot while unused. A mechanism tested only
+#: when non-empty is green-by-absence, which is the defect this whole gate family exists for.
+#:
+#: ⚠ `src/specs/verdict_schema.md` is deliberately OUT OF SCOPE rather than deferred: it is a
+#: shipped schema contract whose version history is part of its function (a consumer needs to know
+#: what changed between 1.0 and 1.1), it is not injected into any agent as instructions, and it is
+#: sourced from `main`. Listing it here was wrong on both counts -- the entry claimed a violation
+#: this gate's rules do not flag, so it read as coverage while asserting nothing.
+KNOWN_DEFERRED: tuple[tuple[str, str], ...] = ()
+
+
+def _normalize(text: str) -> str:
+    """Collapse markdown line-wrapping so a wrapped phrase still matches.
+
+    Reuses `check_paper_fidelity.py`'s idiom rather than re-deriving it. Without this the gate is
+    defeated by an authored line break: "four documents used to\nsay it was" did NOT match
+    `used to say`, because the pattern's literal space is not a newline. That miss was real and
+    shipped -- an audit found it in `edit-surface.md`. A gate that a line wrap can silence is not
+    a gate, so normalization happens before matching, always.
+    """
+    return " ".join(text.split())
 
 
 def violations_in(text: str) -> list[tuple[str, str]]:
+    flat = _normalize(text)
     out = []
     for kind, pat in FORBIDDEN:
-        for m in re.finditer(pat, text, re.IGNORECASE):
+        for m in re.finditer(pat, flat, re.IGNORECASE):
             out.append((kind, m.group(0)))
     return out
 
@@ -87,13 +110,31 @@ def main() -> int:
                 f"{path.relative_to(REPO)}: {kind} -- {matched!r}. An agent reading this file has "
                 "no use for what it used to say. State the rule as it stands; the history is in git."
             )
+    # The deferred register is an ASSERTION, not a note. It was dead data on first ship -- declared
+    # and never consumed -- which is the "suppression list dressed as a register" shape this gate
+    # exists to avoid, committed by this gate. Each entry must still be a real, still-present
+    # violation: if the prose was fixed, the entry is stale and must be deleted, and if the file
+    # vanished the deferral is meaningless. Either way the gate fails rather than drifting.
+    for rel, reason in KNOWN_DEFERRED:
+        checks += 1
+        path = REPO / rel
+        if not path.exists():
+            failures.append(f"KNOWN_DEFERRED names {rel}, which does not exist -- delete the entry")
+            continue
+        if not violations_in(path.read_text()):
+            failures.append(
+                f"KNOWN_DEFERRED carries {rel} ({reason}) but it is now clean. "
+                "The prose was fixed; delete the allowlist entry rather than carrying it."
+            )
+
     if failures:
         print(f"Gate G FAILED -- {len(failures)} problem(s):", file=sys.stderr)
         for f in failures:
             print(f"  - {f}", file=sys.stderr)
         return 1
     print(f"Gate G passed -- {checks} agent-read files carry no development history.")
-    print(f"  {len(KNOWN_DEFERRED)} deferred (sourced from `main`, not editable from this branch)")
+    n = len(KNOWN_DEFERRED)
+    print(f"  {n} deferred" + (", each verified still-violating" if n else " (register empty; its logic is covered by --selftest)"))
     return 0
 
 
@@ -114,7 +155,34 @@ def selftest() -> int:
         good = fired == should_fire
         ok &= good
         print(f"  {'PASS' if good else 'FAIL'}  {label}")
-    print(f"\n{'6/6 passed' if ok else 'SELFTEST FAILED'}")
+
+    # A line break must not silence the gate. This is the miss that shipped: `used to say` is in the
+    # pattern list, but "four documents used to\nsay it was" did not match, because the pattern's
+    # literal space is not a newline. An audit found it in a swept file the gate had passed.
+    wrapped = "because four documents used to\nsay it was frozen"
+    fired = bool(violations_in(wrapped))
+    ok &= fired
+    print(f"  {'PASS' if fired else 'FAIL'}  a phrase broken across an authored LINE WRAP is still "
+          "caught (the miss that shipped)")
+
+    # The register's own control: a stale entry must FAIL, proving the mechanism works even though
+    # KNOWN_DEFERRED is empty in the shipped state.
+    import tempfile
+    real_reg, real_repo = KNOWN_DEFERRED, REPO
+    with tempfile.TemporaryDirectory() as td:
+        clean_file = pathlib.Path(td) / "clean.md"
+        clean_file.write_text("# a file with no development history\n")
+        globals()["KNOWN_DEFERRED"] = ((clean_file.name, "injected stale entry"),)
+        globals()["REPO"] = pathlib.Path(td)
+        globals()["_SILENCE"] = True
+        stale_caught = main() == 1
+    globals()["KNOWN_DEFERRED"], globals()["REPO"] = real_reg, real_repo
+    globals()["_SILENCE"] = False
+    ok &= stale_caught
+    print(f"  {'PASS' if stale_caught else 'FAIL'}  a STALE deferred entry fails the gate "
+          "(the register is an assertion, not a note)")
+
+    print(f"\n{'8/8 passed' if ok else 'SELFTEST FAILED'}")
     return 0 if ok else 1
 
 
