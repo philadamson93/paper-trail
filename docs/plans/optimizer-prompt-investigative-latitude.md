@@ -520,6 +520,44 @@ hypothetical (it is what Gate F caught first). The history belongs in git and `d
   wins). ⚠ One deferred: `src/specs/verdict_schema.md` carries a shipped schema version history and
   is sourced from `main`, so it is not editable from this branch.
 
+**Step A4 — run scope (Gate H, added 2026-09-11).**
+`experiments/sarol-2024/scripts/check_run_scope.py`. `meta-learnings.md` is injected into every
+optimizer session and is the only state that carries across iterations — which is the point *within*
+a run and contamination *across* runs. **Nothing ever archived or reset it.** It was reset once by
+hand (S6 of `optimizer-instrument-repair.md`) while `profiles.py:514` reasons as though
+"reset between runs" were a guaranteed property. It is also not a manifest entry, so two runs both
+labelled `program-v0` could open with different inherited hypotheses and nothing would detect it —
+the same defect shape as the driver and the orchestrator notes, third instance in three days.
+- *Expected:* for a fresh run the sheet is byte-identical to `meta-learnings.stub.md` and no
+  `findings/iter-*.md` remain. `findings/README.md` is standing doc and is not run state.
+- *Stop:* anything inherited. Override `SAROL_ALLOW_INHERITED_LESSONS=1` for a deliberate
+  continuation run, which prints loudly that its numbers are not comparable to a fresh run's.
+- *Negative controls (4/4):* clean sheet accepted; prior-run lessons refused; leftover per-iteration
+  findings refused even with a clean sheet; `findings/README.md` not mistaken for run state.
+- *Done 2026-09-11:* the 2026-09-09 run's 258-line sheet is archived to
+  `~/.paper-trail/runs/_archive/<ts>-hillclimb-vm-2026-09-09/` and the sheet reset to the stub.
+  **This unblocks the owed baseline recut**, which would otherwise have opened with five iterations
+  of hypotheses formed against the inverted definitions P0 deleted.
+- *Coupling paid down:* the `profiles.py` guard on this file had flipped twice chasing an undefined
+  lifecycle (first pinning "deliberately empty of history", then requiring the opposite). It now
+  accepts **either** legitimate state — clean stub, or inherited-and-qualified — and both branches
+  are verified green (48/48 each).
+
+⚠ **CONTRACT OWED TO THE ISOLATION PLAN — Gate H is a stopgap; the fix is structural.**
+paper-trail already has the run-id (results land in `~/.paper-trail/runs/<run-id>/`) but the boundary
+stops there: releases go to `$REPO_ROOT/iter/`, and the lessons sheet, `findings/` and the
+`program-v*` tag namespace all live in one **shared** checkout. rad-eval scopes a run by cloning the
+repo per run-id — `src/optimizer_loop/run_artifacts.py::default_loop_clone` — and its docstring states
+the payoff: *"two run-ids → two independent `.git` clones → the working tree, `iter/`, the
+`program-v*` tag namespace, and the in-clone audit ledger all isolate for free."* Phil's framing
+(2026-09-11): **program is per iteration, optimizer is per run.** Adopting the per-run clone retires
+Gate H *and* most of the ledger-recut problem — the recut is only dangerous because tags are shared;
+in a disposable per-run clone there is no shared history to rewrite. This belongs in the isolation
+plan, which is already building per-run checkouts (its Phase 1a), rather than bolted on beside it.
+⚠ **Open sub-question for whoever lands it:** Gate H archives to `~/.paper-trail/runs/_archive/`,
+which is **local disk**, not the shared bucket mount where run artifacts belong under the bucketing
+approach. If run state is to live on the mount, the archive destination should follow.
+
 **Step B — factual audit of every harness claim written into the docs.**
 - *Expected:* both release files present; `draw_history.json` confirms identical rosters; `trace_ref`
   present per mistake record; the 0.48/0.42 replicate reproduces.
