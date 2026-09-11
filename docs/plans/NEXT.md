@@ -2,57 +2,75 @@
 
 **Always-current.** Edit this file when state changes. Fresh agents picking up work should read this *first*, then follow the reading path in `CLAUDE.md`.
 
-**Last updated:** 2026-09-09
+**Last updated:** 2026-09-11
 
-## HEAD 2026-09-09 — read this first, then the history below
+## HEAD 2026-09-11 — read this first, then the history below
 
-Three plans now exist for the optimizer work. **The landing order is isolation → Plan A → Plan B**
-(all three edit `.claude/commands/sarol-eval-item.md`; Codex flagged the collision).
+⚠ **LANDING ORDER INVERTED 2026-09-11: Plan A → isolation → Plan B.** Plan A finished first, so the
+isolation session is rebasing onto `94a376f` and landing after it (agreed between both sessions).
 
-- **Plan A — P0 + Steps 0–6 IMPLEMENTED & REVIEWED 2026-09-09.** [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md)
-  · branch `feat/optimizer-prompt-latitude`, 7 commits `b20debd`..`97cddcf`, pushed · gates + suite green.
-  next: Step 7 (driver split) — **blocked until the isolation plan lands** · then ledger recut (needs go-ahead), canary re-pin, Gate E · resume from [`../session/plan-a-implementation-readback.md`](../session/plan-a-implementation-readback.md)
-- **Isolation plan — NOT YET WRITTEN. This is the gap.** Spec is findings §4g.
-  next: author `docs/plans/isolation-protocol.md` · resume from [`../session/isolation-plan-authoring-readback.md`](../session/isolation-plan-authoring-readback.md)
+- **Plan A — COMPLETE for its own scope, 2026-09-11.** [`optimizer-prompt-investigative-latitude.md`](optimizer-prompt-investigative-latitude.md)
+  · branch `feat/optimizer-prompt-latitude` @ `3010192`, 29 commits, pushed · Gates A/D/F/G/H + 4
+  gate-selftests green, suite 447/447 · Codex round-2 audit applied.
+  next: nothing in-lane — **ledger recut (needs Phil's go-ahead), canary re-pin, Gate E (~$25)**; the
+  Codex Critical is owed to the isolation plan · resume from [`../session/plan-a-implementation-readback.md`](../session/plan-a-implementation-readback.md)
+- **Isolation plan — WRITTEN, reviewed, 5 phases / 8 OQs.** `docs/plans/isolation-protocol.md`
+  (untracked in `~/paper-trail`; explainer on the mount at `plan-explainers/isolation-protocol.html`).
+  next: **Phil's `/read-plan` sign-off with OQ1–OQ8 resolved**, then implement · it now also owns the
+  post-edit enforcement Critical, the mirrored-ladder invariant, and the per-run loop clone.
 - **Plan B — scoping only, parked.** [`phase2-evidence-acquisition-programmability.md`](phase2-evidence-acquisition-programmability.md)
   · blocked behind the two above. No action.
 - **Root-cause evidence for all three:** `docs/session/2026-09-09-optimizer-loop-and-isolation-findings.md`
   (git-ignored; §8 is the Sarol Table 1 reconciliation, promote to `docs/journal/` on land).
 
+⚠ **THE UNAPPLIED CODEX CRITICAL (2026-09-11).** All five gates run ONCE at preflight, but the
+optimizer edits the rubric, the dispatch prompt and the driver *during* the run; the only post-agent
+guard re-hashes `contract_file=True` entries (`adapter.py:1591-1626`) — aimed at the files that cannot
+change. So Gate A's paper-verbatim guarantee and the driver's prohibitions are violable mid-run,
+uncaught. Fix belongs in `ContractGuardedAgent.run()` = the isolation plan's seam. **Do not run an
+armed iteration before it lands.** Full audit:
+[`reviews/optimizer-prompt-investigative-latitude-implementation-feedback-round2.md`](reviews/optimizer-prompt-investigative-latitude-implementation-feedback-round2.md)
+
+⚠ **Four uncovered-input defects found 2026-09-11, one still open.** The pattern: *a mechanism that
+would have covered it already existed and was aimed one file (or one moment) away.* Driver → not in
+the manifest (FIXED, now entry 10). Orchestrator notes → no gate on the driver's read path (FIXED,
+Gate F). Lessons sheet → `profiles.py:514` asserted a reset lifecycle nothing implemented (FIXED,
+Gate H). **OPEN: the evidence envelope** — `evidence_producers.py` writes what the judge reads as
+evidence and is in no manifest entry, so changing its tokenizer moves every score with
+`combined_hash` byte-identical. `runtime_pins` is the existing home (verified: it is outside
+`combined_hash` and survives a re-freeze, `freeze_program_v0.py --selftest`). Needs Phil's call.
+
 ⚠ **The 2026-09-09 headline:** the 5-iteration run's held-out 0.62 **loses to the always-ACCURATE
 floor of 0.70** on the same 50 claims, and 9 of 10 net-gained claims were the majority class. The
 objective is anti-informative and the measurement redesign is the next plan after these three.
 
-⚠ **This file is 750+ lines of prose and violates its own pointer contract** (≤3 lines per item,
+⚠ **This file is 800+ lines of prose and violates its own pointer contract** (≤3 lines per item,
 substance in the plan doc). A dedicated consolidation pass is owed — out of scope for `/wrapup`.
 
-### Surfaced 2026-09-09 by the Plan A implementation + review
+### Standing rules + open items surfaced by the Plan A work
 
-- ✅ **The Sarol test split is SEALED again** (2026-09-09). It had been sitting unsealed in the
-  benchmarks dir; all three artifacts `CLAUDE.md` Rule 2 covers are now at
-  `$HOME/.paper-trail-sealed/sarol-2024-test/` — `claims-test.jsonl`, `annotations.zip`, and the
-  extracted `annotations/Test/` (moved to `annotations-Test/`). Checksums verified identical across
-  the move; no test labels were read at any point. **Seal proven load-bearing, not merely configured:**
-  `stage_claim.py --split test` now raises `FileNotFoundError` in `load_claims` (`:69`) at file-open,
-  while the identical call on `--split dev` gets *past* the open and fails at `KeyError` on the dummy
-  id — a real negative-control pair. Full suite re-run green after the move.
-  ⚠ **Re-break vector, not yet closed:** `data/benchmarks/sarol-2024/download.sh:33,35` re-fetches
-  `claims-test.jsonl` and `annotations.zip` into the benchmarks dir on any future run. The unzip is
-  guarded (`! -d annotations`) but the fetches are not. The seal is a filesystem fact with no gate
-  behind it — a candidate for the isolation plan's Phase 0 integrity floor.
-- ⚠ **Table 1 has now been mis-transcribed twice.** Three inverted clauses (found 2026-09-09), then
-  two truncations (CONTRADICT, ETIQUETTE) found by double-reading PMC11231046 the same day.
-  Rule: verify against the paper, never against another copy in this repo.
-  Guard: `experiments/sarol-2024/scripts/check_paper_fidelity.py`.
-- **Re-run the Codex implementation review before `/land`.** It failed mid-run with
-  "workspace is out of credits" (and exited 0 having written nothing); a fresh Claude subagent
-  substituted. See `docs/plans/reviews/optimizer-prompt-investigative-latitude-implementation-feedback.md`.
+- ⚠ **Verify Table 1 against the PAPER, never against another copy in this repo.** It was
+  mis-transcribed twice — three inverted clauses, then two truncations found by double-reading
+  PMC11231046. Guard: `experiments/sarol-2024/scripts/check_paper_fidelity.py` (Gate A). Codex
+  re-checked all eight strings against the paper on 2026-09-11: exact.
+- ⚠ **The test-split seal has no gate behind it.** Sealed 2026-09-09 to
+  `$HOME/.paper-trail-sealed/sarol-2024-test/` with a verified tripwire, but
+  `data/benchmarks/sarol-2024/download.sh:33,35` re-fetches `claims-test.jsonl` and `annotations.zip`
+  on any future run — only the unzip is guarded. Candidate for the isolation plan's Phase 0.
 - **No `.claude/references/implementation-review-checklist.md` exists.** Both review skills look for
-  one; a repo-grounded checklist would sharpen every future audit here.
-- **Open question for Phil:** the judge-read program shrank −56%, but `optimizer-instructions.md`
-  grew +52%. Does it need the subtractive pass P0 gave the rubric? Nothing measures optimizer
-  instruction-following, and Gate E is the only probe that would.
+  one and fall back to a generic prompt; a repo-grounded checklist would sharpen every future audit.
+- **DEFERRED (Phil, 2026-09-11): no subtractive pass on `optimizer-instructions.md`** even though it
+  grew +52% while the judge-read program shrank −56%. Nothing measures optimizer
+  instruction-following, so the edit would be unverifiable guesswork; revisit once a live iteration
+  can show whether the length hurts.
+- ⚠ **Codex's four author questions are unanswered** — see §Questions For The Author in
+  [`reviews/…-implementation-feedback-round2.md`](reviews/optimizer-prompt-investigative-latitude-implementation-feedback-round2.md).
+  The load-bearing one: was Gate F meant to be pre-run only, given the driver becomes editable after
+  that check?
 
+*(Completed and pruned 2026-09-11: the test split was sealed; the Codex re-review ran and its
+findings are applied — both now recorded in the plan's Verification section and the round-2 feedback
+doc rather than here.)*
 ---
 
 > **Paused 2026-04-29** (see `docs/journal/2026-04-29-pause-sarol-pivot-to-features.md`) — prioritized paper-trail-the-tool feature work over this experiment. **Narrowly resumed 2026-07-20**, not as a return to the paper-writing track: a new plan, `docs/plans/papertrail-optimizer-requirements.md`, makes paper-trail the 3rd consumer of an external, cross-repo shared agentic-optimization engine (`agentic-label-opt` — see that plan's header for the sibling-repo pointer). The sibling engine plan itself (in crc-extraction-agent) is Reviewed (`/review-plan`, findings applied) and iterated via `/explain-plan` feedback. Its own Open Questions §4 confirms scope: the value already delivered is the generalization insight this framework's design gave that external effort; actually building/running paper-trail's optimizer to a real curve stays real, unstarted work, secondary to that — Phases 3-5 below (paper writing) stay paused. **Update 2026-07-20 (this session):** `papertrail-optimizer-requirements.md` itself went through one `/review-plan` (Codex) round — the confirmed finding was that the `sarol` worktree lacks the `src/` tree the plan assumed, now fixed in Part A3 — plus a fresh `/explain-plan` HTML companion, opened for Phil's read. Plan is still `Draft` / `Reviewed: No`; both the plan and the HTML are UNCOMMITTED. **Update 2026-09-01:** cross-repo status refresh applied to the plan + HTML (UNCOMMITTED) — the July sequencing answer's "engine not yet battle-tested against a real consumer" claim is stale. `agentic-label-opt` is `main` @ `6d621ac` (2026-08-24, 50 commits past this plan's `5973dbc407e9` pin, all schema drift additive); rad-eval ran one armed end-to-end Vertex iteration 2026-08-05 and MedVAL (consumer #4) took its adapter VM readback GREEN, so the §459 "interface guessed from ~1.5 consumers" risk is materially retired, and two engine landings (the `"open"` network policy, plural `EditAgentMounts.editable_files`) moved toward this consumer specifically. Part C's re-pin target is now `6d621ac`. **Update 2026-09-01 (round 2):** an independent compatibility audit of the plan against `agentic-label-opt` @ `6d621ac` landed, plus a reconciliation against crc's now-approved dispatcher plan. **OQ1 RESOLVED** (freeze mainline + new scorer-side collapse) and **OQ3 RESOLVED** (fixed topology for v0, recorded against crc's contrary Topology Z precedent). New: **Part A4** — Part A is NOT zero-risk; the manifest isn't closed over the prompts' own `{{spec_root}}` references, and the paperclip command reference lives behind an unpinned external CLI, so two frozen versions could behave differently with no manifest diff. New: **Part C4** — six engine-contract blockers for the adapter (Runner called 3×/iteration not 2×, no timeout or status checks, `_split` never injected, `repo_root` must be pre-resolved, materialized tree isn't a runnable Claude Code project, positional-vs-keyword call asymmetry), plus the audit-ledger actor gap. **No engine change is being requested** — crc settled Runner-cost bounding consumer-side (Phil, 2026-08-27), and paper-trail adopts that pattern. C1's cost source-of-truth corrected from `parse_verdict.py` to real metered spend. ⚠ The `.html` is deliberately left STALE (SHA un-bumped) so the change-layer diffs correctly — regenerate with `/explain-plan` before a visual review. **Part A DONE 2026-09-01 (`24e8740`).** Reference closure computed mechanically over all five A1 prompts: four referenced paths sat outside the fileset. `src/specs/verifier_results.md` **added** (contract of record, `contract_file=True`); `control_flow.md` / `paper-trail.md` / `paperclip/SKILL.md` excluded with reasons recorded in the manifest. The paperclip reproducibility hole is closed by a **version pin** (`paperclip 0.5.11` in `runtime_pins`) rather than by freezing the 10-line stub. `experiments/sarol-2024/program-v0/manifest.json` is written and **self-verifying** — 6 entries frozen from `main` @ `4997e067c3a7`, `combined_hash` `006c36dc46db`, recomputable from the JSON alone with no tooling (verified 6/6 on write). **Two items deliberately left open:** (1) `verifier-dispatch.md:93` still references `src/specs/verifier_results.md` as a BARE relative path — it must become `{{spec_root}}/...` or it won't resolve in a materialized tree, but that is a one-line fix to a shipped prompt on `main`, i.e. tool-feature work on a different branch, not `sarol` research; (2) **no `program-v0` git tag was created** — the program files live on `main` while this work is on `sarol`, and the engine harness mints its own `program-v<i>` tags during the loop, so a hand-made tag risks colliding with that scheme; the manifest is a content-addressed freeze that stands without one. **OQ1 REVERSED 2026-09-01 to the Sarol-rubric variant (`66fb299`).** OQ2 pass 1 ran and failed: a native→Sarol collapse is not injective — `INDIRECT_SOURCE` spans both `INDIRECT` (→NOT_ACCURATE) and `INDIRECT_NOT_REVIEW` (→IRRELEVANT), leaving 17 of IRRELEVANT's 34 gold instances **structurally unreachable**. Rather than accept a capped metric, the program itself changed: `program-v0`'s adjudicator is now `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md`, emitting Sarol's own 9 classes, so every gold label is reachable and **3-way macro-F1 is the frontier scalar**, directly comparable to MultiVerS 0.52 / GPT-4 0.45. ⚠ **Micro-F1 is a trap here** — it equals accuracy for single-label, so an always-ACCURATE do-nothing program scores 0.781 and beats both baselines; macro scores it 0.292. `score_sarol3.py --selftest` pins both (9/9). **Output vocabulary is a fixed contract, rubric guidance is not:** the optimizer may edit definitions, boundaries, examples and orderings, but not the set of emittable labels; an out-of-enum label is scored as a miss and counted in `error_class_counts`, never a crash. `program-v0` re-frozen: 7 entries, **two source refs** (5 from `main` @ `4997e067c3a7`, 2 from `sarol` @ `ba7a5308832b`), `combined_hash` `be2eb8070ae1`, verified 7/7. The Sarol variant's stale `.claude/` paths were repaired first (`ba7a530`); only one of the four was operational. **Native taxonomy RETIRED 2026-09-01 (`2004d87`), landing DEFERRED.** Phil: the native rubric was arbitrary, so adopt Sarol's as the tool's own. Git-traced rather than assumed: all 11 native verdicts plus `CONFIRMED_WITH_MINOR` landed **fully formed in one commit** (`18b3832`, 2026-04-19, the commit that created the schema), with no incremental history and no design doc — and the repo's literature review is dated three days later and never mentions the taxonomy. Sarol's 9 are human-annotated over 3,063 instances with reported κ. So severity (`OVERSTATED_MILD`/`OVERGENERAL`/`CONFIRMED_WITH_MINOR`) and abstention (`AMBIGUOUS`), plus `PARTIALLY_SUPPORTED`/`MISATTRIBUTED`/`CITED_OUT_OF_CONTEXT`, are **removed, not carried as an orthogonal field** — they had no grounding. Workflow states (`PENDING`/`NEEDS_PDF`/`STALE`/`SCHEMA_VIOLATION`) stay: pipeline machinery, not taxonomy. **This retires the "gains don't transfer to the shipped tool" objection** — the tool converges on the same rubric. ⚠ **Do NOT land on `main` until the optimizer work is done** (Phil). It is its own scoped change — rubric, adjudicator, extractor, `ground-claim.md`, `paper-trail.md`, `render_html_demo.py`, README, and regenerating the committed example runs, whose ledgers and demo HTMLs carry the retired vocabulary. `sarol`'s variant is already byte-identical in label space to that destination, so waiting creates no rework.
