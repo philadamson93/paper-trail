@@ -46,6 +46,7 @@ import argparse
 import inspect
 import functools
 import json
+import os
 import re
 import pathlib
 import random
@@ -665,6 +666,16 @@ def _selftest() -> int:
     import tempfile
 
     checks: list[tuple[str, bool]] = []
+
+    # The real-staging assertions below call `stage_claim.stage`, which WRITES a gold vector under
+    # its gold root. Where that root is not writable the two staging checks fail for a reason that
+    # has nothing to do with sampling -- an undeclared write precondition, found when an audit ran
+    # in a read-only sandbox and measured 48/50 instead of 50/50.
+    # ⚠ Setting PAPER_TRAIL_GOLD_DIR here is TOO LATE: `stage_claim.GOLD_ROOT` is evaluated at
+    # import time (stage_claim.py:55) and this module imports stage_claim at :62. So override the
+    # resolved constant, which is explicit and does not depend on import order.
+    stage_claim.GOLD_ROOT = pathlib.Path(tempfile.mkdtemp(prefix="sampling-gold-")) / "sarol-2024"
+    stage_claim.GOLD_ROOT.mkdir(parents=True, exist_ok=True)
 
     _seam_tmp = tempfile.mkdtemp(prefix="sampling-seam-")
 

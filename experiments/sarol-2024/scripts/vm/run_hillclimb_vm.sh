@@ -155,7 +155,9 @@ echo "  gold=$GOLD_N benchmarks=$BENCH_N"
 # ---------------------------------------------------------------- instrument
 say "Instrument checks (offline, free)"
 cd "$OPT"
-for m in adapter dispatcher sampling validate_sarol profiles canary; do
+# evidence_producers was omitted here while contributing 26 checks to the reported total, so the
+# preflight under-reported the suite it claims to gate -- and it is the runnable retrieval path.
+for m in adapter dispatcher sampling validate_sarol profiles canary evidence_producers; do
   out=$("$PY" "$m.py" --selftest 2>&1 | tail -1)
   case "$out" in *"passed"*) : ;; *) fail "$m selftest did not pass: $out";; esac
   echo "  $m: $out"
