@@ -8,11 +8,11 @@
       "note": "mainline extractors + verifier + native schema/verifier contracts"
     },
     "sarol": {
-      "commit": "d04b8af2065ac4027e7c65de076961a2ac0e89ad",
+      "commit": "700dacb61de5793f9ece53d146d446ac19633ab9",
       "note": "Sarol-variant adjudicator + the enum contract and rubric guidance it was split into (OQ8 resolved 2026-09-01)"
     }
   },
-  "combined_hash": "ebe433b38d905e82c149f76ea8ea2b2807c91b4fb42f72853fd14b48196a41da",
+  "combined_hash": "7431a5bc98a91473684a29c84687d01fc1ab522a07625b46f02cfcfd73dbd49b",
   "combined_hash_recipe": "sha256 over the concatenation, in ascending path order, of '<path>\\0<sha256>\\n' for every entry. Each entry sha256 is over the raw bytes of `git show <source_refs[entry.source].commit>:<entry.path>`.",
   "entries": [
     {
@@ -37,7 +37,7 @@
       "freeze_policy": "committed",
       "contract_file": false,
       "optional": false,
-      "sha256": "3826c540885c49ab8166cdac27ecf3efefaecde6ebbac5f4bed0a1430630f999"
+      "sha256": "96ef84ad40174838947eed138e08a0c704a519562ee0ff442a7963b6ef29eed6"
     },
     {
       "path": "src/prompts/verifier-dispatch.md",
