@@ -101,7 +101,12 @@ fi
 # contract, which is how the 2026-09-10 defect happened and survived five review passes.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_orchestrator_consistency.py" \
   || fail "GATE F FAILED: orchestrator-facing prose contradicts a driver hard prohibition, or a deferred contradiction just became live because its stage was implemented. The dispatching session reads both files -- fix the prose before spending money on a sweep."
-echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK"
+# Gate G keeps our development history out of the files an agent re-reads every run. A note about
+# what a prompt used to say is context the agent pays for and cannot use -- and a superseded
+# instruction restated verbatim stays actionable to a model skimming for what to do.
+"$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_prompt_hygiene.py" \
+  || fail "GATE G FAILED: an agent-read prompt carries development history (what it used to say, or a dated edit). State the rule as it stands -- the history belongs in git and docs/."
+echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
