@@ -95,7 +95,13 @@ fi
   || fail "GATE A FAILED: the Sarol class definitions no longer match the paper verbatim, or a retired divergent clause is back. Fix the definitions before spending money on a sweep -- see experiments/sarol-2024/specs/verdict_definitions_sarol.md for the reconciled text."
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_empty_window_regression.py" \
   || fail "GATE D FAILED: the empty-window contract regressed. An empty BM25 window must still emit \"evidence\": [] or the exit validator rejects the whole file and the claim scores as a miss regardless of verdict."
-echo "  gates:   paper-fidelity OK, empty-window OK"
+# Gate F guards the layer Gates A and D do not: the DRIVER's read path. The optimizer may now edit
+# the driver itself, and the prompt files it dispatches carry `## Orchestrator notes` addressed to
+# that same session -- so a note telling it to validate or retry silently overrides the driver's
+# contract, which is how the 2026-09-10 defect happened and survived five review passes.
+"$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_orchestrator_consistency.py" \
+  || fail "GATE F FAILED: orchestrator-facing prose contradicts a driver hard prohibition, or a deferred contradiction just became live because its stage was implemented. The dispatching session reads both files -- fix the prose before spending money on a sweep."
+echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
