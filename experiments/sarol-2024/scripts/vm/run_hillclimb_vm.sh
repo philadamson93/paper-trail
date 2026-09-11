@@ -106,7 +106,14 @@ fi
 # instruction restated verbatim stays actionable to a model skimming for what to do.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_prompt_hygiene.py" \
   || fail "GATE G FAILED: an agent-read prompt carries development history (what it used to say, or a dated edit). State the rule as it stands -- the history belongs in git and docs/."
-echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK"
+# Gate H: a fresh run starts from a fresh sheet. `meta-learnings.md` is injected into every
+# optimizer session, so a run that inherits the previous run's lessons opens with hypotheses it did
+# not earn -- measured against a program that may no longer exist. Nothing ever archived it; this is
+# the gate that makes its lifecycle real. The structural fix is the per-run loop clone rad-eval
+# already uses; until that lands, this is the barrier.
+"$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" \
+  || fail "GATE H FAILED: this checkout would hand the run a previous run's lessons or findings. Archive them first (check_run_scope.py --archive $RUN_ID), or set SAROL_ALLOW_INHERITED_LESSONS=1 if you genuinely mean this to be a continuation run -- whose numbers are then not comparable to a fresh run's."
+echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"

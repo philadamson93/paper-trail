@@ -379,6 +379,9 @@ def _selftest() -> int:
         "optimizer-instructions.md": (here / "prompt" / "optimizer-instructions.md")
         .read_text(encoding="utf-8"),
         "meta-learnings.md": (here / "meta-learnings.md").read_text(encoding="utf-8"),
+        # The clean per-run sheet Gate H resets to. Read so the guard below can recognise the
+        # reset state without hard-coding a sentinel string that would drift from the stub.
+        "meta-learnings.stub.md": (here / "meta-learnings.stub.md").read_text(encoding="utf-8"),
         # Added after a Codex-prompted check found this file still telling the optimizer that
         # `corpus.ref` points at the run manifest -- false since C6.8 -- while the gate did not
         # read it. A gate that covers three of four optimizer-facing docs gives false assurance.
@@ -474,9 +477,17 @@ def _selftest() -> int:
         # results. Those entries were measured on a program P0 has since deleted, at step sizes
         # inside the instrument's own 0.06 scatter. So the guard now requires the qualification,
         # not the emptiness.
-        ("meta-learnings qualifies its pre-reset history instead of presenting it as settled",
-         "measured pre-reset" in docs["meta-learnings.md"]
-         and "inside the instrument's scatter" in docs["meta-learnings.md"]),
+        # Stabilised 2026-09-11. This assertion has now flipped twice chasing a file whose
+        # lifecycle was undefined -- first pinning "deliberately empty of history", then requiring
+        # the opposite. Gate H (`check_run_scope.py`) gives the sheet a defined lifecycle: it is
+        # archived and reset to `meta-learnings.stub.md` at the start of every run. So there are
+        # exactly two legitimate states, and the guard accepts either rather than tracking which
+        # one is current: a CLEAN sheet has no history to mis-read, and a sheet carrying inherited
+        # history must qualify it. Anything else -- unqualified inherited entries -- stays red.
+        ("meta-learnings is either the clean per-run sheet, or qualifies the history it carries",
+         docs["meta-learnings.md"] == docs["meta-learnings.stub.md"]
+         or ("measured pre-reset" in docs["meta-learnings.md"]
+             and "inside the instrument's scatter" in docs["meta-learnings.md"])),
 
         # -- the objective, pinned in the docs the way the scorer pins it in code ---------------
         # These exist because the objective has now changed twice (3-way macro -> renormalised
