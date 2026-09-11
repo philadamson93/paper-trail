@@ -471,6 +471,34 @@ mechanically sound, (iii) the next iteration behaves. Runs on this VM with
   marked house text, or the re-applied evidence-array rule.**
 - *Stop:* any silent addition survives — that is the exact defect this reset removes.
 
+**Step A2 — orchestrator read-path consistency (Gate F, added 2026-09-11).**
+`experiments/sarol-2024/scripts/check_orchestrator_consistency.py`. Gate A guards what the *judge*
+reads; nothing guarded what the **driver** reads, and that gap produced a live contradiction that
+survived five review passes (see Step 7). Now that the driver is optimizer-editable the gap is worse,
+so this gate takes the driver's hard prohibitions as the contract and asserts no orchestrator-facing
+prose contradicts them. "Orchestrator-facing" = outside the `## Begin/End dispatch prompt` markers,
+since the driver forwards only what is between them.
+- *Expected:* all five prohibitions still stated in the driver; the four dispatch-path prompt files
+  carry no contradicting instruction; the six deferred violations are each still inert.
+- *Stop:* any new contradiction, **or** a deferred one becoming armed — the gate fails the moment
+  `profiles.IMPLEMENTED_STAGES` grows to include a stage whose prompt still carries forbidden prose.
+  ⚠ **This will fire on Plan B**, whose whole job is implementing the extractor/verifier stages; the
+  six deferred entries must be paid down as part of it.
+- *Negative controls (4/4):* a validate-the-exit-JSON note is caught; a one-retry note is caught; the
+  **same text between the dispatch markers is NOT caught** (it addresses the judge, not the driver);
+  benign orchestrator prose is left alone.
+
+⚠ **Sweep result, 2026-09-11 — the contradiction was systemic, not a one-off.** Swept every markdown
+an agent reads. `extractor-dispatch-pdf.md` and `extractor-dispatch-paperclip.md` (both manifest
+entries) each tell the orchestrator to validate the exit JSON **and** to retry once — two driver
+prohibitions apiece. `verifier-dispatch.md` carries bounce/re-dispatch and flag-patch semantics. All
+are inert today only because the driver aborts those stages. The three `.claude/prompts/*` files carry
+the same text but belong to the **shipped tool**, whose orchestrator legitimately does validate and
+retry — they are not defects in their own context, and are reachable by the experiment only via the
+ambient-read hazard the isolation plan addresses. Not fixed here: they are sourced from `main`, so
+editing them from this branch is out of scope. **Registered in the gate's `KNOWN_DEFERRED` so they
+cannot be forgotten and cannot silently grow.**
+
 **Step B — factual audit of every harness claim written into the docs.**
 - *Expected:* both release files present; `draw_history.json` confirms identical rosters; `trace_ref`
   present per mistake record; the 0.48/0.42 replicate reproduces.
