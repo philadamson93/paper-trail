@@ -499,6 +499,27 @@ ambient-read hazard the isolation plan addresses. Not fixed here: they are sourc
 editing them from this branch is out of scope. **Registered in the gate's `KNOWN_DEFERRED` so they
 cannot be forgotten and cannot silently grow.**
 
+**Step A3 — prompt hygiene (Gate G, added 2026-09-11).**
+`experiments/sarol-2024/scripts/check_prompt_hygiene.py`. Phil's rule: an agent-read prompt carries
+instructions, never our development history. These files are re-read every run, so a sentence about
+what the file *used to* say is context the agent pays for and cannot use — and a superseded
+instruction restated verbatim stays **actionable** to a model skimming for what to do, which is not
+hypothetical (it is what Gate F caught first). The history belongs in git and `docs/`.
+- *The line drawn:* citing a run that produced a number the agent must act on is **allowed** ("on the
+  2026-09-09 VAL roster gold is ACCURATE 35/50, so the floor is 0.70" — strip the date and the claim
+  becomes unverifiable). Narrating a change we made is **forbidden** ("this was macro-F1 until
+  2026-09-07", "has since been fixed", "corrected 2026-09-10").
+- *Expected:* 12 agent-read files clean. `meta-learnings.md` and `findings/` are exempt — they are
+  the optimizer's own dated logs and D4 requires the dates.
+- *Stop:* any changelog prose in an agent-read prompt.
+- *Negative controls (6/6):* four changelog shapes caught; a cited run date and an example-payload
+  timestamp both left alone.
+- *Swept and fixed 2026-09-11:* 13 instances across 5 files — rewritten to state the rule as it
+  stands, not deleted, so no operative content was lost (e.g. "Why not 3-way, which the objective
+  used to be" → "Why not 3-way"; the macro-F1 changelog became the live argument for why accuracy
+  wins). ⚠ One deferred: `src/specs/verdict_schema.md` carries a shipped schema version history and
+  is sourced from `main`, so it is not editable from this branch.
+
 **Step B — factual audit of every harness claim written into the docs.**
 - *Expected:* both release files present; `draw_history.json` confirms identical rosters; `trace_ref`
   present per mistake record; the 0.48/0.42 replicate reproduces.
