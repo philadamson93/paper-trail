@@ -124,4 +124,5 @@ carry you forward, and they are not interchangeable.
 **Which record takes what is defined in one place: the *"The three record surfaces, and what goes in which"*
 section of `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`.** That is the file
 injected into every iteration, so it is the copy you are guaranteed to have read. Do not look for a
-second answer here; there used to be five of them and they had drifted apart.
+second answer here, and do not add one: parallel copies of a rule drift apart, and then the judge
+is reading two of them.

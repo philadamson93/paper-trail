@@ -92,8 +92,8 @@ following it told you nothing about *why* you were wrong. Read the corpus; it is
 
 *(The manifest does hold one thing worth knowing about: a `trace_ref` per claim and stage, pointing
 at the judge's raw transcript. That is a pointer to unstructured text, not reasoning the manifest
-itself carries — and since 2026-09-07 the same path is copied onto every mistake-corpus row, so you
-never need to open the manifest to reach it.)*
+itself carries — and the same path is copied onto every mistake-corpus row, so you never need to
+open the manifest to reach it.)*
 
 Its shape is an object wrapping the per-claim list:
 
@@ -310,10 +310,8 @@ check fails** does the recipe below apply:
 5. **Say so in `experiments/sarol-2024/optimizer/meta-learnings.md`.** An iteration that produced no
    number is a fact the next iteration needs, and it is invisible in the frontier.
 
-The underlying cause of the 2026-09-02 instances has since been fixed — `run_optimization` was
-calling `run_loop` without `loop_ops`, so the release files were never written. **That bug is closed
-and regression-tested**; do not carry forward any inherited note claiming that missing releases are
-normal or expected. They are not, and treating them as normal is what produced the five false
+**Release files are written, and a regression test holds that.** Do not carry forward any inherited
+note claiming that missing releases are normal or expected. They are not, and treating them as normal is what produced the five false
 absences above. The recipe is kept because a missing release will happen again for some *other*
 reason — but it is now gated behind the verify-absence check at the top of this section.
 

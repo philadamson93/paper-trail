@@ -36,8 +36,8 @@ Concretely, as the manifest and the profiles stand today:
 | `src/prompts/verifier-dispatch.md` | evidence spot-check | inert | ✅ |
 | `.claude/commands/sarol-eval-item.md` | the per-claim **driver** — which frozen prompt is dispatched, and how its slots are filled | ✅ | ✅ |
 
-⚠ **The driver (`.claude/commands/sarol-eval-item.md`) is editable as of 2026-09-10, and it is the
-one editable file that also carries the measurement's integrity rules.** You may change which frozen
+⚠ **The driver (`.claude/commands/sarol-eval-item.md`) is editable, and it is the one editable
+file that also carries the measurement's integrity rules.** You may change which frozen
 prompt is dispatched and how its slots are filled. You may **not** weaken any of its hard
 prohibitions — one dispatch per claim, never retry, never author or repair the verdict yourself,
 never read gold or the source paper, never validate the subagent's content. Those are not

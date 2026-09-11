@@ -14,9 +14,9 @@ inter-annotator agreement, split TRAIN 2,141 / VAL 316 / TEST 606.
 ⚠ **Those are the headline figures, not the pool you are scored against.** A claim is drawable only
 if its gold label can be resolved, so the *drawable* population is **2,076 TRAIN / 311 dev** — a few
 percent smaller, almost entirely rows the text join could not match. Every per-class count in this
-document is over that repaired pool. (It was much smaller until 2026-09-07, for the reason in
-"The pool used to delete two classes" below; any figure you meet elsewhere quoting 1,699 / 255 is
-recording that bug, not the benchmark.)
+document is over that repaired pool. (Any figure you meet elsewhere quoting
+1,699 / 255 is recording a defective pool build — see "Why drawability must not require an evidence
+annotation" below — not the benchmark.)
 
 ## The output vocabulary
 
@@ -60,10 +60,10 @@ is not an improvement. Accuracy up with macro flat or rising is a real gain. `ob
 and `n_objective_classes_present` belong to this diagnostic, not to the objective; two macro numbers
 with different denominators are not comparable, and accuracy has no such caveat.
 
-*(This was macro-F1 until 2026-09-07, and before that 3-way macro. The renormalising denominator
-moved with the batch's class mix, which manufactured a −0.15 TRAIN "decline" across three iterations
+*(Macro-F1 is the tempting alternative and it is worse here: its renormalising denominator moves
+with the batch's class mix, which can manufacture a −0.15 TRAIN "decline" across three iterations
 for a program that never changed. Accuracy has no denominator to wobble, and that is most of why it
-won.)*
+wins.)*
 
 Drawable gold, after the pool repair described below:
 
@@ -84,16 +84,16 @@ denominator depends on which classes the batch drew, so a `macro_f1_renormalised
 not comparable to one over 8 — read `n_objective_classes_present` before comparing two of them.
 Accuracy is free of this: its denominator is the batch size, whatever the batch contains.
 
-### The pool used to delete two classes, and it shaped everything
+### Why drawability must not require an evidence annotation
 
-Until 2026-09-07 a claim was drawable only if its cited bucket carried an **evidence annotation**.
-But `IRRELEVANT` means *"no information in the cited paper is relevant"* and `ETIQUETTE` means
+Make a claim drawable only when its cited bucket carries an **evidence annotation** and two classes
+vanish from the pool entirely. `IRRELEVANT` means *"no information in the cited paper is relevant"* and `ETIQUETTE` means
 *"unclear what is being cited to this paper"* — both are **defined by the absence of evidence**, so
 neither has evidence segments to point at.
 
-The filter therefore deleted exactly those two classes and nothing else: **442 of 2141 TRAIN rows
+Such a filter deletes exactly those two classes and nothing else: **442 of 2141 TRAIN rows
 (300 ETIQUETTE + 142 IRRELEVANT) and 61 of 316 dev rows (37 + 24)** — an exact match, while every
-other class was 100% evidence-covered. It was a property of our filter, not of the benchmark.
+other class is 100% evidence-covered. That is a property of the filter, not of the benchmark.
 
 ⚠ **What that does and does not explain.** It explains why no run was ever *scored correct* on an
 `IRRELEVANT` claim: there were none in the pool to be scored on. It does **not** explain why the
@@ -127,9 +127,9 @@ by `score_sarol3.py --selftest`.
 | `macro_f1_9way` (fixed /9 denominator) | 0.097 | Descriptive breakdown |
 
 The 3-way gold distribution underlying it — `ACCURATE` **185 (59.5%)**, `NOT_ACCURATE` **67
-(21.5%)**, `IRRELEVANT` **59 (19.0%)**. The `IRRELEVANT` row used to read 1.8%; that was the
-deleted-classes bug, not the benchmark, since `ETIQUETTE` and `IRRELEVANT` both collapse into it and
-both were being filtered out.
+(21.5%)**, `IRRELEVANT` **59 (19.0%)**. A figure of 1.8% for the `IRRELEVANT` row records a
+defective pool build, not the benchmark: `ETIQUETTE` and `IRRELEVANT` both collapse into that row,
+and an evidence-annotation filter removes both.
 
 ⚠ **This pool is not your eval set, and the difference is the whole ballgame.** You are scored on a
 **50-claim VAL batch drawn from this pool**, and the draw is not distribution-preserving. Measured on
@@ -153,7 +153,7 @@ separate, and **the gap between them is precisely the mass of your within-bucket
 Read the gap as a readout: wide means much of your error is fine-grained discrimination inside
 NOT_ACCURATE; narrow means your errors cross bucket boundaries.
 
-### Why not 3-way, which the objective used to be
+### Why not 3-way
 
 3-way collapses `OVERSIMPLIFY` / `NOT_SUBSTANTIATE` / `CONTRADICT` / `MISQUOTE` / `INDIRECT` into
 one NOT_ACCURATE bucket, so every confusion among them costs nothing — a quarter of dev with no

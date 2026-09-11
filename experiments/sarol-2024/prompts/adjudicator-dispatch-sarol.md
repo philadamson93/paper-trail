@@ -120,13 +120,10 @@ Exit after writing the verdict JSON. Final message: absolute path + one line lik
 
 ## Orchestrator notes (not sent to subagent)
 
-- ⚠ **Corrected 2026-09-10 — this bullet used to carry an exit-JSON *checking* instruction.**
-  (Deliberately described, not quoted: restating a forbidden imperative verbatim leaves it
-  actionable to anyone skimming, and Gate F flags it for exactly that reason.) It contradicted
-  `.claude/commands/sarol-eval-item.md` step 4, which forbids the dispatching session from validating
-  or repairing the verdict ("a second opinion here can only disagree with the validator of record"),
-  and it contradicted the very next bullet. The dispatching session must **not** check the enum, the
-  rollup, or `rubric_variant`; it checks only that the output file exists and parses. Those content
-  rules are enforced by `validate_sarol.py`, which the Runner calls after that session exits.
-- Schema check: exit validation is owned by `experiments/sarol-2024/optimizer/validate_sarol.py`, an experiment-only validator the Runner calls (Open Questions §9). Gated on `rubric_variant`: when it is `"sarol_2024_9class"`, verdicts are validated against the 9-class enum contract; mixed native/Sarol labels in one file are **rejected** rather than coerced. Nothing relaxes the shipped `src/specs/verdict_schema.md` validator — `main`'s stays strict against the native enum and is untouched by this experiment. (Earlier revisions of this file claimed validation "is relaxed on the experiment branch." That was never implemented and is not the design; corrected 2026-09-01.)
+- The dispatching session must **not** check the enum, the rollup, or `rubric_variant`, and must
+  not repair anything it finds. It checks only that the output file exists and parses. Content rules
+  belong to `validate_sarol.py`, which the Runner calls after that session exits — a second opinion
+  here can only disagree with the validator of record. See `.claude/commands/sarol-eval-item.md`
+  step 4, which this bullet must never contradict.
+- Schema check: exit validation is owned by `experiments/sarol-2024/optimizer/validate_sarol.py`, an experiment-only validator the Runner calls (Open Questions §9). Gated on `rubric_variant`: when it is `"sarol_2024_9class"`, verdicts are validated against the 9-class enum contract; mixed native/Sarol labels in one file are **rejected** rather than coerced. Nothing relaxes the shipped `src/specs/verdict_schema.md` validator — `main`'s stays strict against the native enum and is untouched by this experiment.
 - Verifier downstream is unchanged — it spot-checks the extractor's evidence, not the adjudicator's verdict class.
