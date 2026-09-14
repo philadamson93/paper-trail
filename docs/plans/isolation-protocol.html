@@ -166,8 +166,10 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
       iteration loop, freezes and materializes program versions, sandboxes tool access and audits
       calls &mdash; it does not know what it is optimizing. Two directories matter here:
       <code>engine/</code> (the loop) and <code>isolation/</code> (the Docker substrate whose mount
-      renderer is this plan's boundary). <b>paper-trail has no dependency on it today</b> &mdash; two
-      mentions in prose, no package &mdash; which is what item&nbsp;1 fixes.</span></td>
+      renderer is this plan's boundary). &#9888; <b>We already depend on it</b> &mdash; the dispatcher drives its
+      loop, the adapter implements its four protocols. What we lack is a <b>pinned version</b>: it is
+      found by a hardcoded path to a checkout in your home directory, not by a package pin. That is
+      what item&nbsp;1 fixes.</span></td>
       <td class="ph">shared</td></tr>
     <tr><td><b><code>rad-eval</code></b> &mdash; &ldquo;the other project&rdquo;<br><span class="d">The
       mature consumer, and the engine was generalized out of it. Its container agent (198 lines, on
@@ -249,6 +251,51 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
 </div>
 
 
+
+<div class="card" id="audit">
+  <h2 style="margin-top:0">What the code audit found <span class="chg new">&#10022; new</span></h2>
+  <p>Four agents read the actual code in both repos, after pulling both current. They found about
+  twenty corrections. <b>The architecture survived. The list of work did not</b> &mdash; it is smaller
+  than the plan said, and several things the plan cited as proven are not.</p>
+
+  <p><b>The uncomfortable one: the armed run&rsquo;s safety number proves nothing.</b> The August run
+  this plan leans on reports <code>denied=0</code>, and the write-up reads that as &ldquo;the agent hit
+  zero sandbox denials.&rdquo; But container mode has <b>no permission hooks at all</b>, so nothing
+  <i>could</i> be denied. The number is zero by construction. That is this plan&rsquo;s own root-cause
+  pattern &mdash; a mechanism pointed somewhere else, reporting green &mdash; sitting inside the
+  evidence the plan uses to justify itself. It is now in the root-cause table.</p>
+
+  <p><b>Four claims were simply wrong:</b></p>
+  <ul>
+    <li><b>The advice to &ldquo;drop the chown&rdquo; was about code that isn&rsquo;t there.</b> The
+    container agent we plan to copy has no ownership change in it at all &mdash; that belongs to the
+    older non-container path, which container mode retires. The conclusion (the boundary is the set of
+    mounted paths) still holds, for a simpler reason: only two files are mounted writable.</li>
+    <li><b>The flag we wanted to replace isn&rsquo;t ours to pass.</b> The one that switches off
+    permission checks is set unconditionally by the shared wrapper. Replacing it is an upstream
+    prerequisite, and until it lands the container has no second layer &mdash; only the mounts.</li>
+    <li><b>The site count is 22, not 21</b>, and 19 are test-only. The plan budgeted nineteen
+    exemptions over zero production risk while the three that actually ship got a sentence each.</li>
+    <li><b>There is a third way past the gate</b> the plan doesn&rsquo;t model: a caller can hand in
+    pre-built components and skip it. The test suite already does.</li>
+  </ul>
+
+  <p><b>Two things we planned to build now exist upstream</b>, landed the same day: the channel that
+  reports <i>why</i> a run stopped and carries the partial run out with it (that is OQ5), and a
+  per-version callable that fails closed rather than reusing a stale value (that is the precedent for
+  OQ2).</p>
+
+  <p><b>And the substrate is less proven than the plan implies.</b> The &ldquo;212 passed&rdquo; figure
+  was from your Mac with the container tests <i>skipped</i>. The negative-control suite has not been
+  re-verified since an August refactor. A writable mount nested inside a read-only one does not work on
+  current Docker. And the one test named for read-scoping is a <b>positive</b> control &mdash; it
+  asserts reads succeed. So nothing anywhere yet proves a reachable path cannot be read, which is
+  exactly what item&nbsp;12 adds.</p>
+
+  <p class="small">Engine line numbers are now stamped with the commit they were read at. They have
+  gone stale twice in two days.</p>
+</div>
+
 <div class="card" id="building">
   <h2 style="margin-top:0">What we are building <span class="chg new">&#10022; new section</span></h2>
   <p>Added because you asked the question this plan was not answering: <i>&ldquo;we&rsquo;re discussing
@@ -258,23 +305,26 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
   <table class="bt">
     <thead><tr><th></th><th>What</th><th>Phase</th></tr></thead>
     <tbody>
-    <tr><td class="n">1</td><td><b>Depend on the shared engine, <code>agentic-label-opt</code></b><br><span class="d">A pinned revision (a commit, not a branch) in our package file. paper-trail has <b>no</b> dependency on it today — two mentions in prose and nothing else. Nothing else in this plan imports until this exists.</span></td><td class="ph">1a</td></tr>
+    <tr><td class="n">1</td><td><b>Pin the dependency on <code>agentic-label-opt</code></b><br><span class="d">&#9888; <b>Corrected — an earlier wording said paper-trail had “no dependency” on it, which read as though the engine did not exist.</b> It does, and we already use it: our dispatcher drives its loop, our adapter implements its four protocols. What is missing is the <b>pin</b>. paper-trail has <b>no packaging file at all</b>, and finds the engine by pushing a hardcoded home-directory path onto the import path — in two separate places. So a run binds to whatever is in that tree at that moment, branch and uncommitted edits included. Pinning it to a commit means <i>creating</i> our first package file. <span class="chg mod">&#9679; corrected</span></span></td><td class="ph">1a</td></tr>
     <tr><td class="n">2</td><td><b>The judge’s container</b><br><span class="d">Built <b>per dispatch</b>, not once at startup. It can see: this claim’s working folder (writable), the frozen spec it is judging (read-only), the program snapshot as its working directory (read-only), a folder to keep its transcript. Nothing else — the releases folder, the optimizer’s findings, the lessons sheet, <b>gold</b> and <b>the benchmark tree</b> are denied by simply not being there.</span></td><td class="ph">1b, 1c</td></tr>
     <tr><td class="n">3</td><td><b>The optimizer’s container</b><br><span class="d">Copied from <code>rad-eval</code>’s working example: a fresh temporary writable area, copy the results back afterwards, and the scorer, gold, releases and program manifest <b>absent from its mount set</b> — so ‘the optimizer cannot edit the scorer’ holds by construction rather than by a rule we ask it to respect.</span></td><td class="ph">1e</td></tr>
     <tr><td class="n">4</td><td><b>A deterministic dispatcher, in Python</b><br><span class="d">Reads the frozen prompt, fills the slots, refuses on an unresolved one, and launches the judge <b>directly</b>. No middleman session, no subagent. <span class="chg mod">&#9679; new this round</span></span></td><td class="ph">0c, OQ1</td></tr>
-    <tr><td class="n">5</td><td><b>One place that refuses to run uncontained</b><br><span class="d">The runner’s constructor raises unless it is handed a container command, so all <b>21</b> construction sites are either contained or visibly exempted. Test cases exempt with an injected fake command — never a true-or-false switch.</span></td><td class="ph">1f, OQ7</td></tr>
+    <tr><td class="n">5</td><td><b>One place that refuses to run uncontained</b><br><span class="d">The runner’s constructor raises unless it is handed a container command. &#9888; <b>The count is 22, not 21</b> — and 19 of them are test-only. <b>Three</b> can run in production, and one of those already accepts an injected runner, so there are really <b>two</b> to wire. It must sit at the constructor because there are three ways to reach a runner, including one that skips the usual gate entirely. <span class="chg mod">&#9679; corrected</span></span></td><td class="ph">1f, NF11, OQ7</td></tr>
     <tr><td class="n">6</td><td><b>The isolation module</b><br><span class="d">One module, one concern: the scope check, both mount-set builders, the host-to-container path map, the environment allowlist, the version-tied working directory, and the configuration fingerprint. Written <b>generically</b> so the boundary machinery can lift into <code>agentic-label-opt</code> for <code>crc-extraction-agent</code> to reuse.</span></td><td class="ph">2a, 2b, 3, OQ4</td></tr>
     <tr><td class="n">7</td><td><b>Keep the judge’s transcript</b><br><span class="d">The adapter already holds the streamed session in memory; write it beside the answer. Without this, containerizing silently ends judge traceability — which is how the 61% contamination was found in the first place.</span></td><td class="ph">1d</td></tr>
     <tr><td class="n">8</td><td><b>Per-iteration held-out folders</b><br><span class="d">Widen <code>agentic-label-opt</code>’s held-out inputs to accept a per-iteration form, mirroring the training inputs; then assert the answer slot is empty before each dispatch. <span class="chg mod">&#9679; new this round</span></span></td><td class="ph">0a, OQ2</td></tr>
-    <tr><td class="n">9</td><td><b>A broken dispatch fails loudly</b><br><span class="d">No retry. A dispatch producing no answer fails that claim under a <b>separate</b> delivery-failure count, is handed to the optimizer as feedback, and is never reported as program quality or folded into the mistake corpus.</span></td><td class="ph">0b, OQ5</td></tr>
+    <tr><td class="n">9</td><td><b>A broken dispatch fails loudly</b><br><span class="d">No retry. A dispatch producing no answer fails that claim under a <b>separate</b> delivery-failure count, is handed to the optimizer as feedback, and is never reported as program quality. &#9888; <b>The engine landed the channel for this the same day</b> — a stop now carries a machine-readable reason and brings the partial run out with it. Use it; do not build a second one. <span class="chg mod">&#9679; corrected</span></span></td><td class="ph">0b, OQ5</td></tr>
     <tr><td class="n">10</td><td><b>Pin the configuration</b><br><span class="d">One key recording the image <b>digest</b>, the mount set as actually rendered, the network policy and the session flags — read from the committed file, not the working copy, because a guard whose reference value is editable in the same tree is not a guard.</span></td><td class="ph">3</td></tr>
     <tr><td class="n">11</td><td><b>Reset the run state at run start</b><br><span class="d">Archive the lessons sheet, the findings files and the releases folder, then assert absent. The VM runner mints the run id. <b>Not</b> a per-run clone. <span class="chg mod">&#9679; changed this round</span></span></td><td class="ph">4, OQ9</td></tr>
     <tr><td class="n">12</td><td><b>The sentinel test</b><br><span class="d">Plant sentinels in gold, the benchmark tree, the releases folder and the optimizer’s findings, and show a judge <b>cannot</b> read any of them — with a control that must itself fail, so a green cannot mean ‘the container never started’.</span></td><td class="ph">1g</td></tr>
     </tbody>
   </table>
   <p><b>Upstream, in one line:</b> four small files (the credential by name, the generic seal test, its
-  assertion, the CLI re-pin) <b>plus</b> one backward-compatible type widening in
-  <code>agentic-label-opt</code>&rsquo;s engine core for item 8. That last one corrects this plan&rsquo;s earlier claim of &ldquo;no change to the engine
+  assertion, the CLI re-pin), <b>plus</b> one backward-compatible type widening in
+  <code>agentic-label-opt</code>&rsquo;s engine core for item 8, <b>plus</b> one more the code audit
+  turned up: the flag that switches off permission checks is passed <b>unconditionally by the shared
+  wrapper</b>, not by us &mdash; so the deny-by-default layer item&nbsp;2 describes does not exist
+  until that becomes a caller choice. That last one corrects this plan&rsquo;s earlier claim of &ldquo;no change to the engine
   core&rdquo; &mdash; see OQ8 below for why it is still small.</p>
   <p><b>What we are deliberately <i>not</i> building</b>, all three struck this round: the middleman
   session (item 4 replaces it), the per-run git clone and its provisioner (item 11 replaces it), and
