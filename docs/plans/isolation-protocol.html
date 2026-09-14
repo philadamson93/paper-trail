@@ -252,6 +252,35 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
 
 
 
+
+<div class="card" id="whoiswho">
+  <h2 style="margin-top:0">Who is who <span class="chg new">&#10022; new</span></h2>
+  <p>Added because you asked what &ldquo;the judge&rdquo; meant. This page says it constantly and
+  never defined it. <b>The judge is the paper-trail adjudicator. It is not the optimizer.</b> Both
+  words are your codebase&rsquo;s own &mdash; neither was invented for this plan.</p>
+  <table class="bt">
+    <thead><tr><th></th><th>The optimizer</th><th>The judge (adjudicator)</th></tr></thead>
+    <tbody>
+    <tr><td class="n">does</td><td>edits the program &mdash; the prompt and rubric text it is allowed to change</td><td>reads one claim and its evidence, returns a verdict</td></tr>
+    <tr><td class="n">runs</td><td><b>once per iteration</b> &mdash; about 5 times in a run</td><td><b>once per claim</b> &mdash; about 113 an iteration, <b>561</b> in the September run</td></tr>
+    <tr><td class="n">must never see</td><td>the scorer, gold, the releases folder, the manifest &mdash; it would be marking its own homework</td><td><b>gold labels</b>, the benchmark data, the optimizer&rsquo;s own findings and hypotheses</td></tr>
+    <tr><td class="n">in a box today</td><td>&#9989; yes &mdash; that is the August VM run</td><td>&#10060; <b>no. That is what this plan adds.</b></td></tr>
+    </tbody>
+  </table>
+  <p><b>Why two names.</b> <i>Adjudicator</i> is the <b>stage name</b> &mdash; one of three stages, and
+  the only one actually implemented; the other two abort if selected. <i>Judge</i> is the <b>role</b>,
+  the thing that scores. Your code treats them as the same thing and even asserts it in a test:
+  <i>&ldquo;retrieval runs the judge alone&rdquo;</i>, checking that the stage list is exactly
+  <code>("adjudicator",)</code>.</p>
+  <p>&#9888; <b>The judge is two sessions per claim today, not one</b> &mdash; a middleman session that
+  runs the slash command, which spawns a subagent that does the actual judging. <b>Your OQ1 answer
+  collapses that to one.</b></p>
+  <p>&#9888; <b>Neither of them is the scorer.</b> The scorer is plain Python that makes no model calls
+  at all &mdash; it compares verdicts against gold and sits <i>outside both boxes</i>. It is never an
+  agent. Where this plan talks about protecting &ldquo;the scorer&rdquo;, it means that code and the
+  gold it reads.</p>
+</div>
+
 <div class="card" id="audit">
   <h2 style="margin-top:0">What the code audit found <span class="chg new">&#10022; new</span></h2>
   <p>Four agents read the actual code in both repos, after pulling both current. They found about

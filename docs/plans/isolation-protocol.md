@@ -103,6 +103,36 @@ wearing a bigger name.
 ⚠ The pattern to avoid here is the one in the root-cause table: a residual that stops being written
 down becomes a residual nobody remembers accepting.
 
+## Who is who — the two principals, and what they are called
+
+⚠ **Added 2026-09-14 because Phil asked what "the judge" meant.** This plan says *judge* 98 times and
+never defined it. Both words below are the codebase's own; neither is invented here.
+
+| | **The optimizer** | **The judge**, a.k.a. the **adjudicator** |
+|---|---|---|
+| What it does | edits the program — the prompt and rubric markdown it is allowed to change | reads one claim plus its evidence and returns a verdict |
+| How often it runs | **one session per iteration** (~5 in a run) | **one session per claim** — *"~113 an iteration, against the optimizer's one"* (`adapter.py:360`); 561 across the 2026-09-09 run |
+| Must never see | the scorer, gold, `iter/`, the manifest — it would be marking its own homework | **gold labels**, the benchmark tree, the optimizer's findings and hypothesis log |
+| Containerized today | ✅ yes — that is the 2026-08-05 armed VM run | ❌ **no. That is what this plan adds.** |
+
+**On the two names.** `adjudicator` is the **stage name** — a string in
+`ALL_STAGES = ("extractor", "adjudicator", "verifier")` (`profiles.py:57`), and the **only** one
+implemented (`IMPLEMENTED_STAGES = ("adjudicator",)`, `:67`; the other two abort
+`STAGE_NOT_IMPLEMENTED`). *Judge* is the **role** — the thing that scores. The code uses them
+interchangeably and even asserts the equivalence in a selftest: `profiles.py:266`,
+*`("retrieval runs the judge alone", RETRIEVAL.stages == ("adjudicator",))`*, and
+`JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE)` at `:52`.
+
+⚠ **The judge is two sessions per claim today, not one** — a driver session that runs the
+`/sarol-eval-item` slash command, which spawns a subagent that does the adjudicating. **OQ1 collapses
+that to one** by making the dispatcher deterministic Python. So "the judge" means the driver+subagent
+pair before OQ1 lands, and a single top-level session after.
+
+⚠ **Neither principal is the *scorer*.** The scorer (`SarolScorer`, `adapter.py`) is deterministic
+Python that makes zero LLM calls, compares verdicts to gold, and sits **outside both containers**. It
+is never an agent and never containerized. When this plan says a boundary protects "the scorer", it
+means that code and the gold it reads.
+
 ## What we are building
 
 Added 2026-09-14 because Phil asked the question this plan was not answering: *"we're discussing these
