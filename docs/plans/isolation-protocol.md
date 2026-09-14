@@ -103,35 +103,58 @@ wearing a bigger name.
 ⚠ The pattern to avoid here is the one in the root-cause table: a residual that stops being written
 down becomes a residual nobody remembers accepting.
 
-## Who is who — the two principals, and what they are called
+## Who is who — the two principals
 
-⚠ **Added 2026-09-14 because Phil asked what "the judge" meant.** This plan says *judge* 98 times and
-never defined it. Both words below are the codebase's own; neither is invented here.
+⚠ **Rewritten 2026-09-14 on Phil's correction. This is a scoping fix, not a naming preference.**
+An earlier version called the two principals *the optimizer* and *the judge*. Phil: *"we have the
+agentic program (which goes in a container here) and the optimizer. Judge is confusing because it's
+one PART of the program."* **Correct — and the mis-naming had already bitten the design**, see the
+three consequences below.
 
-| | **The optimizer** | **The judge**, a.k.a. the **adjudicator** |
+| | **The agentic program** | **The optimizer** |
 |---|---|---|
-| What it does | edits the program — the prompt and rubric markdown it is allowed to change | reads one claim plus its evidence and returns a verdict |
-| How often it runs | **one session per iteration** (~5 in a run) | **one session per claim** — *"~113 an iteration, against the optimizer's one"* (`adapter.py:360`); 561 across the 2026-09-09 run |
-| Must never see | the scorer, gold, `iter/`, the manifest — it would be marking its own homework | **gold labels**, the benchmark tree, the optimizer's findings and hypothesis log |
-| Containerized today | ✅ yes — that is the 2026-08-05 armed VM run | ❌ **no. That is what this plan adds.** |
+| What it is | the labelling pipeline itself — **one session per stage, per claim** | the agent that **edits** the program between iterations |
+| How often | `for stage in self.profile.stages` (`adapter.py:866`) × every claim. Today **1 × 561**; under the `agentic` profile **3 × 561** | **one session per iteration**, ~5 in a run (`adapter.py:360`: *"~113 an iteration, against the optimizer's one"*) |
+| Must never **read** | **gold labels**, the benchmark tree, the optimizer's findings and hypothesis log | — |
+| Must never **write** | — | the scorer, gold, `iter/`, the manifest — it would be marking its own homework |
+| Containerized today | ❌ **no. This plan adds it.** Nobody has built one, anywhere | ✅ built and armed-run — **in rad-eval**; ❌ not here |
 
-**On the two names.** `adjudicator` is the **stage name** — a string in
-`ALL_STAGES = ("extractor", "adjudicator", "verifier")` (`profiles.py:57`), and the **only** one
-implemented (`IMPLEMENTED_STAGES = ("adjudicator",)`, `:67`; the other two abort
-`STAGE_NOT_IMPLEMENTED`). *Judge* is the **role** — the thing that scores. The code uses them
-interchangeably and even asserts the equivalence in a selftest: `profiles.py:266`,
-*`("retrieval runs the judge alone", RETRIEVAL.stages == ("adjudicator",))`*, and
-`JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE)` at `:52`.
+**The stages, and why "judge" is the wrong name for the boundary.**
+`ALL_STAGES = ("extractor", "adjudicator", "verifier")` (`profiles.py:57`). The `retrieval` profile —
+Phase 1, the only runnable one today — sets `stages=("adjudicator",)`, so **the program currently
+happens to be exactly one stage**, which is why "the judge" and "the program" have looked like the
+same thing. They are not. The landed `agentic` profile sets `stages=ALL_STAGES` — *"three sessions per
+claim"* — of which the adjudicator is one. ⇒ **Naming the boundary after the judge bakes in a Phase-1
+accident.** The convention from here:
 
-⚠ **The judge is two sessions per claim today, not one** — a driver session that runs the
-`/sarol-eval-item` slash command, which spawns a subagent that does the adjudicating. **OQ1 collapses
-that to one** by making the dispatcher deterministic Python. So "the judge" means the driver+subagent
-pair before OQ1 lands, and a single top-level session after.
+- **the program** — the principal that gets the container, whatever stages the profile runs.
+- **a program stage** / **the adjudicator stage** — when one specific stage is meant.
+- **judge** — acceptable as the *role* of the adjudicator stage; the code uses it that way
+  (`JUDGE_SCOPE`, and the selftest `("retrieval runs the judge alone", RETRIEVAL.stages ==
+  ("adjudicator",))`, `profiles.py:266`). ⚠ **Never for the container or the mount set.**
 
-⚠ **Neither principal is the *scorer*.** The scorer (`SarolScorer`, `adapter.py`) is deterministic
-Python that makes zero LLM calls, compares verdicts to gold, and sits **outside both containers**. It
-is never an agent and never containerized. When this plan says a boundary protects "the scorer", it
-means that code and the gold it reads.
+⚠ **Three consequences the "judge container" framing hid. These are design changes, not wording:**
+
+1. **The boundary is per `(stage, claim, version)`, not per `(claim, version)`.** The dispatch loop is
+   `for stage in self.profile.stages:` (`adapter.py:866`), and `_stage_command(stage, claim,
+   materialized_path)` (`:700`) already takes the stage. **Phase 1c's prefix factory must key on it
+   too** — as written it keys on the claim and the materialised path only.
+2. **Mount sets differ per stage, and this plan only ever derived the adjudicator's.** The extractor
+   produces evidence from the source (`evidence_producer="extractor"`, `source_mode="pdf"`), so it
+   needs the paper mounted; the adjudicator reads the finished evidence envelope and **must not** see
+   the paper. Under `retrieval` the evidence is produced by ordinary Python beforehand
+   (`evidence_producer="bm25"`), which is the only reason one mount set has sufficed so far.
+3. **Containerization cost triples when Phase 2 runs.** V0c's per-session figure is measured against 1
+   stage/claim today and becomes 3 under `agentic`. Report it per **stage-dispatch**, not per claim.
+
+⚠ **Neither principal is the *scorer*.** `SarolScorer` is deterministic Python making zero model
+calls; it compares verdicts to gold and sits **outside both containers**. Never an agent, never
+containerized. Where this plan protects "the scorer" it means that code and the gold it reads.
+
+⚠ **Known debt from this rename:** the body below still says *judge* ~120 times, usually meaning *the
+adjudicator stage* and occasionally *the program*. The definitions here govern; a consistency pass is
+owed and is listed in *Landing & cleanup*.
+
 
 ## What we are building
 
@@ -143,7 +166,7 @@ session should build, and the disagreement is a defect to fix here.
 | # | What | Where | Phase |
 |---|---|---|---|
 | 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39`. So a run binds to whatever that tree holds at that moment. Copy rad-eval's shape: a git **revision** under `[tool.uv.sources]` (it pins `rev = "3bbe6c4"`), which means **creating** our first `pyproject.toml` | `pyproject.toml` | 1a |
-| 2 | **The judge's container**, built **per dispatch** by a factory owned by `SarolRunner.process(claim)`. Mount set: claim staging (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). Nothing else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks` are denied by absence | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
+| 2 | **The program's container**, built **per stage-dispatch** by a factory owned by `SarolRunner.process(claim)` — keyed on `(stage, claim, version)`, ⚠ **not** on the claim alone. Adjudicator-stage mount set: claim staging (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). Nothing else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks` denied by absence. ⚠ The extractor and verifier stages need **their own** mount sets when Phase 2 runs; only the adjudicator's is derived here | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
 | 3 | **The optimizer's container**, modelled on rad-eval's `docker_agent.py`: temp writable staging, copy-back into the live tree, and the scorer / gold / `iter/` / manifest **absent from the mount set** — so "the optimizer cannot edit the scorer" holds by construction | `optimizer/isolation.py` | 1e |
 | 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the judge **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
 | 5 | **One refusal locus** — `SarolRunner.__init__` raises absent an explicit prefix factory. ⚠ **22 sites, not 21**, and it must cover three reach-paths (`build_components`, direct construction, and a pre-built `components=` dict that skips the gate). ✅ Only **3 ship**; the other 19 are selftests, and `canary.py` already accepts an injected runner. Offline tests opt out with an **injected fake prefix**, never a boolean | `optimizer/adapter.py`, `dispatcher.py`, `canary.py`, `scripts/run_baseline.py` | 1f, **NF11**, **OQ7** |
@@ -776,7 +799,13 @@ this in `dispatcher.build_components` and that cannot work.** Three inputs are o
 | the staged argv | `_stage_command` (`adapter.py:700-731`) embeds **host absolute paths** | those paths do not resolve to `/workspace/...` inside the container |
 
 So the seam is a **factory owned by `SarolRunner.process(claim)`**: given `(materialized_path,
-claim)` it returns the prefix for that one dispatch. With it comes a **canonical container path map**
+stage, claim)` it returns the prefix for that one dispatch. ⚠ **`stage` added 2026-09-14 (Phil's
+program-vs-judge correction).** The dispatch loop is `for stage in self.profile.stages:`
+(`adapter.py:866`) and `_stage_command` already takes the stage (`:700`), so a factory keyed only on
+the claim returns **one prefix for all three stages** the moment the `agentic` profile runs — and
+since the stages need *different* mounts (the extractor needs the paper; the adjudicator must not see
+it), that is a silent boundary widening, not merely a stale path. Today `retrieval` runs one stage, so
+the defect is latent rather than live. With it comes a **canonical container path map**
 — a single place that says host path → container path (`/workspace/program`, `/workspace/staging`,
 `/workspace/cwd`) — and **every** host path that crosses into the container is translated through it:
 the argv, `--add-dir`, `workdir`, and any path interpolated into prompt text. A path that is correct
@@ -2144,7 +2173,12 @@ never reproduce it, since a restated imperative stays actionable to a model that
 `findings/iter-*.md`; run `--archive <run-id>` first. **Phase 4 retires it.** ⚠ It resolves paths from
 its own location, so running Plan A's copy from its worktree passes and says nothing about this tree).
 
-**Cleanup on land.** `/land` prunes the branch (local + remote) and the worktree, marks this plan
+**Cleanup on land.** ⚠ **Owed first: a naming consistency pass.** Phil's 2026-09-14 correction renamed
+the contained principal from *the judge* to *the program* (see *Who is who*), and the body below still
+says *judge* ~120 times — usually meaning the adjudicator stage, occasionally the program. The
+definitions section governs; the body has not been swept. Do that before implementation starts, not
+after, because the two readings differ exactly where it matters (a per-stage mount set versus a
+per-claim one). Then `/land` prunes the branch (local + remote) and the worktree, marks this plan
 `Status: Completed`, updates its `docs/plans/README.md` row, prunes the `NEXT.md` entry, and retires
 the scratch sentinel fixtures and any per-run working dirs.
 
