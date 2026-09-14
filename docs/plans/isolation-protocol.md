@@ -3,7 +3,12 @@ Reference: docs/claude_ops.md
 # The isolation protocol — putting the judge inside the shared substrate
 
 **Status: Draft** (rewritten 2026-09-11 against the shared engine's landed substrate; Codex review
-applied 2026-09-13) · **Reviewed: No**
+applied 2026-09-13; Phil's explain-plan feedback applied 2026-09-14) · **Reviewed: No**
+**All nine open questions are now resolved** (2026-09-14). Three of them cut scope rather than adding
+it: the driver session is eliminated (OQ1), the per-run git clone is replaced by a run-start reset
+(OQ9), and the tag-scoped settings file is retired (OQ6). One adds a small engine change that the
+plan previously ruled out — per-iteration held-out staging (OQ2). *What we are building*, below, is
+the concrete list Phil asked for and is the section to read if you read only one.
 **Rewrite reason:** the first draft specified paper-trail-local machinery for work the shared
 `agentic-label-opt` engine has already designed, built and landed. Phil, 2026-09-11: *the entire idea
 of agentic program opt was to abstract away shared needs across these use cases.* This version starts
@@ -82,11 +87,37 @@ wearing a bigger name.
 | A **deliberate** adversary | the 2026-04-23 threat model is honest optimisation; this plan addresses accidental exposure, which is what 2026-09-09 demonstrated | unchanged, not reopened here |
 | The session can read **its own token** | fixing host-argv and log disclosure (Phase 1b) does not hide a variable from the process holding it | needs a credential broker; out of scope, stated |
 | **Audit rows** from container sessions | container mode discards the engine ledger, so four tripwires go blind | engine work, recorded in Phase 1e |
-| **Per-call tool policy** (hooks) | deferred by Phil 2026-07-22; `--allowedTools` is coarser than a hook that fails closed per call | the second landing |
+| **Per-call tool policy** (hooks) | deferred by Phil 2026-07-22; `--allowedTools` is coarser than a hook that fails closed per call. ⚠ On the **optimizer's** path this is a live gap, not a theoretical one — the engine's own egress plan records that rad-eval keeps `WebFetch` only because a `PreToolUse` hook denies every URL, and *"Docker mode has no hook wiring at all"* (`2026-07-30-docker-vertex-only-egress-allowlist.md:123`). On the **judge's** path it is redundant once `Bash`/`WebFetch`/`WebSearch` are off the allowlist — there is no per-call decision left to make (**OQ6**) | the second landing |
 | Egress beyond the **host allowlist** | an allowlisted host can still receive data | the allowlist narrows the surface, it does not close it |
 
 ⚠ The pattern to avoid here is the one in the root-cause table: a residual that stops being written
 down becomes a residual nobody remembers accepting.
+
+## What we are building
+
+Added 2026-09-14 because Phil asked the question this plan was not answering: *"we're discussing these
+things, but what are we building concretely?"* Twelve items. Everything below this section is the
+reasoning behind one of them; if the reasoning and this list ever disagree, this list is what a fresh
+session should build, and the disagreement is a defect to fix here.
+
+| # | What | Where | Phase |
+|---|---|---|---|
+| 1 | **An engine dependency** — `agentic-label-opt` pinned to a git **revision** (not a branch) under `[tool.uv.sources]`. Nothing else in this plan imports until it exists | `pyproject.toml` | 1a |
+| 2 | **The judge's container**, built **per dispatch** by a factory owned by `SarolRunner.process(claim)`. Mount set: claim staging (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). Nothing else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks` are denied by absence | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
+| 3 | **The optimizer's container**, modelled on rad-eval's `docker_agent.py`: temp writable staging, copy-back into the live tree, and the scorer / gold / `iter/` / manifest **absent from the mount set** — so "the optimizer cannot edit the scorer" holds by construction | `optimizer/isolation.py` | 1e |
+| 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the judge **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
+| 5 | **One refusal locus** — `SarolRunner.__init__` raises absent an explicit prefix factory, so all **21** construction sites are either containerized or visibly opted out. Offline tests opt out with an **injected fake prefix**, never a boolean | `optimizer/adapter.py`, `canary.py`, `scripts/run_baseline.py` | 1f, **OQ7** |
+| 6 | **The isolation module** — scope predicate, both mount-set builders, the canonical host→container path map, the env allowlist, the version-addressed cwd builder, the configuration hash. ⚠ Shaped so the boundary machinery lifts into the shared engine for crc; only the mount *contents* are ours | new `optimizer/isolation.py` | 2a, 2b, 3, **OQ4** |
+| 7 | **Trace persistence** — the streamed session JSON written beside the verdict as `trace_ref`, because `find_transcript` globs the *host's* `~/.claude/projects` and goes blind in a container | `optimizer/adapter.py` | 1d |
+| 8 | **Per-iteration held-out staging** — `val_inputs` accepts `Callable[[int], RunInputs]`, mirroring `train_inputs` in the same signature; the Runner asserts the live verdict path is absent before dispatch | `engine/loop.py` (upstream), `optimizer/adapter.py` | 0a, **OQ2** |
+| 9 | **Fail-and-feed on a no-verdict dispatch** — a distinguishable delivery-failure count keyed **only** on `UNREADABLE:`, surfaced to the optimizer as the iteration's outcome, never scored as program quality and never summed into the mistake corpus | `optimizer/adapter.py` | 0b, **OQ5** |
+| 10 | **A configuration pin under `runtime_pins`** covering image **digest**, the rendered mount triples with roles, network policy, egress allowlist and session flags — read from `git show HEAD:<manifest>`, not the worktree | `manifest.json`, `optimizer/isolation.py` | 3 |
+| 11 | **A run-start reset** — archive `meta-learnings.md`, the five `findings/iter-*.md` and `iter/` to the run archive, then assert absent; the VM runner mints the run id. ⚠ **Not** a per-run git clone (**OQ9**) | `run_hillclimb_vm.sh`, `optimizer/isolation.py` | 4 |
+| 12 | **The sentinel negative control** — sentinels planted in gold, the benchmark tree, `iter/` and the optimizer's findings; a judge must **fail** to read each, and the control has a negative control of its own | `isolation/negative_control.py` + tests (upstream) | 1g |
+
+**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin) **plus** one backward-compatible type widening in `engine/loop.py` for item 8. That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
+
+**What we are deliberately not building** is its own section (*Deliberately out of scope*), and three things left it on 2026-09-14: the driver **session** (item 4 replaces it), the per-run **git clone** and `optimizer/run_clone.py` (item 11 replaces it), and the tag-scoped **settings file** (**OQ6** retires it).
 
 ## The architecture, in Phil's terms
 
@@ -131,7 +162,7 @@ and byte-identical to it under `isolation/`. Two engine plans, both **Completed*
 | Injection seam | `engine/claude_wrapper.py::run(cmd_prefix=…, extra_env=…)` | Docker slots in as a `cmd_prefix`, exactly parallel to rad-eval's `sudo -u optimizer env …`. No wrapper change |
 | Edit-artifact contract | substrate plan, item 3 | frozen tree read-only; *more-specific* writable mounts overlay only the editable files; harness copies out before and back after, then commits |
 | Tool-policy decision logic | `engine/policy.py` | tested `evaluate_read`/`evaluate_bash`/`evaluate_tool`, deliberately not wired to a hook |
-| Per-run clone precedent | rad-eval `src/optimizer_loop/run_artifacts.py::default_loop_clone(run_id)` | *"two run-ids → two independent `.git` clones → the working tree, `iter/`, the `program-v*` tag namespace, and the in-clone audit ledger all isolate for free"* |
+| ~~Per-run clone precedent~~ ⚠ **not adopted** | rad-eval `src/optimizer_loop/run_artifacts.py::default_loop_clone(run_id)` | *"two run-ids → two independent `.git` clones → the working tree, `iter/`, the `program-v*` tag namespace, and the in-clone audit ledger all isolate for free"* — ⚠ **"two run-ids" is the operative phrase, and paper-trail never has two at once (OQ9).** Kept in the table because the *tag namespace* line names the one thing the reset does not cover; see Phase 4 |
 
 ⚠ **The write boundary is the mount set — not a hook and not a checker.** Two ideas from the first
 draft were the wrong layer and are withdrawn: re-hashing the scoring files (detects, does not
@@ -156,8 +187,9 @@ Phil's OQ4 ruling. The first draft had the boundary backwards and handed away wo
 paper-trail's. Phil's reframe guards against the opposite error: **do not treat these problems as
 paper-trail's alone.** Both paper-trail and crc-extraction-agent are ours, and crc will need much of
 what this plan builds — the gold-holding container boundary, the by-name credential transport, the
-audit rows from container sessions, the isolation-label check, the per-run clone, the bucket-mode
-storage. So for each piece the real question is **modularity, not ownership**: does it belong in the
+audit rows from container sessions, the isolation-label check, the bucket-mode
+storage. (⚠ The per-run clone was on this list until **OQ9** removed it from the plan entirely; crc
+may still want one, which is a question for crc.) So for each piece the real question is **modularity, not ownership**: does it belong in the
 shared engine because more than one consumer needs it, or is it genuinely paper-trail-specific? The
 list sorts the work on that axis. "Consumer work now" means *this plan builds or wires it on the
 paper-trail side*; several of those are candidates to lift into the shared engine the moment crc needs
@@ -260,16 +292,21 @@ Verified on disk. Only the ones that still steer a decision.
 specs/`. So `--setting-sources project` finds no hook config and **there is no PreToolUse hook in the
 judge's path at all** — the trade that bought the wide cwd bought nothing. ⚠ It also silently retires
 a specified control: `NEXT.md:463` says a tag-scoped settings file *should* be committed. Retiring it
-is defensible (the container supersedes it) but must be a recorded decision — **OQ6** — because
+is defensible (the container supersedes it) but must be a recorded decision — ✅ **OQ6 records it**
+(retired 2026-09-14, with the hook *capability* explicitly not retired with the file) — because
 reasoning a requirement away in passing is this plan's own root cause.
 
-**NF2 — the held-out path has no iteration signal.** `engine/loop.py:193-194` types
-`train_inputs: RunInputs | Callable[[int], RunInputs]` but `val_inputs: RunInputs`, documented at
-`:255` as *"fixed for the whole run, as always"*, and `:345` reuses the one object every iteration.
-Both batch ids are iteration-free (`dispatcher.py:898`, `:816`). Proven on disk: batches `i1` and
-`i5` point claim `1059-13` at the identical staging dir, and one verdict file carries mtime `06:51`
-against a directory created `01:42` — overwritten in place. ⇒ staging cannot be keyed on the
-iteration without an engine change.
+**NF2 — the held-out path has no iteration signal.** ⚠ **Line numbers re-verified 2026-09-14 against
+engine `6d621ac`; the earlier citations (`:193-194`, `:255`, `:345`) had drifted.**
+`engine/loop.py:189-190` types `train_inputs: RunInputs | Callable[[int], RunInputs]` but
+`val_inputs: RunInputs`, documented at `:251` as *"fixed for the whole run, as always"* — the docstring
+says `val_inputs` *"is unaffected"* by the per-iteration TRAIN work — and `:335` reuses the one object
+every iteration, as does the probe at `:410`. Both batch ids are iteration-free (`dispatcher.py:898`,
+`:816`). Proven on disk: batches `i1` and `i5` point claim `1059-13` at the identical staging dir, and
+one verdict file carries mtime `06:51` against a directory created `01:42` — overwritten in place.
+⇒ staging cannot be keyed on the iteration without an engine change. ✅ **OQ2 takes that engine
+change** (Phil, 2026-09-14); the two-line widening mirrors `train_inputs` in the same signature and is
+backward compatible.
 
 **NF3 — the staging fix is a precondition for the fail-closed fix, not a sibling.** While a stale
 verdict sits at `ledger/claims/<claim_id>.json`, "wrote nothing" is indistinguishable from "last
@@ -335,7 +372,9 @@ Four design rules, each taken from something already working here:
   — see the green-by-absence audit.
 - **Copy the built thing, not the designed thing.** Where a capability exists in code that has
   actually run, port its shape rather than re-deriving it: rad-eval's container agent for both
-  principals, its per-run clone for Phase 4, the engine's mount renderer for the boundary. The one
+  principals and the engine's mount renderer for the boundary. (⚠ Its per-run clone was the
+  precedent for Phase 4 until **OQ9** descoped that phase to a reset — the rule still held; the
+  problem turned out not to need the mechanism.) The one
   place this plan has no built precedent is the judge/dispatcher container, and that is said out loud
   rather than assumed (see `isolation-prior-work-inventory.md`).
 
@@ -343,14 +382,31 @@ Four design rules, each taken from something already working here:
 
 Nothing downstream is measurable until this lands, and it is independent of the boundary.
 
-**0a. Archive the previous verdict, then assert it is gone** (§4g item 6). Per NF2 there is no
-iteration number on the held-out path, so immediately before dispatching a claim the Runner (1) moves
-any existing `ledger/claims/<claim_id>.json` to
-`ledger/_superseded/<utc_timestamp>-<claim_id>.json`, (2) asserts the live path is absent. Same for
-`ledger/errors/`. No iteration number needed, consumer-only, and it **preserves** the prior verdict
-rather than destroying it as today's overwrite does. *Alternative:* make `val_inputs` accept a
-`Callable[[int], RunInputs]` mirroring the existing `train_inputs` precedent (`loop.py:249-255`) —
-cleaner, but an engine change shared with three consumers for a consumer-side defect. **OQ2.**
+**0a. Give the held-out path an iteration, then assert the verdict slot is empty** (§4g item 6).
+**Resolved by OQ2 (Phil, 2026-09-14): per-iteration folders, via the engine change** — this plan
+previously recommended the consumer-side archive and was overruled, so what follows is the adopted
+form, not the alternative.
+
+Widen `val_inputs` to `RunInputs | Callable[[int], RunInputs]` in `engine/loop.py` (`:190`), mirroring
+`train_inputs` (`:189`) five lines above it, and resolve it at `:335` and the probe at `:410` the way
+`:333` already resolves TRAIN. Backward compatible: a plain `RunInputs` still works, so the engine's
+other two consumers need no change. Held-out staging is then keyed on the iteration and **starts
+fresh** — which is the property Phil asked about and the one NF2 proves is missing today (batches `i1`
+and `i5` point claim `1059-13` at the identical directory; one verdict file carries mtime `06:51` in a
+directory created `01:42`).
+
+What stays consumer-side is the **assertion**, and it is the half that matters: immediately before
+dispatching a claim the Runner asserts `ledger/claims/<claim_id>.json` and `ledger/errors/` are
+**absent**. Per NF3 that is the precondition that makes 0b's refuse-to-score meaningful — while a
+stale verdict can sit on the read path, "wrote nothing" is indistinguishable from "last iteration
+wrote it". ✅ The archive-and-move step is **dropped**: an iteration-scoped root preserves the prior
+verdict for free, in its own folder, which is what the move was recovering. ⚠ The assertion is not
+redundant with the scoping — it is the green-by-absence rule applied to this plan's own fix. A
+directory that silently was not iteration-scoped (a consumer passing the plain form, a probe path
+passing the wrong index) must **fail**, not pass quietly.
+
+⚠ **One seam decision owed at implementation, not here.** `:410` probes a *newly materialised*
+program; which iteration index it passes needs stating rather than inferring.
 
 **0b. Refuse to score a dispatch that produced no verdict** (§4g item 5). ⚠ **This is the
 load-bearing step of Phase 0**, because NF8 leaves the delivery path editable: nothing prevents a
@@ -407,7 +463,7 @@ silent retry would hide the very defect the optimizer is supposed to see and rep
 - **Gate F is no longer in tension.** Plan A's `check_orchestrator_consistency.py` forbids
   `retry`/`re-dispatch`/`bounce` in driver-facing prose. With no retry, there is nothing for it to catch.
 
-**0c. Render the dispatch prompt in Python — as a default the driver may override** (§4g item 4).
+**0c. Render the dispatch prompt in Python — and, per OQ1, *be* the dispatcher** (§4g item 4).
 Both observed delivery bugs (`$dispatch_prompt` unexpanded; `$(cat /tmp/adjudicator_filled_$$.txt)`
 with an unexpanded `$$`) appear **nowhere in this repo** — the model authored them at run time,
 differently each run, and 13 of 561 sessions started with no task. A new `dispatch_prompt.py` reads
@@ -415,10 +471,33 @@ the frozen prompt between the markers, loads slots from `ledger/evidence/<claim_
 `staging_info.json`, substitutes, and writes the rendered bytes into staging, refusing on an
 unresolved slot (`SLOT_UNRESOLVED:<slot>`).
 
-⚠ **Per NF8 this is a default, not a constraint.** The driver stays fully editable. An optimizer that
-leaves the delivery text alone gets deterministic substitution; one that rewrites it owns the result.
-What reaches the subagent is 100% optimizer-authored either way — Python only fills placeholders in a
-prompt the optimizer wrote. Reuse, so this does not fork existing logic: `evidence_producers.py:210-216`
+✅ **OQ1 (Phil, 2026-09-14) extends this step from "render" to "dispatch".** The driver *session* is
+eliminated: the same Python invokes the judge directly with the rendered prompt, rather than handing
+the text to a Claude session that spawns a Task subagent. Reading the driver file settles why — its
+224 lines do three things, (1) fill slots, (2) dispatch exactly one general-purpose subagent with the
+filled text as its whole prompt (`:134`), (3) one `Bash` call to check the output file exists (`:142`)
+— and this step already owns (1), a `claude --print` invocation is (2), and the Runner already does
+(3) at `adapter.py:907`. Nothing in it requires judgement. ✅ This removes the **no-task failure class**
+structurally rather than detecting it: Python cannot improvise a broken heredoc.
+
+⚠ **Per NF8 this remains the optimizer's, not the harness's.** What is removed is the **model**, not
+the **editability**. The driver file stays manifest entry #10 at the same path, holding
+optimizer-authored prompt text that the dispatcher reads; Phil's ruling that the optimizer may write
+Python covers the dispatcher itself. What reaches the judge is 100% optimizer-authored either way —
+Python only fills placeholders in a prompt the optimizer wrote. ⚠ An earlier draft moved ~40% of the
+driver into harness code and Phil withdrew it; this is not that, and the test of the difference is
+whether the optimizer can still change what the judge receives. It can.
+
+⚠ **The driver file's contents change even though its path and manifest slot do not.** Its
+driver-facing prose — the dispatch instructions and the prohibitions addressed to a session that no
+longer exists ("never repair the subagent's output", "never write the verdict yourself") — becomes
+dead text in a frozen entry the optimizer would otherwise spend iterations optimising. Those
+prohibitions are not lost: they are **enforced by construction**, since the code that would have
+repaired an output is code nobody writes. Trimming to the judge-facing prompt re-freezes
+`combined_hash` — a normal program-version event. Entry **count** and scope are untouched, so the five
+count/scope selftests do not move.
+
+Reuse, so this does not fork existing logic: `evidence_producers.py:210-216`
 already reads `staging_info.json` and `claim_text_normalized` (factor **one** shared slot-source
 helper), and `validate_sarol.py:266` already emits `CLAIM_ID_MISMATCH:` (reuse that vocabulary).
 ⚠ Honest scope: under `retrieval` the same Python process writes both sides of the join, so
@@ -472,14 +551,21 @@ Two separate holes:
 `--permission-prompts none` (`claude --help`: *"nobody: anything that would prompt is denied
 automatically"*) with a non-bypass `--permission-mode` and an `--allowedTools` set. Strictly better
 than bypass-everything even behind a mount boundary. **Not** an alternative to the container — an
-earlier draft framed it that way and Phil withdrew it (**OQ3**, resolved). ⚠ **The allowlist must
-carry `Task`** if OQ1 keeps the driver: the judge *is* a Task subagent, so an allowlist that omits it
-kills every dispatch while looking like a permissions tightening. V0c covers it.
+earlier draft framed it that way and Phil withdrew it (**OQ3**, resolved). ✅ **`Task` is no longer
+required.** OQ1 eliminated the driver session, so the judge is a top-level `claude --print` session
+rather than a Task subagent, and the earlier warning — that an allowlist omitting `Task` *"kills every
+dispatch while looking like a permissions tightening"* — no longer applies. `Task` comes **off** the
+allowlist, which is a real narrowing, and V0c's check becomes the opposite assertion: no subagent is
+spawned.
 
 **The tool surface is a named deliverable, not a flag choice.** Write it down as an exact list with
 a reason per entry, because this is the layer covering the four threats the mount set cannot. Minimum
-shape: `Task` present (the judge **is** a subagent), `Read`/`Write` scoped to staging, `Bash` either
-absent or reduced, `WebFetch`/`WebSearch` **absent**. Model the list on rad-eval's
+shape: `Read`/`Write` scoped to staging, `Bash` either absent or reduced, `Task` **absent** (OQ1),
+`WebFetch`/`WebSearch` **absent**. ⚠ With `Bash`, `WebFetch` and `WebSearch` off the list there is no
+per-call decision left for a hook to make on the judge's path — which is the finding that let **OQ6**
+retire the tag-scoped settings file without retiring the hook requirement on the *optimizer's* path,
+where `Bash` is needed and `engine/policy.py`'s per-command granularity still has work to do. Model
+the list on rad-eval's
 `src/optimizer_loop/allowed_tools.py`, which removed `WebSearch` and `Agent` until inheritance was
 proven. ⚠ **Prove it rather than declaring it** (V2h): inside the container, `env`/`printenv`,
 arbitrary `Bash`, `WebFetch`, and an outbound request to a non-allowlisted host must each fail, and
@@ -511,8 +597,11 @@ the argv, `--add-dir`, `workdir`, and any path interpolated into prompt text. A 
 in argv and stale in the prompt is a dispatch the judge cannot complete, and it will look like a
 model failure.
 
-Two properties to keep: the prefix wraps the **driver** invocation and therefore the Task subagent
-inside it, so containerizing the driver containerizes the judge transitively; and a wholesale
+Two properties to keep. ✅ **Since OQ1, the prefix wraps the judge directly** — the earlier form wrapped
+the *driver* invocation and relied on the Task subagent inheriting the boundary transitively, which is
+a weaker claim (it was V2i's job to demonstrate, and a named halt condition if it failed). With no
+driver session there is nothing to inherit through: one container, one session, one boundary, and V2i
+becomes moot rather than pending. And a wholesale
 `DockerRunner` must preserve the `CachingRunner` + `BudgetGuard` wrapping at `dispatcher.py:553-570`
 or it loses the probe cache or the spend ceiling.
 
@@ -532,16 +621,19 @@ docker run --rm
   <image>@<digest>                                            # digest, not tag (Phase 3)
   claude --print
     --permission-prompts none --permission-mode <non-bypass>
-    --allowedTools Task,Read,Write                            # Task is required, not optional
+    --allowedTools Read,Write                                 # no Task: OQ1 removed the subagent
     --add-dir /workspace/staging
-    /sarol-eval-item '<prompt with /workspace/... paths only>'
+    '<rendered judge prompt, /workspace/... paths only>'       # rendered by Python (0c), not a slash command
 ```
 
-Three things to read off it. **Every path is a container path** — `--add-dir`, the workdir, and the
+Four things to read off it. **Every path is a container path** — `--add-dir`, the workdir, and the
 paths inside the prompt text all come from the same map, and a `/home/philadamson/...` string
 anywhere in this command is a bug V2d catches. **Nothing here is constant across dispatches**: the
-program mount changes per iteration, the staging and trace mounts per claim. And **the token appears
-as a name**, which is the one real engine diff this phase needs.
+program mount changes per iteration, the staging and trace mounts per claim. **The token appears
+as a name**, which is the one real engine diff this phase needs. And ✅ **the invocation is the judge's
+own, not a slash command a driver runs** — the prompt arrives fully rendered on argv (0c), so there is
+no second session, no `Task`, and the container boundary and the session boundary are the same
+boundary.
 
 *Gate:* **two claims × two program versions in one process** (V2d). One prefix reused across either
 axis is the failure mode — it silently points a v1 dispatch at v0's bytes, or claim B at claim A's
@@ -586,8 +678,10 @@ assertable (**V2c**).
 non-test sites: `scripts/run_baseline.py` **produces** Plan A's baseline recut, and `canary.py`
 **guards** it. Both take the shipping factory. An opt-out there would mean the baseline is measured
 on the uncontained instrument while every iteration compared against it is measured on the contained
-one — which is not a weaker guarantee, it is an invalid comparison. **OQ7** is therefore about the
-selftest sentinel's shape, not about whether the baseline gets one.
+one — which is not a weaker guarantee, it is an invalid comparison. **OQ7** was therefore about the
+selftest sentinel's shape, not about whether the baseline gets one — ✅ and it resolved to an
+**injected fake prefix**, so the selftests keep asserting real argv and no production-reachable branch
+can disable the boundary.
 
 **1g. The sentinel negative control** (§4g item 8). Plant sentinels and assert a judge **cannot**
 read them. This mirrors the one read-oriented control that shipped — `test_train_only_read_scope`
@@ -670,7 +764,8 @@ callers still change (`:748` plus six selftest sites at `:1253`, `:1399`, `:1404
 `:1603`), *and* every direct construction site must pass a prefix factory or an explicit opt-out
 sentinel — 19 in `adapter.py`, one in `canary.py`, one in `scripts/run_baseline.py`. That last one
 produces the baseline recut this plan owes Plan A, so it is the one that matters most and the one a
-`build_components` gate would have missed entirely. **OQ7** covers the opt-out policy.
+`build_components` gate would have missed entirely. ✅ **OQ7** settles the opt-out policy: an injected
+fake prefix for the 19 selftest sites, and no opt-out here.
 
 **Reuse, not re-derivation:** the predicate reuses `val_isolation_problem`'s containment idiom
 (`resolve()`, then `path == other or other in path.parents`, `dispatcher.py:481-487`), and its
@@ -698,15 +793,24 @@ kills at the source (*"no `.git/` in cwd means no branch/uncommitted-files secti
 verified 2026-04-23"*). Both channels fired; the one producing the filename list was git state. So
 2a's root does more work here than any env var, and **V3b asserts both absences**.
 
-**`--bare` is a candidate for the last row, with two caveats.** Verified on CLI 2.1.267: *"skip
-hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and
+**`--bare` is now the preferred form for the last row, with one caveat left.** Verified on CLI 2.1.267:
+*"skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and
 `CLAUDE.md` auto-discovery"* — one flag for the row whose two env-var names are unverified, and
-`NEXT.md:461` already names `claude --bare --print /sarol-eval-item …`. But it **refuses
-OAuth/keychain auth**, and Rule 3 records that `--bare`-style default toolsets **omit `Task`** —
-which OQ1 option (i) requires. V0b tests it; OQ1 decides. **Three canonical pieces are deliberately
-omitted** and said so plainly: `--tools default`, `--agents`, `--settings <tag-scoped>`
-(`experiment-sarol-eval-arm-isolation.md:107-115`) — all unused today; `--tools default` becomes
-required if OQ1 keeps the driver, `--settings` returns only if OQ6 authors the file.
+`NEXT.md:461` already names `claude --bare --print …`. ✅ **Its blocker is gone.** Rule 3 records that
+`--bare`-style default toolsets **omit `Task`**, which was disqualifying while OQ1's option (i) kept
+the driver; OQ1 resolved to (ii), so the judge needs no `Task` and `--bare`'s omission is now a
+narrowing rather than a breakage. ⚠ **The remaining caveat is auth**: `--bare` refuses OAuth/keychain
+auth, and paper-trail authenticates with `CLAUDE_CODE_OAUTH_TOKEN` — an env var rather than a keychain
+read, but unverified. **V0b tests it. Pre-encoded fork:** the token survives `--bare` → use `--bare`;
+it does not → drop it and set this row's flags individually, which is what the table above lists
+anyway, and record the two unverified env-var names as a residual.
+
+**Three canonical pieces are deliberately omitted** and said so plainly: `--tools default`, `--agents`,
+`--settings <tag-scoped>` (`experiment-sarol-eval-arm-isolation.md:107-115`) — all unused today. ✅ All
+three are now **permanent** rather than pending: `--tools default` was conditional on OQ1 keeping the
+driver (it did not), and `--settings` was conditional on OQ6 authoring the file (**OQ6 retires it** —
+the flags on this command line carry those controls directly, where Phase 3's hash can pin them, and a
+settings file would sit on disk inside the tree the optimizer edits).
 
 *Seam note.* `Invoker` is `Callable[[Sequence[str], pathlib.Path, float], InvocationResult]`
 (`adapter.py:332`) and dozens of gates pass 3-arg spies. Rather than widen the protocol, `env` and
@@ -764,7 +868,14 @@ V2a-seal probes rather than from the intent that produced them. ⚠ A version st
 an image rebuilt from the same Dockerfile with a newer base layer keeps the tag and changes the
 contents.
 
-### Phase 4 — one clone per run
+### Phase 4 — reset the run-scoped state at run start
+
+⚠ **Retitled and descoped 2026-09-14 by OQ9 (Phil).** This phase was *"one clone per run"*. It is now
+a reset. The finding below is unchanged and still real; the mechanism is much smaller. Read OQ9 for
+the reasoning — in one line: the defect is **sequential** residue between runs, a git clone buys
+*concurrent-namespace* isolation that paper-trail will never need, and a reset is the part that does
+the work. `optimizer/run_clone.py`, the provisioner, the clone options, the ownership question, the
+resume design and the `REPO_ROOT` re-resolution are all **struck**.
 
 **The finding (Plan A).** `optimizer/meta-learnings.md` — injected into every optimizer session — has
 **never been archived or reset between runs**, while `profiles.py:514` reasons as though a reset were
@@ -776,44 +887,76 @@ reset it to a stub, which unblocks its owed baseline recut.
 *"Results under `$RUNS`; releases under `$REPO_ROOT/iter/`."* Per-run: results only. Shared: releases,
 the lessons sheet, `findings/`, and the `program-v*` tag namespace.
 
-**Adopt rad-eval's `default_loop_clone(run_id)`** — a fresh git clone per run id. Phil's framing: *the
-program is per iteration; the optimizer is per run.* It lands here rather than beside this plan
-because Phase 2a already builds a per-run working directory for the judge; this is the same move one
-level up, for the optimizer. Three consequences: **Gate H becomes unnecessary** (it exists only to
-refuse starting when a previous run's `findings/iter-*.md` are present, and a disposable clone has no
-residue — it *retires* the gate rather than satisfying it); **most of the ledger-recut hazard
-disappears** (the recut is dangerous only because it rewrites shared tags); and it closes NF9's class
-for the optimizer's inputs, since a clone boundary covers everything in the tree.
+**Archive-and-assert at run start.** Phil's framing still holds — *the program is per iteration; the
+optimizer is per run* — and the implementation of "per run" is a reset, not a clone. Concretely: the
+VM runner mints one run id per invocation and, before `build_components`, moves `meta-learnings.md`,
+the five `findings/iter-*.md` and `iter/` into the run archive, then **asserts each is absent**. Phase
+2a already builds a per-run working directory for the judge; this is the same move one level up, for
+the optimizer's inputs.
+
+Three consequences. ✅ **Gate H is satisfied rather than retired** — `check_run_scope.py` exists to
+refuse starting when a previous run's `findings/iter-*.md` are present, and the reset clears them
+*before* it looks, so the gate keeps asserting instead of being designed away. (A clone would have
+removed it; keeping a live gate is the better outcome and was an accidental loss in the clone
+version.) ✅ **The ledger-recut hazard is reduced but not eliminated** — the recut is dangerous because
+it rewrites *shared tags*, and tags are repo-global whether or not there is a clone. That is the one
+thing the clone gave for free, and OQ9 names the two ways out (namespace tags per run id, or drop tags
+in favour of the manifest's `combined_hash`, which already identifies a program version and is
+committed — recommended). ⚠ **It does not close NF9's class for the optimizer's inputs.** A clone
+boundary covered everything in the tree; a reset covers the three things it is told to reset. So the
+reset list is load-bearing and must be **derived from what the optimizer reads**, not appended to when
+something is noticed — the same discipline the mount-set allowlist gets in the forks section.
 
 ✅ **Where run state lives — OQ8 resolved (Phil, 2026-09-14): local git and local disk.** paper-trail
-is non-PHI forever, so Gate H's archive at `~/.paper-trail/runs/_archive/` and the per-run clone both
+is non-PHI forever, so Gate H's archive at `~/.paper-trail/runs/_archive/` and the run's own state both
 stay on local VM disk — plain git is a fine home. No split to the shared mount: the "bucket mode"
 that lands run state on the mount is a modular capability of the shared engine for a PHI consumer like
 crc-extraction-agent, which paper-trail leaves off (see OQ4). This also sidesteps the mount's ~2 MB/s
-small-file reads, which would have made a clone working tree there slow anyway.
+small-file reads, which would have made any working tree there slow anyway.
 
 ⚠ **Precondition, verified 2026-09-11:** the archive holds `meta-learnings.md` **only**. The five
 `findings/iter-*.md` in the primary checkout are still untracked, unarchived, and **the only copy**.
 Archiving them is a precondition, not a consequence.
 
-⚠ **Where this actually gets built — the first draft named a function and stopped.** "Adopt
-`default_loop_clone`" is not an implementation surface; the engine helper only makes a clone, and
-every decision about what runs inside it is ours. Concretely:
+**Where this actually gets built.** The earlier version of this table specified a clone provisioner
+and was the reason the review called Phase 4 *"not implementable by a fresh session"*. The reset is
+small enough to state in full:
 
 | Piece | Decision |
 |---|---|
 | Who mints the run id | the VM runner script (`run_hillclimb_vm.sh`), which already owns `$RUNS`; one id per invocation, passed down, never re-derived |
-| Where the clone is made | before `build_components`, so every path the dispatcher resolves is already inside it |
-| What `REPO_ROOT` means afterwards | the clone, not the checkout — this is the change with reach, because `REPO_ROOT` is the default for `working_checkout` and for the forbidden-path set |
-| What comes back out | releases under `iter/`, `findings/`, and the lessons sheet, copied to the run's archive at the end; nothing copied back into the source checkout |
-| What the optimizer's container mounts | the clone's writable subtree only — 1e's mount set is defined against the clone, so Phase 4 and Phase 1e have to agree on paths |
+| When the reset runs | before `build_components`, so no component has yet resolved a path into stale state |
+| What gets reset | `meta-learnings.md`, `findings/iter-*.md`, `iter/` — moved to `~/.paper-trail/runs/<run_id>/_archive/`, then **asserted absent**. ⚠ The list is derived from what the optimizer reads; adding to it later means the derivation was wrong, not that the list grew |
+| What `REPO_ROOT` means afterwards | unchanged — the checkout. ✅ This is the reach the clone had and the reset does not: no consumer of `REPO_ROOT` is re-resolved, so `working_checkout` and the forbidden-path set keep their current meaning |
+| The `program-v*` tag namespace | the one thing the clone gave free. Recommended: stop using tags as version identity and key on the manifest's `combined_hash` (committed, already what Phase 3 pins). Alternative: `run-<id>/program-v<n>`. Decide before implementing (OQ9) |
+| What the optimizer's container mounts | the program subtree of the checkout, via rad-eval's temp writable staging + copy-back (1e) — **not** a clone, and never the scorer, gold, `iter/` or the manifest |
+| Resume after an interrupted run | ⚠ no longer a design question. A reset is idempotent against an already-clean tree, so a resumed run either finds the archive it made or makes one; there is no half-provisioned clone to reconcile |
 
-⚠ **Phase 4 and Phase 1e are the same boundary at two scopes and must land together or in that
-order.** An optimizer container whose mounts point at the shared checkout has no clone to protect,
-and a clone with no container around the optimizer is a fresh tree the optimizer can still walk out
-of. Neither half is isolation alone.
+✅ **Phase 4 and Phase 1e are no longer coupled.** The clone version made them the same boundary at two
+scopes, so they had to land together. They do not: 1e's write boundary is the **mount set plus
+copy-back**, which this plan already states outright (*"a clone with no container around the optimizer
+is a fresh tree the optimizer can still walk out of"* — the clone was never the boundary). 1e protects
+the scorer by not mounting it; Phase 4 stops run N's hypotheses reaching run N+1. Different jobs, no
+ordering constraint, and OQ9's worry that splitting would leave *"the optimizer's boundary weaker"*
+does not survive contact with what each half actually does.
 
 ### Deliberately out of scope
+
+**Three things left scope on 2026-09-14**, on Phil's feedback, and are recorded here rather than
+silently dropped — reasoning a requirement away in passing is this plan's own root cause:
+
+- **The driver session** (**OQ1**). Eliminated, not deferred: the dispatcher is deterministic, so
+  `dispatch_prompt.py` invokes the judge directly. What is *out of scope* is the consequence — the
+  judge stops being a Task subagent, so iterations 1-5 are not comparable across the change. Plan A's
+  baseline recut already had to run on the post-isolation instrument (61% of iter-5 judges read a
+  stale verdict), so the recut absorbs the topology change; it is bundled, not free.
+- **The per-run git clone and `optimizer/run_clone.py`** (**OQ9**). Replaced by a run-start reset.
+  Phil: there will never be parallel runs, and a clone's distinctive value is concurrent-namespace
+  isolation. ⚠ The residual is the `program-v*` tag namespace, named in Phase 4 with a recommendation.
+- **The tag-scoped `--settings` file** (**OQ6**). Retired, with the reason recorded: the container's
+  explicit flags carry the same controls where Phase 3's hash can pin them, and a settings file would
+  live on disk inside the tree the optimizer edits. ⚠ **Hooks are not retired with it** — per-call tool
+  policy stays a live gap on the *optimizer's* path and stays in the residuals table.
 
 - **The corpus accounting bug** (§3.4) — iter-5's corpus claims `n_correct=37`; truth is 36.
 - **The runner prints the lagging metric** (§3.5) —
@@ -849,9 +992,13 @@ one concern, matching this directory's one-module-per-concern convention. **Sist
 `dispatcher.py:465-490` (`val_isolation_problem`) for the predicate and its containment idiom;
 `canary.py:16-36`, `:118-151` for the committed-pin / refusal shape.
 
-**New — `optimizer/dispatch_prompt.py`.** Slot resolution, integrity checks, prompt rendering (0c).
-Out of `adapter.py` (already ~2,900 lines) and out of `isolation.py` (different concern). **Reuse
-target:** `evidence_producers.py:201-216`.
+**New — `optimizer/dispatch_prompt.py`.** Slot resolution, integrity checks, prompt rendering **and
+the dispatch itself** (0c + **OQ1**) — it reads the frozen prompt from the driver file, fills the
+slots, refuses on an unresolved one, and invokes the judge directly. ⚠ **This module replaces the
+driver session**, so it is the one place the delivery path lives; per NF8 the optimizer may rewrite it
+(Phil: the optimizer may write Python), which is what keeps eliminating the driver *model* from being
+a removal of the optimizer's reach. Out of `adapter.py` (already ~2,900 lines) and out of
+`isolation.py` (different concern). **Reuse target:** `evidence_producers.py:201-216`.
 
 **`pyproject.toml`** — ⚠ **the dependency that does not exist yet**: `agentic-label-opt` pinned to a
 git **revision** under `[tool.uv.sources]`, copying rad-eval's shape (1a). Nothing else in this plan
@@ -894,33 +1041,44 @@ direct `SarolRunner` site, which `build_components` does not cover.
 
 **`scripts/run_baseline.py`** — `:119-121` constructs `SarolRunner` directly. ⚠ This is the widest
 judge in the system and the one that produces Plan A's baseline recut, so it is the site the first
-draft's `build_components` gate would have missed. Its own version-addressed cwd, or an explicit
-reasoned opt-out (**OQ7**).
+draft's `build_components` gate would have missed. It takes its own version-addressed cwd and the
+**shipping** factory. ✅ **No opt-out** — OQ7 confirms the injected fake prefix is for the 19 selftest
+sites only; a baseline measured on an uncontained instrument would not be a weaker guarantee, it would
+be an invalid comparison against every iteration measured on the contained one.
 
-**`experiments/sarol-2024/scripts/vm/run_hillclimb_vm.sh`** — mints the run id, calls the provisioner
-before `build_components` (Phase 4), and records the in-container CLI version and the **image
-digest** beside `model`/`profile`/`retrieval_k`.
+**`experiments/sarol-2024/scripts/vm/run_hillclimb_vm.sh`** — mints the run id and runs the
+**run-start reset** before `build_components` (Phase 4 as descoped by **OQ9**: archive
+`meta-learnings.md`, `findings/iter-*.md` and `iter/`, then assert absent — ⚠ *not* a clone
+provisioner), and records the in-container CLI version and the **image digest** beside
+`model`/`profile`/`retrieval_k`.
 
-**New — `optimizer/run_clone.py`** (Phase 4, **only if OQ9 answers "keep"**). The provisioner
-rad-eval's `default_loop_clone` does *not* include, which is the part that does the security work:
-clone from a named source ref with stated options, set ownership for the container uid, mark the tree
-`safe.directory`, define **resume** behaviour for an interrupted run, define the `program-v*` **tag
-policy** inside the clone, and re-resolve **every consumer of `REPO_ROOT`** — which is the change
-with reach, since `REPO_ROOT` is the default for both the working checkout and the forbidden-path
-set. **Sister file:** rad-eval `src/optimizer_loop/run_artifacts.py`. Tests: two run ids isolate
-releases, tags and findings. ⚠ If OQ9 answers "split", this file and the runner's clone call move to
-that plan and Phase 4 is struck from this one — not left in as prose.
+⚠ **~~New — `optimizer/run_clone.py`~~ — STRUCK by OQ9 (Phil, 2026-09-14).** There is no per-run
+clone, so there is no provisioner, no clone options, no ownership or `safe.directory` step, no resume
+design, and **no re-resolution of `REPO_ROOT`** — which was the change with reach in this plan and is
+now simply not made. Phase 4's reset is ~30 lines split between the VM runner (mint the run id, move
+the three items to the archive) and `optimizer/isolation.py` (assert absent). Tests: two consecutive
+run ids see a clean `meta-learnings.md` and no `findings/iter-*.md`; and the assertion **fails** when
+the archive step is skipped — a reset with no negative control is the inert-mechanism pattern.
 
 **`experiments/sarol-2024/program-v0/manifest.json`** — one new key under **`runtime_pins`** carrying
 the expected configuration hash over Phase 3's expanded schema (image digest, mount triples with
 roles, network policy, session flags). Not a new file, and it cannot re-version the program:
 `combined_hash` covers `entries` only, and `cmd_write` preserves `runtime_pins` across re-freezes.
 
-**`.claude/commands/sarol-eval-item.md`** — the default delivery text points at the pre-rendered
-prompt. ⚠ **Fully editable** (NF8): this is a default the optimizer may rewrite, not a contract.
+**`.claude/commands/sarol-eval-item.md`** — ⚠ **its role changes, its path and manifest slot do not**
+(**OQ1**). It stops being a slash command a driver session executes and becomes the file the
+dispatcher reads the judge's prompt out of. Trim the now-dead driver-facing prose — the dispatch
+instructions (`:123-138`) and the prohibitions addressed to a session that no longer exists
+(`:43-50`), which are enforced by construction once no model sits in the delivery path — and keep the
+judge-facing prompt between the markers. This re-freezes `combined_hash`; it does **not** change the
+manifest's entry count or scope, so the five count/scope selftests are untouched. ⚠ **Fully editable**
+(NF8): this is a default the optimizer may rewrite, not a contract.
 
-**Shared engine** (`~/code/agentic-label-opt`, now on `main` @ `c2dd0b3`) — ⚠ **four files, where the
-first draft claimed one:**
+**Shared engine** — the `agentic-label-opt` clone (⚠ **not** at the `~/code/…` path this plan gave;
+it sits beside the other personal-projects checkouts. Local `main` is `6d621ac`, three behind
+`origin/main`; both `c2dd0b3` and the pinned `82f547d` are present, so the citations below resolve) —
+⚠ **five files now, where the first draft claimed one and the second claimed four** — the fifth is
+`engine/loop.py`, added by OQ2:
 - **`isolation/docker_prefix.py`** (small, real) — a by-name env form
   (`inherit_env=(...)` → `--env NAME`) so the OAuth token stops appearing in host argv (`:437-439`)
   and in the wrapper's recorded command (`claude_wrapper.py:342-365`). A prerequisite, not a
@@ -936,12 +1094,24 @@ first draft claimed one:**
   `iter_n` outranked live code in this plan's first draft; correcting it is part of the change, not
   tidying.
 
+- **`engine/loop.py`** (⚠ **new as of OQ2, 2026-09-14**) — widen `val_inputs` from `RunInputs` to
+  `RunInputs | Callable[[int], RunInputs]` (`:190`), mirroring `train_inputs` (`:189`) in the same
+  signature, and resolve it at `:335` and the probe at `:410` the way `:333` already resolves TRAIN.
+  Update the docstring at `:251`, which currently states the opposite (*"`val_inputs` is unaffected
+  (fixed for the whole run, as always)"*). Backward compatible — a plain `RunInputs` still works, so
+  the other two consumers need no change. Tests: an iteration-keyed VAL batch reaches
+  `runner.run`, and the plain form still does.
+
 ⚠ **Paper-trail's own sentinels and auth stay here, not upstream.** An upstream addition earns its
 place only if it is generic and tested there; otherwise it is our specifics living in three other
 consumers' repo.
 
-✅ Still **no change to `engine/`** — the materialised path is already threaded (`loop.py:192`,
-`:426-431`).
+⚠ **This plan now touches `engine/`, where it previously claimed not to.** The earlier line read
+*"✅ Still no change to `engine/`"* and was true until OQ2. The materialised path is indeed already
+threaded (`loop.py:192`, `:426-431`) — that part stands — but the held-out inputs are not, and OQ4's
+"sort by where it should live" is what moved the fix upstream. It remains a two-line type widening
+plus a docstring correction, so the claim that changes is *"no engine change"*, not *"a small engine
+change"*.
 
 **`docs/claude_ops.md`** — one line: its §Environment says this repo has "no build step, no runtime,
 and no test suite" while this plan's verification rests on a 447-check suite. Repo-local copy.
@@ -952,22 +1122,50 @@ and no test suite" while this plan's verification rests on a 447-check suite. Re
 
 ## Open Questions
 
-Nine numbered, **five open** — OQ3, OQ4, OQ5 and OQ8 are resolved (2026-09-14) and kept for
-reference. OQ5 was the implementation gate and is now settled (fail-and-feed-the-optimizer).
-**OQ9 still decides this plan's scope and should be answered first;** OQ1, OQ2, OQ6 and OQ7 remain.
+Nine numbered, **all nine resolved** as of 2026-09-14. Kept in full rather than deleted, because
+several were resolved *against* this plan's own recommendation and the reasoning is what a fresh
+session needs. Resolution order on the day: OQ4, OQ5, OQ8 first, then OQ9 (which set the scope),
+then OQ1, OQ2, OQ6, OQ7.
 
-**OQ9 — does Phase 4 stay in this plan, or become its own reviewed plan?** The review's judgement was
-blunt: Phase 4 as written is *"not implementable by a fresh session"* — it named a helper and left
-out the provisioner, the resume behaviour, the tag policy, and every consumer of `REPO_ROOT`. It now
-has an implementation surface (see the table there), but it is still the largest remaining unknown in
-a plan that already covers two container boundaries. Options: **(i) split it** — land Phases 0-3,
-which are the isolation the 2026-09-09 run demanded, and give the per-run clone its own review;
-**(ii) keep it and fully specify** — write the provisioner, the clone options, ownership, resume,
-tag policy and the `REPO_ROOT` consumer list into *Files to Modify* before implementation starts.
-*Recommendation: (i).* ⚠ With one condition, because splitting has a real cost: Phase 1e's optimizer
-mounts are defined against the clone, so a split means Phase 1e lands against the shared checkout and
-the optimizer's boundary is weaker until the clone follows. Say that in the landing note rather than
-discovering it later.
+**OQ9 — ✅ RESOLVED 2026-09-14 (Phil): no per-run clone. A run-start reset instead.** Phil: *"I don't
+think we're ever going to have multiple runs in parallel… a run is always going to be operating from
+the latest checkout… I guess I don't see what the concern is."*
+
+⚠ **The concern was never parallelism, and this plan failed to say so.** Phase 4's finding is
+*sequential*: `meta-learnings.md` — injected into every optimizer session — had **never been archived
+or reset between runs**, so run N+1 opened carrying run N's inherited hypotheses while
+`profiles.py:514` reasoned as though a reset were guaranteed. Two runs both labelled `program-v0`
+could therefore start from different states with nothing recording it. That happens with runs strictly
+one after another; concurrency has nothing to do with it. Phil's own framing — *"if we update
+something for a new run, that would land in the next run"* — assumes each run starts from a defined
+state, which is exactly the property that was missing.
+
+**But his ruling does dissolve the clone.** A git clone per run id buys two things: a reset, and an
+*independent namespace* (working tree, `iter/`, `program-v*` tags, audit ledger) for runs that
+overlap in time. rad-eval needed the second. paper-trail never will. So the clone is a heavyweight
+mechanism for a job an archive-and-reset does — and adopting it would be this plan's own anti-pattern
+(*re-aim what exists*) in reverse. **Phase 4 is therefore descoped** to: archive `meta-learnings.md`,
+the five `findings/iter-*.md` and `iter/` into the run archive at run start, assert them absent, and
+mint the run id in the VM runner. `optimizer/run_clone.py` is **struck** — with it go the provisioner,
+the clone options, the ownership question, the resume design and the `REPO_ROOT` re-resolution that
+made Phase 4 *"not implementable by a fresh session."*
+
+✅ **Three consequences worth stating.** Gate H (`check_run_scope.py`) is now **satisfied rather than
+retired** — it refuses when residue is present, and the reset removes the residue before it looks, so
+the gate keeps asserting instead of disappearing. The OQ9-as-written worry that *"Phase 1e's optimizer
+mounts are defined against the clone"* **evaporates**: the clone was never the write boundary — this
+plan already says so (*"a clone with no container around the optimizer is a fresh tree the optimizer
+can still walk out of"*) — and 1e's real mechanism is rad-eval's temp writable staging plus copy-back,
+which needs no clone. And the split question falls away: there is no large Phase 4 left to split, so
+Phases 0-4 land as one plan.
+
+⚠ **One thing the clone gave for free that a reset does not: the `program-v*` tag namespace.** Tags
+are repo-global, so a second run re-mints `program-v1..v5` over the first run's. Two ways out, and
+this is the only genuinely open detail left: **(a)** namespace the tags per run (`run-<id>/program-v<n>`),
+or **(b)** stop using tags as the version identity and rely on the manifest's `combined_hash`, which
+already identifies a program version uniquely and is committed. *Recommendation: (b)* — it is one
+fewer mechanism, and the hash is the thing the pin (Phase 3) already keys on. Decide it before Phase 4
+is implemented; it is a ten-line decision, not a design.
 
 **OQ5 — ✅ RESOLVED 2026-09-14 (Phil): allow it to fail; the optimizer determines and fixes it.**
 No Runner-side retry and no scoring around the failure. A dispatch that produces no verdict fails the
@@ -979,16 +1177,87 @@ recorded under a distinguishable delivery-failure count, keyed only on `UNREADAB
 reported as program quality. Dropping the retry also removes the probe-cache trap, the
 session/claim-count desync, and any tension with Gate F. ⚠ Plan A's baseline recut runs on this.
 
-**OQ1 — does the driver session survive 0c?** (i) keep it, pre-render its prompt — minimal change to
-the measured condition (the judge stays a Task subagent, which is what all five iterations were
-measured under); (ii) eliminate it — simpler, removes a model from the delivery path, applies every
-flag directly to the judge, saves its ~10% of spend. *Recommendation: (i) here*; (ii) changes what
-the judge *is* and belongs with the measurement redesign. ⚠ Interacts with `--bare` (omits `Task`),
-and (ii) now costs a manifest re-freeze back to 9 entries, breaking five count/scope selftests.
+**OQ1 — ✅ RESOLVED 2026-09-14 (Phil, against this plan's recommendation): eliminate the driver
+session — option (ii).** Phil: *"it feels like what you're describing is the dispatcher, which doesn't
+need to be an agent because it's deterministic, right?"* Correct, and checking the file settles it:
+`.claude/commands/sarol-eval-item.md` is 224 lines of prose executed by a Claude session whose entire
+output is (1) fill slots into the frozen prompt, (2) dispatch **exactly one** general-purpose subagent
+with the filled text as its whole prompt (`:134`), (3) one `Bash` call to check the output file exists
+(`:142`). Step 1 is what 0c already moves into Python; step 2 is a `claude --print` invocation; step 3
+is what the Runner already does at `adapter.py:907`. There is no judgement left in it — so it is a
+dispatcher, and a model is the wrong thing to implement a dispatcher with.
 
-**OQ2 — staging: consumer archive, or an engine change?** *Recommendation: consumer-side now* — the
-defect is ours and the engine change touches three other consumers; the engine version is the better
-end state if per-iteration trees are wanted for forensics.
+⚠ **"Eliminate the driver session" ≠ "take the delivery path away from the optimizer."** That
+distinction is load-bearing, because an earlier draft moved ~40% of the driver into harness code and
+Phil withdrew it (NF8). What is removed is the **model**, not the **editability**: the driver file
+stays a manifest entry holding optimizer-authored prompt text, the dispatcher reads it, and Phil's
+ruling that the optimizer may write Python if it wants covers the dispatcher too. What reaches the
+judge is 100% optimizer-authored either way.
+
+✅ **What this buys, beyond the ~10% of spend.** It removes the entire **no-task failure class**
+structurally: both observed delivery bugs (`$dispatch_prompt` unexpanded; `$(cat …_$$.txt)` with an
+unexpanded `$$`) were authored by the driver *model* at run time, differently each run, and 13 of 561
+sessions started with no task. Python cannot improvise a broken heredoc. It also retires the driver's
+prohibitions **by construction** rather than by prose — "never repair the subagent's output", "never
+write the verdict yourself", "never retry" stop being instructions a model might skim past and become
+code nobody wrote. That is this plan's whole thesis applied one level up.
+
+✅ **And it collapses three open unknowns.** `--allowedTools` no longer needs `Task`, so the warning
+that an allowlist omitting it *"kills every dispatch while looking like a permissions tightening"*
+goes away. **`--bare` becomes available** — its omission of `Task` was the blocker, and it covers the
+whole auto-memory / `CLAUDE.md` / dynamic-section row in one verified flag. **V2i is moot**: there is
+no Task subagent whose policy inheritance needs demonstrating, which was a named halt condition.
+
+⚠ **Two costs, both real, neither new.** First, **the measured condition changes** — the judge stops
+being a Task subagent and becomes a top-level `claude --print` session, so iterations 1-5 are not
+comparable across it. But this plan already owes Plan A a baseline recut on the post-isolation
+instrument (61% of iter-5 judges read a stale verdict), so the recut absorbs the topology change at no
+extra cost; it does not get to be *cheap*, it gets to be **bundled**. Second, **`--bare` refuses
+OAuth/keychain auth** and paper-trail authenticates with `CLAUDE_CODE_OAUTH_TOKEN` — an env var, not a
+keychain read, but unverified. **V0b tests it; pre-encoded fork:** token survives `--bare` → use it;
+does not → drop `--bare` and set the row's flags individually, which is what §2c lists anyway.
+
+✅ **No manifest re-freeze to 9 entries, and no five-selftest break** — the earlier warning assumed the
+driver file disappeared. It does not: it stays at the same path as entry #10, holding the prompt text
+the dispatcher reads. ⚠ Its *contents* do change (the driver-facing prose describing a dispatch nobody
+performs any more is dead text a frozen entry should not carry, and the optimizer would otherwise
+spend iterations optimising it), which re-freezes `combined_hash` — a normal program-version event,
+not a breakage. Entry **count** and scope are untouched.
+
+**OQ2 — ✅ RESOLVED 2026-09-14 (Phil, against this plan's recommendation): per-iteration folders, via
+the engine change.** Phil: *"We should have folders based on iteration, right? … each run should have
+its own iteration folder that starts fresh. Is that not what we're doing?"*
+
+⚠ **Direct answer: no — not on the held-out path, and that asymmetry is the defect.** TRAIN does get
+per-iteration inputs; VAL does not. Verified in the engine at `6d621ac`: `engine/loop.py:189-190`
+types `train_inputs: RunInputs | Callable[[int], RunInputs]` but `val_inputs: RunInputs`, documented
+at `:251` as *"fixed for the whole run, as always"*, and `:335` (plus the probe at `:410`) reuses the
+one object every iteration. Both batch ids are iteration-free (`dispatcher.py:898`, `:816`). Proven on
+disk: batches `i1` and `i5` point claim `1059-13` at the identical staging dir, and one verdict file
+carries mtime `06:51` in a directory created `01:42` — **overwritten in place**. So iteration 5's
+judge ran in iteration 1's folder, on top of iteration 1's verdict. (Note the citations moved: this
+plan quoted `:193-194`, `:255`, `:345` against an older engine SHA.)
+
+**So the engine change is the answer, and OQ4 is why it stops being a close call.** This plan
+recommended the consumer-side archive on the grounds that *"the defect is ours and the engine change
+touches three other consumers."* OQ4 overturns that reasoning explicitly: sort by **where it should
+live**, not who owns the defect. Any consumer whose runner keys staging on a claim id hits the
+identical in-place overwrite — crc included — so per-iteration held-out staging is a shared-engine
+property, not a paper-trail patch.
+
+✅ **And it is small, because the precedent is in the same signature.** Widen `val_inputs` to
+`RunInputs | Callable[[int], RunInputs]` and resolve it at `:335` and `:410` exactly as `:333` already
+resolves `train_inputs`. Backward compatible — a plain `RunInputs` still works, so the other two
+consumers need no change. ⚠ One implementation detail to decide at the seam, not here: `:410` is the
+*probe* on a newly materialised program, so which iteration index it passes needs stating rather than
+inferring.
+
+✅ **Phase 0a shrinks to its cheap half.** With an iteration-scoped root, a stale verdict from
+iteration N cannot sit where iteration N+1 reads, so the archive-then-move step is unnecessary; what
+remains is the assertion — the live path **must be absent** before dispatch — which stays, because
+per NF3 that assertion is the precondition that makes 0b's refuse-to-score meaningful. The prior
+iteration's verdict is preserved for free by living in its own folder, which is the preservation
+property 0a was built to recover.
 
 **OQ3 — ✅ RESOLVED 2026-09-11 (Phil): the container is the mechanism.** An earlier draft asked
 whether `--permission-prompts none` could replace it and said Phase 1 would then "demote to
@@ -1006,12 +1275,72 @@ consumer-side or upstream? — do the check **consumer-side now** (upstream brea
 reference adapter and two of its tests first, engine-owed item 5) but **file it as shared-engine
 work**, because crc needs the identical check and rebuilding it there would repeat the work.
 
-**OQ6 — is the tag-scoped settings file retired, or deferred?** NF1 proves it never existed;
-`NEXT.md:463` says it should be committed. Retiring it is defensible now the container supersedes it,
-but it must be a **recorded** decision — reasoning a requirement away in passing is this plan's own
-root cause.
+> **Phil's follow-up, and the answer.** *"Does this change any of what's in this plan currently? …
+> we're discussing these things, but what are we building concretely?"*
+>
+> **It changes the filing, not the build — with one exception.** Every item OQ4 re-filed as
+> shared-engine work is something this plan already declined to build: bucket-mode storage, hook
+> wiring, audit rows from container sessions, the isolation-label validation. They move from *"a gap we
+> noted"* to *"named backlog crc will need"*, and none of them enters scope. The exception is **OQ2**:
+> OQ4's reasoning is what flipped per-iteration held-out staging from a consumer-side workaround to a
+> small upstream change in `engine/loop.py`, because *"the defect is ours"* stopped being the deciding
+> argument.
+>
+> **It adds one design constraint, which is not extra work.** The judge/dispatcher container is the one
+> thing nobody has built anywhere, and crc designed the identical gold-holding sibling. So
+> `optimizer/isolation.py` is written with its mount-set builder and path map **generic, with
+> paper-trail's paths as data** — shaped to lift, not lifted now. That is a way of writing the module,
+> not a second module.
+>
+> **And it is why *What we are building* now exists** at the top of this plan. The concrete answer is
+> those twelve items. This section answers *where each one should eventually live*, which is a
+> different question and was being read as the same one.
 
-**OQ7 — what shape does the offline-test opt-out take?** ⚠ Narrower than it looks, because the
+**OQ6 — ✅ RESOLVED 2026-09-14 (Phil): retire the tag-scoped settings file. Hooks are *not* retired.**
+Phil: *"we can retire it unless you think that there are hooks that do things that are non-redundant
+with the Docker container."* This is the recorded decision the question asked for.
+
+**Retire the file.** `NEXT.md:463` says a tag-scoped `--settings` file should be committed; NF1 proves
+it never existed, so nothing regresses. What it was *for* was delivering hook config and permission
+settings into a session invoked with `--setting-sources project` and no config on disk. The container
+plus explicit CLI flags — `--permission-prompts none`, a non-bypass `--permission-mode`, an
+`--allowedTools` list — deliver those same controls directly, on the command line, where the
+configuration hash (Phase 3) can pin them. A settings file would additionally be *on disk inside the
+program tree the optimizer edits*, which is the wrong place for a control the optimizer must not move.
+`--settings` therefore joins `--tools default` and `--agents` as a permanently-omitted Rule 3 piece
+rather than a pending one.
+
+**Now the "unless" — and the honest answer is a split, not a flat no.** Hooks do one thing the
+container cannot: decide **per call**, on the call's *content*. `--allowedTools` is all-or-nothing per
+tool; `engine/policy.py`'s `evaluate_bash(command, …)` and `evaluate_webfetch(url, …)` inspect the
+command string and the URL. The network profile sees a **host**; the hook sees the **URL**. This is not
+hypothetical — the engine's own egress plan records that rad-eval retains `WebFetch` *precisely
+because* a real `PreToolUse` hook denies every URL unconditionally, and that **"Docker mode has no hook
+wiring at all, so that same app-layer policing doesn't exist"**
+(`2026-07-30-docker-vertex-only-egress-allowlist.md:123`).
+
+- **On the judge's path: redundant.** Its allowlist has `Bash` absent-or-reduced and `WebFetch` /
+  `WebSearch` absent (and, per OQ1, no longer needs `Task`). With those tools ungranted there is no
+  per-call decision left for a hook to make. ✅ Retiring the file costs the judge nothing.
+- **On the optimizer's path: non-redundant, and a live gap.** The optimizer needs `Bash` — it edits and
+  runs things — so `evaluate_bash`'s per-command granularity has real work to do that the mount set and
+  a tool allowlist cannot. That gap is inherited knowingly by going container-first, and it is already
+  in the residuals table as the second landing. Retiring the settings *file* does not retire it.
+
+⚠ The distinction to keep: what is retired is a **delivery mechanism** that never shipped, superseded
+by a better one. What is deferred is a **capability** whose decision logic exists (16 tests) and whose
+wiring does not. Collapsing those two into "hooks: dropped" would be the exact move this plan's
+root-cause table is made of.
+
+**OQ7 — ✅ RESOLVED 2026-09-14 (Phil): the injected fake prefix, as recommended.** Phil's one-word
+answer. So: the 19 selftest sites opt out by passing an explicit sentinel **plus an injected fake
+prefix**, which keeps the argv assertions real — the selftests still exercise the path translation
+rather than skipping it — and leaves no production-reachable branch that disables the boundary. The
+rejected shape is recorded with it: a boolean `isolation_mode` flag, because a keyword that silently
+disables the boundary is the mechanism this plan's root-cause table is made of. The original question,
+for reference:
+
+⚠ Narrower than it looks, because the
 review closed the part that mattered: `run_baseline.py` and `canary.py` **produce and guard
 reportable numbers**, so both take the shipping factory and neither gets an opt-out (1f). What is
 left is the 19 selftest sites: an `isolation_mode="test"` keyword, an injected fake prefix, or a
@@ -1028,6 +1357,30 @@ landing on the mount so a PHI consumer can hold them off local disk) is for a re
 crc-extraction-agent, which *is* PHI. So bucket mode is not paper-trail's concern — it is a **modular
 capability of the shared engine** that crc turns on and paper-trail leaves off (see OQ4). Practical
 consequence: drop the "clone local, archive to mount" split from Phase 4; both stay local.
+
+> **Phil's follow-up, and the answer.** *"Is this a large design change to the Agentic Label Opt
+> project? As well as this one."*
+>
+> **No, on both counts — and the engine surface is the smaller of the two.** What this plan actually
+> asks the engine to build is five things, all small: a by-name credential env form
+> (`inherit_env=(…)` → `--env NAME`, ~20 lines in `isolation/docker_prefix.py`, which today only emits
+> `-e KEY=VALUE` at `:439`); the generic half of the seal negative control plus its test, both additive
+> and reusing `run_probe`; a `CLAUDE_CODE_VERSION` re-pin in the `Dockerfile` and README; and — new as
+> of OQ2 — widening `val_inputs` in `engine/loop.py` to accept a callable, which is a two-line type
+> change mirroring `train_inputs` five lines above it and is backward compatible, so the other two
+> consumers are untouched. ⚠ That last one **corrects this plan's earlier "✅ no change to `engine/`"**,
+> which was true before OQ2 and is not now.
+>
+> **What *is* a design change is a change of ownership, not of architecture.** OQ4 and OQ8 say four
+> capabilities — bucket-mode storage, hook wiring, container-mode audit rows, isolation-label
+> validation — are the engine's to own because crc needs them too. None of them is built here, none is
+> designed here, and the engine's plans already name three of the four as explicitly deferred. So the
+> engine's **backlog** grows; its **design** does not.
+>
+> **The one genuine architectural addition is paper-trail's, not the engine's:** the gold-holding
+> judge/dispatcher container, which crc's umbrella plan designed (`2026-07-10-…:60`, `:232-237`) and no
+> repo has shipped. It gets built here, generically, so crc can adopt it rather than rebuild it — which
+> is a change *in* the engine's direction, not a change *to* the engine.
 
 ---
 
@@ -1082,7 +1435,7 @@ cross-model review found in the gates that matter most.
 | **V3c** | an empty `--add-dir` set trivially satisfies "no entry is an ancestor of `$REPO`" | assert the set equals **exactly** the two expected paths |
 | **V2e** | a `trace_ref` field that exists but points nowhere | non-empty file **and** the claim id present in its content; at run scale, trace count equals dispatch count |
 | **V2f** | grepping for a token that was never set ⇒ nothing found ⇒ green | assert the variable **name** is present in the argv before asserting the **value** is absent |
-| **V2h / V2i** | every attempt failing ⇒ green, but a broken container looks identical to a sealed one | each result attributed to a **named layer**, plus a positive control that must **succeed** (staging read; subagent staging read) |
+| **V2h** (⚠ V2i struck by OQ1) | every attempt failing ⇒ green, but a broken container looks identical to a sealed one | each result attributed to a **named layer**, plus a positive control that must **succeed** (staging read). ⚠ V2i's own removal is the rule applied to this plan: it is struck, not reported green, because its subject no longer exists |
 | **V1d** | — | **the prototype**: asserts the checks *ran*, not that they passed |
 | **V2b** | a skipped suite reports no failures; and the historical "104" is a number from another machine | asserts **0 skipped**, and records **this run's** engine SHA, image digest, Docker version and pytest counts rather than reusing the old total |
 | **V0b** | a matrix row silently disappears and the rest still pass; a flag works in a scratch probe and is dropped by `_stage_command` | assert the **candidate count**, and assert each surviving flag appears in the **shipping argv**, not just in a probe |
@@ -1120,10 +1473,13 @@ would be self-refuting. Also stop if a flag passes the probe and is absent from 
 that is the inert-mechanism pattern, caught one layer earlier than usual.
 
 **V0c — does a judge run in-container, under the shipping configuration, at what cost?** ⚠ **Through
-the real topology**: the driver spawning a Task subagent, launched by the **same per-dispatch prefix
-factory** production uses (1c). A hand-built `docker run` or a direct judge prompt measures a fixture
+the real topology**, which OQ1 simplified: `dispatch_prompt.py` rendering the prompt and invoking the
+judge directly, launched by the **same per-dispatch prefix factory** production uses (1c) — no driver
+session, no Task subagent. A hand-built `docker run` measures a fixture
 and tells us nothing about Phase 1c — and Phase 1c is where the review found the design could not
-work. One claim,
+work. ✅ Add one assertion the older topology could not make: **no subagent is spawned**, since `Task`
+is now off the allowlist and a dispatch that still spawns one means the driver prose was not fully
+retired. One claim,
 `network_policy="open"` + `adc_path=None` + `CLAUDE_CODE_OAUTH_TOKEN`, **and**
 `--permission-prompts none` + a non-bypass `--permission-mode` + `--allowedTools` in place of
 `--dangerously-skip-permissions`. **Also test cwd = the read-only program snapshot** instead of a
@@ -1283,14 +1639,15 @@ allowlist, network policy, or permission mode. *Stop:* any forbidden attempt suc
 attempt failing with no layer identified, which is a green that proves nothing — a broken container
 and a sealed one look identical from outside.
 
-**V2i — what the Task subagent inherits.** The judge **is** a Task subagent, so the driver's policy
-has to reach it and nothing in the plan proved that. rad-eval removed `Agent` from its allowlist
-precisely until inheritance was demonstrated. A purpose-built control: the driver spawns one subagent
-that attempts (1) an allowed staging read, (2) a forbidden gold-sentinel read, (3) a forbidden write
-to the scorer path, (4) one outbound request. *Expected:* (1) succeeds, (2)-(4) fail, each with its
-layer named. *Stop:* any of (2)-(4) succeeding — the boundary holds for the driver and leaks one
-level down, which is the shape of the leak that started this. ⚠ Also *stop* if (1) fails: a subagent
-that cannot read staging cannot judge, and a run of all-failures would otherwise read as a pass.
+⚠ **~~V2i — what the Task subagent inherits~~ — STRUCK by OQ1 (Phil, 2026-09-14).** It asked whether
+the driver's policy reaches the Task subagent the judge used to be. With the driver session eliminated
+the judge is the top-level session, the policy applies to it directly, and there is nothing to inherit
+through. **Struck rather than marked green**, because a gate that passes for want of a subject is
+green-by-absence — the failure mode this plan's own rule names. ✅ What replaces it is smaller and
+stronger: V0c asserts **no subagent is spawned at all**, and V2h already probes the same four attempts
+against the judge session itself. ⚠ If a future change reintroduces a subagent in the delivery path,
+this gate comes back with it — rad-eval removed `Agent` from its allowlist precisely until inheritance
+was demonstrated, and that precedent is unchanged.
 
 **Recipe (this box).** Build the image first with the host CLI version
 (`docker build --build-arg CLAUDE_CODE_VERSION=2.1.267`, per Phase 1g), record its **digest** for the
@@ -1396,8 +1753,10 @@ or a version/digest mismatch.
   Phase 2 and call the isolation done.
 - **V0b finds an inert env var** → drop it and rely on 2a's root, which §2c's re-ranking says was the
   stronger channel anyway; note the residual explicitly.
-- **V0b shows `--bare` covers the row but omits `Task`** → `--bare` and OQ1 option (i) are mutually
-  exclusive; OQ1 decides and the loser is dropped explicitly.
+- **V0b shows `--bare` refuses the `CLAUDE_CODE_OAUTH_TOKEN` env var** → drop `--bare` and set §2c's
+  last row flag by flag, recording the two unverified env-var names as a residual. ✅ The older form of
+  this fork (`--bare` omits `Task`, so it conflicts with keeping the driver) is **closed**: OQ1
+  eliminated the driver, the judge needs no `Task`, and the omission is now a narrowing.
 - **A delivery failure fires mid-run (OQ5 fail-and-feed)** → the iteration returns the failure to the
   optimizer rather than a score; record the delivery-failure count in the release breakdown so it is
   never read as a program-quality drop.
@@ -1415,10 +1774,11 @@ or a version/digest mismatch.
 - **V2g finds the optimizer needs write access to something in the deny set** → name the file and ask,
   rather than widening. The scorer and the manifest are not negotiable (Phil); anything else is a
   design question about what the program *is*.
-- **V2i shows the Task subagent does not inherit the driver's policy** → this is a halt, not a
-  widening: follow rad-eval and drop the subagent path until inheritance is demonstrated, which makes
-  OQ1 option (ii) — eliminate the driver and apply every flag to the judge directly — the live
-  option rather than the deferred one.
+- ✅ **~~V2i — the Task subagent does not inherit the driver's policy~~ → MOOT.** This was a named halt
+  condition whose resolution was *"drop the subagent path"*; OQ1 dropped it up front, so there is no
+  subagent whose inheritance needs demonstrating and every flag applies to the judge directly. ⚠ V2i
+  is struck from the gate list rather than left green-by-absence — a gate that passes because its
+  subject no longer exists must say so, not report a pass.
 - **V2h cannot attribute a failure to a layer** → treat as red. Re-run with one layer relaxed at a
   time until each result has an owner; an unattributed all-fail is indistinguishable from a container
   that never started.
@@ -1442,13 +1802,16 @@ to a 57-line stub on Plan A's branch. That conflicts on rebase. Do **not** `git 
 `reset --hard`, or `stash` that file: this copy holds content that exists nowhere else, and the five
 untracked findings beside it have **no blob to restore**.
 
-**Landing gate.** `/read-plan` sign-off with **OQ1–OQ9 resolved** (OQ9 first — it sets the scope); the five findings archived (a
+**Landing gate.** ✅ **OQ1–OQ9 are all resolved** (2026-09-14), so what this gate now waits on is
+`/read-plan` sign-off on the resolved plan — plus the one detail OQ9 left open, the `program-v*` tag
+namespace (recommendation: key on `combined_hash`), which is a decision to record, not a phase to
+design. Then: the five findings archived (a
 Phase 4 precondition and the only copy); Step 0's probes run and recorded; **V2a-seal green,
 including its negative control** — a land with either red is not a land; **V2c's 21-site census
 green**, so no ungated judge ships; **V2d and V3d green**, because a reused prefix or a shared cwd
-mis-attributes one program's behaviour to another and nothing downstream would show it; **V2h and
-V2i green with every result attributed to a layer**, since they cover the four threats the mount set
-cannot; **V2e green**, so a containerized run is still auditable; the credential-by-name engine
+mis-attributes one program's behaviour to another and nothing downstream would show it; **V2h green with every result attributed to a layer**, since it covers the
+threats the mount set cannot (⚠ **V2i is struck, not waived** — OQ1 removed the Task subagent it
+tested); **V2e green**, so a containerized run is still auditable; the credential-by-name engine
 change **landed upstream first** (Phase 1b is a prerequisite, not a follow-up); then `/review-implementation` → `/commit-review` → `/phi-vet`. No PHI is
 expected anywhere here (claim ids and sentinel strings only), but the repo is gated. ✅ Codex credits
 are restored, and this is a **rewrite** of a plan whose only review covered a different structure — a
@@ -1463,8 +1826,11 @@ five count/scope selftests (`adapter.py:1668`, `:1773` and its retrieval-scope a
 
 **Contract owed to Plan A's baseline recut.** It must run on the **post-isolation** instrument: 61% of
 iter-5 judges read a stale verdict, so a baseline measured today measures the contamination. The
-landing order satisfies this. ⚠ It also depends on whatever OQ7 decides (OQ5 is settled:
-fail-and-feed, so the recut runs on the fail-and-feed instrument).
+landing order satisfies this. ✅ Its dependencies are now settled rather than pending: OQ5
+(fail-and-feed) and OQ7 (injected fake prefix — so `run_baseline.py` takes the shipping factory and
+gets **no** opt-out, which is what makes the recut and the iterations comparable at all). ⚠ Add OQ1 to
+the list: the recut also runs on the no-driver topology, so it absorbs both the containerization and
+the delivery-path change in one measurement.
 
 **Three new gates this plan must not break** (Plan A's, all in the preflight, all green at
 Plan A's tip): the **consistency gate** (`check_orchestrator_consistency.py`, 16 checks — trivially
