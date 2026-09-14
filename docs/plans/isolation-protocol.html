@@ -282,9 +282,18 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
     <li><b>The box is per stage, not per claim.</b> The dispatch loop already runs once per stage. A
     container command built per <i>claim</i> hands all three stages the same one.</li>
     <li><b>Each stage needs different mounts &mdash; and only the judge&rsquo;s was worked out.</b> The
-    extractor has to read the paper; the adjudicator must <i>not</i> see it, only the finished
-    evidence. Today that gap is invisible because the evidence is prepared by ordinary Python before
-    any session starts.</li>
+    extractor has to read the paper; the adjudicator gets only the finished evidence. Today that gap
+    is invisible because the evidence is prepared by ordinary Python before any session starts.
+    <br>&#9888; <b>Corrected &mdash; you asked why the adjudicator can&rsquo;t see the paper, and my
+    answer was wrong twice.</b> <span class="chg mod">&#9679; corrected</span> The rule that says
+    &ldquo;never read the source paper yourself&rdquo; is addressed to the <b>middleman</b>, not the
+    judge. And <b>the paper is not a secret</b> &mdash; it is the source document; gold is the secret.
+    The real reason the judge gets only the retrieved passages is that <b>the retrieved subset
+    <i>is</i> the experiment</b>: a judge reading the whole paper would mix up &ldquo;how good is our
+    judging&rdquo; with &ldquo;how good was our retrieval&rdquo;, which is why the release already
+    pins the retrieval setting. So this is <b>measurement integrity, not leakage</b> &mdash; a class
+    this plan explicitly assigns to Plan A. Per-stage mounts are still right, because not mounting a
+    file beats asking an editable prompt not to read it; it just has to be labelled honestly.</li>
     <li><b>The cost triples</b> when the full pipeline runs. The cheap probe measures one session per
     claim today; report it per stage, not per claim.</li>
   </ul>

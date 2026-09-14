@@ -182,9 +182,36 @@ accident.** The convention from here:
    too** — as written it keys on the claim and the materialised path only.
 2. **Mount sets differ per stage, and this plan only ever derived the adjudicator's.** The extractor
    produces evidence from the source (`evidence_producer="extractor"`, `source_mode="pdf"`), so it
-   needs the paper mounted; the adjudicator reads the finished evidence envelope and **must not** see
+   needs the paper mounted; the adjudicator reads the finished evidence envelope and should not get
    the paper. Under `retrieval` the evidence is produced by ordinary Python beforehand
    (`evidence_producer="bm25"`), which is the only reason one mount set has sufficed so far.
+
+   ⚠ **Corrected 2026-09-14 (Phil asked why the adjudicator can't see the paper). Two errors, and
+   the second one matters for scope.** First, **attribution**: the prohibition
+   *"Never read the source paper yourself — not `pdfs/<citekey>/content.txt`, not `meta.json`, not
+   `sections/`"* (`.claude/commands/sarol-eval-item.md:42`) is addressed to the **driver**, not the
+   adjudicator — *"yourself"* is the driver session, and the next clause says *"only the dispatched
+   subagent reads what its own prompt entitles it to read."* Second, **category**: the paper is **not
+   a secret**. It is the source document, freely readable; gold is the secret. The reason the
+   adjudicator does not get the whole paper is that its evidence **is** the retrieved subset — under
+   `retrieval`, k=20 passages — and that subset *is the experimental condition being measured*. A
+   judge reading the full paper would confound retrieval with judgment, which findings §6 D2 names
+   directly: *"if the optimizer changes retrieval, two program versions no longer share an evidence
+   condition… the release already pins `profile` AND `retrieval_k` for exactly this reason."*
+   ⇒ **This is measurement integrity, not leakage** — and this plan's own **NF10** already says so
+   (*"never pre-read the paper … is measurement integrity, not leakage"*), assigning that class to
+   Plan A and Gate F rather than here. So the earlier wording contradicted the plan's own finding.
+
+   ✅ **Per-stage mount sets are still the right design, for a reason worth stating precisely:** the
+   mount set is a *cheap, structural* way to enforce a measurement-integrity property that is
+   otherwise only prose the optimizer can edit — the adjudicator cannot read the paper because it is
+   not mounted, not because it was asked not to. That is strictly better than an instruction, and it
+   is the same argument this plan makes for gold. ⚠ But it must be **labelled** as measurement
+   integrity, because NF10's scope rule sends that class to Plan A, and an unlabelled
+   measurement-integrity guarantee hiding inside an isolation plan is how requirements get lost —
+   this plan's own root cause. **Open decision (Phil):** does this plan derive the extractor and
+   verifier mount sets — enforcing an evidence-condition boundary it has scoped out — or stay
+   adjudicator-only and hand Phase 2 a named gap?
 3. **Containerization cost triples when Phase 2 runs.** V0c's per-session figure is measured against 1
    stage/claim today and becomes 3 under `agentic`. Report it per **stage-dispatch**, not per claim.
 
