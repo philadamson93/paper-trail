@@ -918,6 +918,21 @@ fix, no new plumbing: the adapter **already holds the streamed session JSON in m
 change as 1c, not after — a containerized run with no trace cannot be audited, and the audit is the
 deliverable.
 
+⚠ **Before 1e: do not inherit rad-eval's read scope.** Recovered from the authoring readback
+2026-09-09 and verified against code 2026-09-14. The finding, verbatim: *"Engine side, same shape: one
+principal (the edit agent), two boundaries. The judge as a second, **less**-privileged principal was
+never modeled — and the canonical READ scope **affirmatively grants** `release_train.json`,
+`context/*.md` and `meta-learnings.md`."* Confirmed: rad-eval's `READ_WHITELIST`
+(`hooks/policy.py:178`) lists `release_train.json` (`:183`) and `meta-learnings.md` (`:194`).
+
+✅ **That is correct for rad-eval and catastrophic for us**, and the difference is the whole of §4g
+item 8. Those grants exist because that whitelist belongs to the **optimizer**, which legitimately
+reads its own lessons sheet and the TRAIN release. Paper-trail's program principal must never see
+either — `release_train.json` **carries per-claim gold labels**. ⚠ So the read scope is
+**per-principal**, exactly as item 8 said: copying rad-eval's posture wholesale would hand the judge
+the gold file by name, through an allowlist, while every mount-set gate in this plan still reported
+green. A boundary defeated by inheritance, not by absence.
+
 **1e. The optimizer's container.** Model on **rad-eval's `src/optimizer_loop/docker_agent.py`** — 198
 lines, on `main`, actually run: prefix delegated to the engine, a fresh temp writable staging tree,
 copy-back into the live tree afterwards, a reduced tool set. What it gives paper-trail that a
