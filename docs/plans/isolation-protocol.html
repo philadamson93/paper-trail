@@ -275,6 +275,18 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
   <p>&#9888; <b>The judge is two sessions per claim today, not one</b> &mdash; a middleman session that
   runs the slash command, which spawns a subagent that does the actual judging. <b>Your OQ1 answer
   collapses that to one.</b></p>
+  <p>&#9888; <b>The judge <i>is</i> the program running.</b> You asked whether the judge is part of the
+  agentic program &mdash; it is, and that is precisely why it needs a box rather than a reason it
+  doesn&rsquo;t. The judge&rsquo;s prompt, its rubric and its driver <i>are</i> the editable fileset,
+  under every profile, because optimizing the adjudicator is the one thing common to all of them. So
+  the program is the judge&rsquo;s <i>instructions</i>, and the judge is those instructions
+  <i>executing</i> &mdash; a real session, with tools. A boundary written as prose cannot hold, because
+  the optimizer writes the prose.</p>
+  <p>&#9888; <b>Which box already exists, precisely.</b> <span class="chg mod">&#9679; corrected</span>
+  An <b>optimizer</b> container has been built and really run &mdash; but in <b>rad-eval</b>, not here.
+  A <b>judge</b> container has never been built by anyone. <b>paper-trail needs both.</b> The only
+  difference is that for the optimizer we get to copy something that works, and for the judge there is
+  nothing to copy.</p>
   <p>&#9888; <b>Neither of them is the scorer.</b> The scorer is plain Python that makes no model calls
   at all &mdash; it compares verdicts against gold and sits <i>outside both boxes</i>. It is never an
   agent. Where this plan talks about protecting &ldquo;the scorer&rdquo;, it means that code and the
@@ -479,7 +491,7 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
     <tbody>
       <tr><td>Someone <b>deliberately</b> trying to cheat</td><td>The threat model you set in April is honest optimisation. This addresses accidental exposure, which is what actually happened. Unchanged, not reopened.</td></tr>
       <tr><td>The session can read <b>its own login token</b></td><td>Keeping the token out of command lines and logs does not hide a variable from the process holding it. Closing that needs a credential broker, which is out of scope.</td></tr>
-      <tr><td><b>Audit records</b> from container sessions</td><td>Container mode throws away the engine's ledger, so four of its automatic tripwires go blind &mdash; including the one that halts when scoring happens at the wrong time. Going containers-first inherits that, knowingly.</td></tr>
+      <tr><td><b>Audit records</b> from container sessions</td><td>&#9888; <b>Corrected &mdash; this is not a loss for us, because we never had it.</b> Two different things were being run together. The <b>audit ledger</b> is one row <i>per tool call</i>, written by the permission hooks; in a container there are no hooks, so there is nothing to write &mdash; not discarded, never produced. And <b>paper-trail never wired it</b>: the adapter says outright that this consumer does not use it, and the dispatcher passes none. It is recorded there because four documents once promised the agent its gold-reaching would be logged, which nothing implemented. The <b>reasoning trace</b> you are thinking of &mdash; the judge's session transcript, which the blame analysis opens &mdash; is a <i>different</i> artifact. That one <i>is</i> lost in a container, silently, and <b>item 7 exists to save it</b>. So: traces yes, keep them. Ledger rows, we never had. <span class="chg mod">&#9679; corrected</span></td></tr>
       <tr><td><b>Per-action permission checks</b></td><td>Deferred by you in July. A coarse tool allowlist is not as good as a check that fails closed on every single action. Second landing.</td></tr>
       <tr><td>Network beyond the host allowlist</td><td>An allowed host can still receive data. The allowlist narrows the surface; it does not close it.</td></tr>
     </tbody>
@@ -611,7 +623,7 @@ flowchart TD
   p1c["1c, build the command per dispatch<br/>NOT once at startup"]
   p1d["1d, keep the transcript"]
   p1e["1e, the optimizer's container<br/>copy rad-eval's"]
-  p1f["1f, refuse to run uncontained<br/>all 21 places, not 7"]
+  p1f["1f, refuse to run uncontained<br/>22 sites, but only 3 in production"]
   p1g["1g, the sentinel test"]
   p2["Phase 2, narrow what is exposed<br/>working folder tied to the version"]
   p3["Phase 3, pin the configuration<br/>image digest, mounts, network, flags"]
@@ -722,11 +734,28 @@ flowchart TD
   <p><b>1e &mdash; the optimizer's container.</b> Your ruling. Model it on the one rad&#8209;eval already
   runs: 198 lines, on main, a real armed run behind it. What it buys over a permission rule: the scorer,
   gold, and the manifest are simply not in the optimizer's mounts, so "the optimizer cannot edit the
-  scorer" holds by construction. One caution &mdash; a literal copy does <i>not</i> give us the write
-  boundary, because rad&#8209;eval's setup hands the whole clone to the sandbox account with editing
-  still allowed. Take the mounts, drop that part.</p>
-  <p><b>1f &mdash; one place that refuses to run uncontained, covering every case.</b> There are
-  <b>21</b> places a judge gets built, not the 7 the first draft counted &mdash; 19 in one file, one in
+  scorer" holds by construction.</p>
+  <p class="chgnote">&#9888; <b>You asked what "take the mounts, drop that part" actually meant. The
+  honest answer: it meant nothing, because the part it told us to drop is not there.</b>
+  <span class="chg mod">&#9679; corrected</span> The claim was that rad&#8209;eval hands the whole clone
+  to a sandbox account by changing its ownership. The container agent does <b>no such thing</b> &mdash;
+  it makes two temporary files writable and nothing else. The ownership change belongs to the
+  <i>older, non-container</i> path, which container mode deliberately retires: its own note says the
+  container's non-root user makes the sandbox account unnecessary, and the real August run used an
+  ordinary user's clone. So there is <b>nothing to drop</b>. The conclusion survives and gets simpler:
+  the boundary is the mount set, because exactly two files are mounted writable. &#9888; <b>What we
+  actually should not copy</b> is a real defect the audit found: it never deletes its temporary staging
+  directory, so every iteration leaves one behind holding the edited program.</p>
+  <p><b>1f &mdash; one place that refuses to run uncontained, covering every case.</b>
+  &#9888; <b>You asked whether 21 was redundancy, an oversight, or just sloppy. It is none of those
+  &mdash; and the number was wrong anyway.</b> <span class="chg mod">&#9679; corrected</span> The real
+  count is <b>22</b>, and <b>19 of them are inside the test suite</b>: the selftests build a judge over
+  and over to exercise different paths, which is normal and fine. <b>Only three can run in
+  production</b>, and one of those already accepts a substitute, so there are really <b>two</b> to
+  wire. The earlier text made this sound like twenty-one live judges scattered through the code. It is
+  two. What the count is <i>for</i> is a tripwire: if it ever changes, someone added a new way to build
+  a judge, and we want the suite to say so. &#9888; It also has to count <i>subclasses</i>, since one
+  inherits the constructor and matches no text search. Formerly: 21 places, 19 in one file, one in
   the canary, one in the baseline script. A check in the shared setup path protects the cases that go
   through it and silently does not apply to the rest, which is worse than failing. So the refusal moves
   into the constructor, and the count itself gets asserted. <b>No exemption for anything that produces
@@ -757,8 +786,9 @@ flowchart TD
   actually fired in September's run &mdash; which turned out to be <b>git state, not project context</b>.
   The sessions enumerated filenames "based on the git status", and a working folder with no git history
   kills that at the source.</p>
-  <p class="chgnote"><b>The critical here:</b> a single fixed working folder cannot serve the now-editable
-  judging instructions. Their bytes differ per program version, so one shared folder serves whichever
+  <p class="chgnote"><b>The critical here &mdash; and yes, exactly as you said: the folder is named by
+  the program version.</b> <span class="chg mod">&#9679; your reading confirmed</span> A single fixed
+  working folder cannot serve the now-editable Their bytes differ per program version, so one shared folder serves whichever
   version wrote it last &mdash; and a v0 dispatch and a v1 dispatch in the same run could execute the
   <i>same</i> instructions while the results say they ran different programs. Plausible verdicts both
   times, and nothing downstream would show it. So the working folder is addressed by version, and the
