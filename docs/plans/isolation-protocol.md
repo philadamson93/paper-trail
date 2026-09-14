@@ -204,9 +204,21 @@ them, flagged where they apply.
    `rad-eval:src/optimizer_loop/docker_agent.py`** — 198 lines, on `main`, run for real: prefix
    delegated to the engine, fresh temp writable staging, copy-back into the live tree, reduced tool
    set.
-2. **An engine dependency.** paper-trail has **none** — two prose mentions, no package dependency.
-   rad-eval pins it as a git revision under `[tool.uv.sources]`. Nothing in this plan can work until
-   that exists.
+2. **A *pinned* engine dependency.** ⚠ **Corrected 2026-09-14 — the earlier claim here ("paper-trail
+   has none — two prose mentions") was wrong twice over.** `agentic-label-opt` is a mature repo (57
+   commits, 19 modules under `engine/` + `isolation/`, 17 test files, 4 Completed plans), and
+   paper-trail **already depends on it at runtime**: `dispatcher.py` drives its `run_loop`,
+   `adapter.py` implements its four `TaskAdapter` protocols, and 8 non-doc files reference it. What is
+   missing is **version pinning**, not the dependency and not the repo. paper-trail has **no packaging
+   file of any kind** (no `pyproject.toml`, no `requirements.txt`, no lockfile) and resolves the engine
+   by `sys.path` injection from an absolute home-directory path —
+   `DEFAULT_ENGINE = ~/Documents/Misc/Projects/agentic-label-opt`, overridable by `$AGENTIC_LABEL_OPT`
+   (`adapter.py:102`, `engine_path()` at `:117-118`). ⚠ **That is the risk, and it is this plan's own
+   root cause in miniature:** a path import binds to whatever is in that working tree *at that moment*
+   — current branch, uncommitted edits included — so the bytes under test are unrecorded and
+   unreproducible. The clone is on `main`, three commits behind `origin/main`, as of 2026-09-14.
+   rad-eval pins it as a git revision under `[tool.uv.sources]`. ⚠ Adopting that shape here means
+   **creating** paper-trail's first packaging file, which is more work than adding a line to one.
 3. **A paper-trail egress profile.** Phil's ruling 2026-08-18: the network profile is **paper-trail's
    own to own** — adding one to the engine's policy registry re-litigates a resolved question. Build
    it on the generic host-allowlist primitive, which already accepts a caller-supplied host list.
@@ -511,11 +523,17 @@ scorer stays outside both. So this phase builds two boundaries, not one. Phil: *
 running in docker, that's our whole isolation engine and intentional."* Everything in Phase 2 is a
 layer behind this, not an alternative to it.
 
-**1a. Depend on the engine at a pinned revision.** paper-trail has **no** dependency on
-`agentic-label-opt` today — two prose mentions, no package. Nothing else in this plan can be built
-until that exists. Copy rad-eval's shape: a git revision under `[tool.uv.sources]`, pinned to a
-commit, not a branch. The adapter's `engine_path()` env-var dance (`adapter.py:117-118`) stays as the
-selftest path; the pin is what the runtime imports. ⚠ Pinning to `main` instead of a revision
+**1a. Pin the engine dependency that already exists.** ⚠ **Restated 2026-09-14** — the earlier
+wording ("paper-trail has no dependency on `agentic-label-opt` today") read as though the engine did
+not exist. It does, and paper-trail already uses it: `dispatcher.py` drives its `run_loop`,
+`adapter.py` implements its four `TaskAdapter` protocols. What does not exist is a **pinned, versioned**
+dependency — paper-trail has no packaging file at all, and the engine is resolved by `sys.path`
+injection from a hardcoded home-directory path (`adapter.py:102`), overridable by
+`$AGENTIC_LABEL_OPT` (`engine_path()`, `:117-118`). So an import binds to whatever that working tree
+holds at that moment, branch and uncommitted edits included. Copy rad-eval's shape: a git revision
+under `[tool.uv.sources]`, pinned to a commit, not a branch — which here means **creating
+`pyproject.toml`**, paper-trail's first. The `engine_path()` env-var dance stays as the selftest
+path; the pin is what the runtime imports. ⚠ Pinning to `main` instead of a revision
 reintroduces exactly the drift that made the stale README outrank live code in this plan's first
 draft.
 
@@ -1000,7 +1018,9 @@ driver session**, so it is the one place the delivery path lives; per NF8 the op
 a removal of the optimizer's reach. Out of `adapter.py` (already ~2,900 lines) and out of
 `isolation.py` (different concern). **Reuse target:** `evidence_producers.py:201-216`.
 
-**`pyproject.toml`** — ⚠ **the dependency that does not exist yet**: `agentic-label-opt` pinned to a
+**`pyproject.toml`** — ⚠ **a new file: paper-trail has no packaging file of any kind today.** The
+dependency on `agentic-label-opt` is real and live (see 1a); what this adds is the **pin** that
+replaces a hardcoded home-directory path. `agentic-label-opt` pinned to a
 git **revision** under `[tool.uv.sources]`, copying rad-eval's shape (1a). Nothing else in this plan
 imports until this lands.
 
