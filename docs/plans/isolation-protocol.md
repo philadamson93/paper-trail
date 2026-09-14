@@ -38,7 +38,48 @@ hashed only host-side properties (Phase 3); Phase 4 named a function instead of 
 and V2a-seal — the plan's centrepiece — could be defeated by a broad mount at an unexpected target.
 A separate Codex adjudication chose the mechanism order (**containers first, hooks second**) at
 `docs/plans/reviews/isolation-mechanism-options-feedback.md`.
-**Findings this is built on:** `docs/session/2026-09-09-optimizer-loop-and-isolation-findings.md` §4.
+**Findings this is built on — and the evidence is now inlined, not cited.**
+`docs/session/2026-09-09-optimizer-loop-and-isolation-findings.md` §4 (474 lines, sha256 `a7f17c32…`).
+
+⚠ **Provenance incident, 2026-09-14 — read this, because it explains a real defect in this plan.**
+That findings doc lives under `docs/session/`, which is **git-ignored by policy** (`.gitignore:56`,
+*"so per-session resume notes cannot be swept into a commit"*; `claude_ops.md` mandates it). So it
+never travelled by git, and for most of this plan's life it **did not exist on the authoring machine
+at all** — while the plan cited it **23 times** and keyed **seven phase steps** to its `§4g` item
+numbers. Every one of those citations was unverifiable. It was recovered off the VM on 2026-09-14 and
+now also sits at `/mnt/su-vista-uscentral1/session-docs/paper-trail/2026-09-14/`.
+
+✅ **The fix is not a better citation — it is to stop depending on the file.** §4g's nine-item fix
+list is the thing this plan's steps are derived from, so it is reproduced **verbatim** below and the
+steps point here. A plan whose evidence base is git-ignored has no evidence base.
+
+> **§4g. The fix (mirror what already works)** — verbatim from the findings doc
+> 1. `inner_scope_problem(working_checkout, {iter/, optimizer/findings/, meta-learnings.md})` wired into `run_optimization`'s preflight at exactly the line where `val_isolation_problem` already sits (`dispatcher.py:549-551`). Fail closed.
+> 2. Pass a **minimal `working_checkout`** — already a constructor parameter, already exercised with `empty_checkout` at `adapter.py:2118`; production just passes the default.
+> 3. Restore Rule 3's stack on judge invocations (`--add-dir` scope, `CLAUDE_CONFIG_DIR`, `env -i`, `--exclude-dynamic-system-prompt-sections`, `--no-session-persistence`).
+> 4. **Render the dispatch prompt in Python**, not via shell interpolation into an LLM — kills both §3.2 bugs and the §3.3 fabrications at the root.
+> 5. Fail closed on no-task: no verdict written ⇒ `infra_error`, never a scored data point; and never a session that surveys its working directory.
+> 6. **Per-iteration staging** (or wipe between iterations) — kills the 61% contamination.
+> 7. Make `optimizer_isolation_hash` load-bearing; refuse to run on an unverified value.
+> 8. Engine: model **N principals**, not one; add a per-principal mount manifest with an explicit **deny** list; add the negative control that plants a sentinel in `release_train.json` and asserts a judge **cannot** read it — the mirror image of the permissive read test that shipped.
+> 9. Wire the Docker substrate for real (consumer-side `DockerAgent`/`DockerRunner`), per Phil: *"we DO want this running in docker, that's our whole isolation engine and intentional."*
+
+⚠ **Two places this plan had drifted from its own source, both found only once the file came back:**
+
+- **Item 8 said "model N principals, not one" and "a *per-principal* mount manifest."** This plan
+  collapsed that into a fixed two — *the judge* and *the optimizer* — and then derived **one** mount
+  set. That is exactly the error Phil corrected on 2026-09-14 (*"we have the agentic program and the
+  optimizer; judge is one PART of the program"*), and the per-stage mount-set gap in *Who is who* is
+  literally what "per-principal mount manifest" was asking for. ⚠ Note also that item 8 scopes this as
+  **engine** work; this plan made it consumer work (see OQ4).
+- **Item 6 said "per-iteration staging."** This plan recommended a consumer-side archive instead and
+  called the engine change too costly. Phil's OQ2 ruling restored the source finding — without being
+  able to read the source.
+
+✅ Everything else checks out: all 23 citations resolve, and §4g items 1-7 and 9 map cleanly onto
+Phases 2b, 2a, 2c, 0c, 0b, 0a, 3 and 1c respectively. ⚠ One evolution, not a drift: item 2 says a
+**minimal** working checkout; Phase 2a makes it **version-addressed**, which is a later and correct
+refinement once the driver became optimizer-editable. Marked so nobody reads it as a misquote.
 **Prior work — read this before changing anything here:**
 `docs/plans/isolation-prior-work-inventory.md`, a four-repo sweep of every branch, worktree, plan and
 VM readback (2026-09-12). It exists because two sessions running concluded something was unbuilt when
