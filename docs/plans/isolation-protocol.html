@@ -254,43 +254,48 @@ table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
 
 
 <div class="card" id="whoiswho">
-  <h2 style="margin-top:0">Who is who <span class="chg new">&#10022; new</span></h2>
-  <p>Added because you asked what &ldquo;the judge&rdquo; meant. This page says it constantly and
-  never defined it. <b>The judge is the paper-trail adjudicator. It is not the optimizer.</b> Both
-  words are your codebase&rsquo;s own &mdash; neither was invented for this plan.</p>
+  <h2 style="margin-top:0">Who is who <span class="chg mod">&#9679; rewritten on your correction</span></h2>
+  <p>You said: <i>&ldquo;we have the agentic program (which goes in a container here) and the
+  optimizer &mdash; judge is confusing because it&rsquo;s one PART of the program.&rdquo;</i>
+  <b>You&rsquo;re right, and this was not just a naming problem &mdash; the mis-naming had already bent
+  the design.</b> The two principals:</p>
   <table class="bt">
-    <thead><tr><th></th><th>The optimizer</th><th>The judge (adjudicator)</th></tr></thead>
+    <thead><tr><th></th><th>The agentic program</th><th>The optimizer</th></tr></thead>
     <tbody>
-    <tr><td class="n">does</td><td>edits the program &mdash; the prompt and rubric text it is allowed to change</td><td>reads one claim and its evidence, returns a verdict</td></tr>
-    <tr><td class="n">runs</td><td><b>once per iteration</b> &mdash; about 5 times in a run</td><td><b>once per claim</b> &mdash; about 113 an iteration, <b>561</b> in the September run</td></tr>
-    <tr><td class="n">must never see</td><td>the scorer, gold, the releases folder, the manifest &mdash; it would be marking its own homework</td><td><b>gold labels</b>, the benchmark data, the optimizer&rsquo;s own findings and hypotheses</td></tr>
-    <tr><td class="n">in a box today</td><td>&#9989; yes &mdash; that is the August VM run</td><td>&#10060; <b>no. That is what this plan adds.</b></td></tr>
+    <tr><td class="n">is</td><td>the labelling pipeline itself &mdash; <b>one session per stage, per claim</b></td><td>the agent that <b>edits</b> the program between iterations</td></tr>
+    <tr><td class="n">runs</td><td>every stage &times; every claim. Today <b>1 &times; 561</b>; under the full pipeline <b>3 &times; 561</b></td><td><b>once per iteration</b> &mdash; about 5 times in a run</td></tr>
+    <tr><td class="n">never reads</td><td><b>gold labels</b>, the benchmark data, the optimizer&rsquo;s findings and hypotheses</td><td>&mdash;</td></tr>
+    <tr><td class="n">never writes</td><td>&mdash;</td><td>the scorer, gold, the releases folder, the manifest &mdash; it would be marking its own homework</td></tr>
+    <tr><td class="n">in a box</td><td>&#10060; <b>no. This plan adds it.</b> Nobody has built one, anywhere</td><td>&#9989; built and really run &mdash; <b>in rad-eval</b>; &#10060; not here</td></tr>
     </tbody>
   </table>
-  <p><b>Why two names.</b> <i>Adjudicator</i> is the <b>stage name</b> &mdash; one of three stages, and
-  the only one actually implemented; the other two abort if selected. <i>Judge</i> is the <b>role</b>,
-  the thing that scores. Your code treats them as the same thing and even asserts it in a test:
-  <i>&ldquo;retrieval runs the judge alone&rdquo;</i>, checking that the stage list is exactly
-  <code>("adjudicator",)</code>.</p>
-  <p>&#9888; <b>The judge is two sessions per claim today, not one</b> &mdash; a middleman session that
-  runs the slash command, which spawns a subagent that does the actual judging. <b>Your OQ1 answer
-  collapses that to one.</b></p>
-  <p>&#9888; <b>The judge <i>is</i> the program running.</b> You asked whether the judge is part of the
-  agentic program &mdash; it is, and that is precisely why it needs a box rather than a reason it
-  doesn&rsquo;t. The judge&rsquo;s prompt, its rubric and its driver <i>are</i> the editable fileset,
-  under every profile, because optimizing the adjudicator is the one thing common to all of them. So
-  the program is the judge&rsquo;s <i>instructions</i>, and the judge is those instructions
-  <i>executing</i> &mdash; a real session, with tools. A boundary written as prose cannot hold, because
-  the optimizer writes the prose.</p>
-  <p>&#9888; <b>Which box already exists, precisely.</b> <span class="chg mod">&#9679; corrected</span>
-  An <b>optimizer</b> container has been built and really run &mdash; but in <b>rad-eval</b>, not here.
-  A <b>judge</b> container has never been built by anyone. <b>paper-trail needs both.</b> The only
-  difference is that for the optimizer we get to copy something that works, and for the judge there is
-  nothing to copy.</p>
+
+  <p><b>Where &ldquo;judge&rdquo; fits.</b> The program has three stages &mdash; extractor,
+  adjudicator, verifier. The profile running today uses <b>only the adjudicator</b>, which is why the
+  judge and the program have looked like the same thing. They are not: the full pipeline runs
+  <b>three sessions per claim</b> and the judge is one of them. So <b>judge</b> is fine as the
+  <i>role</i> of the adjudicator stage &mdash; your code uses it that way &mdash; but naming the
+  <i>container</i> after it freezes in a temporary accident.</p>
+
+  <p><b>&#9888; Three things that framing was hiding, and they are design changes:</b></p>
+  <ul>
+    <li><b>The box is per stage, not per claim.</b> The dispatch loop already runs once per stage. A
+    container command built per <i>claim</i> hands all three stages the same one.</li>
+    <li><b>Each stage needs different mounts &mdash; and only the judge&rsquo;s was worked out.</b> The
+    extractor has to read the paper; the adjudicator must <i>not</i> see it, only the finished
+    evidence. Today that gap is invisible because the evidence is prepared by ordinary Python before
+    any session starts.</li>
+    <li><b>The cost triples</b> when the full pipeline runs. The cheap probe measures one session per
+    claim today; report it per stage, not per claim.</li>
+  </ul>
+
   <p>&#9888; <b>Neither of them is the scorer.</b> The scorer is plain Python that makes no model calls
   at all &mdash; it compares verdicts against gold and sits <i>outside both boxes</i>. It is never an
   agent. Where this plan talks about protecting &ldquo;the scorer&rdquo;, it means that code and the
   gold it reads.</p>
+
+  <p class="small">&#9888; The rest of this page still says &ldquo;judge&rdquo; where it usually means
+  the adjudicator stage. This section governs; the sweep is owed before implementation.</p>
 </div>
 
 <div class="card" id="audit">
