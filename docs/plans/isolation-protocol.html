@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="plan-sha256" content="a193c545821bb977247e5815f460a997fed6ef2aa12280bf1e6bf75f345ae709">
+<meta name="plan-sha256" content="68e4e6bd052c3d8df0b2cd5799528ef0aea7816f946fadc931f6d2620fb6155f">
 <meta name="plan-path" content="docs/plans/isolation-protocol.md">
 <title>The isolation protocol — plan explainer</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -128,6 +128,13 @@ hr{border:none;border-top:1px solid var(--line);margin:26px 0}
 .chgnote{font-size:13.6px;background:var(--code);border-left:3px solid var(--accent);
   padding:9px 12px;border-radius:0 7px 7px 0;margin:11px 0}
 .hint{font-size:11.8px;color:var(--muted);margin-left:auto}
+
+table.bt{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.6px}
+table.bt th{text-align:left;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;opacity:.55;padding:0 10px 6px;border-bottom:1px solid rgba(128,128,128,.28)}
+table.bt td{padding:9px 10px;border-bottom:1px solid rgba(128,128,128,.16);vertical-align:top}
+table.bt td.n{width:26px;opacity:.5;font-variant-numeric:tabular-nums}
+table.bt td.ph{width:96px;white-space:nowrap;opacity:.6;font-size:12.4px}
+table.bt span.d{opacity:.82;display:block;margin-top:3px;line-height:1.5}
 </style></head>
 <body>
 <div class="wrap">
@@ -138,18 +145,48 @@ hr{border:none;border-top:1px solid var(--line);margin:26px 0}
   <div class="meta">
     <span><b>Status</b> Draft &middot; Reviewed: No</span>
     <span><b>Lands on</b> <code>sarol-optimizer-concurrent</code>, after Plan A</span>
-    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>a193c545821b</code></span>
-    <span><b>1,457 lines</b> &middot; 9 open questions</span>
+    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>68e4e6bd052c</code></span>
+    <span><b>1,860 lines</b> &middot; <b style="color:#1a7f4b">0 open questions</b> &mdash; all nine resolved</span>
   </div>
 </header>
 
 <div class="card chgsum">
   <h2 style="margin-top:0">What changed since you last looked</h2>
-  <p><b>This round applies your explain-plan feedback.</b> You answered the nine open questions: three
-  decisions I applied to the plan, four questions I answered on their cards below (green callouts), and
-  one that read as a stray keystroke. Three open questions remain plus OQ7 and OQ9's scope call.</p>
-  <p>The three decisions, and where they reached:</p>
+  <p><b>This round closes the last five questions, and the plan got smaller.</b> All nine are now
+  resolved. Three of your answers <b>cut scope</b> rather than adding it, one added a small piece, and
+  two were questions back at me that I have answered below. I also added a <b>What we are building</b>
+  section &mdash; you said you could not tell what was actually being built, and you were right that the
+  plan never said so in one place.</p>
+  <p><b>Two of your answers overturned my recommendation, and both were right.</b> That is worth
+  flagging rather than burying: I recommended keeping the middleman session and I recommended patching
+  the stale-answer problem on our side. You pushed back on both and the plan is better for it.</p>
+  <p>The five decisions this round:</p>
   <ol>
+    <li><b>OQ1 &mdash; the middleman is cut.</b> You called it: <i>"that's the dispatcher, and it
+    doesn't need to be an agent because it's deterministic."</i> I checked the file &mdash; its 224
+    lines do three things, and all three are already deterministic or already done elsewhere. So plain
+    Python now renders the prompt and launches the judge directly. This kills the whole
+    <b>no-task failure class</b> structurally (13 of 561 sessions started with no task because the
+    middleman <i>model</i> improvised broken shell each run &mdash; Python cannot improvise), drops the
+    subagent tool from the permission list, unblocks a one-flag hygiene setting that was previously
+    unusable, and removes an entire verification gate. What it does <b>not</b> do is take the delivery
+    path away from the optimizer: what is removed is the model, not the editability.</li>
+    <li><b>OQ9 &mdash; no per-run clone. A reset instead.</b> You said there will never be parallel
+    runs. ⚠ The concern was never parallelism &mdash; it is <i>sequential</i> residue, and the plan
+    failed to say so. But your ruling still kills the clone: a clone buys a reset <i>plus</i> an
+    independent namespace for runs that overlap, and you will never have the second. So Phase 4 is now
+    a <b>run-start reset</b> and the clone provisioner, the resume design and the risky
+    repository-root rewrite are all struck. See the card below for the part that <i>is</i> real.</li>
+    <li><b>OQ2 &mdash; per-iteration folders, in the shared engine after all.</b> You asked <i>"is that
+    not what we're doing?"</i> It is not, and that is the defect: the training side gets per-iteration
+    inputs, the held-out side does not. I recommended patching it on our side; your OQ4 ruling is what
+    overturned that, because any project using this engine hits the identical bug. It is a two-line
+    change upstream.</li>
+    <li><b>OQ6 &mdash; the settings file is retired; hooks are not.</b> You asked whether hooks do
+    anything the container does not. Split answer, on the card below &mdash; for the judge, no; for the
+    optimizer, yes, and the engine's own documentation says so.</li>
+    <li><b>OQ7 &mdash; the "dutr" was "sure".</b> Adopted as recommended: inject a fake container
+    command in the test cases, never a true-or-false switch.</li>
     <li><b>OQ5 &mdash; a broken judge session now fails loudly, and the optimizer fixes it.</b> No
     silent retry. A dispatch that produces no verdict fails the claim and that failure is handed to the
     optimizer as feedback &mdash; because the delivery path is the optimizer's to edit, a no-task
@@ -165,22 +202,60 @@ hr{border:none;border-top:1px solid var(--line);margin:26px 0}
     The "what lives where" section is reframed around where each piece should live, not who owns the
     defect.</li>
   </ol>
-  <p>Answered on their cards (no plan change needed, the questions were about understanding):
-  <b>OQ9</b> (what "per-run clone" means &mdash; per run, not per iteration; not impossible),
-  <b>OQ1</b> (what the middleman does and the alternative), <b>OQ2</b> (the stale-answer problem), and
-  <b>OQ6</b> (the hook-based safety net). <b>OQ7</b>'s note read as "dutr" &mdash; left unchanged
-  pending your confirmation.</p>
+  <p><b>Your two questions back, answered on their cards:</b> whether the modularity ruling changes
+  what we are building (<b>OQ4</b> &mdash; it changes the <i>filing</i>, not the build, with one
+  exception), and whether any of this is a large design change to the shared engine (<b>OQ8</b> &mdash;
+  no: five small files, the largest about twenty lines).</p>
+  <p><b>One detail deliberately left open</b>, because it is a ten-line decision and not a design: the
+  version-tag namespace. Tags are repository-global, so a second run re-mints the first run's. Either
+  namespace them per run, or stop using tags as the version identity and rely on the program
+  fingerprint, which is already committed and already what the configuration pin keys on. I recommend
+  the second.</p>
   <p class="small">Baseline: the plan as it stood in the previous explainer, the one carrying the full
   cross-model review (<code>d786057bddfd</code>, 2026-09-13). Every section below is flagged against
   that; the open-question cards below carry the change flags this round.</p>
 </div>
 
+
+<div class="card" id="building">
+  <h2 style="margin-top:0">What we are building <span class="chg new">&#10022; new section</span></h2>
+  <p>Added because you asked the question this plan was not answering: <i>&ldquo;we&rsquo;re discussing
+  these things, but what are we building concretely?&rdquo;</i> Twelve items. Everything else on this
+  page is the reasoning behind one of them &mdash; if the reasoning and this list ever disagree, this
+  list is what a fresh session should build, and the disagreement is a defect to fix.</p>
+  <table class="bt">
+    <thead><tr><th></th><th>What</th><th>Phase</th></tr></thead>
+    <tbody>
+    <tr><td class="n">1</td><td><b>Depend on the shared engine</b><br><span class="d">A pinned revision (a commit, not a branch) in our package file. paper-trail has <b>no</b> dependency on it today — two mentions in prose and nothing else. Nothing else in this plan imports until this exists.</span></td><td class="ph">1a</td></tr>
+    <tr><td class="n">2</td><td><b>The judge’s container</b><br><span class="d">Built <b>per dispatch</b>, not once at startup. It can see: this claim’s working folder (writable), the frozen spec it is judging (read-only), the program snapshot as its working directory (read-only), a folder to keep its transcript. Nothing else — the releases folder, the optimizer’s findings, the lessons sheet, <b>gold</b> and <b>the benchmark tree</b> are denied by simply not being there.</span></td><td class="ph">1b, 1c</td></tr>
+    <tr><td class="n">3</td><td><b>The optimizer’s container</b><br><span class="d">Copied from the other project’s working example: a fresh temporary writable area, copy the results back afterwards, and the scorer, gold, releases and program manifest <b>absent from its mount set</b> — so ‘the optimizer cannot edit the scorer’ holds by construction rather than by a rule we ask it to respect.</span></td><td class="ph">1e</td></tr>
+    <tr><td class="n">4</td><td><b>A deterministic dispatcher, in Python</b><br><span class="d">Reads the frozen prompt, fills the slots, refuses on an unresolved one, and launches the judge <b>directly</b>. No middleman session, no subagent. <span class="chg mod">&#9679; new this round</span></span></td><td class="ph">0c, OQ1</td></tr>
+    <tr><td class="n">5</td><td><b>One place that refuses to run uncontained</b><br><span class="d">The runner’s constructor raises unless it is handed a container command, so all <b>21</b> construction sites are either contained or visibly exempted. Test cases exempt with an injected fake command — never a true-or-false switch.</span></td><td class="ph">1f, OQ7</td></tr>
+    <tr><td class="n">6</td><td><b>The isolation module</b><br><span class="d">One module, one concern: the scope check, both mount-set builders, the host-to-container path map, the environment allowlist, the version-tied working directory, and the configuration fingerprint. Written <b>generically</b> so the boundary machinery can lift into the shared engine for crc.</span></td><td class="ph">2a, 2b, 3, OQ4</td></tr>
+    <tr><td class="n">7</td><td><b>Keep the judge’s transcript</b><br><span class="d">The adapter already holds the streamed session in memory; write it beside the answer. Without this, containerizing silently ends judge traceability — which is how the 61% contamination was found in the first place.</span></td><td class="ph">1d</td></tr>
+    <tr><td class="n">8</td><td><b>Per-iteration held-out folders</b><br><span class="d">Widen the engine’s held-out inputs to accept a per-iteration form, mirroring the training inputs; then assert the answer slot is empty before each dispatch. <span class="chg mod">&#9679; new this round</span></span></td><td class="ph">0a, OQ2</td></tr>
+    <tr><td class="n">9</td><td><b>A broken dispatch fails loudly</b><br><span class="d">No retry. A dispatch producing no answer fails that claim under a <b>separate</b> delivery-failure count, is handed to the optimizer as feedback, and is never reported as program quality or folded into the mistake corpus.</span></td><td class="ph">0b, OQ5</td></tr>
+    <tr><td class="n">10</td><td><b>Pin the configuration</b><br><span class="d">One key recording the image <b>digest</b>, the mount set as actually rendered, the network policy and the session flags — read from the committed file, not the working copy, because a guard whose reference value is editable in the same tree is not a guard.</span></td><td class="ph">3</td></tr>
+    <tr><td class="n">11</td><td><b>Reset the run state at run start</b><br><span class="d">Archive the lessons sheet, the findings files and the releases folder, then assert absent. The VM runner mints the run id. <b>Not</b> a per-run clone. <span class="chg mod">&#9679; changed this round</span></span></td><td class="ph">4, OQ9</td></tr>
+    <tr><td class="n">12</td><td><b>The sentinel test</b><br><span class="d">Plant sentinels in gold, the benchmark tree, the releases folder and the optimizer’s findings, and show a judge <b>cannot</b> read any of them — with a control that must itself fail, so a green cannot mean ‘the container never started’.</span></td><td class="ph">1g</td></tr>
+    </tbody>
+  </table>
+  <p><b>Upstream, in one line:</b> four small files (the credential by name, the generic seal test, its
+  assertion, the CLI re-pin) <b>plus</b> one backward-compatible type widening in the engine core for
+  item 8. That last one corrects this plan&rsquo;s earlier claim of &ldquo;no change to the engine
+  core&rdquo; &mdash; see OQ8 below for why it is still small.</p>
+  <p><b>What we are deliberately <i>not</i> building</b>, all three struck this round: the middleman
+  session (item 4 replaces it), the per-run git clone and its provisioner (item 11 replaces it), and
+  the tag-scoped settings file (OQ6 retires it). Each is recorded as a decision rather than dropped
+  quietly &mdash; reasoning a requirement away in passing is this plan&rsquo;s own root cause.</p>
+</div>
+
 <div id="tb">
-  <b>Your feedback round</b> <span class="chg mod">4 questions resolved</span> <span class="chg mod">4 answered</span>
+  <b>Your feedback round</b> <span class="chg mod">all 9 resolved</span> <span class="chg mod">3 cut scope</span> <span class="chg new">&#10022; what we're building</span>
   <button id="only">Show changed only</button>
   <button id="prev">&#8593; Prev change</button>
   <button id="next">&#8595; Next change</button>
-  <span class="sp">changed this round: the open questions, plus Phase&nbsp;0, Phases&nbsp;2&#8211;4 and the files list</span>
+  <span class="sp">changed this round: a new <b>what we are building</b> list, every open question, Phase&nbsp;0, Phase&nbsp;1, Phase&nbsp;4 and the files list</span>
 </div>
 
 <div class="card">
@@ -319,7 +394,7 @@ flowchart LR
   end
   subgraph rade["rad-eval, the working example"]
     ragent["container agent, 198 lines<br/>on main, really ran"]
-    rclone["one clone per run"]
+    rclone["one clone per run<br/>NOT adopted here, no parallel runs"]
   end
   subgraph pt["paper-trail, this plan"]
     dep["depend on the engine<br/>NO dependency today"]
@@ -337,7 +412,7 @@ flowchart LR
   mat --> fact
   cred --> jbox
   ragent --> obox
-  rclone --> obox
+  rclone -.->|not adopted| obox
   dep --> jbox
   dep --> obox
   fact --> jbox
@@ -429,7 +504,7 @@ flowchart TD
   p1g["1g, the sentinel test"]
   p2["Phase 2, narrow what is exposed<br/>working folder tied to the version"]
   p3["Phase 3, pin the configuration<br/>image digest, mounts, network, flags"]
-  p4["Phase 4, one clone per run<br/>OQ9, keep it or split it out"]
+  p4["Phase 4, reset the run state<br/>at run start, no clone"]
   v2["V2a-seal, the gate that decides<br/>exact mounts, then probe, then a<br/>control that MUST fail"]
   v5["V5, one real iteration<br/>expect the number to go DOWN"]
   s0 --> p0
@@ -452,7 +527,7 @@ flowchart TD
     g2["the containers, the mechanism (rose)"]
     g3["layers behind the boundary (green)"]
     g4["the gate, red means stop (amber)"]
-    g5["scope decision, answer OQ9 first (grey dashed)"]
+    g5["descoped this round, no longer a fork (grey dashed)"]
   end
   classDef probe fill:#bfdbfe,stroke:#1d4ed8,color:#082f49
   classDef boxes fill:#fecdd3,stroke:#be123c,stroke-width:3px,color:#4c0519
@@ -515,9 +590,13 @@ flowchart TD
   passing it by name is a prerequisite, not a follow-up. It fixes the command line and the log; the
   token stays readable <i>inside</i> the session, which needs a credential broker and is out of scope.
   And the <b>tool list is a named deliverable</b>, not a flag choice, because it covers the four threats
-  a mount cannot touch: what commands run, outbound network, the credential, and what a subagent
-  inherits. The list must include the subagent tool &mdash; the judge <i>is</i> one, so leaving it out
-  kills every dispatch while looking like a tightening.</p>
+  a mount cannot touch: what commands run, outbound network, the credential, and audit rows.
+  <span class="chg mod">&#9679; changed this round</span> The list previously <i>had</i> to include the
+  subagent tool, because the judge was one; now that the middleman is cut (OQ1) the judge is a
+  top-level session, so <b>the subagent tool comes off the list</b> &mdash; a real narrowing, and one
+  fewer way to get the permissions wrong. With shell reduced-or-absent and both web tools absent, there
+  is also no per-call decision left for a hook to make on this path, which is what let OQ6 retire the
+  settings file without retiring the hook requirement on the <i>optimizer's</i> path.</p>
   <p><b>1c &mdash; build the container command per dispatch.</b> The first draft built it once at
   startup and that cannot work: the program version changes per iteration, the scratch space per claim,
   and the staged command currently has real machine paths baked into it that mean nothing inside a
@@ -557,10 +636,11 @@ flowchart TD
 </details>
 
 <details data-section="p234" data-changed="mod">
-  <summary>Phases 2, 3 and 4 &mdash; the layers behind the boundary <span class="chg mod">&#9679; OQ8 resolved</span></summary>
+  <summary>Phases 2, 3 and 4 &mdash; the layers behind the boundary <span class="chg mod">&#9679; Phase 4 descoped</span></summary>
   <p class="note">What changed: the working folder is now tied to the program version (a critical), the
-  configuration fingerprint covers the container (it covered nothing about it before), and the per-run
-  clone finally has a build surface &mdash; or gets split out, which is OQ9.</p>
+  configuration fingerprint covers the container (it covered nothing about it before), and
+  <b>Phase 4 shrank from a per-run git clone to a reset at run start</b> (OQ9) &mdash; the largest
+  remaining unknown in this plan stopped being an unknown by ceasing to be a clone.</p>
   <p><b>Phase 2 &mdash; narrow what the judge sees.</b> Phase 1 makes things unreachable; Phase 2 reduces
   what is <i>exposed</i> even where the mounts already deny it. It removes the look-around channel that
   actually fired in September's run &mdash; which turned out to be <b>git state, not project context</b>.
@@ -588,23 +668,35 @@ flowchart TD
   environment variables, so rotating the token does not read as a configuration change and get the gate
   switched off; and the mount set <b>as rendered</b>, so the fingerprint is computed from the same bytes
   the seal test probes.</p>
-  <p><b>Phase 4 &mdash; one clone per run.</b> The finding from Plan A: the optimizer's lessons sheet is
+  <p><b>Phase 4 &mdash; reset the run state at run start.</b> <span class="chg mod">&#9679; descoped
+  this round</span> The finding from Plan A is unchanged: the optimizer's lessons sheet is
   injected into every session and has <b>never been reset between runs</b>, while the code reasons as
   though a reset were guaranteed. So two runs both labelled the same version could open with different
-  inherited hypotheses and nothing would record it. A fresh clone per run closes it, retires a gate
-  built to work around it, and removes most of the danger from the baseline recut.</p>
+  inherited hypotheses and nothing would record it. ⚠ Note that this is a <b>sequential</b>
+  problem &mdash; runs one after another &mdash; which is what the earlier version of this plan failed
+  to say, and what made a per-run clone look necessary. It is not: a clone buys a reset <i>plus</i> an
+  independent namespace for overlapping runs, and paper-trail never has two runs at once. So Phase 4 is
+  now the reset itself &mdash; archive the lessons sheet, the findings files and the releases folder,
+  then assert they are absent &mdash; and the clone, its provisioner, the resume design and the
+  repository-root rewrite are struck. The fresh-run gate ends up <b>satisfied</b> rather than retired,
+  which is the better outcome: the reset clears the residue before the gate looks, so a live gate keeps
+  asserting. One residual the clone covered and the reset does not: version tags are repository-global,
+  so a second run re-mints the first run's (OQ9 names the two ways out).</p>
   <p class="chgnote"><b>OQ8 resolved this round &mdash; local git and local disk.</b> paper-trail is not
   PHI and never will be, so the clone and its archives stay on local VM disk; plain git is a fine home
   and no bucket is needed. The shared-mount "bucket mode" &mdash; run state landing on the mount so a
   PHI consumer can keep it off local disk &mdash; is a capability for a repo like crc, which paper-trail
   leaves off. This also sidesteps the mount's slow small-file reads.</p>
-  <p class="chgnote"><b>OQ9, and it is a real scope question.</b> The reviewer's judgement was blunt:
-  Phase 4 as written is not buildable by a fresh session &mdash; it named a helper and left out who
-  makes the clone, what happens on resume, the version-tag policy, and every place that assumes the old
-  repository root. It now has that surface written out. But it is still the largest remaining unknown in
-  a plan that already covers two container boundaries, so the question is whether it stays or becomes
-  its own reviewed plan. Splitting has a real cost: the optimizer's mounts are defined against the
-  clone, so a split means its boundary is weaker until the clone follows.</p>
+  <p class="chgnote"><b>OQ9 &mdash; resolved, and the scope question dissolved with it.</b> The
+  reviewer had called Phase 4 not buildable by a fresh session: it named a helper and left out who makes
+  the clone, what happens on resume, the version-tag policy, and every place that assumes the old
+  repository root. Rather than write that surface out, this round removed the need for it. You said
+  there will never be parallel runs; a clone's distinctive value is an independent namespace for runs
+  that overlap; so the clone goes and a reset stays. ⚠ The concern itself was never parallelism
+  &mdash; it is sequential residue between runs, and this plan failed to say so, which is why the
+  mechanism was oversized. There is now no large Phase 4 to split, so Phases 0 through 4 land as one
+  plan, and my &ldquo;the optimizer's boundary is weaker until the clone follows&rdquo; condition falls
+  away: the clone was never that boundary &mdash; the mount set and copy-back are.</p>
   <label class="fb" for="fb-p234">Notes on Phases 2 to 4</label>
   <textarea id="fb-p234" data-section="p234"></textarea>
 </details>
@@ -689,7 +781,7 @@ flowchart TD
   <textarea id="fb-outscope" data-section="outscope"></textarea>
 </details>
 
-<h2>Open questions &mdash; five open, four resolved this round <span class="chg mod">&#9679; your feedback applied</span></h2>
+<h2>Open questions &mdash; <b style="color:#1a7f4b">all nine resolved</b> <span class="chg mod">&#9679; your second round applied</span></h2>
 <p class="note">What changed this round: you resolved OQ4, OQ5 and OQ8 (green cards), and I answered
 OQ9, OQ1, OQ2 and OQ6 on their cards (violet callouts). OQ9 (scope, answer first), OQ1, OQ2, OQ6 and
 OQ7 remain open. OQ3 was already withdrawn.</p>
@@ -716,11 +808,15 @@ they could pass on a broken system.</p>
   survives, and points at a real non-empty file for <i>that</i> claim. The token appears by name and its
   value appears nowhere &mdash; asserting the name is present <i>first</i>, or grepping for a token that
   was never set finds nothing and reports green. The optimizer's own boundary: the scorer and manifest
-  unwritable, its own space writable, edits landing in the clone and not the shared checkout. The tool
+  unwritable, its own space writable, edits landing in a temporary area and copied back rather than
+  written straight into the shared checkout. The tool
   list and network, proved <b>per layer</b> &mdash; because if every attempt fails with no layer named,
-  a broken container and a sealed one look identical from outside. And what a <b>subagent</b> inherits,
-  since the judge is one: the boundary holding for the driver and leaking one level down is the shape of
-  the leak that started this.</p>
+  a broken container and a sealed one look identical from outside. <span class="chg mod">&#9679;
+  changed this round</span> The subagent-inheritance gate that used to sit here is <b>struck</b>: with
+  the middleman cut there is no subagent to inherit anything, so the policy applies to the judge
+  directly. Struck rather than marked green &mdash; a gate that passes because its subject stopped
+  existing is the same false green this plan is about. What replaces it is stronger and cheaper: the
+  cheap probe now asserts that <b>no subagent is spawned at all</b>.</p>
   <p><b>What to expect from the end-to-end run, said in advance.</b> Removing 61% eval contamination
   should push the held-out number <b>down</b>. A judge that can no longer read the previous iteration's
   answer for the same claim loses its self-consistency crutch. <b>A lower number is the expected
@@ -744,14 +840,18 @@ they could pass on a broken system.</p>
   <p class="chgnote"><b>Correction this round:</b> the base moved. Plan A's tip is now five commits past
   the one this plan's line numbers were taken against, and that is also where the full test count
   reproduces. Re-check the citations when the branch is cut.</p>
-  <p><b>Before it merges:</b> sign-off with all nine questions answered, OQ9 first because it sets the
-  scope; the five findings archived; the cheap probes run and recorded; <b>the sentinel test green
+  <p><b>Before it merges:</b> <span class="chg mod">&#9679; changed</span> all nine questions are now
+  answered, so the sign-off is your read of the resolved plan plus the one ten-line call on the
+  version-tag namespace &mdash; the gate no longer waits on a scope decision. Then: the five findings
+  archived; the cheap probes run and recorded; <b>the sentinel test green
   including its must-fail control</b> &mdash; a land with either red is not a land; <b>the 21-place
   census green</b>, so no ungated judge ships; the per-dispatch and per-version gates green, because a
   reused command or a shared folder mis-attributes one program's behaviour to another and nothing
-  downstream would show it; the tool and subagent gates green with every result attributed to a layer;
-  the transcript gate green; and <b>the token-by-name change landed upstream first</b>, since it is a
-  prerequisite rather than a follow-up.</p>
+  downstream would show it; the tool gate green with every result attributed to a layer (&#9888; the
+  <i>subagent</i> gate is struck, not waived &mdash; cutting the middleman removed the subagent it
+  tested, and a gate that passes because its subject no longer exists is exactly the kind of false
+  green this plan is about); the transcript gate green; and <b>the token-by-name change landed upstream
+  first</b>, since it is a prerequisite rather than a follow-up.</p>
   <p><b>Owed to Plan A.</b> Its fresh baseline must run on the <i>post-isolation</i> instrument &mdash;
   61% of the last iteration's judges read a stale answer, so a baseline measured today measures the
   contamination. The landing order satisfies that.</p>
@@ -770,60 +870,66 @@ they could pass on a broken system.</p>
 <div id="bar">
   <button id="copy">Copy all feedback as Claude prompt</button>
   <span class="n" id="cnt">nothing entered yet</span>
-  <span class="n" style="margin-left:auto">Saved in this browser as you type &middot; plan <code>a193c545821b</code></span>
+  <span class="n" style="margin-left:auto">Saved in this browser as you type &middot; plan <code>68e4e6bd052c</code></span>
 </div>
 
 <script>
 const PLAN_PATH = "docs/plans/isolation-protocol.md";
 const PLAN_BRANCH = "sarol-optimizer-concurrent";
-const PLAN_SHA = "a193c545821bb977247e5815f460a997fed6ef2aa12280bf1e6bf75f345ae709";
+const PLAN_SHA = "68e4e6bd052c3d8df0b2cd5799528ef0aea7816f946fadc931f6d2620fb6155f";
 const STEM = "isolation-protocol";
 
 /* ---------- Open questions ---------- */
 const OQS = [
-  { n:9, gate:true, isnew:true, plain:"The per-run clone is the biggest remaining unknown. Keep it in this plan, or give it its own review?",
+  { n:9, resolved:"No per-run clone. A run-start reset instead (Phil, 2026-09-14).", plain:"The per-run clone is the biggest remaining unknown. Keep it in this plan, or give it its own review?",
     orig:"The reviewer's judgement was that Phase 4 as written is not buildable by a fresh session — it named a helper and left out who makes the clone, what happens on resume, the version-tag policy, and every place that assumes the old repository root. It now has that surface written out, but it is still the largest unknown in a plan that already covers two container boundaries.",
-    rec:"Split it. Land the isolation the September run actually demanded, and give the per-run clone its own review. One condition, because splitting has a real cost: the optimizer's mounts are defined against the clone, so a split means the optimizer's boundary is weaker until the clone follows. Say that in the landing note rather than discovering it later.",
-    resp:"You asked what \"per-run clone\" is and why it isn't possible. A <i>run</i> is one full optimization job (one launch of the VM runner); it holds many iterations — September's run had 5. The clone is <b>per run, reused across all its iterations, not per iteration</b>. Your own framing is the plan's: the program (the frozen thing scored) is per iteration; the optimizer (which edits the program, plus its lessons sheet and findings) is per run. The requirement: the optimizer's cross-run memory (the lessons sheet, findings/, the program-version tags) lives in the shared checkout today and is never reset, so run #2 can silently inherit run #1's hypotheses. A fresh clone per run gives each run a clean tree. It is <b>not impossible</b> — that word came from the reviewer calling the first draft too thin to hand a fresh session, now fixed. The only real question left is scope: keep Phase 4 here, or split it out." },
-  { n:5, gate:true, resolved:"Allow it to fail; the optimizer determines and fixes it (Phil, 2026-09-14).", plain:"When a judge session breaks for infrastructure reasons rather than answering badly, what happens to that batch's score?",
+    rec:"RESOLVED — the clone is gone, replaced by a reset at the start of each run: archive the lessons sheet, the findings files and the releases folder, then assert they are absent. Struck with it: the clone provisioner, the resume design, the version-tag policy, and the rewrite of what \u2018the repository root\u2019 means — which was the change with the most reach in this plan and is now simply not made. Two things improve as a side effect. The fresh-run gate is now <b>satisfied</b> rather than retired: it refuses to start when a previous run\u2019s findings are present, and the reset clears them before it looks, so a live gate keeps asserting instead of being designed away. And Phase 4 stops being coupled to the optimizer\u2019s container — my \u2018the boundary is weaker until the clone follows\u2019 worry does not survive contact with what each half does, because the clone was never the boundary; the plan says so itself. One residual: version tags are repository-global, so a second run re-mints the first run\u2019s. Namespace them per run, or drop tags as the version identity and use the program fingerprint, which is committed and is already what the configuration pin keys on. I recommend the second.",
+    resp:"You said you never run two runs in parallel, so you could not see the concern. <b>You are right that parallelism is not the concern, and this plan failed to say so.</b> The problem is <i>sequential</i>: the optimizer\u2019s lessons sheet is injected into every optimizer session and had <b>never been reset between runs</b>, while the code reasons as though a reset were guaranteed. So run #2 opens carrying run #1\u2019s hypotheses, and two runs both labelled program-v0 can start from different states with nothing recording it. That happens with runs strictly one after another. Your own framing — <i>\u2018if we update something for a new run, that lands in the next run\u2019</i> — assumes each run starts from a defined state, and that is exactly the property that was missing.<br><br><b>But your ruling does kill the clone.</b> A clone per run buys two things: a reset, and an independent namespace (working tree, releases, tags, ledger) for runs that overlap in time. The other project needed the second. You never will. So the clone was a heavy mechanism for a job a reset does — and adopting it would have been this plan\u2019s own rule (<i>re-aim what already exists</i>) applied backwards. Phase 4 is now the reset, and it is roughly thirty lines instead of a new module." },
+  { n:5, resolved:"Allow it to fail; the optimizer determines and fixes it (Phil, 2026-09-14).", plain:"When a judge session breaks for infrastructure reasons rather than answering badly, what happens to that batch's score?",
     orig:"The three options give numbers you cannot compare across iterations, so it looked like a measurement-design decision. The first draft's recommendation was to retry once and fail the iteration if the retry also failed.",
     rec:"RESOLVED — allow it to fail, no retry. A dispatch that produces no verdict fails the claim, and that failure is surfaced to the optimizer as feedback. The delivery path is optimizer-editable, so a no-task dispatch is a delivery defect inside the program the optimizer owns — exactly what the optimize loop exists to catch and fix. The refuse-to-score gate still stands (never read the stale verdict, never silently score 0.0 for the whole batch); the failure is recorded under a distinguishable delivery-failure count and never reported as program quality. Dropping the retry also removes the probe-cache trap, the session/claim-count desync, and any tension with the consistency gate." },
-  { n:1, gate:false, plain:"Keep the middleman session that hands the judge its task, or cut it out?",
+  { n:1, resolved:"Cut it — the dispatcher is deterministic, so Python does it (Phil, 2026-09-14).", plain:"Keep the middleman session that hands the judge its task, or cut it out?",
     orig:"Keeping it is the smallest change to what was actually measured — the judge stays a subagent of a driver session, which is what all five iterations were measured under. Cutting it is simpler, removes a model from the delivery path, and saves its roughly 10% of spend.",
-    rec:"Keep it here. Cutting it changes what the judge is, and the judging instructions were tuned under the current shape, so it belongs with the measurement redesign. One new interaction: if the subagent turns out not to inherit the driver's permissions, cutting it becomes the live option rather than the deferred one.",
-    resp:"You asked what the middleman does and what the alternative is. The middleman is the <b>driver session</b>: the top-level session that takes the batch and, per claim, fills the dispatch prompt and spawns the judge as a Task subagent. Its job is the dispatch loop — one driver, N judge subagents — and all 5 measured iterations ran this shape. The alternative (option ii above): cut it, and have the runner launch each judge directly as its own container, no intermediate session. That removes a model (~10% of spend) and applies every isolation flag straight to the judge, but changes what the judge <i>is</i> and forces a manifest re-freeze that breaks selftests." },
-  { n:2, gate:false, plain:"Fix the stale-answer problem in our own code, or change the shared engine three other projects depend on?",
+    rec:"RESOLVED, against my recommendation — cut it. Reading the file settles it: those 224 lines do exactly three things, and Python already owns two of them. <b>What this buys beyond the ~10% of spend:</b> the entire no-task failure class disappears <i>structurally</i> — both observed delivery bugs were shell the middleman <i>model</i> wrote at run time, differently each run, and 13 of 561 sessions began with no task at all; Python cannot improvise a broken heredoc. The subagent tool comes off the permission list, which is a real narrowing. A one-flag hygiene setting that skips auto-memory, project-context discovery and the dynamic sections becomes usable, because its refusal to grant the subagent tool was the only thing disqualifying it. And a whole verification gate — does the subagent inherit the driver\u2019s policy? — is struck, since there is no subagent. <b>The cost, stated plainly:</b> the judge stops being a subagent and becomes a top-level session, so the five measured iterations are not comparable across the change. That cost is already paid — the plan already owes a baseline recut on the post-isolation instrument, because 61% of the last run\u2019s judges read a stale answer. The recut absorbs the topology change. It is bundled, not free.",
+    resp:"You said it sounds like a dispatcher, and a dispatcher does not need to be an agent because it is deterministic. <b>Correct, and checking the file confirms it.</b> Its 224 lines do three things: fill the slots in the frozen prompt, dispatch exactly one general-purpose subagent with the filled text as its whole prompt, and make one shell call to check the output file exists. Phase 0c already moves the first into Python, the second is a single command-line invocation, and the runner already does the third. There is no judgement left in it.<br><br><b>One distinction that matters, because I got it wrong in an earlier draft:</b> cutting the middleman is not the same as taking the delivery path away from the optimizer. An earlier version moved about 40% of that file into harness code and you withdrew it. This is not that. What is removed is the <b>model</b>; what stays is the <b>editability</b> — the file remains a program entry holding optimizer-authored prompt text, and your ruling that the optimizer may write Python covers the dispatcher too. The test of the difference is whether the optimizer can still change what the judge receives. It can.<br><br><b>And the earlier worry about a re-freeze was wrong</b> — it assumed the file disappeared. It does not: same path, same slot, so the program entry count and scope are untouched. Only its contents change, which is an ordinary new-version event." },
+  { n:2, resolved:"Per-iteration folders, via the shared-engine change (Phil, 2026-09-14).", plain:"Fix the stale-answer problem in our own code, or change the shared engine three other projects depend on?",
     orig:"Ours needs no iteration number and has no shared blast radius. The engine version would give genuinely per-iteration folders.",
-    rec:"Ours for now — the defect is entirely ours. The engine version is the better end state if you want per-iteration folders for forensics.",
-    resp:"You asked what the stale-answer problem is. Each claim's verdict writes to a fixed path with <b>no iteration number</b>, so a new iteration overwrites in place. If a dispatch in the new iteration fails to write a verdict, the <b>previous iteration's file is still there</b> — the scorer reads it, it validates, and it is scored as <i>this</i> iteration's prediction. You measure iteration-5's judge but score iteration-4's answer. That is the 61% stale-verdict contamination from September. Phase 0a fixes it (archive-then-assert-absent before each dispatch), and it feeds OQ5: with the stale file gone, a failed dispatch produces an unreadable-verdict signal, which is what fail-and-feed acts on." },
-  { n:3, gate:false, plain:"RESOLVED — the container is the isolation mechanism, and the question is withdrawn.",
+    rec:"RESOLVED, against my recommendation — take the engine change. My argument for keeping it local was <i>\u2018the defect is ours and the engine change touches three other projects\u2019</i>, and your OQ4 ruling overturns exactly that reasoning: sort by <b>where a thing should live</b>, not by who owns the defect. Any project whose runner keys its staging on a claim id hits the identical overwrite — crc included — so per-iteration held-out folders are a shared-engine property, not a paper-trail patch. <b>And it is small, because the precedent sits five lines above it in the same function signature:</b> the training inputs already accept a per-iteration form; the held-out inputs do not. Widen one type, resolve it in two places, correct a docstring that currently asserts the opposite. Backward compatible, so the other two projects need no change. <b>Phase 0a then shrinks to its cheap half</b> — with folders keyed on the iteration, the previous answer cannot sit where the new one is read, so the archive-and-move step goes and what remains is the assertion that the slot is empty before dispatch. That assertion stays, because it is what makes refusing-to-score meaningful.",
+    resp:"You asked: <i>\u2018we should have folders based on iteration, right? Is that not what we\u2019re doing?\u2019</i> <b>Direct answer: no — not on the held-out side, and that asymmetry is the defect.</b> The training side does get per-iteration inputs. The held-out side is typed as a single fixed object, documented as <i>\u2018fixed for the whole run, as always\u2019</i>, and the same object is reused every iteration. Proven on disk: the iteration-1 and iteration-5 batches point the same claim at the <b>identical directory</b>, and one answer file carries a timestamp four hours later than the directory that contains it — overwritten in place.<br><br>The consequence is the 61% contamination from September: if a dispatch fails to write an answer, the <b>previous iteration\u2019s file is still sitting there</b>, the scorer reads it, it validates, and it is scored as <i>this</i> iteration\u2019s prediction. You measure iteration 5\u2019s judge and score iteration 4\u2019s answer. So your instinct was the fix, not a check on the fix." },
+  { n:3, resolved:"The container is the isolation mechanism; the question is withdrawn (Phil, 2026-09-11).", plain:"Could a cheaper permission setting replace the container?",
     orig:"An earlier draft asked whether a cheaper permission setting could replace the container, and said the container work would then demote to defence-in-depth. That reopened a decision you had already made.",
     rec:"Withdrawn. Deny-by-default is adopted INSIDE the container as a second layer. What survives is a measurement, not a fork: the cheap probe reports what containerizing every judge session costs across a run. It does not decide whether to do it." },
   { n:4, gate:false, resolved:"It is a modularity question — much of this belongs in the shared engine because crc needs it too (Phil, 2026-09-14).", plain:"Check the isolation label on our side, or in the shared engine?",
     orig:"Validating it upstream would break the engine's own reference code and two of its own tests before reaching any other project.",
-    rec:"RESOLVED — do not treat these problems as paper-trail's alone. crc-extraction-agent needs much of the same (the container boundary, the by-name credential transport, the audit rows, the isolation-label check, bucket-mode storage), and both repos are ours. So each piece is sorted by where it should live, not who owns the defect. For the narrow instance that opened this — the isolation-label check — do it consumer-side now (upstream breaks the engine's own tests first) but file it as shared-engine work, because crc needs the identical check." },
-  { n:6, gate:false, plain:"The hook-based safety net everyone assumed existed was never built here. Retire it deliberately, or build it?",
+    rec:"RESOLVED — do not treat these problems as paper-trail's alone. crc-extraction-agent needs much of the same (the container boundary, the by-name credential transport, the audit rows, the isolation-label check, bucket-mode storage), and both repos are ours. So each piece is sorted by where it should live, not who owns the defect. For the narrow instance that opened this — the isolation-label check — do it consumer-side now (upstream breaks the engine's own tests first) but file it as shared-engine work, because crc needs the identical check.",
+    resp:"You asked: <i>\u2018does this change any of what\u2019s in this plan currently? What are we building concretely?\u2019</i><br><br><b>It changes the filing, not the build — with one exception.</b> Every item this ruling re-filed as shared-engine work is something the plan had already declined to build: bucket-mode storage, hook wiring, audit rows from container sessions, the isolation-label check. They move from \u2018a gap we noted\u2019 to \u2018named backlog the other project will need\u2019, and none of them enters scope. The exception is <b>OQ2</b> — this ruling is precisely what flipped per-iteration folders from a local workaround to a small upstream change, because \u2018the defect is ours\u2019 stopped being the deciding argument.<br><br><b>It adds one design constraint, which is not extra work.</b> The judge container is the one thing nobody has built anywhere, and crc designed the identical gold-holding sibling. So our isolation module is written with its mount-set builder and path map <b>generic, with paper-trail\u2019s paths as data</b> — shaped to lift, not lifted now. That is a way of writing the module, not a second module.<br><br><b>And it is why the \u2018What we are building\u2019 list now exists</b> at the top of this page and at the top of the plan. You were right that the plan never said it in one place: it discussed where things should live, which is a different question, and was reading as the same one." },
+  { n:6, resolved:"Retire the settings file. Hooks themselves are NOT retired (Phil, 2026-09-14).", plain:"The hook-based safety net everyone assumed existed was never built here. Retire it deliberately, or build it?",
     orig:"The tracking doc says a per-experiment settings file should be committed; it does not exist. Retiring it is defensible now the container supersedes it.",
-    rec:"No recommendation — this is the one where quietly deciding would repeat the plan's own root cause. Your call, on the record.",
-    resp:"You asked what the hook-based safety net is. It is the <b>in-session permission layer</b>: a Claude Code permission hook plus a settings file that vets each tool call as the agent runs and denies the disallowed ones. The engine has the decision logic (16 tests) but nothing is wired to call it — no hook exists, and the settings file everyone assumed existed was never built. It is a \"safety net\" because it is a <b>second</b> layer beside the container: the container blocks from outside (filesystem, network), the hook would block tool calls from inside. Retire it (the container already enforces the boundary) or build it as defence-in-depth — your call, on the record." },
-  { n:7, gate:false, changed:true, plain:"Only the test cases still need an exemption. How should it look?",
+    rec:"RESOLVED, and recorded rather than reasoned away in passing — which is what you asked for. <b>The file is retired.</b> What it was <i>for</i> was delivering hook configuration and permission settings into a session that had no configuration on disk. The container plus explicit command-line flags deliver those same controls more directly, on the command line, where the configuration pin can actually fingerprint them — and a settings file would otherwise sit on disk <i>inside the tree the optimizer edits</i>, which is the wrong home for a control the optimizer must not move. <b>What is not retired is the capability.</b> The distinction to hold: a <i>delivery mechanism</i> that never shipped is superseded; a <i>capability</i> whose decision logic exists with 16 tests and whose wiring does not is still owed. Collapsing those two into \u2018hooks: dropped\u2019 would be the exact move this plan\u2019s root-cause list is made of.",
+    resp:"You said retire it <i>unless</i> hooks do something the container does not. <b>They do, but only on one of the two paths — so the honest answer is a split, not a flat no.</b><br><br>A hook decides <b>per call, on the call\u2019s content</b>. The permission list is all-or-nothing per tool; a hook inspects the actual shell command, or the actual URL. The network profile sees a <i>host</i>; a hook sees the <i>URL</i>. This is not hypothetical — the engine\u2019s own egress plan records that the other project keeps web-fetch enabled <b>precisely because</b> a real hook denies every URL, and that <i>\u2018Docker mode has no hook wiring at all, so that same app-layer policing doesn\u2019t exist\u2019</i>.<br><br><b>On the judge\u2019s path: redundant.</b> Its permission list has shell absent-or-reduced and both web tools absent — and, now that the middleman is cut, no subagent tool either. With those ungranted there is no per-call decision left to make, so retiring the file costs the judge nothing.<br><br><b>On the optimizer\u2019s path: non-redundant, and a live gap.</b> The optimizer needs shell — it edits and runs things — so per-command granularity has real work to do that neither the mount set nor a tool list can. That gap is inherited knowingly by going container-first, and it stays on the residuals list as the second landing." },
+  { n:7, resolved:"\u201cdutr\u201d was \u201csure\u201d — adopt the recommendation (Phil, 2026-09-14).", plain:"Only the test cases still need an exemption. How should it look?",
     orig:"Narrower than it was. The review closed the part that mattered: the baseline script produces a reported number and the canary guards one, so both take the real container and neither gets an exemption. What is left is the 19 test cases.",
     rec:"Inject a fake container command rather than a true-or-false switch. It keeps the test assertions real, so they still exercise the path translation instead of skipping it, and there is no production-reachable branch to disable by accident. A boolean flag is the option to avoid — a setting that silently turns the boundary off is the kind of mechanism this plan's root-cause list is made of.",
-    resp:"Your note here read as \"dutr\" — which looks like a stray keystroke, so I left OQ7 unchanged. Say the word if you meant something." },
+    resp:"You confirmed the stray keystroke was meant to say <i>\u2018sure\u2019</i>, so the recommendation is adopted as written: the 19 test cases opt out by passing an explicit marker <b>plus an injected fake container command</b>. The rejected shape is recorded alongside it — a true-or-false switch — because a setting that silently turns the boundary off is precisely the kind of mechanism this plan exists to remove. Note what this settles beyond the test cases: the baseline script and the canary both take the <b>real</b> container and get no exemption, so the baseline recut and every iteration compared against it are measured on the same instrument. An exemption there would not be a weaker guarantee; it would be an invalid comparison." },
   { n:8, gate:false, resolved:"paper-trail uses local git and local disk; bucket mode is crc's (Phil, 2026-09-14).", plain:"Where should per-run state live — local VM disk, or the shared bucket you read from your Mac?",
     orig:"Phase 4's per-run clone needs a home, and the archive currently writes to local disk while run artifacts are meant to move to the bucket. Measured: the bucket reads small files at roughly 2 MB/s, so a working clone there would be slow.",
-    rec:"RESOLVED — paper-trail is explicitly not PHI and never will be, so plain git and local VM disk are a fine home for the per-run clone and its archives. No bucket needed. The shared-mount \"bucket mode\" (run state landing on the mount so a PHI consumer can keep it off local disk) is for a repo like crc-extraction-agent, which is PHI — so it is a modular capability of the shared engine that crc turns on and paper-trail leaves off (see OQ4)." }
+    rec:"RESOLVED — paper-trail is explicitly not PHI and never will be, so plain git and local VM disk are a fine home for the per-run clone and its archives. No bucket needed. The shared-mount \"bucket mode\" (run state landing on the mount so a PHI consumer can keep it off local disk) is for a repo like crc-extraction-agent, which is PHI — so it is a modular capability of the shared engine that crc turns on and paper-trail leaves off (see OQ4).",
+    resp:"You asked whether this is a large design change to the shared engine project, as well as to this one. <b>No, on both counts — and the engine side is the smaller of the two.</b><br><br>What this plan actually asks the engine to build is five things, all small: passing the credential <b>by name</b> rather than by value, so the token stops appearing in the host command line and in a log file (about twenty lines, and it is a <i>prerequisite</i>, not a follow-up, because a token environment variable is our documented auth path); the generic half of the seal test plus its matching assertion, both additive; re-pinning the container\u2019s CLI version to match the host\u2019s, which is 49 patch releases newer; and — new this round, from OQ2 — widening the held-out inputs to accept a per-iteration form, which is a two-line type change mirroring the training inputs five lines above it, backward compatible, so the other two projects are untouched. \u26a0 That last one <b>corrects this plan\u2019s earlier claim of \u2018no change to the engine core\u2019</b>, which was true before OQ2 and is not now.<br><br><b>What is a design change is a change of ownership, not of architecture.</b> OQ4 and OQ8 say four capabilities — bucket-mode storage, hook wiring, container-mode audit rows, isolation-label validation — are the engine\u2019s to own because crc needs them too. None is built here, none is designed here, and the engine\u2019s own plans already name three of the four as explicitly deferred. So the engine\u2019s <b>backlog</b> grows; its <b>design</b> does not.<br><br><b>The one genuine architectural addition is ours, not the engine\u2019s:</b> the gold-holding judge container, which crc\u2019s umbrella plan designed and no project has shipped. It gets built here, generically, so crc adopts it rather than rebuilds it — a change <i>in</i> the engine\u2019s direction, not a change <i>to</i> the engine." }
 ];
 
 const oqRoot = document.getElementById('oqs');
-OQS.forEach(q => {
+// all nine are resolved, so this is a record rather than a queue: read it in number order
+OQS.slice().sort((a, b) => a.n - b.n).forEach(q => {
   const d = document.createElement('div');
   d.className = 'oq';
   d.id = 'oq-' + q.n;
   if (q.isnew || q.changed || q.resolved || q.resp) d.setAttribute('data-changed', q.isnew ? 'new' : 'mod');
+  // data-default records where this select STARTS, so the export can tell "you changed it"
+  // from "it shipped that way". Every card is resolved now, so comparing against the literal
+  // 'Pending' would export all nine as empty noise on every copy.
   const sel = q.resolved
-    ? '<select data-oq="' + q.n + '"><option>Resolved</option><option>Pending</option><option>Deferred</option></select>'
-    : '<select data-oq="' + q.n + '"><option>Pending</option><option>Resolved</option><option>Deferred</option></select>';
+    ? '<select data-oq="' + q.n + '" data-default="Resolved"><option>Resolved</option><option>Pending</option><option>Deferred</option></select>'
+    : '<select data-oq="' + q.n + '" data-default="Pending"><option>Pending</option><option>Resolved</option><option>Deferred</option></select>';
   d.innerHTML =
     '<div class="top"><span class="id">OQ' + q.n + '</span>' +
     (q.resolved ? '<span class="chip done">resolved</span>'
@@ -915,7 +1021,7 @@ document.getElementById('copy').addEventListener('click', async () => {
   document.querySelectorAll('select[data-oq]').forEach(s => {
     const n = s.dataset.oq;
     const note = (document.getElementById('fb-oq' + n) || {}).value || '';
-    if (s.value !== 'Pending' || note.trim()) {
+    if (s.value !== (s.dataset.default || 'Pending') || note.trim()) {
       L.push('## OQ' + n);
       L.push('Status: ' + s.value);
       if (note.trim()) L.push(note.trim());
