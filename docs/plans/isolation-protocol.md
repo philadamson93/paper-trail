@@ -281,7 +281,25 @@ them, flagged where they apply.
 3. **A paper-trail egress profile.** Phil's ruling 2026-08-18: the network profile is **paper-trail's
    own to own** — adding one to the engine's policy registry re-litigates a resolved question. Build
    it on the generic host-allowlist primitive, which already accepts a caller-supplied host list.
-4. **The judge/dispatcher container.** Nobody has built one. Everywhere else ships *one* agent
+4. **The judge/dispatcher container.** ⚠ **Scope of this claim tightened 2026-09-14, because Phil
+read it as saying the optimizer's container is a solved problem for us. It is not.** Precisely:
+
+| | built **anywhere**? | built **in paper-trail**? |
+|---|---|---|
+| **Optimizer** container | ✅ yes — rad-eval's, armed VM run 2026-08-05, `$4.13` | ❌ **no** |
+| **Judge** container | ❌ **no — nowhere, by any consumer** | ❌ no |
+
+So **paper-trail builds both** (Phase 1e and Phase 1b–1d). The difference is only that for the
+optimizer we get to *copy* a working implementation, and for the judge there is nothing to copy.
+
+⚠ **"But isn't the judge part of the agentic program?" (Phil) — yes, and that is the reason it needs
+the container, not a reason it doesn't.** Verified: the judge's prompt, its rubric and its driver are
+literally the editable fileset — `JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER)`
+(`profiles.py:52`/`:58`), editable under **every** profile, because *"optimizing the adjudicator is
+the one thing common to the whole ladder."* So the program **is** the judge's instructions, and the
+judge is the **execution** of the program: a real Claude Code session, with tools, running
+optimizer-authored text. That is exactly why a boundary drawn in prose cannot hold — the optimizer
+writes the prose. Nobody has built one. Everywhere else ships *one* agent
    container with the runner, scorer, gold and commit in the host process. crc's umbrella plan
    designed the gold-holding dispatcher sibling (`2026-07-10-…:60`, `:232-237`) and it was never
    built. **This is the one place this plan adds something new, and it is a deviation from the built
@@ -846,11 +864,28 @@ is no chown to drop.** The boundary is the mount set because exactly two files a
 `TemporaryDirectory`, no `finally` — so every iteration leaks a temp dir holding the edited program and
 copies of its reference docs. Ours must clean up.
 
-⚠ **Docker mode writes zero audit rows.** rad-eval's Docker agent discards the engine ledger
-(`docker_agent.py:84`), so the engine's four tripwires — including the one that halts when a
-final-evaluation row appears mid-loop, which *is* the dispatcher principle expressed in code — are
-**blind in container mode**. Going container-first inherits that blind spot knowingly. Recorded here
-so it is a decision, not a surprise; fixing it is engine work.
+⚠ **Docker mode writes zero audit rows — but corrected 2026-09-14: this is not a loss for
+paper-trail, because paper-trail never had them.** The earlier wording imported rad-eval's caveat and
+stated it as our regression. Two separate things were also being conflated, and Phil's question
+("*I thought the optimizer reads reasoning traces and everything is saved to the mount*") is exactly
+the conflation:
+
+| Artifact | What it is | Status in a container |
+|---|---|---|
+| **The audit ledger** | one Merkle-chained row **per tool call**, written by the `PreToolUse` hooks, feeding the engine's four tripwires | ❌ empty — and **not because it is discarded**: container mode has no hooks, so there is nothing to write. rad-eval's `del audit_ledger` (`docker_agent.py:84`) is honest about that, not wasteful |
+| **The reasoning trace** | the judge's **session transcript** — what Phil is thinking of, and what the optimizer's blame analysis opens (`adapter.py:1920`, the S13 fix) | ⚠ lost **silently** in a container (`find_transcript` globs the *host's* `~/.claude/projects`) → ✅ **Phase 1d preserves it**, which is why 1d is not optional |
+
+✅ **And for paper-trail the ledger half changes nothing, because it was never wired.** `adapter.py:10-17`
+states it outright: *"The audit ledger is the engine's, and this consumer does not use it"* —
+`dispatcher.py` passes none, and `audit_ledger` / `policy_config` appear **zero** times there. It is
+recorded there precisely because four optimizer-facing docs once promised the agent that reaching for
+gold was *"logged to the audit ledger, and a denied-call threshold pauses the run"* — **a guarantee
+nothing implemented**, since corrected to say what is true: *"VAL/TEST isolation here is by
+construction, the records living outside the repository tree entirely, which needs no watcher to
+hold."* ⇒ So containerizing costs paper-trail **no** tripwire it currently has. The residual is real
+but it belongs to the engine and to rad-eval, and this plan should stop describing it as a blind spot
+it is inheriting. ⚠ It is also why the `denied=0` row in the root-cause table matters: the same
+absent mechanism is what makes that number meaningless.
 
 **1f. One refusal locus, covering every construction site.** ⚠ **Re-counted 2026-09-14 — see NF11.
 The number is 22, and 19 of them are selftests.** 19 in `adapter.py` (all inside `_selftest()`), one
@@ -1399,12 +1434,31 @@ with the filled text as its whole prompt (`:134`), (3) one `Bash` call to check 
 is what the Runner already does at `adapter.py:907`. There is no judgement left in it — so it is a
 dispatcher, and a model is the wrong thing to implement a dispatcher with.
 
-⚠ **"Eliminate the driver session" ≠ "take the delivery path away from the optimizer."** That
-distinction is load-bearing, because an earlier draft moved ~40% of the driver into harness code and
-Phil withdrew it (NF8). What is removed is the **model**, not the **editability**: the driver file
-stays a manifest entry holding optimizer-authored prompt text, the dispatcher reads it, and Phil's
-ruling that the optimizer may write Python if it wants covers the dispatcher too. What reaches the
-judge is 100% optimizer-authored either way.
+⚠ **"Eliminate the driver session" ≠ "take the delivery path away from the optimizer."** What is
+removed is the **model**, not the **editability**: the driver file stays a manifest entry holding
+optimizer-authored prompt text (`DRIVER` is in `JUDGE_SCOPE` on Plan A's tip, `profiles.py:50`,
+`:58`), and the dispatcher reads it. What reaches the judge is 100% optimizer-authored either way.
+
+⚠ **CORRECTED 2026-09-14 (Phil): the dispatcher itself is NOT optimizer-editable, and an earlier
+sentence here said it was.** It read *"Phil's ruling that the optimizer may write Python covers the
+dispatcher too."* That is wrong, and wrong in the direction that would defeat this entire plan.
+**`dispatch_prompt.py` is runner code, not program.** Draw the line exactly where the manifest already
+draws it: `src/commands/paper-trail.md` — the orchestrator — sits in `deliberately_excluded` with the
+reason *"orchestrator = fixed runner code, not editable program."* The dispatcher is the same
+category, and it has a harder reason: **it is the thing that builds the container command** (Phase
+1c). An isolation boundary the isolated party can edit is not a boundary. So:
+
+| Surface | Who owns it | Why |
+|---|---|---|
+| The **prompt text** in the driver file | **the optimizer** — fully editable | it is what the judge is *told*; optimizing it is the point |
+| The **rubric / adjudicator prompt** (`JUDGE_SCOPE`) | **the optimizer** | same |
+| **`dispatch_prompt.py`** — slot-filling, refusal, invoking the judge | ⚠ **the harness. Never the optimizer** | it applies the container prefix; editable enforcement is not enforcement |
+| The **scorer**, gold, the manifest | the harness | unchanged, and outside both containers |
+
+⚠ **And Phil's 2026-09-11 "the optimizer may write Python" ruling is not in tension with this** — it
+scopes to the *program*. The optimizer may author Python **inside its own program fileset** (a
+retrieval helper, say). It may not author the runner that contains it. Keeping those two straight is
+the difference between a program-model question and a security boundary.
 
 ✅ **What this buys, beyond the ~10% of spend.** It removes the entire **no-task failure class**
 structurally: both observed delivery bugs (`$dispatch_prompt` unexpanded; `$(cat …_$$.txt)` with an
@@ -1431,10 +1485,27 @@ does not → drop `--bare` and set the row's flags individually, which is what �
 
 ✅ **No manifest re-freeze to 9 entries, and no five-selftest break** — the earlier warning assumed the
 driver file disappeared. It does not: it stays at the same path as entry #10, holding the prompt text
-the dispatcher reads. ⚠ Its *contents* do change (the driver-facing prose describing a dispatch nobody
-performs any more is dead text a frozen entry should not carry, and the optimizer would otherwise
-spend iterations optimising it), which re-freezes `combined_hash` — a normal program-version event,
-not a breakage. Entry **count** and scope are untouched.
+the dispatcher reads. Its *contents* change; the entry **count** and scope do not, so the five
+count/scope selftests are untouched.
+
+⚠ **"Same path — doesn't it just get overwritten?" (Phil, 2026-09-14). In the working tree yes; in
+every frozen version no — and that distinction is the whole versioning model, so it is written out
+here rather than assumed.** A program version is **a git commit plus a `program-v<n>` tag**, not a
+directory of current files. `engine/materialize.py` builds a version's snapshot by reading each
+manifest entry's bytes **out of git at that version's SHA** — `git show <version_sha>:<path>` — and
+writing them into a per-version read-only tree (`_make_read_only` chmods files *and* directories, so
+nothing can be added either). Consequences:
+
+- Editing the driver **does** overwrite the working-tree copy. That is the only thing overwritten.
+- `program-v0`'s bytes stay pinned at `program-v0`'s commit forever. `git show program-v0:<path>`
+  returns the old text no matter how many times the file is edited afterwards.
+- So a v0 dispatch and a v1 dispatch read from **different materialised snapshots**, each holding its
+  own version's bytes. Nothing is lost and nothing is shared.
+
+✅ That is also exactly why **Phase 2a makes the judge's working directory the per-version snapshot**
+rather than a fixed folder — the snapshot *is* the version-addressing, already on disk, already
+read-only. "Ordinary new-version event" means: edit the file → freeze → `program-v1` exists with the
+new bytes, `program-v0` still resolves to the old ones.
 
 **OQ2 — ✅ RESOLVED 2026-09-14 (Phil, against this plan's recommendation): per-iteration folders, via
 the engine change.** Phil: *"We should have folders based on iteration, right? … each run should have
