@@ -4,6 +4,15 @@ Reference: docs/claude_ops.md
 
 **Status: Draft** (rewritten 2026-09-11 against the shared engine's landed substrate; Codex review
 applied 2026-09-13; Phil's explain-plan feedback applied 2026-09-14) · **Reviewed: No**
+⚠ **Code-audit round, 2026-09-14 (four parallel agents against current code, both repos pulled).**
+It found ~20 corrections, several load-bearing, and every one is applied below. The architecture
+survived; **the inventory of work did not** — it is smaller than this plan said. The four that change
+what gets built: the refusal census is **22 sites, of which only 3 ship** (not "21, mostly in
+`adapter.py`"); `--dangerously-skip-permissions` is set by the **shared wrapper**, not by us, so
+replacing it is an upstream prerequisite; the engine has **just landed** the feed-the-optimizer
+channel OQ5 needs; and the armed run this plan cites as proof reports a safety number that is
+**zero by construction**. Engine citations are now stamped with the SHA they were read at
+(`c2dd0b3`), because they have gone stale twice.
 **All nine open questions are now resolved** (2026-09-14). Three of them cut scope rather than adding
 it: the driver session is eliminated (OQ1), the per-run git clone is replaced by a run-start reset
 (OQ9), and the tag-scoped settings file is retired (OQ6). One adds a small engine change that the
@@ -23,7 +32,8 @@ exist yet); the Docker prefix cannot be built once at construction (Phase 1c, pe
 plus a canonical container path map); one shared minimal cwd cannot serve a per-version editable
 driver (Phase 2a, version-addressed); mounts do not cover credentials, and the token lands in host
 argv and a log file (Phase 1b, a real engine diff and a prerequisite); containerizing discards the
-judge's trace (Phase 1d); the refusal must cover **21** construction sites, not 7 (Phase 1f); the pin
+judge's trace (Phase 1d); the refusal must cover **21** construction sites, not 7 (Phase 1f — ⚠ the
+2026-09-14 audit re-counted this as **22**, see NF11); the pin
 hashed only host-side properties (Phase 3); Phase 4 named a function instead of an implementation;
 and V2a-seal — the plan's centrepiece — could be defeated by a broad mount at an unexpected target.
 A separate Codex adjudication chose the mechanism order (**containers first, hooks second**) at
@@ -102,20 +112,20 @@ session should build, and the disagreement is a defect to fix here.
 
 | # | What | Where | Phase |
 |---|---|---|---|
-| 1 | **An engine dependency** — `agentic-label-opt` pinned to a git **revision** (not a branch) under `[tool.uv.sources]`. Nothing else in this plan imports until it exists | `pyproject.toml` | 1a |
+| 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39`. So a run binds to whatever that tree holds at that moment. Copy rad-eval's shape: a git **revision** under `[tool.uv.sources]` (it pins `rev = "3bbe6c4"`), which means **creating** our first `pyproject.toml` | `pyproject.toml` | 1a |
 | 2 | **The judge's container**, built **per dispatch** by a factory owned by `SarolRunner.process(claim)`. Mount set: claim staging (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). Nothing else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks` are denied by absence | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
 | 3 | **The optimizer's container**, modelled on rad-eval's `docker_agent.py`: temp writable staging, copy-back into the live tree, and the scorer / gold / `iter/` / manifest **absent from the mount set** — so "the optimizer cannot edit the scorer" holds by construction | `optimizer/isolation.py` | 1e |
 | 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the judge **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
-| 5 | **One refusal locus** — `SarolRunner.__init__` raises absent an explicit prefix factory, so all **21** construction sites are either containerized or visibly opted out. Offline tests opt out with an **injected fake prefix**, never a boolean | `optimizer/adapter.py`, `canary.py`, `scripts/run_baseline.py` | 1f, **OQ7** |
+| 5 | **One refusal locus** — `SarolRunner.__init__` raises absent an explicit prefix factory. ⚠ **22 sites, not 21**, and it must cover three reach-paths (`build_components`, direct construction, and a pre-built `components=` dict that skips the gate). ✅ Only **3 ship**; the other 19 are selftests, and `canary.py` already accepts an injected runner. Offline tests opt out with an **injected fake prefix**, never a boolean | `optimizer/adapter.py`, `dispatcher.py`, `canary.py`, `scripts/run_baseline.py` | 1f, **NF11**, **OQ7** |
 | 6 | **The isolation module** — scope predicate, both mount-set builders, the canonical host→container path map, the env allowlist, the version-addressed cwd builder, the configuration hash. ⚠ Shaped so the boundary machinery lifts into the shared engine for crc; only the mount *contents* are ours | new `optimizer/isolation.py` | 2a, 2b, 3, **OQ4** |
 | 7 | **Trace persistence** — the streamed session JSON written beside the verdict as `trace_ref`, because `find_transcript` globs the *host's* `~/.claude/projects` and goes blind in a container | `optimizer/adapter.py` | 1d |
 | 8 | **Per-iteration held-out staging** — `val_inputs` accepts `Callable[[int], RunInputs]`, mirroring `train_inputs` in the same signature; the Runner asserts the live verdict path is absent before dispatch | `engine/loop.py` (upstream), `optimizer/adapter.py` | 0a, **OQ2** |
-| 9 | **Fail-and-feed on a no-verdict dispatch** — a distinguishable delivery-failure count keyed **only** on `UNREADABLE:`, surfaced to the optimizer as the iteration's outcome, never scored as program quality and never summed into the mistake corpus | `optimizer/adapter.py` | 0b, **OQ5** |
+| 9 | **Fail-and-feed on a no-verdict dispatch** — a distinguishable delivery-failure count keyed **only** on `UNREADABLE:`, handed to the engine's **newly-landed** stop-reason + partial-run channel (`82f547d`) rather than a new one, never scored as program quality and never summed into the mistake corpus | `optimizer/adapter.py` | 0b, **OQ5** |
 | 10 | **A configuration pin under `runtime_pins`** covering image **digest**, the rendered mount triples with roles, network policy, egress allowlist and session flags — read from `git show HEAD:<manifest>`, not the worktree | `manifest.json`, `optimizer/isolation.py` | 3 |
 | 11 | **A run-start reset** — archive `meta-learnings.md`, the five `findings/iter-*.md` and `iter/` to the run archive, then assert absent; the VM runner mints the run id. ⚠ **Not** a per-run git clone (**OQ9**) | `run_hillclimb_vm.sh`, `optimizer/isolation.py` | 4 |
 | 12 | **The sentinel negative control** — sentinels planted in gold, the benchmark tree, `iter/` and the optimizer's findings; a judge must **fail** to read each, and the control has a negative control of its own | `isolation/negative_control.py` + tests (upstream) | 1g |
 
-**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin) **plus** one backward-compatible type widening in `engine/loop.py` for item 8. That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
+**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin), **plus** one backward-compatible type widening in `engine/loop.py` for item 8, **plus** making `--dangerously-skip-permissions` a caller choice in `engine/claude_wrapper.py:130` — currently unconditional, so item 2's deny-by-default layer does not exist until it lands. That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
 
 **What we are deliberately not building** is its own section (*Deliberately out of scope*), and three things left it on 2026-09-14: the driver **session** (item 4 replaces it), the per-run **git clone** and `optimizer/run_clone.py` (item 11 replaces it), and the tag-scoped **settings file** (**OQ6** retires it).
 
@@ -144,10 +154,29 @@ land before any number means anything.
 
 ## What the engine already gives us
 
-All verified present in the SHA this repo pins (`82f547d`), which is an ancestor of engine `main`
-and byte-identical to it under `isolation/`. Two engine plans, both **Completed**:
-`2026-07-22-isolation-docker-substrate.md` (landed `de07032`, VM smoke 104 passed / 0 skipped) and
-`2026-08-10-optional-edit-agent-mounts.md` (landed `dcefe1e`, 212 passed).
+⚠ **Re-verified 2026-09-14 against engine `main` @ `c2dd0b3`** — three commits past the `82f547d`
+this repo pins, and the line numbers below moved again. Cite the SHA with the line, always.
+Two engine plans, both **Completed**:
+`2026-07-22-isolation-docker-substrate.md` (landed `de07032`, **VM smoke 104 passed / 0 skipped** —
+a real VM run, and the 0-skip is the pass signal) and `2026-08-10-optional-edit-agent-mounts.md`
+(landed `dcefe1e`). ⚠ **The second citation was misleading and is corrected here.** Earlier drafts
+quoted it as "212 passed". The real figure is **212 passed / 15 skipped, on the Mac — and the 15
+skips are the Docker tests.** That plan had **no VM smoke at all** ("every phase was Mac-local"), and
+its own text concedes the writable-mount ownership check is *"on MODE BITS only … a proxy for the
+property, not the property"*, with cross-uid proof deferred to crc. So the mount plumbing this plan
+builds on is proven by construction and by unit test, **not** by a container run. ⚠ Relatedly: the
+engine's negative-control suite has **not been re-verified since a 2026-08-21 refactor** — the last
+real-Docker verification is 2026-08-05, before it. Quoting a pass count from a suite whose last real
+run predates its own refactor is the green-by-absence rule applied to our evidence, so **V2a-seal
+re-runs it rather than citing it.**
+
+⚠ **Two capabilities landed upstream on 2026-09-14, after this plan was written, and both retire work
+it specified.** See Phase 0b (OQ5) and Phase 0a (OQ2):
+
+| Landed | What it gives us |
+|---|---|
+| `82f547d` **LoopStop hardening** | a stop now carries a machine-readable `reason` (`loop.py:63`, categories incl. `agent_session_failed`, `probe_validation_failed`) **and the partial run comes out with it** — the iteration loop is wrapped so a mid-run stop is enriched for reporting, never swallowed (`:544-558`), and the just-committed version is excluded from the reported frontier as untrustworthy. Probe scoring moved inside the validation block precisely so *"a judge that emits a malformed verdict must become a controlled stop, not an uncaught crash."* ⇒ **this is OQ5's feed-the-optimizer channel; do not build a second one.** |
+| `ee26d80` **version-addressed manifest loader** | `manifest_for_version: Callable[[str], ProgramManifest] \| None` (`loop.py:217`), resolved per SHA and **failing closed** — never falls back to a stale entry set. ⇒ a second precedent for OQ2's per-iteration callable, in the same file. |
 
 | Capability | Where | What it means for us |
 |---|---|---|
@@ -155,9 +184,9 @@ and byte-identical to it under `isolation/`. Two engine plans, both **Completed*
 | Mount rendering | `isolation/docker_prefix.py::build_docker_cmd_prefix` (`:444-464`) | generic `extra_ro_mounts`, `writable_mounts`, `workdir`, `env`, `container_user`, `adc_path` — **the judge's mount set is expressible today with zero engine diff** |
 | Plural editable set | `EditAgentMounts.editable_files` (`:96-112`) | went plural **for paper-trail by name**: its review found *"paper-trail's optimizable program is a five-file Markdown globset a singular `editable_file_rel` cannot express"*, and Phil's recorded decision was *"paper-trail is a future consumer and the shape is designed for it"* |
 | Network profiles | `isolation/open_profile.py:68-72` | `network_policy="open"` + `adc_path=None` + `CLAUDE_CODE_OAUTH_TOKEN` — paper-trail's documented answer |
-| Negative-control harness | `isolation/negative_control.py` (`run_probe` `:44-58`, fixture `:102`), `docker_available()` | a direct `docker run … cat <path>` probe is decisive **for the path it probes** — ⚠ not for the seal, since a broad mount at an unexpected target defeats a path list (see V2a-seal); skips cleanly with no daemon |
+| Negative-control harness | `isolation/negative_control.py` (`run_probe` `:266`, fixture `:102`), `docker_available()` `:44`; 15 tests in `tests/test_isolation_negative_control.py`, all VM-only via `skipif` | a direct `docker run … <probe>` is decisive **for the path it probes** — ⚠ not for the seal, since a broad mount at an unexpected target defeats a path list (see V2a-seal). ⚠ **And it does not cover read denial at all, which strengthens 1g rather than weakening it.** Verified 2026-09-14: `test_sealed_file_is_unreachable` (`:85`) asserts `test ! -e` — the file **is not in the container namespace**, which proves non-mounting, not that a reachable path cannot be read. And `test_train_only_read_scope` (`:173`), the one test whose *name* promises read scoping, is a **positive** control asserting `returncode == 0` on both probes. So across 15 negative controls **nothing asserts that a reachable-but-forbidden path fails to open.** That is exactly the sentinel this plan adds, and it is now evidenced rather than claimed. |
 | Materialised path threading | `engine/loop.py:192`, `:426-431` + `tests/test_materialized_path_threading.py` | ✅ **already done** — the per-iteration snapshot path reaches `agent.run`. ⚠ The engine README saying otherwise is six weeks stale; the first draft cited it over code |
-| A built consumer-side container agent | rad-eval `src/optimizer_loop/docker_agent.py` (198 lines, on `main`, armed run 2026-08-05, $4.13) | the pattern to copy for **both** principals: prefix from the engine, fresh temp writable staging, copy-back, reduced tool set. ⚠ Its provisioning `chown -R`s the clone and leaves Write/Edit enabled, so the boundary is the **mount set**, not the ownership — take the mounts, drop the chown |
+| A built consumer-side container agent | rad-eval `src/optimizer_loop/docker_agent.py` (198 lines, on `main`, armed run 2026-08-05, $4.13) | the pattern to copy for **both** principals: prefix delegated wholly to the engine's `build_docker_cmd_prefix` (it builds no docker flags itself), fresh temp writable staging, copy-back into the live tree, reduced tool set (`Read, Write, Edit, Bash` — `WebFetch` dropped for container mode specifically). ⚠ **Correction, 2026-09-14: the "drop the chown" advice was about code that is not there.** `docker_agent.py` contains **no chown** — two `chmod 0o666` calls under a `0700` temp root, nothing else. The `chown -R` belongs to the **non-Docker sudo path** (`scripts/provision_loop_clone.py:123-128`), which Docker mode explicitly retires: *"the container's own non-root user makes the optimizer OS account/sudo unnecessary."* The 2026-08-05 run used a clone owned by the ordinary user. ✅ The conclusion still holds — the boundary **is** the mount set — but for the reason that only two files are mounted `:rw`, not because ownership was worked around. ⚠ **Two real defects not to copy:** it never cleans up `staging_root` (no `rmtree`, no `finally`), so every iteration leaks a temp dir holding the edited program; and see the `denied=0` row in the root-cause table. |
 | Read-only frozen checkout | `engine/materialize.py:100-107` | `.git`-free, chmod'd read-only **files and directories** — no git-history channel, nothing writable |
 | Injection seam | `engine/claude_wrapper.py::run(cmd_prefix=…, extra_env=…)` | Docker slots in as a `cmd_prefix`, exactly parallel to rad-eval's `sudo -u optimizer env …`. No wrapper change |
 | Edit-artifact contract | substrate plan, item 3 | frozen tree read-only; *more-specific* writable mounts overlay only the editable files; harness copies out before and back after, then commits |
@@ -289,6 +318,7 @@ because it says *re-aim what exists*, not *build another one*.
 | The scorer | `verify_contract_files` re-hash | the ten markdown entries; **no `.py` is in the manifest at all** |
 | The program's semantics mid-run (**NF10**) | `ContractGuardedAgent`'s post-agent guard | the `contract_file=True` entries — the files that *cannot* change. The misaim is a **moment**, not a file |
 | *(caught in design)* the pins both plans key gates on | `runtime_pins` survives a re-freeze | untested implementation detail of a script neither gate owns |
+| ⚠ **the armed run's own safety number** (found 2026-09-14, and the sharpest instance yet) | the `denied=` counter, which on the **hooked** path counts real per-call refusals | **container mode has no hooks at all**, so `denied` is 0 *by construction*. The 2026-08-05 readback reads `denied=0` as *"the agent hit zero sandbox denials (stayed inside the allowed tool/import list)"* — a claim the mechanism cannot support. Structurally confirmed: the container's cwd is the frozen checkout, which carries only manifest entries — no `.claude/`, no hooks — so no hook can fire. ⚠ **This is inside the evidence this plan cites as its proof.** |
 
 ✅ **Every phase below is that shape**, which is why this plan is small: Phase 1 uses the engine's
 existing mount params, Phase 2 re-aims `val_isolation_problem` and a constructor parameter production
@@ -302,18 +332,33 @@ Verified on disk. Only the ones that still steer a decision.
 **NF1 — `.claude/settings.json` does not exist anywhere.** `git ls-files | grep -i settings` empty;
 `find . -name 'settings*.json'` empty; `.claude/` holds only `commands/ prompts/ scripts/ skills/
 specs/`. So `--setting-sources project` finds no hook config and **there is no PreToolUse hook in the
-judge's path at all** — the trade that bought the wide cwd bought nothing. ⚠ It also silently retires
+judge's path at all** — the trade that bought the wide cwd bought nothing.
+
+⚠ **And the comment that justifies the wide cwd is itself wrong — corrected 2026-09-14.**
+`_stage_command` (`adapter.py:722-723`) explains the real checkout as: *"'project', not '' — ''
+silently disables the whole hook stack. Note this reads `.claude/settings.json` from the *cwd*, which
+is why cwd is a real checkout."* There is no `.claude/settings.json`, so that is not why. The **real**
+dependency is `.claude/commands/sarol-eval-item.md` — the slash-command definition, which is *not* a
+manifest entry and therefore **not in the materialised tree** (see NF11 and `adapter.py:642-645`:
+*"A real checkout, not the materialized tree… the orchestrator is deliberately not in the fileset"*).
+⚠ **This matters concretely for Phase 1:** a container image built to satisfy the comment would ship a
+settings file and still fail to resolve the slash command. ✅ It also cross-checks NF1 from the other
+side — rad-eval proves the same point structurally: its container cwd is the frozen checkout, which
+carries only manifest entries, so *no hook can fire in a container* regardless of the flag. That is
+the structural basis for OQ6 retiring the settings file on the judge's path. ⚠ It also silently retires
 a specified control: `NEXT.md:463` says a tag-scoped settings file *should* be committed. Retiring it
 is defensible (the container supersedes it) but must be a recorded decision — ✅ **OQ6 records it**
 (retired 2026-09-14, with the hook *capability* explicitly not retired with the file) — because
 reasoning a requirement away in passing is this plan's own root cause.
 
-**NF2 — the held-out path has no iteration signal.** ⚠ **Line numbers re-verified 2026-09-14 against
-engine `6d621ac`; the earlier citations (`:193-194`, `:255`, `:345`) had drifted.**
-`engine/loop.py:189-190` types `train_inputs: RunInputs | Callable[[int], RunInputs]` but
-`val_inputs: RunInputs`, documented at `:251` as *"fixed for the whole run, as always"* — the docstring
-says `val_inputs` *"is unaffected"* by the per-iteration TRAIN work — and `:335` reuses the one object
-every iteration, as does the probe at `:410`. Both batch ids are iteration-free (`dispatcher.py:898`,
+**NF2 — the held-out path has no iteration signal.** ⚠ **Line numbers have now drifted twice; these
+are read at engine `main` @ `c2dd0b3` and must be re-checked against the pinned SHA at implementation
+time.** `run_loop` is at `engine/loop.py:183`. It types `train_inputs: RunInputs | Callable[[int],
+RunInputs]` (`:193`) but `val_inputs: RunInputs` (`:194`), documented at `:257` as *"fixed for the
+whole run, as always"* — the docstring says `val_inputs` *"is unaffected"* by the per-iteration TRAIN
+work — and `:377` reuses the one object every iteration, as does the probe at `:475`. (For the record
+of how much this moves: the same four facts were at `:193-194`/`:255`/`:345`, then
+`:189-190`/`:251`/`:335`/`:410`, now `:193`/`:194`/`:257`/`:377`/`:475`.) Both batch ids are iteration-free (`dispatcher.py:898`,
 `:816`). Proven on disk: batches `i1` and `i5` point claim `1059-13` at the identical staging dir, and
 one verdict file carries mtime `06:51` against a directory created `01:42` — overwritten in place.
 ⇒ staging cannot be keyed on the iteration without an engine change. ✅ **OQ2 takes that engine
@@ -335,9 +380,13 @@ Adopt its hygiene, invert its scope. All the flags exist on the installed CLI (2
 
 **NF6 — the judge inherits the optimizer's whole environment.** `headless_claude_invoke`
 (`adapter.py:470-478`) calls `subprocess.Popen(..., cwd=…, start_new_session=True)` with **no
-`env=`**. ⚠ Do not over-claim it: `_gold_root()` (`parse_verdict.py:47-51`) falls back to
-`~/.paper-trail/gold` with **no env var set at all**, so scrubbing `PAPER_TRAIL_GOLD_DIR` buys
-nothing against gold — the path is hard-coded. `env -i` closes every *other* variable; the gold
+`env=`** — confirmed 2026-09-14, zero `env=` hits in the whole file. ⚠ Do not over-claim it, and ⚠
+**the earlier wording here was wrong.** `_gold_root()` (`parse_verdict.py:48-52`) *does* read an
+override, `PAPER_TRAIL_GOLD_DIR` (`:49`), before falling back to `~/.paper-trail/gold`. The earlier
+text said there was "no env var at all", which is false. What is true is the operative half:
+**nothing in the repo ever sets it** — every occurrence across the tree is a read or prose — so
+scrubbing it from a child environment buys nothing against gold, because the fallback is hard-coded
+and deterministic. Same conclusion, accurate premise. `env -i` closes every *other* variable; the gold
 boundary has to be the mount set.
 
 **NF8 — the driver is optimizer-editable, and stays fully so.** It is the 10th manifest entry at
@@ -362,6 +411,52 @@ lands, so editing that prose changes nothing — the read fails regardless. Sort
 prohibitions, every one an edit can actually defeat (never ask, never write the verdict yourself,
 never repair, never retry, never pre-read the paper) is **measurement integrity**, not leakage. So
 the post-edit check belongs to Plan A and Gate F, and this plan does not carry it.
+
+**NF11 — the refusal census was wrong, and its shape was inverted** (new 2026-09-14, from a direct
+code audit). This is the correction with the most reach in this round, because Phase 1f, OQ7 and gate
+V2c were all sized against it.
+
+- **The count is 22, not 21.** 19 in `adapter.py`, 1 in `canary.py:257`, 1 in
+  `scripts/run_baseline.py:119`, **and 1 the earlier census missed: `dispatcher.py:554`**, a direct
+  construction inside `build_components` itself. ⚠ A gate asserting the count equals **21** therefore
+  goes red on day one — which is worse than a wrong number, because the first response to a red
+  census is to assume the tree grew a new judge.
+- **There is a 23rd site reaching the same refusal, invisible to a text search.**
+  `adapter.py:2770` constructs `_RealInvokerRunner` (declared `:2739`), a `SarolRunner` **subclass**
+  that overrides only `_stage_command`, **not `__init__`** — so a refusal in `__init__` fires there
+  too. Any census implemented by grepping `SarolRunner(` will not see it. Count subclasses, or count
+  at the constructor.
+- ⚠ **And 19 of the 22 are selftest-only.** Every `adapter.py` site is inside `_selftest()`
+  (begins `:1642`; first construction `:1742`). **Exactly three sites can run outside a test:**
+  `dispatcher.py:554`, `canary.py:257`, `scripts/run_baseline.py:119`. So the earlier framing —
+  `adapter.py` as *"the largest surface"*, carrying 19 opt-outs — is 19 units of ceremony over **zero**
+  production risk, while the three sites that actually ship got a sentence each. The risk is inverted.
+- ✅ **One of the three needs no new mechanism.** `canary.py:257` is already
+  `run = runner or adapter.SarolRunner(...)` — an injection seam exists today.
+- ⚠ **`build_components` is bypassable through its own entry point**, which the earlier two-way
+  partition (goes-through-`build_components` vs direct-construction) does not model.
+  `run_optimization` takes `components: dict | None = None` (`dispatcher.py:604`) and does
+  `parts = components or build_components(...)` (`:748`). A caller supplying `components=` skips the
+  gate entirely — and the suite already does exactly that (`:1222`). So there are **three** paths, not
+  two, and the refusal has to sit at the constructor to cover all of them.
+- **`val_isolation_problem` is module-level** (`dispatcher.py:467`), *called* from inside
+  `build_components` at `:549` with the raise at `:550-551` — not defined there, and independently
+  callable (the selftests call it directly at `:1571-1589`).
+
+**NF12 — two cost/topology facts the plan states wrongly** (new 2026-09-14).
+
+- **A claim costs one nested session today, not three.** `profiles.py:67` sets
+  `IMPLEMENTED_STAGES = ("adjudicator",)`, and the driver aborts `STAGE_NOT_IMPLEMENTED` for the other
+  stages. `adapter.py`'s "three nested Claude Code sessions one claim costs" describes the `agentic` /
+  `paperclip` profiles, which **cannot run today**. Any arithmetic keyed to three stages is describing
+  an unrunnable configuration.
+- **The driver→subagent hop is prose, not structure.** `.claude/commands/sarol-eval-item.md:134` says
+  *"Dispatch the filled text as the entire prompt of exactly one general-purpose subagent"* — and that
+  is the entire enforcement. The file has **no YAML frontmatter and no `allowed-tools`**, and there is
+  **no `.claude/agents/` directory**; "general-purpose subagent" is the built-in Task agent. A driver
+  that inlined the work would emit a verdict that looks identical. ✅ This **strengthens OQ1**: cutting
+  the driver removes an unenforced convention, not a structural guarantee, so it is a smaller change
+  than the plan treated it as.
 
 ---
 
@@ -400,8 +495,9 @@ previously recommended the consumer-side archive and was overruled, so what foll
 form, not the alternative.
 
 Widen `val_inputs` to `RunInputs | Callable[[int], RunInputs]` in `engine/loop.py` (`:190`), mirroring
-`train_inputs` (`:189`) five lines above it, and resolve it at `:335` and the probe at `:410` the way
-`:333` already resolves TRAIN. Backward compatible: a plain `RunInputs` still works, so the engine's
+`train_inputs` (`:193`) one line above it, and resolve it at `:377` and the probe at `:475` the way
+`:375` already resolves TRAIN — line numbers at engine `c2dd0b3`, and ⚠ re-read them against the
+pinned SHA, since they have moved twice (NF2). Backward compatible: a plain `RunInputs` still works, so the engine's
 other two consumers need no change. Held-out staging is then keyed on the iteration and **starts
 fresh** — which is the property Phil asked about and the one NF2 proves is missing today (batches `i1`
 and `i5` point claim `1059-13` at the identical directory; one verdict file carries mtime `06:51` in a
@@ -417,8 +513,10 @@ redundant with the scoping — it is the green-by-absence rule applied to this p
 directory that silently was not iteration-scoped (a consumer passing the plain form, a probe path
 passing the wrong index) must **fail**, not pass quietly.
 
-⚠ **One seam decision owed at implementation, not here.** `:410` probes a *newly materialised*
-program; which iteration index it passes needs stating rather than inferring.
+⚠ **One seam decision owed at implementation, not here.** `:475` probes a *newly materialised*
+program; which iteration index it passes needs stating rather than inferring. ✅ The engine's own
+`manifest_for_version` (`:217`) is the pattern to copy for the failure posture: resolve per version
+and **fail closed**, never fall back to a stale value.
 
 **0b. Refuse to score a dispatch that produced no verdict** (§4g item 5). ⚠ **This is the
 load-bearing step of Phase 0**, because NF8 leaves the delivery path editable: nothing prevents a
@@ -467,8 +565,18 @@ silent retry would hide the very defect the optimizer is supposed to see and rep
   the mistake corpus and is never reported as a program-performance number. A malformed-but-present
   verdict stays `invalid_output` and stays scored — that is a result about the program.
 - **The iteration returns a failure signal, not a misleading score.** Rather than the total-coverage
-  path returning 0.0 for all 50 (`adapter.py:1414-1435`), the iteration surfaces the delivery failure
-  to the optimizer as its outcome. The optimizer reads it, diagnoses the broken delivery, and fixes it.
+  path returning 0.0 for all 50 (`adapter.py:1414`, `:1428-1433`), the iteration surfaces the delivery
+  failure to the optimizer as its outcome. The optimizer reads it, diagnoses the broken delivery, and
+  fixes it. ✅ **Use the channel the engine landed on 2026-09-14 rather than building one**
+  (`82f547d`): `LoopStop` now carries a machine-readable `reason` (`engine/loop.py:63`) with named
+  categories including `agent_session_failed` and `probe_validation_failed`, the iteration loop is
+  wrapped so a mid-run stop **brings the partial run out with it** (`:544-558`) instead of losing it,
+  and probe scoring moved inside the validation block specifically so *"a judge that emits a malformed
+  verdict must become a controlled stop, not an uncaught crash"* — which is this failure class
+  exactly. It also excludes the just-committed version from the reported frontier as untrustworthy,
+  which is the right default for a delivery failure. ⚠ So Phase 0b's job shrinks to **classifying**
+  the failure and handing it to that channel; inventing a parallel reporting path would be a second
+  mechanism beside a working one, which is this plan's own root cause.
 - **No cache trap, no count desync.** With no retry, the probe-cache hazard (a cached empty result
   re-served, `dispatcher.py:306-320`) and the session-count-vs-claim-count desync (batch aggregation,
   `adapter.py:1111-1122`) both vanish — they were artifacts of the retry option, now dropped.
@@ -554,7 +662,12 @@ Two separate holes:
 - **Network policy is required and has no default.** `"none"` — what the existing controls use —
   would deny the judge its own API calls, so it would fail rather than be isolated. Use
   **`network_policy="open"`** + **`adc_path=None`** + `CLAUDE_CODE_OAUTH_TOKEN`
-  (`isolation/open_profile.py:68-72`). A paper-trail allowlist profile built on the generic
+  (`isolation/open_profile.py:68-72`). ⚠ **Two traps verified 2026-09-14.** `adc_path` defaults to a
+  **real credential path**, not `None` (`gcp_credentials.py:35`), so *omitting* it gives the
+  credential-bearing shape — `None` must be passed explicitly. And `adc_path=None` is honoured **only
+  on the `"open"` policy**; under `"vertex-only"` it is silently coerced back to the default
+  (`:557-560`). Our tier is `"open"`, and the open profile was in fact built for *"paper-trail's
+  `CLAUDE_CODE_OAUTH_TOKEN`-only tier"* — so this works, but state it as policy-specific, not general. A paper-trail allowlist profile built on the generic
   host-allowlist primitive is **ours to own** (Phil, 2026-08-18), not an addition to the engine's
   registry.
 - **The token lands in host argv and in a log file.** The renderer only emits `-e KEY=VALUE`
@@ -564,6 +677,13 @@ Two separate holes:
   this phase**, not a follow-up. ⚠ It fixes host argv and log disclosure only; the token stays
   readable **inside** the session. Denying that needs a credential broker — out of scope, stated so
   nobody reads this as solved.
+
+⚠ **The flag we want to replace is not ours to pass — found 2026-09-14, and it makes this a
+prerequisite.** `--dangerously-skip-permissions` is set unconditionally by the **shared wrapper**
+(`claude_wrapper.py:130`), not by the consumer, so "we will use different flags" is an upstream change
+(a **sixth** engine file), not a local choice. Until it lands, a container session has no hook layer
+*and* no permission gate: Write/Edit/Bash are ungated within the mount set. The mount set still holds
+— but the second layer this phase claims does not exist yet.
 
 ⚠ **Also adopt deny-by-default inside the container**, replacing `--dangerously-skip-permissions`:
 `--permission-prompts none` (`claude --help`: *"nobody: anything that would prompt is denied
@@ -653,14 +773,28 @@ own, not a slash command a driver runs** — the prompt arrives fully rendered o
 no second session, no `Task`, and the container boundary and the session boundary are the same
 boundary.
 
+⚠ **A writable mount cannot be nested inside a read-only one on current Docker** — verified by
+rad-eval's Deviation 1 (2026-07-28, Docker 29.x/runc refuses a mountpoint that does not pre-exist
+inside a `:ro` mount). The engine's edit-artifact contract is often summarised as *"more-specific
+writable mounts overlay the editable files"*, and that is **not** how the working implementation does
+it: rad-eval puts its writable change-note at a **sibling** path (`/workspace/writable/…`), outside
+the `:ro` tree. Our staging mount must do the same. ⚠ Related: bind-mounting a host path that does not
+exist creates a **directory** at the mount point, silently breaking the overlay — so the host side
+must `touch` real files first.
+
 *Gate:* **two claims × two program versions in one process** (V2d). One prefix reused across either
 axis is the failure mode — it silently points a v1 dispatch at v0's bytes, or claim B at claim A's
 staging, and both produce plausible verdicts.
 
 **1d. Keep the judge's trace** (new; the first draft lost it). `find_transcript`
-(`adapter.py:427-438`) globs the **host's** `~/.claude/projects`. Inside a container that directory
+(`adapter.py:438-439`) globs the **host's** `~/.claude/projects`. Inside a container that directory
 is the container's, and it is discarded with the container — so containerizing silently ends judge
-traceability, which is how the 61% stale-verdict contamination was found in the first place. Cheapest
+traceability, which is how the 61% stale-verdict contamination was found in the first place.
+⚠ **And "silently" is literal — verified 2026-09-14.** The lookup is guarded: `trace_ref` starts
+`None`, the copy is behind `if src is not None`, and an `OSError` resets it to `None`
+(`adapter.py:874-884`). So inside a container every `trace_ref` becomes `null` **while the run still
+reports `status: ok`**. A gate that checks run status would not notice. The gate therefore has to
+assert `trace_ref` is **non-null**, not that the run succeeded. Cheapest
 fix, no new plumbing: the adapter **already holds the streamed session JSON in memory**
 (`:469-503`); persist it beside the verdict and record it as `trace_ref`. ⚠ Do this in the same
 change as 1c, not after — a containerized run with no trace cannot be audited, and the audit is the
@@ -671,10 +805,16 @@ lines, on `main`, actually run: prefix delegated to the engine, a fresh temp wri
 copy-back into the live tree afterwards, a reduced tool set. What it gives paper-trail that a
 permission rule cannot: the scorer, gold, `iter/`, and the manifest are **not in the optimizer's
 mount set**, so "the optimizer cannot edit the scorer" holds by construction rather than by a rule
-the optimizer is asked to respect. ⚠ **A literal port does not give us the write boundary.**
-rad-eval's provisioning `chown -R`s the whole clone to the sandbox account and leaves Write/Edit
-enabled, so its own boundary is the mount set, not the ownership. Take the mount discipline and drop
-the chown.
+the optimizer is asked to respect. ⚠ **Correction 2026-09-14 — the earlier version of this warning described code that is not there.**
+It said rad-eval's provisioning `chown -R`s the clone to a sandbox account. `docker_agent.py` has
+**no chown**: two `chmod 0o666` calls under a `0700` temp root, nothing more. The `chown -R` is in the
+**non-Docker sudo path** (`scripts/provision_loop_clone.py:123-128`), which Docker mode retires
+outright — *"the container's own non-root user makes the optimizer OS account/sudo unnecessary"* — and
+the 2026-08-05 run used an ordinary-user clone. ✅ So the conclusion stands and gets simpler: **there
+is no chown to drop.** The boundary is the mount set because exactly two files are mounted `:rw`.
+⚠ **What to actually avoid copying:** `staging_root` is never cleaned up — no `rmtree`, no
+`TemporaryDirectory`, no `finally` — so every iteration leaks a temp dir holding the edited program and
+copies of its reference docs. Ours must clean up.
 
 ⚠ **Docker mode writes zero audit rows.** rad-eval's Docker agent discards the engine ledger
 (`docker_agent.py:84`), so the engine's four tripwires — including the one that halts when a
@@ -682,15 +822,29 @@ final-evaluation row appears mid-loop, which *is* the dispatcher principle expre
 **blind in container mode**. Going container-first inherits that blind spot knowingly. Recorded here
 so it is a decision, not a surprise; fixing it is engine work.
 
-**1f. One refusal locus, covering every construction site.** ⚠ **There are 21 direct `SarolRunner`
-constructions, not the 7 the first draft counted** — 19 in `adapter.py`, one in `canary.py`, one in
-`scripts/run_baseline.py`. A gate inside `build_components` protects the paths that go through
-`build_components` and silently does not apply to the rest, which is worse than failing: the widest
-judge in the system (the baseline recut) would run ungated while the suite reports green. So the
-refusal lives in **`SarolRunner.__init__`**: absent an explicit prefix factory it raises, and an
-**offline test** may opt out by passing an explicit sentinel plus an injected fake prefix. That makes
-every one of the 21 sites either containerized or visibly opted out, and makes the count itself
-assertable (**V2c**).
+**1f. One refusal locus, covering every construction site.** ⚠ **Re-counted 2026-09-14 — see NF11.
+The number is 22, and 19 of them are selftests.** 19 in `adapter.py` (all inside `_selftest()`), one
+in `canary.py:257`, one in `scripts/run_baseline.py:119`, and one the earlier census missed:
+`dispatcher.py:554`, inside `build_components` itself. Plus a 23rd that reaches the same refusal
+without matching a text search — `_RealInvokerRunner` (`adapter.py:2770`), a subclass that does not
+override `__init__`.
+
+**The refusal still lives in `SarolRunner.__init__`, and the reason is now stronger, not weaker.**
+There are **three** ways to reach a Runner, not two: through `build_components`, by direct
+construction, and by handing `run_optimization` a pre-built `components=` dict that skips
+`build_components` altogether (`dispatcher.py:604`, `:748`; already exercised at `:1222`). Only the
+constructor sits under all three. A gate in `build_components` would miss the baseline recut *and*
+the `components=` path while the suite reported green.
+
+⚠ **But the effort is not where the plan put it.** The three sites that can run outside a test are
+`dispatcher.py:554`, `canary.py:257` and `scripts/run_baseline.py:119` — and `canary.py` **already
+accepts an injected runner** (`run = runner or adapter.SarolRunner(...)`), so it needs no new
+mechanism at all. That leaves **two** production sites to wire. The 19 `adapter.py` sites are
+selftest ceremony: real work to type, but zero production risk, and they should be described that way
+rather than as *"the largest surface"*.
+
+✅ Every site is then either containerized or visibly opted out, and the count is assertable
+(**V2c**) — ⚠ **against 22, and counting subclasses, not against 21 by grep.**
 
 ⚠ **No opt-out for anything that produces or guards a reportable number.** That rules out both
 non-test sites: `scripts/run_baseline.py` **produces** Plan A's baseline recut, and `canary.py`
@@ -1095,10 +1249,11 @@ manifest's entry count or scope, so the five count/scope selftests are untouched
 (NF8): this is a default the optimizer may rewrite, not a contract.
 
 **Shared engine** — the `agentic-label-opt` clone (⚠ **not** at the `~/code/…` path this plan gave;
-it sits beside the other personal-projects checkouts. Local `main` is `6d621ac`, three behind
-`origin/main`; both `c2dd0b3` and the pinned `82f547d` are present, so the citations below resolve) —
-⚠ **five files now, where the first draft claimed one and the second claimed four** — the fifth is
-`engine/loop.py`, added by OQ2:
+it sits beside the other personal-projects checkouts. ⚠ **Pulled current 2026-09-14: local `main`
+is now `c2dd0b3`** (was `6d621ac`, three behind). The pinned `82f547d` is an ancestor, so the
+citations resolve — but the line numbers moved, and are re-stamped throughout against `c2dd0b3`)
+⚠ **six files now** — the first draft claimed one, the second four; `engine/loop.py` was added by
+OQ2 and `engine/claude_wrapper.py` by the 2026-09-14 code audit:
 - **`isolation/docker_prefix.py`** (small, real) — a by-name env form
   (`inherit_env=(...)` → `--env NAME`) so the OAuth token stops appearing in host argv (`:437-439`)
   and in the wrapper's recorded command (`claude_wrapper.py:342-365`). A prerequisite, not a
@@ -1109,15 +1264,22 @@ it sits beside the other personal-projects checkouts. Local `main` is `6d621ac`,
 - **`tests/test_isolation_negative_control.py`** — the matching assertions, including the negative
   control that mounts a tree at an unexpected target and must **fail**. A control with no test
   asserting it is exactly the inert-mechanism pattern.
+- **`engine/claude_wrapper.py`** (⚠ **new 2026-09-14, and a prerequisite**) — `:130` passes
+  `--dangerously-skip-permissions` unconditionally for every consumer. Phase 1b's deny-by-default
+  layer cannot exist until this is a caller choice. Until then a container session has no hook layer
+  and no permission gate; the mount set is the only boundary.
 - **`isolation/Dockerfile`** + **`isolation/README.md`** — re-pin `CLAUDE_CODE_VERSION` from 2.1.218
   to the host version and say so. ⚠ The README is also the file whose six-week-stale sentence about
   `iter_n` outranked live code in this plan's first draft; correcting it is part of the change, not
   tidying.
 
 - **`engine/loop.py`** (⚠ **new as of OQ2, 2026-09-14**) — widen `val_inputs` from `RunInputs` to
-  `RunInputs | Callable[[int], RunInputs]` (`:190`), mirroring `train_inputs` (`:189`) in the same
-  signature, and resolve it at `:335` and the probe at `:410` the way `:333` already resolves TRAIN.
-  Update the docstring at `:251`, which currently states the opposite (*"`val_inputs` is unaffected
+  `RunInputs | Callable[[int], RunInputs]` (`:194` at engine `c2dd0b3`), mirroring `train_inputs`
+  (`:193`) in the same signature, and resolve it at `:377` and the probe at `:475` the way `:375`
+  already resolves TRAIN. ⚠ **Re-read these against the pinned SHA before editing — they have moved
+  twice already** (NF2). ✅ There is now a second precedent in the same file: `manifest_for_version`
+  (`:217`), a per-version callable that **fails closed** rather than falling back to a stale value —
+  copy that failure posture. Update the docstring at `:257`, which currently states the opposite (*"`val_inputs` is unaffected
   (fixed for the whole run, as always)"*). Backward compatible — a plain `RunInputs` still works, so
   the other two consumers need no change. Tests: an iteration-keyed VAL batch reaches
   `runner.run`, and the plain form still does.
@@ -1249,9 +1411,10 @@ the engine change.** Phil: *"We should have folders based on iteration, right? �
 its own iteration folder that starts fresh. Is that not what we're doing?"*
 
 ⚠ **Direct answer: no — not on the held-out path, and that asymmetry is the defect.** TRAIN does get
-per-iteration inputs; VAL does not. Verified in the engine at `6d621ac`: `engine/loop.py:189-190`
-types `train_inputs: RunInputs | Callable[[int], RunInputs]` but `val_inputs: RunInputs`, documented
-at `:251` as *"fixed for the whole run, as always"*, and `:335` (plus the probe at `:410`) reuses the
+per-iteration inputs; VAL does not. Verified in the engine at `c2dd0b3` (`run_loop` at `:183`):
+`engine/loop.py:193-194` types `train_inputs: RunInputs | Callable[[int], RunInputs]` but
+`val_inputs: RunInputs`, documented
+at `:257` as *"fixed for the whole run, as always"*, and `:377` (plus the probe at `:475`) reuses the
 one object every iteration. Both batch ids are iteration-free (`dispatcher.py:898`, `:816`). Proven on
 disk: batches `i1` and `i5` point claim `1059-13` at the identical staging dir, and one verdict file
 carries mtime `06:51` in a directory created `01:42` — **overwritten in place**. So iteration 5's
@@ -1266,9 +1429,12 @@ identical in-place overwrite — crc included — so per-iteration held-out stag
 property, not a paper-trail patch.
 
 ✅ **And it is small, because the precedent is in the same signature.** Widen `val_inputs` to
-`RunInputs | Callable[[int], RunInputs]` and resolve it at `:335` and `:410` exactly as `:333` already
-resolves `train_inputs`. Backward compatible — a plain `RunInputs` still works, so the other two
-consumers need no change. ⚠ One implementation detail to decide at the seam, not here: `:410` is the
+`RunInputs | Callable[[int], RunInputs]` and resolve it at `:377` and `:475` exactly as `:375` already
+resolves `train_inputs`. ✅ **A second precedent landed the same day** (`ee26d80`):
+`manifest_for_version: Callable[[str], ProgramManifest] | None` (`:217`), a per-version callable in
+this same signature that **fails closed** rather than reusing a stale value — so the shape is now
+idiomatic here, not novel. Backward compatible — a plain `RunInputs` still works, so the other two
+consumers need no change. ⚠ One implementation detail to decide at the seam, not here: `:475` is the
 *probe* on a newly materialised program, so which iteration index it passes needs stating rather than
 inferring.
 
@@ -1447,7 +1613,7 @@ cross-model review found in the gates that matter most.
 | Gate | Vacuity risk | Assertion |
 |---|---|---|
 | **V2a-seal** | **empty deny list ⇒ zero probes ⇒ green, seal unproven**; and a **broad mount at an unexpected target** passes every path probe | list non-empty, expected entries by name **and count**, probe count equals list length; the rendered mount set equals an **exact** `(source, target, mode)` allowlist; no source is an **ancestor** of a forbidden path; probes enumerated **from the argv**; plus a positive control and a **negative control that must fail** |
-| **V2c** | a refusal that only covers the sites we remembered ⇒ green while an ungated judge ships | assert the **count** of direct `SarolRunner` constructions (21) and classify each as containerized or explicitly opted out |
+| **V2c** | a refusal that only covers the sites we remembered ⇒ green while an ungated judge ships | assert the **count** of direct `SarolRunner` constructions (⚠ **22**, NF11) and classify each as containerized or explicitly opted out. ⚠ Count by constructor reachability, not by grep — a subclass inheriting `__init__` is bound by the refusal and matches no text search |
 | **V4** | pin container emptied by a `cmd_write` refactor; pin read from the worktree; **a host-only hash ⇒ a swapped container leaves it unmoved** | round-trip re-freeze test; pin read from `git show HEAD:`; one divergence case per container component, image by **digest** not tag |
 | **V3b** | an exact-fileset assertion passes on a **single shared** cwd serving two program versions | V3b keeps the fileset assertion; **V3d** asserts each version's own driver bytes reached its own verdict |
 | **V1c** | a manifest with no matching entry leaves nothing to compare | assert the manifest resolves and the entry is present before comparing bytes |
@@ -1614,14 +1780,20 @@ tests.) *Stop:* a regression in the edit-agent principal — this plan is additi
 
 **V2c — the refusal gate, at every construction site.** Construct the Runner with no prefix factory
 and no opt-out sentinel. *Expected:* refuses at `__init__`, before any spend. **And assert the
-inventory:** the count of direct `SarolRunner` constructions equals **21**, and each one is
-classified as containerized or explicitly opted out — a source-level census in the selftest, so a new
-ungated site added later fails the suite instead of running ungated. ⚠ Without the count assertion
-this gate is green-by-absence: a refusal that applies to the sites we remembered is exactly what the
-first draft shipped.
-⚠ **One negative control per production entry point**, not one for the class: `build_components`,
-the canary's pinning path, the baseline recut, and the CLI runner each get a case asserting they
-refuse without a factory. A test-only fake invoker must stay possible **without** creating a
+inventory:** the count of direct `SarolRunner` constructions equals **22** (NF11 — 19 in `adapter.py`,
+plus `dispatcher.py:554`, `canary.py:257`, `scripts/run_baseline.py:119`), and each one is classified
+as containerized or explicitly opted out — a source-level census in the selftest, so a new ungated
+site added later fails the suite instead of running ungated. ⚠ Without the count assertion this gate
+is green-by-absence: a refusal that applies to the sites we remembered is exactly what the first draft
+shipped. ⚠ **The census must count subclasses, not text matches** — `_RealInvokerRunner`
+(`adapter.py:2770`) inherits `__init__` and so is bound by the refusal while matching no grep for
+`SarolRunner(`. A census that greps returns 22 and silently omits it; the assertion should be written
+against constructor reachability.
+⚠ **One negative control per production entry point**, not one for the class — and there are
+**three**, not two: `build_components` (`dispatcher.py:554`), the **`components=` bypass**
+(`run_optimization` accepts pre-built components and skips `build_components` entirely —
+`dispatcher.py:604`/`:748`, exercised at `:1222`), and the baseline recut. The canary needs a case too,
+though it already accepts an injected runner today. A test-only fake invoker must stay possible **without** creating a
 production-reachable bypass — if the same keyword can disable the boundary in production, the gate
 is decoration. Also confirm the `CachingRunner` + `BudgetGuard` wrapping survives the containerized
 path.
@@ -1785,9 +1957,11 @@ or a version/digest mismatch.
 - **V2a-seal's mount-set allowlist keeps needing entries** → each addition is a boundary widening and
   gets a written reason next to it; three or more means the mount set was designed wrong, so re-derive
   it from what the judge reads rather than appending.
-- **V2c's census finds more than 21 construction sites** → the count moved under us; update the
+- **V2c's census finds more than 22 construction sites** → the count moved under us; update the
   assertion *and* say which sites appeared, because a new ungated judge is the defect this plan is
-  about.
+  about. ⚠ The baseline is **22** (NF11), not the 21 earlier drafts asserted, and the census must
+  count `SarolRunner` **subclasses** too — `_RealInvokerRunner` (`adapter.py:2770`) reaches an
+  `__init__` refusal while matching no search for `SarolRunner(`.
 - **V2f shows the by-name env form is not available on the pinned engine revision** → the engine
   change is a prerequisite (1b), so land it upstream first; do **not** ship the `-e KEY=VALUE` form
   with a note to fix later, which is how `optimizer_isolation_hash` became a literal string.
@@ -1827,7 +2001,7 @@ untracked findings beside it have **no blob to restore**.
 namespace (recommendation: key on `combined_hash`), which is a decision to record, not a phase to
 design. Then: the five findings archived (a
 Phase 4 precondition and the only copy); Step 0's probes run and recorded; **V2a-seal green,
-including its negative control** — a land with either red is not a land; **V2c's 21-site census
+including its negative control** — a land with either red is not a land; **V2c's 22-site census
 green**, so no ungated judge ships; **V2d and V3d green**, because a reused prefix or a shared cwd
 mis-attributes one program's behaviour to another and nothing downstream would show it; **V2h green with every result attributed to a layer**, since it covers the
 threats the mount set cannot (⚠ **V2i is struck, not waived** — OQ1 removed the Task subagent it
@@ -1839,7 +2013,12 @@ cross-model pass is worth running.
 
 **Merge sequence.** Plan A finished first, so: this plan rebases onto its tip, implements against a
 10-entry manifest (`combined_hash 7431a5bc98a9`) and Plan A's three new preflight gates, then lands
-after it. Plan B stays parked behind both, and must not start while Gate F's `KNOWN_DEFERRED` holds
+after it. ⚠ **Rebase before you read the manifest — verified 2026-09-14.** On *this* branch the
+manifest has **8 entries, `combined_hash 0a02710cbd88`, and does not contain the driver file at all**;
+the 10-entry manifest carrying `.claude/commands/sarol-eval-item.md` exists only on Plan A's branch
+(`origin/feat/optimizer-prompt-latitude`, tip `f02d761`). So an implementer who starts here will find
+that the file OQ1's whole argument rests on is not a manifest entry, and conclude the plan is wrong.
+It is not — it is forward-referencing, deliberately, and this is the line that says so. Plan B stays parked behind both, and must not start while Gate F's `KNOWN_DEFERRED` holds
 six live contradictions in the stages it would enable. ⚠ Adding or removing a manifest entry breaks
 five count/scope selftests (`adapter.py:1668`, `:1773` and its retrieval-scope assertion;
 `profiles.py:262` and its retrieval-scope assertion) — update them individually.
