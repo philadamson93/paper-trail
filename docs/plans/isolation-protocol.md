@@ -156,9 +156,23 @@ three consequences below.
 |---|---|---|
 | What it is | the labelling pipeline itself — **one session per stage, per claim** | the agent that **edits** the program between iterations |
 | How often | `for stage in self.profile.stages` (`adapter.py:866`) × every claim. Today **1 × 561**; under the `agentic` profile **3 × 561** | **one session per iteration**, ~5 in a run (`adapter.py:360`: *"~113 an iteration, against the optimizer's one"*) |
-| Must never **read** | **gold labels**, the benchmark tree, the optimizer's findings and hypothesis log | — |
+| Must never **read** | **gold labels**, the benchmark tree, the optimizer's findings and hypothesis log | ⚠ **not "nothing" — corrected 2026-09-15 (Phil):** the **held-out set's per-claim behaviour**. VAL is *"Tier 2 — scalar only"*: the optimizer sees one number from the held-out split, never which claims it got wrong or what it answered. `val_isolation_problem` (`dispatcher.py:467`) is what asserts it, and its docstring says why payload-stripping is not enough: *"if the VAL run manifest and its per-example outputs sit inside the repo, the optimizer can simply open them and read the held-out set's per-claim behaviour directly, bypassing the release boundary entirely."* ⚠ Also never **VAL gold** — the mistake corpus is TRAIN-only by design |
 | Must never **write** | — | the scorer, gold, `iter/`, the manifest — it would be marking its own homework |
 | Containerized today | ❌ **no. This plan adds it.** Nobody has built one, anywhere | ✅ built and armed-run — **in rad-eval**; ❌ not here |
+
+⚠ **So there are TWO read boundaries, not one — and the plan's own framing under-counted (Phil,
+2026-09-15).** They are mirror images, which is exactly why the fix generalises:
+
+| Boundary | Who is denied | What | Enforced today? |
+|---|---|---|---|
+| **Read 1** | the **program** | gold, the benchmark tree, the optimizer's workspace | ❌ **no — this plan builds it** |
+| **Read 2** | the **optimizer** | the held-out set's per-claim detail (it gets a scalar) | ✅ **yes — `val_isolation_problem`, and it works** |
+| **Write** | the **optimizer** | the scorer, gold, `iter/`, the manifest | ⚠ partly — by convention, not by mount set |
+
+✅ **Read 2 is the model, not an afterthought.** It is the one read check in the system that already
+works, and Phase 2b builds Read 1 *beside it, reusing its containment idiom* — the plan's whole
+"re-aim what exists" thesis in one line. ⚠ And note the asymmetry the root-cause table is about:
+reviews audited Read 2 (the direction with a test) and never Read 1 (the direction with only prose).
 
 **The stages, and why "judge" is the wrong name for the boundary.**
 `ALL_STAGES = ("extractor", "adjudicator", "verifier")` (`profiles.py:57`). The `retrieval` profile —
@@ -212,8 +226,15 @@ accident.** The convention from here:
    this plan's own root cause. **Open decision (Phil):** does this plan derive the extractor and
    verifier mount sets — enforcing an evidence-condition boundary it has scoped out — or stay
    adjudicator-only and hand Phase 2 a named gap?
-3. **Containerization cost triples when Phase 2 runs.** V0c's per-session figure is measured against 1
-   stage/claim today and becomes 3 under `agentic`. Report it per **stage-dispatch**, not per claim.
+3. ⚠ **"Cost triples" — explained and downgraded 2026-09-15 (Phil asked where the 3× comes from).**
+   The 3× is simply **three stages per claim instead of one**: `ALL_STAGES = ("extractor",
+   "adjudicator", "verifier")`, and the `agentic` profile's own docstring says *"three sessions per
+   claim"*. So boxing every session would cost 3 × 561 instead of 1 × 561. **But it cannot happen
+   today** — `IMPLEMENTED_STAGES = ("adjudicator",)` and the driver aborts the other two with
+   `STAGE_NOT_IMPLEMENTED`, so the figure is about a configuration that does not run. ⇒ Report V0c
+   per **stage-dispatch** (so the number stays meaningful if the pipeline ever grows) but **do not
+   budget for 3×** — today's cost is 1 × 561, about 14 minutes of container startup on a multi-hour
+   run.
 
 ⚠ **Neither principal is the *scorer*.** `SarolScorer` is deterministic Python making zero model
 calls; it compares verdicts to gold and sits **outside both containers**. Never an agent, never
@@ -989,8 +1010,21 @@ follow `corpus.ref` and read `mistakes/<batch_id>.json`. **V2a-seal must plant a
 both** — the release envelope *and* every corpus path reachable from a TRAIN release — or state
 plainly why denying `iter/` wholesale is sufficient and prove *that* instead.
 
-**1e. The optimizer's container.** Model on **rad-eval's `src/optimizer_loop/docker_agent.py`** — 198
-lines, on `main`, actually run: prefix delegated to the engine, a fresh temp writable staging tree,
+**1e. The optimizer's container.** ⚠ **Reframed 2026-09-15, because Phil read "copy rad-eval's" as
+"the capability lives in a sibling repo" — it does not, and the distinction matters for how much work
+this is.** The division, verified in the engine at `c2dd0b3`:
+
+| Layer | Where it lives | State |
+|---|---|---|
+| The **machinery** — renders the whole `docker run` command: mounts, network, user, workdir, credentials | **the shared engine**, `isolation/docker_prefix.py` (+ `network_allowlist.py`, `open_profile.py`, `gcp_credentials.py`, the `Dockerfile`, `negative_control.py`) | ✅ **built and shared.** We are a consumer of it |
+| The **interface** — what an agent must look like | the engine, as a `Protocol` (`adapter.py:43`) plus a `FakeAgent` for tests | ✅ built. ⚠ **The engine ships no real agent** — by design |
+| The **thin adapter** — ~200 lines that implement the interface, call the machinery, stage files, copy results back | **each consumer's own repo** | ✅ rad-eval wrote theirs. ❌ **paper-trail has none** |
+
+✅ **So Phil is right that we are a consumer of built, shared machinery** — the mount rendering is
+zero engine diff for us. What is missing is only our own adapter, and **rad-eval's is the only real
+implementation of that interface anywhere**, which is why it is the worked example rather than a
+capability to import. "Copy rad-eval's" means *copy the shape of the glue*, not *borrow the
+boundary*. Its shape, and why each part: prefix delegated to the engine, a fresh temp writable staging tree,
 copy-back into the live tree afterwards, a reduced tool set. What it gives paper-trail that a
 permission rule cannot: the scorer, gold, `iter/`, and the manifest are **not in the optimizer's
 mount set**, so "the optimizer cannot edit the scorer" holds by construction rather than by a rule
@@ -1049,15 +1083,15 @@ mechanism at all. That leaves **two** production sites to wire. The 19 `adapter.
 selftest ceremony: real work to type, but zero production risk, and they should be described that way
 rather than as *"the largest surface"*.
 
-⚠ **Second refusal, same locus: reject any stage whose mount set does not exist (Codex round 2,
-Critical).** The container keys on `(stage, claim, version)`, but only the adjudicator's mount set is
-derived (**OQ10**). So the constructor — or the preflight — must **refuse a profile requesting any
-stage without a specified, tested mount set**, naming the stage. Without it, enabling the `agentic`
-profile silently runs the extractor and verifier inside a boundary designed for neither, and the
-symptom would be a plausible verdict rather than an error. ⚠ This refusal is required under **OQ10
-option (i)** and harmless under option (ii), so it is specified here regardless of which wins — it is
-what makes "adjudicator-only" a *scope* rather than a latent gap. Its negative control: construct with
-`stages=("extractor",)` and assert the refusal fires, naming `extractor`.
+⚠ **Second refusal — restated 2026-09-15 after OQ10: point at the existing check, do not build a new
+one.** An earlier version of this section specified a fresh refusal rejecting any stage without a
+mount set. ✅ **That refusal already exists**: `profiles.unrunnable_reason` (`:177-182`) refuses, at
+preflight before any spend, a profile requesting a stage outside `IMPLEMENTED_STAGES` — and since
+`DEFAULT_PROFILE = AGENTIC` (`:152`) is itself the unrunnable three-stage profile, that check fires
+in practice today. ⇒ The requirement here is therefore **negative**: the container work must **not
+bypass or relocate** `unrunnable_reason`, and its negative control is to select the default profile
+and assert the preflight still refuses, naming the missing stages. ⚠ Building a second gate beside a
+working one is the pattern this plan's root-cause table is made of.
 
 ✅ Every site is then either containerized or visibly opted out, and the count is assertable
 (**V2c**) — ⚠ **against 22, and counting subclasses, not against 21 by grep.**
@@ -1540,35 +1574,68 @@ resolved *against* this plan's own recommendation and the reasoning is what a fr
 Resolution order on the day: OQ4, OQ5, OQ8 first, then OQ9 (which set the scope), then OQ1, OQ2, OQ6,
 OQ7.
 
-⚠ **OQ10 must be answered before implementation starts** — it decides what Phase 1c builds.
+✅ **OQ10, OQ11 and OQ12 resolved 2026-09-15.** All twelve are now closed. OQ10 dissolved rather
+than being decided — the mechanism it asked for already exists.
 
-**OQ10 — is this implementation adjudicator-only, or does it derive the extractor and verifier mount
-sets now?** (Codex round 2, Critical.) The plan keys the container on `(stage, claim, version)` — right
-— but derives **only** the adjudicator's mount set, leaving the other two stages as prose. Codex's
-objection is about handoff, not design: an open decision sitting inside a document that otherwise tells
-an implementer exactly what to build is a gap, because the reachable `agentic` profile needs all three.
-Options: **(i) adjudicator-only**, with a **hard preflight that refuses any non-adjudicator stage**
-until its mount set is specified and tested — scope stays small and the gap cannot be entered by
-accident; **(ii) derive all three now** — more work up front, and the extractor's mount set is the one
-that must include the paper while the adjudicator's must not. *Recommendation: (i).* Only `retrieval`
-runs today (`IMPLEMENTED_STAGES = ("adjudicator",)`), so (ii) specifies a boundary for a profile that
-cannot yet run — but (i) is only safe **with** the refusal, which is why the refusal is written into
-Phase 1f regardless of which option wins.
+**OQ10 — ✅ RESOLVED 2026-09-15 (Phil): paper-trail is one adjudication step, and the refusal this
+question asked for is already built.** Phil: *"I don't know what you mean 'judging stage only'.
+Paper-trail is one thing. It receives claims and evidence and adjudicates."*
 
-**OQ11 — after `pyproject.toml` exists, does `$AGENTIC_LABEL_OPT` stay a supported override?**
-(Codex round 2.) The pin only binds what gets imported if the runtime import path changes too; today
-both the adapter (`adapter.py:102`, `:117-118`) and `scripts/materialize_smoke.py:39` resolve the
-engine from a hardcoded home path. Options: keep the env override as a documented development escape
-hatch, or demote it to selftest-only so production always imports the pinned package.
-*Recommendation: demote it* — an override that silently changes which engine bytes run is the same
-class of drift the pin exists to close. ⚠ Either way the answer has to be stated, or an implementer
-will add the pin and leave the `sys.path` injection in place, which changes nothing.
+⚠ **That is the correct product model, and it matches the only configuration that can run.** Under
+`retrieval` — Phase 1, the live profile — the evidence envelope is produced **mechanically by Python
+before any session starts** (`evidence_producer="bm25"`), and the agent adjudicates. One session, one
+claim, one mount set. The three-stage pipeline (`extractor` → `adjudicator` → `verifier`) is
+*designed* but **not built**: `IMPLEMENTED_STAGES = ("adjudicator",)` (`profiles.py:67`) and the
+driver aborts the other two with `STAGE_NOT_IMPLEMENTED`, whose own text says why — *"Phase 1 runs
+the adjudicator alone; the evidence envelope is produced mechanically, so no extractor session
+runs."*
 
-**OQ12 — for `program-v*` identity, are tags namespaced per run, or replaced by the manifest's
-`combined_hash`, before Phase 4 lands?** (Codex round 2, and already flagged in OQ9's resolution.)
-Tags are repository-global, so a second run re-mints the first run's. *Recommendation: key on
-`combined_hash`* — it is committed, already uniquely identifies a program version, and is already what
-the Phase 3 configuration pin keys on, so it removes a mechanism rather than adding one.
+✅ **And the hard refusal this plan proposed adding already exists.** `profiles.unrunnable_reason`
+(`:177-182`) computes `missing = [s for s in prof.stages if s not in IMPLEMENTED_STAGES]` and refuses
+the profile at **preflight, before anything is spent**. ⚠ Worth knowing: `DEFAULT_PROFILE = AGENTIC`
+(`:152`) — the *default* profile is the unrunnable three-stage one, so that check is load-bearing
+today, not theoretical. ⇒ **Phase 1f's "second refusal" is struck as a new mechanism** and becomes a
+one-line requirement instead: *the container work must not bypass `unrunnable_reason`* — it runs at
+preflight and must keep running there. This plan's own thesis, one more time: the mechanism existed;
+point the container at it rather than building a second one.
+
+**What this plan therefore builds:** **one** mount set, for the adjudication step. If the three-stage
+pipeline is ever built, per-stage mount sets come with it — the container command already keys on the
+stage (`adapter.py:866`, `_stage_command(stage, …)` at `:700`), so the seam is there and unused.
+⚠ Recorded as a **named consequence, not a gap**: a future session that widens `IMPLEMENTED_STAGES`
+must derive the new stages' mount sets in the same change, and the evidence-finding stage is the
+awkward one, since it must read the paper while adjudication must not (which is measurement
+integrity, not leakage — see *Who is who*).
+
+**OQ11 — ✅ RESOLVED 2026-09-15 (my call, after Phil said the question was unreadable): demote the
+override to development-only.** The question was badly asked, so here it is in plain terms.
+
+**What it is.** Right now, when this code needs the shared engine, it does not import an installed
+package — it *pushes a folder path onto Python's import path* and imports from there. The folder is
+hardcoded to a location in your home directory (`adapter.py:102`), and an environment variable
+(`$AGENTIC_LABEL_OPT`) can point it somewhere else (`:117-118`). A second copy of the same default
+lives in `scripts/materialize_smoke.py:39`.
+
+**Why it matters.** Whatever is in that folder at that moment is what runs — current branch,
+uncommitted edits and all. Nothing records which engine code produced a number. That is the same
+drift this plan complains about everywhere else, sitting in our own import statement.
+
+**The decision.** Add the package pin **and** change the import to use the installed package;
+`$AGENTIC_LABEL_OPT` survives only as a **development escape hatch for tests**, never on a path that
+produces a reportable number. *Reasoning:* an override that silently swaps which engine code runs
+defeats the pin it sits next to — and this is an implementation detail, not a product call, so it
+does not need Phil's ruling. ⚠ The half that must not be skipped: **the pin alone changes nothing**
+if the path-poking stays. Both edits, or neither is worth doing.
+
+**OQ12 — ✅ RESOLVED 2026-09-15 (Phil: "your call"): key program identity on the manifest's
+`combined_hash`, not on git tags.** Tags are repository-global, so a second run re-mints the first
+run's `program-v1..v5` — the one thing the per-run clone gave for free that the run-start reset does
+not. *Chosen because it removes a mechanism rather than adding one:* `combined_hash` is already
+committed, already identifies a program version uniquely, and is already what the Phase 3
+configuration pin keys on. Namespacing tags per run would have meant inventing a naming scheme and
+teaching every reader of a tag about it. ⚠ Tags may stay as a human convenience; what changes is that
+**nothing load-bearing keys on them** — the release payload, the pin and the frontier all key on the
+hash.
 
 **OQ9 — ✅ RESOLVED 2026-09-14 (Phil): no per-run clone. A run-start reset instead.** Phil: *"I don't
 think we're ever going to have multiple runs in parallel… a run is always going to be operating from
