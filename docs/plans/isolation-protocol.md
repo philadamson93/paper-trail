@@ -1,12 +1,15 @@
 Reference: docs/claude_ops.md
 
-# The isolation protocol — putting the judge inside the shared substrate
+# The isolation protocol — putting the agentic program inside the shared substrate
 
 **Status: Draft** (rewritten 2026-09-11 against the shared engine's landed substrate; Codex review
 applied 2026-09-13; Phil's explain-plan feedback applied 2026-09-14; Codex round 2 applied and
 **approved by Phil via `/explain-plan` 2026-09-15 at plan-sha `942a5f0c9948`**) · **Reviewed: Yes**
-⚠ **Approved ≠ ready to code.** Three things must happen first, all recorded in *Landing & cleanup*:
-rebase onto Plan A's tip, sweep the ~120 stale uses of "judge", and note that **OQ10 scopes this to
+⚠ **Approved ≠ ready to code — but the two preconditions are now cleared (2026-09-15).** Both are
+recorded in *Landing & cleanup*: the branch is **rebased onto Plan A's tip `f02d761`**, and the
+**"judge" naming sweep is done** — 108 of 142 uses rewritten, to *the program* where the text named
+the container, the mount set, the cwd or the read boundary, and to *the adjudicator* where it named
+the stage doing the judging. ⚠ Still standing, and not a task but a scope fact: **OQ10 scopes this to
 the adjudicator dispatch only** — the eval harness's single stage, not the product's three.
 ⚠ **Code-audit round, 2026-09-14 (four parallel agents against current code, both repos pulled).**
 It found ~20 corrections, several load-bearing, and every one is applied below. The architecture
@@ -36,7 +39,7 @@ exist yet); the Docker prefix cannot be built once at construction (Phase 1c, pe
 plus a canonical container path map); one shared minimal cwd cannot serve a per-version editable
 driver (Phase 2a, version-addressed); mounts do not cover credentials, and the token lands in host
 argv and a log file (Phase 1b, a real engine diff and a prerequisite); containerizing discards the
-judge's trace (Phase 1d); the refusal must cover **21** construction sites, not 7 (Phase 1f — ⚠ the
+adjudicator's trace (Phase 1d); the refusal must cover **21** construction sites, not 7 (Phase 1f — ⚠ the
 2026-09-14 audit re-counted this as **22**, see NF11); the pin
 hashed only host-side properties (Phase 3); Phase 4 named a function instead of an implementation;
 and V2a-seal — the plan's centrepiece — could be defeated by a broad mount at an unexpected target.
@@ -60,12 +63,12 @@ steps point here. A plan whose evidence base is git-ignored has no evidence base
 > **§4g. The fix (mirror what already works)** — verbatim from the findings doc
 > 1. `inner_scope_problem(working_checkout, {iter/, optimizer/findings/, meta-learnings.md})` wired into `run_optimization`'s preflight at exactly the line where `val_isolation_problem` already sits (`dispatcher.py:549-551`). Fail closed.
 > 2. Pass a **minimal `working_checkout`** — already a constructor parameter, already exercised with `empty_checkout` at `adapter.py:2118`; production just passes the default.
-> 3. Restore Rule 3's stack on judge invocations (`--add-dir` scope, `CLAUDE_CONFIG_DIR`, `env -i`, `--exclude-dynamic-system-prompt-sections`, `--no-session-persistence`).
+> 3. Restore Rule 3's stack on program invocations (`--add-dir` scope, `CLAUDE_CONFIG_DIR`, `env -i`, `--exclude-dynamic-system-prompt-sections`, `--no-session-persistence`).
 > 4. **Render the dispatch prompt in Python**, not via shell interpolation into an LLM — kills both §3.2 bugs and the §3.3 fabrications at the root.
 > 5. Fail closed on no-task: no verdict written ⇒ `infra_error`, never a scored data point; and never a session that surveys its working directory.
 > 6. **Per-iteration staging** (or wipe between iterations) — kills the 61% contamination.
 > 7. Make `optimizer_isolation_hash` load-bearing; refuse to run on an unverified value.
-> 8. Engine: model **N principals**, not one; add a per-principal mount manifest with an explicit **deny** list; add the negative control that plants a sentinel in `release_train.json` and asserts a judge **cannot** read it — the mirror image of the permissive read test that shipped.
+> 8. Engine: model **N principals**, not one; add a per-principal mount manifest with an explicit **deny** list; add the negative control that plants a sentinel in `release_train.json` and asserts the program **cannot** read it — the mirror image of the permissive read test that shipped.
 > 9. Wire the Docker substrate for real (consumer-side `DockerAgent`/`DockerRunner`), per Phil: *"we DO want this running in docker, that's our whole isolation engine and intentional."*
 
 ⚠ **Two places this plan had drifted from its own source, both found only once the file came back:**
@@ -113,15 +116,15 @@ is cut.
 
 ## Goal
 
-Every number the optimizer has seen was produced by a judge session running with `cwd` = the full
+Every number the optimizer has seen was produced by an adjudicator session running with `cwd` = the full
 repo root under `--dangerously-skip-permissions`. That tree holds the optimizer's own per-claim
 failure analysis, its hypothesis log, and `iter/<n>/release_train.json` — **which carries per-claim
-gold labels**. Across 561 judge traces nothing was read; but 13 sessions that lost their task fell
+gold labels**. Across 561 adjudicator traces nothing was read; but 13 sessions that lost their task fell
 back on surveying their working directory, and two listed the optimizer's own findings as candidate
 work. The only thing between "listed" and "read" was that no human was there to say yes.
 
-Make the judge's boundary a fact about the filesystem instead of a sentence in a prompt, and prove it
-with the test whose absence caused this: plant a sentinel where the gold labels live and show a judge
+Make the program's boundary a fact about the filesystem instead of a sentence in a prompt, and prove it
+with the test whose absence caused this: plant a sentinel where the gold labels live and show the program
 **cannot** open it.
 
 ### What landing this certifies, and what it does not
@@ -129,7 +132,7 @@ with the test whose absence caused this: plant a sentinel where the gold labels 
 Written out because the review asked and because the first draft answered it two different ways in
 two places.
 
-**Certified on land:** the judge cannot *read* gold, the benchmark tree, the optimizer's findings,
+**Certified on land:** the program cannot *read* gold, the benchmark tree, the optimizer's findings,
 the hypothesis log, or the repo outside its own staging — by absence from its mount set, proved by
 probe. And the optimizer cannot *write* the scorer, the manifest, `iter/`, or gold — same mechanism,
 one scope up (Phase 1e). Both principals are contained, so this is not "judge read isolation"
@@ -142,7 +145,7 @@ wearing a bigger name.
 | A **deliberate** adversary | the 2026-04-23 threat model is honest optimisation; this plan addresses accidental exposure, which is what 2026-09-09 demonstrated | unchanged, not reopened here |
 | The session can read **its own token** | fixing host-argv and log disclosure (Phase 1b) does not hide a variable from the process holding it | needs a credential broker; out of scope, stated |
 | **Audit rows** from container sessions | container mode discards the engine ledger, so four tripwires go blind | engine work, recorded in Phase 1e |
-| **Per-call tool policy** (hooks) | deferred by Phil 2026-07-22; `--allowedTools` is coarser than a hook that fails closed per call. ⚠ On the **optimizer's** path this is a live gap, not a theoretical one — the engine's own egress plan records that rad-eval keeps `WebFetch` only because a `PreToolUse` hook denies every URL, and *"Docker mode has no hook wiring at all"* (`2026-07-30-docker-vertex-only-egress-allowlist.md:123`). On the **judge's** path it is redundant once `Bash`/`WebFetch`/`WebSearch` are off the allowlist — there is no per-call decision left to make (**OQ6**) | the second landing |
+| **Per-call tool policy** (hooks) | deferred by Phil 2026-07-22; `--allowedTools` is coarser than a hook that fails closed per call. ⚠ On the **optimizer's** path this is a live gap, not a theoretical one — the engine's own egress plan records that rad-eval keeps `WebFetch` only because a `PreToolUse` hook denies every URL, and *"Docker mode has no hook wiring at all"* (`2026-07-30-docker-vertex-only-egress-allowlist.md:123`). On the **program's** path it is redundant once `Bash`/`WebFetch`/`WebSearch` are off the allowlist — there is no per-call decision left to make (**OQ6**) | the second landing |
 | Egress beyond the **host allowlist** | an allowlisted host can still receive data | the allowlist narrows the surface, it does not close it |
 
 ⚠ The pattern to avoid here is the one in the root-cause table: a residual that stops being written
@@ -267,9 +270,11 @@ accident.** The convention from here:
 calls; it compares verdicts to gold and sits **outside both containers**. Never an agent, never
 containerized. Where this plan protects "the scorer" it means that code and the gold it reads.
 
-⚠ **Known debt from this rename:** the body below still says *judge* ~120 times, usually meaning *the
-adjudicator stage* and occasionally *the program*. The definitions here govern; a consistency pass is
-owed and is listed in *Landing & cleanup*.
+✅ **The naming debt from this rename is PAID (2026-09-15).** 108 of the body's 142 uses of *judge*
+were rewritten: to *the program* where the text named the container, the mount set, the cwd or the
+read boundary, and to *the adjudicator* where it named the stage doing the judging. The 34 that remain
+are deliberate — the `JUDGE_SCOPE` code symbol (6), the separate word *judgement* (4), Phil's quoted
+words, the quoted selftest and validator strings, and this section's own discussion of the naming.
 
 
 ## What we are building
@@ -284,7 +289,7 @@ session should build, and the disagreement is a defect to fix here.
 | 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39`. So a run binds to whatever that tree holds at that moment. Copy rad-eval's shape: a git **revision** under `[tool.uv.sources]` (it pins `rev = "3bbe6c4"`), which means **creating** our first `pyproject.toml` | `pyproject.toml` | 1a |
 | 2 | **The program's container**, built **per stage-dispatch** by a factory owned by `SarolRunner.process(claim)` — keyed on `(stage, claim, version)`, ⚠ **not** on the claim alone. Adjudicator-stage mount set: claim staging (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). Nothing else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks` denied by absence. ⚠ The extractor and verifier stages need **their own** mount sets when Phase 2 runs; only the adjudicator's is derived here | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
 | 3 | **The optimizer's container**, modelled on rad-eval's `docker_agent.py`: temp writable staging, copy-back into the live tree, and the scorer / gold / `iter/` / manifest **absent from the mount set** — so "the optimizer cannot edit the scorer" holds by construction | `optimizer/isolation.py` | 1e |
-| 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the judge **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
+| 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the adjudicator **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
 | 5 | **One refusal locus** — `SarolRunner.__init__` raises absent an explicit prefix factory. ⚠ **22 sites, not 21**, and it must cover three reach-paths (`build_components`, direct construction, and a pre-built `components=` dict that skips the gate). ✅ Only **3 ship**; the other 19 are selftests, and `canary.py` already accepts an injected runner. Offline tests opt out with an **injected fake prefix**, never a boolean | `optimizer/adapter.py`, `dispatcher.py`, `canary.py`, `scripts/run_baseline.py` | 1f, **NF11**, **OQ7** |
 | 6 | **The isolation module** — scope predicate, both mount-set builders, the canonical host→container path map, the env allowlist, the version-addressed cwd builder, the configuration hash. ⚠ Shaped so the boundary machinery lifts into the shared engine for crc; only the mount *contents* are ours | new `optimizer/isolation.py` | 2a, 2b, 3, **OQ4** |
 | 7 | **Trace persistence** — the streamed session JSON written beside the verdict as `trace_ref`, because `find_transcript` globs the *host's* `~/.claude/projects` and goes blind in a container | `optimizer/adapter.py` | 1d |
@@ -292,9 +297,9 @@ session should build, and the disagreement is a defect to fix here.
 | 9 | **Fail-and-feed on a no-verdict dispatch** — a distinguishable delivery-failure count keyed **only** on `UNREADABLE:`, handed to the engine's **newly-landed** stop-reason + partial-run channel (`82f547d`) rather than a new one, never scored as program quality and never summed into the mistake corpus | `optimizer/adapter.py` | 0b, **OQ5** |
 | 10 | **A configuration pin under `runtime_pins`** covering image **digest**, the rendered mount triples with roles, network policy, egress allowlist and session flags — read from `git show HEAD:<manifest>`, not the worktree | `manifest.json`, `optimizer/isolation.py` | 3 |
 | 11 | **A run-start reset** — archive `meta-learnings.md`, the five `findings/iter-*.md` and `iter/` to the run archive, then assert absent; the VM runner mints the run id. ⚠ **Not** a per-run git clone (**OQ9**) | `run_hillclimb_vm.sh`, `optimizer/isolation.py` | 4 |
-| 12 | **The sentinel negative control** — sentinels planted in gold, the benchmark tree, `iter/` and the optimizer's findings; a judge must **fail** to read each, and the control has a negative control of its own | `isolation/negative_control.py` + tests (upstream) | 1g |
+| 12 | **The sentinel negative control** — sentinels planted in gold, the benchmark tree, `iter/` and the optimizer's findings; the program must **fail** to read each, and the control has a negative control of its own | `isolation/negative_control.py` + tests (upstream) | 1g |
 
-**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin), **plus** one backward-compatible type widening in `engine/loop.py` for item 8, **plus** making `--dangerously-skip-permissions` a caller choice in `engine/claude_wrapper.py:130` — currently unconditional, and needed for the **optimizer** path. ⚠ **Not needed for the judge**: paper-trail passes that flag itself at `adapter.py:713`, so the judge's deny-by-default layer is a local edit available now (Codex round 2). That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
+**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin), **plus** one backward-compatible type widening in `engine/loop.py` for item 8, **plus** making `--dangerously-skip-permissions` a caller choice in `engine/claude_wrapper.py:130` — currently unconditional, and needed for the **optimizer** path. ⚠ **Not needed for the program**: paper-trail passes that flag itself at `adapter.py:713`, so the program's deny-by-default layer is a local edit available now (Codex round 2). That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
 
 **What we are deliberately not building** is its own section (*Deliberately out of scope*), and three things left it on 2026-09-14: the driver **session** (item 4 replaces it), the per-run **git clone** and `optimizer/run_clone.py` (item 11 replaces it), and the tag-scoped **settings file** (**OQ6** retires it).
 
@@ -313,7 +318,7 @@ So there are two boundaries, and the engine owns the design of both:
 
 | Boundary | What it stops | Who builds it |
 |---|---|---|
-| **Read** — the judge cannot reach gold, the optimizer's workspace, or the benchmark data | leakage | **this plan**, consumer-side, no engine change (NF4) |
+| **Read** — the program cannot reach gold, the optimizer's workspace, or the benchmark data | leakage | **this plan**, consumer-side, no engine change (NF4) |
 | **Write** — the optimizer cannot edit the scorer | cheating | **the engine**, one wiring step short of done (see *What the engine still owes*) |
 
 Everything else in this plan is a layer behind the read boundary, or an integrity fix that has to
@@ -350,7 +355,7 @@ it specified.** See Phase 0b (OQ5) and Phase 0a (OQ2):
 | Capability | Where | What it means for us |
 |---|---|---|
 | Container image | `isolation/Dockerfile` | non-root user, pinned CLI, `git`+`curl` guaranteed present so a probe failure can't be mistaken for a seal |
-| Mount rendering | `isolation/docker_prefix.py::build_docker_cmd_prefix` (`:444-464`) | generic `extra_ro_mounts`, `writable_mounts`, `workdir`, `env`, `container_user`, `adc_path` — **the judge's mount set is expressible today with zero engine diff** |
+| Mount rendering | `isolation/docker_prefix.py::build_docker_cmd_prefix` (`:444-464`) | generic `extra_ro_mounts`, `writable_mounts`, `workdir`, `env`, `container_user`, `adc_path` — **the program's mount set is expressible today with zero engine diff** |
 | Plural editable set | `EditAgentMounts.editable_files` (`:96-112`) | went plural **for paper-trail by name**: its review found *"paper-trail's optimizable program is a five-file Markdown globset a singular `editable_file_rel` cannot express"*, and Phil's recorded decision was *"paper-trail is a future consumer and the shape is designed for it"* |
 | Network profiles | `isolation/open_profile.py:68-72` | `network_policy="open"` + `adc_path=None` + `CLAUDE_CODE_OAUTH_TOKEN` — paper-trail's documented answer |
 | Negative-control harness | `isolation/negative_control.py` (`run_probe` `:266`, fixture `:102`), `docker_available()` `:44`; 15 tests in `tests/test_isolation_negative_control.py`, all VM-only via `skipif` | a direct `docker run … <probe>` is decisive **for the path it probes** — ⚠ not for the seal, since a broad mount at an unexpected target defeats a path list (see V2a-seal). ⚠ **And it does not cover read denial at all, which strengthens 1g rather than weakening it.** Verified 2026-09-14: `test_sealed_file_is_unreachable` (`:85`) asserts `test ! -e` — the file **is not in the container namespace**, which proves non-mounting, not that a reachable path cannot be read. And `test_train_only_read_scope` (`:173`), the one test whose *name* promises read scoping, is a **positive** control asserting `returncode == 0` on both probes. So across 15 negative controls **nothing asserts that a reachable-but-forbidden path fails to open.** That is exactly the sentinel this plan adds, and it is now evidenced rather than claimed. |
@@ -420,19 +425,19 @@ them, flagged where they apply.
 3. **A paper-trail egress profile.** Phil's ruling 2026-08-18: the network profile is **paper-trail's
    own to own** — adding one to the engine's policy registry re-litigates a resolved question. Build
    it on the generic host-allowlist primitive, which already accepts a caller-supplied host list.
-4. **The judge/dispatcher container.** ⚠ **Scope of this claim tightened 2026-09-14, because Phil
+4. **The program/dispatcher container.** ⚠ **Scope of this claim tightened 2026-09-14, because Phil
 read it as saying the optimizer's container is a solved problem for us. It is not.** Precisely:
 
 | | built **anywhere**? | built **in paper-trail**? |
 |---|---|---|
 | **Optimizer** container | ✅ yes — rad-eval's, armed VM run 2026-08-05, `$4.13` | ❌ **no** |
-| **Judge** container | ❌ **no — nowhere, by any consumer** | ❌ no |
+| **Program** container | ❌ **no — nowhere, by any consumer** | ❌ no |
 
 So **paper-trail builds both** (Phase 1e and Phase 1b–1d). The difference is only that for the
-optimizer we get to *copy* a working implementation, and for the judge there is nothing to copy.
+optimizer we get to *copy* a working implementation, and for the program there is nothing to copy.
 
 ⚠ **"But isn't the judge part of the agentic program?" (Phil) — yes, and that is the reason it needs
-the container, not a reason it doesn't.** Verified: the judge's prompt, its rubric and its driver are
+the container, not a reason it doesn't.** Verified: the adjudicator's prompt, its rubric and its driver are
 literally the editable fileset — `JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER)`
 (`profiles.py:52`/`:58`), editable under **every** profile, because *"optimizing the adjudicator is
 the one thing common to the whole ladder."* So the program **is** the judge's instructions, and the
@@ -499,7 +504,7 @@ because it says *re-aim what exists*, not *build another one*.
 | Instance | Mechanism that existed | Where it pointed |
 |---|---|---|
 | The driver file | the frozen manifest | omitted it until 2026-09-11 |
-| The notes addressed to the driver | Gate A | scoped to the *judge's* read path |
+| The notes addressed to the driver | Gate A | scoped to the *program's* read path |
 | The optimizer's hypothesis log | `profiles.py:514` asserts a reset lifecycle | nothing implemented one |
 | The evidence envelope (**NF9**) | `runtime_pins` | pins the paperclip CLI, which the only runnable profile never invokes |
 | The scorer | `verify_contract_files` re-hash | the ten markdown entries; **no `.py` is in the manifest at all** |
@@ -519,7 +524,7 @@ Verified on disk. Only the ones that still steer a decision.
 **NF1 — `.claude/settings.json` does not exist anywhere.** `git ls-files | grep -i settings` empty;
 `find . -name 'settings*.json'` empty; `.claude/` holds only `commands/ prompts/ scripts/ skills/
 specs/`. So `--setting-sources project` finds no hook config and **there is no PreToolUse hook in the
-judge's path at all** — the trade that bought the wide cwd bought nothing.
+program's path at all** — the trade that bought the wide cwd bought nothing.
 
 ⚠ **And the comment that justifies the wide cwd is itself wrong — corrected 2026-09-14.**
 `_stage_command` (`adapter.py:722-723`) explains the real checkout as: *"'project', not '' — ''
@@ -532,7 +537,7 @@ manifest entry and therefore **not in the materialised tree** (see NF11 and `ada
 settings file and still fail to resolve the slash command. ✅ It also cross-checks NF1 from the other
 side — rad-eval proves the same point structurally: its container cwd is the frozen checkout, which
 carries only manifest entries, so *no hook can fire in a container* regardless of the flag. That is
-the structural basis for OQ6 retiring the settings file on the judge's path. ⚠ It also silently retires
+the structural basis for OQ6 retiring the settings file on the program's path. ⚠ It also silently retires
 a specified control: `NEXT.md:463` says a tag-scoped settings file *should* be committed. Retiring it
 is defensible (the container supersedes it) but must be a recorded decision — ✅ **OQ6 records it**
 (retired 2026-09-14, with the hook *capability* explicitly not retired with the file) — because
@@ -557,7 +562,7 @@ verdict sits at `ledger/claims/<claim_id>.json`, "wrote nothing" is indistinguis
 iteration wrote it", and `adapter.py:907` reads that path unconditionally after the session exits —
 so a stale file is validated and **scored as this iteration's prediction**.
 
-**NF4 — the judge side needs no engine change.** `runner.run(materialized, inputs)` is duck-typed and
+**NF4 — the adjudicator side needs no engine change.** `runner.run(materialized, inputs)` is duck-typed and
 consumer-constructed (`loop.py:344-345`, `:443`; built in `dispatcher.build_components` →
 `adapter.SarolRunner`). Only the *Agent* side needs the engine's owed wiring.
 
@@ -565,7 +570,7 @@ consumer-constructed (`loop.py:344-345`, `:443`; built in `dispatcher.build_comp
 the tree this plan denies; it was written when `:144`'s "nothing in-repo to be denied" was believed.
 Adopt its hygiene, invert its scope. All the flags exist on the installed CLI (2.1.267).
 
-**NF6 — the judge inherits the optimizer's whole environment.** `headless_claude_invoke`
+**NF6 — the adjudicator inherits the optimizer's whole environment.** `headless_claude_invoke`
 (`adapter.py:470-478`) calls `subprocess.Popen(..., cwd=…, start_new_session=True)` with **no
 `env=`** — confirmed 2026-09-14, zero `env=` hits in the whole file. ⚠ Do not over-claim it, and ⚠
 **the earlier wording here was wrong.** `_gold_root()` (`parse_verdict.py:48-52`) *does* read an
@@ -586,7 +591,7 @@ path can be rewritten mid-run, so **the no-task failure class is detected rather
 (Phase 0b), at roughly 2% of sessions.
 
 **NF9 — the evidence envelope is version-uncovered.** The manifest's ten entries are all `.md`;
-`evidence_producers.py`, which writes the envelope the judge reads *as its evidence*, is not among
+`evidence_producers.py`, which writes the envelope the adjudicator reads *as its evidence*, is not among
 them and is not in `deliberately_excluded` either — never considered. The only record of the
 retrieval condition is two scalars (`dispatcher.py:827`) whose selftest (`:1147`) checks they are
 **present**, never that they describe what ran; and `retrieval_k` pins the *budget*, not the
@@ -607,7 +612,7 @@ V2c were all sized against it.
   `scripts/run_baseline.py:119`, **and 1 the earlier census missed: `dispatcher.py:554`**, a direct
   construction inside `build_components` itself. ⚠ A gate asserting the count equals **21** therefore
   goes red on day one — which is worse than a wrong number, because the first response to a red
-  census is to assume the tree grew a new judge.
+  census is to assume the tree grew a new adjudicator.
 - **There is a 23rd site reaching the same refusal, invisible to a text search.**
   `adapter.py:2770` constructs `_RealInvokerRunner` (declared `:2739`), a `SarolRunner` **subclass**
   that overrides only `_stage_command`, **not `__init__`** — so a refusal in `__init__` fires there
@@ -654,7 +659,7 @@ V2c were all sized against it.
 
 **Phases are numbered in build order.** The containers are the boundary, so they land before the
 layers behind them — not last, as the first draft had it. **Both principals get one** (Phil): the
-judge, and the optimizer. The scorer and gold sit outside both.
+adjudicator, and the optimizer. The scorer and gold sit outside both.
 
 Four design rules, each taken from something already working here:
 
@@ -672,7 +677,7 @@ Four design rules, each taken from something already working here:
   principals and the engine's mount renderer for the boundary. (⚠ Its per-run clone was the
   precedent for Phase 4 until **OQ9** descoped that phase to a reset — the rule still held; the
   problem turned out not to need the mechanism.) The one
-  place this plan has no built precedent is the judge/dispatcher container, and that is said out loud
+  place this plan has no built precedent is the program/dispatcher container, and that is said out loud
   rather than assumed (see `isolation-prior-work-inventory.md`).
 
 ### Phase 0 — the integrity floor
@@ -782,7 +787,7 @@ the frozen prompt between the markers, loads slots from `ledger/evidence/<claim_
 unresolved slot (`SLOT_UNRESOLVED:<slot>`).
 
 ✅ **OQ1 (Phil, 2026-09-14) extends this step from "render" to "dispatch".** The driver *session* is
-eliminated: the same Python invokes the judge directly with the rendered prompt, rather than handing
+eliminated: the same Python invokes the adjudicator directly with the rendered prompt, rather than handing
 the text to a Claude session that spawns a Task subagent. Reading the driver file settles why — its
 224 lines do three things, (1) fill slots, (2) dispatch exactly one general-purpose subagent with the
 filled text as its whole prompt (`:134`), (3) one `Bash` call to check the output file exists (`:142`)
@@ -793,17 +798,17 @@ structurally rather than detecting it: Python cannot improvise a broken heredoc.
 ⚠ **Per NF8 this remains the optimizer's, not the harness's.** What is removed is the **model**, not
 the **editability**. The driver file stays manifest entry #10 at the same path, holding
 optimizer-authored prompt text that the dispatcher reads; Phil's ruling that the optimizer may write
-Python covers the dispatcher itself. What reaches the judge is 100% optimizer-authored either way —
+Python covers the dispatcher itself. What reaches the adjudicator is 100% optimizer-authored either way —
 Python only fills placeholders in a prompt the optimizer wrote. ⚠ An earlier draft moved ~40% of the
 driver into harness code and Phil withdrew it; this is not that, and the test of the difference is
-whether the optimizer can still change what the judge receives. It can.
+whether the optimizer can still change what the adjudicator receives. It can.
 
 ⚠ **The driver file's contents change even though its path and manifest slot do not.** Its
 driver-facing prose — the dispatch instructions and the prohibitions addressed to a session that no
 longer exists ("never repair the subagent's output", "never write the verdict yourself") — becomes
 dead text in a frozen entry the optimizer would otherwise spend iterations optimising. Those
 prohibitions are not lost: they are **enforced by construction**, since the code that would have
-repaired an output is code nobody writes. Trimming to the judge-facing prompt re-freezes
+repaired an output is code nobody writes. Trimming to the adjudicator-facing prompt re-freezes
 `combined_hash` — a normal program-version event. Entry **count** and scope are untouched, so the five
 count/scope selftests do not move.
 
@@ -835,7 +840,7 @@ path; the pin is what the runtime imports. ⚠ Pinning to `main` instead of a re
 reintroduces exactly the drift that made the stale README outrank live code in this plan's first
 draft.
 
-**1b. The judge's mount set** (§4g item 8). Grant: `{claim staging (rw), materialized spec root (ro),
+**1b. The program's per-stage mount set** (§4g item 8). Grant: `{claim staging (rw), materialized spec root (ro),
 version-addressed cwd (ro)}`. Everything else — `iter/`, `optimizer/findings/`, `meta-learnings.md`,
 `optimizer/context/`, **`~/.paper-trail/gold`**, **`~/.paper-trail/benchmarks`** — is denied by
 absence *and* asserted denied.
@@ -843,14 +848,14 @@ absence *and* asserted denied.
 ✅ **Zero engine diff for the mounts themselves.** `build_docker_cmd_prefix` (`:444-464`) already
 exposes `extra_ro_mounts`, `writable_mounts`, `workdir`, `env`, `container_user`, `adc_path`, and an
 explicit `edit_agent_mounts=None` documented for *"a consumer with no editing agent at all (e.g.
-crc)"* — exactly the judge's shape. An earlier draft proposed a `JudgeMounts` dataclass in a repo
+crc)"* — exactly the program's shape. An earlier draft proposed a `ProgramMounts` dataclass in a repo
 three siblings consume; that buys naming, not capability.
 
 ⚠ **But the mount set does not cover credentials or network, and the first draft implied it did.**
 Two separate holes:
 
 - **Network policy is required and has no default.** `"none"` — what the existing controls use —
-  would deny the judge its own API calls, so it would fail rather than be isolated. Use
+  would deny the adjudicator its own API calls, so it would fail rather than be isolated. Use
   **`network_policy="open"`** + **`adc_path=None`** + `CLAUDE_CODE_OAUTH_TOKEN`
   (`isolation/open_profile.py:68-72`). ⚠ **Two traps verified 2026-09-14.** `adc_path` defaults to a
   **real credential path**, not `None` (`gcp_credentials.py:35`), so *omitting* it gives the
@@ -870,17 +875,17 @@ Two separate holes:
 
 ⚠ **`--dangerously-skip-permissions` is passed in TWO places, and the requirement splits by path.**
 ⚠ **Corrected 2026-09-14 (Codex round 2) — an earlier version of this paragraph said the flag was
-"not ours to pass", which is half wrong and would have left the judge on bypass.** Both are real:
+"not ours to pass", which is half wrong and would have left the adjudicator on bypass.** Both are real:
 
 | Path | Who passes it | What has to change |
 |---|---|---|
-| **The program / judge** | **ours** — `adapter.py:713`, in `_stage_command`'s own argv | **a local edit.** No upstream dependency, no prerequisite. This is the principal this plan is about, so the deny-by-default layer is available to us **now** |
+| **The program / adjudicator** | **ours** — `adapter.py:713`, in `_stage_command`'s own argv | **a local edit.** No upstream dependency, no prerequisite. This is the principal this plan is about, so the deny-by-default layer is available to us **now** |
 | **The optimizer** (via `DockerAgent`/`claude_wrapper`) | the **shared wrapper**, unconditionally (`agentic-label-opt/engine/claude_wrapper.py:130`, arg built `:128`) | an **upstream** change making bypass caller-selectable, preserving today's behaviour for rad-eval and crc unless they opt in |
 
 ⚠ **The failure mode this correction prevents:** an implementer who changes only the shared wrapper
-leaves `_stage_command` still emitting `--dangerously-skip-permissions`, and the judge — the principal
+leaves `_stage_command` still emitting `--dangerously-skip-permissions`, and the adjudicator — the principal
 whose containment is the point of this plan — runs on bypass while the upstream diff looks like the
-fix. **Acceptance check (new):** no shipping judge argv contains `--dangerously-skip-permissions`;
+fix. **Acceptance check (new):** no shipping adjudicator argv contains `--dangerously-skip-permissions`;
 assert on the argv the Runner actually builds, not on the wrapper.
 
 ⚠ **Also adopt deny-by-default inside the container**, replacing `--dangerously-skip-permissions`:
@@ -888,7 +893,7 @@ assert on the argv the Runner actually builds, not on the wrapper.
 automatically"*) with a non-bypass `--permission-mode` and an `--allowedTools` set. Strictly better
 than bypass-everything even behind a mount boundary. **Not** an alternative to the container — an
 earlier draft framed it that way and Phil withdrew it (**OQ3**, resolved). ✅ **`Task` is no longer
-required.** OQ1 eliminated the driver session, so the judge is a top-level `claude --print` session
+required.** OQ1 eliminated the driver session, so the adjudicator is a top-level `claude --print` session
 rather than a Task subagent, and the earlier warning — that an allowlist omitting `Task` *"kills every
 dispatch while looking like a permissions tightening"* — no longer applies. `Task` comes **off** the
 allowlist, which is a real narrowing, and V0c's check becomes the opposite assertion: no subagent is
@@ -898,7 +903,7 @@ spawned.
 a reason per entry, because this is the layer covering the four threats the mount set cannot. Minimum
 shape: `Read`/`Write` scoped to staging, `Bash` either absent or reduced, `Task` **absent** (OQ1),
 `WebFetch`/`WebSearch` **absent**. ⚠ With `Bash`, `WebFetch` and `WebSearch` off the list there is no
-per-call decision left for a hook to make on the judge's path — which is the finding that let **OQ6**
+per-call decision left for a hook to make on the adjudicator's path — which is the finding that let **OQ6**
 retire the tag-scoped settings file without retiring the hook requirement on the *optimizer's* path,
 where `Bash` is needed and `engine/policy.py`'s per-command granularity still has work to do. Model
 the list on rad-eval's
@@ -936,10 +941,10 @@ the defect is latent rather than live. With it comes a **canonical container pat
 — a single place that says host path → container path (`/workspace/program`, `/workspace/staging`,
 `/workspace/cwd`) — and **every** host path that crosses into the container is translated through it:
 the argv, `--add-dir`, `workdir`, and any path interpolated into prompt text. A path that is correct
-in argv and stale in the prompt is a dispatch the judge cannot complete, and it will look like a
+in argv and stale in the prompt is a dispatch the adjudicator cannot complete, and it will look like a
 model failure.
 
-Two properties to keep. ✅ **Since OQ1, the prefix wraps the judge directly** — the earlier form wrapped
+Two properties to keep. ✅ **Since OQ1, the prefix wraps the adjudicator directly** — the earlier form wrapped
 the *driver* invocation and relied on the Task subagent inheriting the boundary transitively, which is
 a weaker claim (it was V2i's job to demonstrate, and a named halt condition if it failed). With no
 driver session there is nothing to inherit through: one container, one session, one boundary, and V2i
@@ -965,14 +970,14 @@ docker run --rm
     --permission-prompts none --permission-mode <non-bypass>
     --allowedTools Read,Write                                 # no Task: OQ1 removed the subagent
     --add-dir /workspace/staging
-    '<rendered judge prompt, /workspace/... paths only>'       # rendered by Python (0c), not a slash command
+    '<rendered adjudicator prompt, /workspace/... paths only>'       # rendered by Python (0c), not a slash command
 ```
 
 Four things to read off it. **Every path is a container path** — `--add-dir`, the workdir, and the
 paths inside the prompt text all come from the same map, and a `/home/philadamson/...` string
 anywhere in this command is a bug V2d catches. **Nothing here is constant across dispatches**: the
 program mount changes per iteration, the staging and trace mounts per claim. **The token appears
-as a name**, which is the one real engine diff this phase needs. And ✅ **the invocation is the judge's
+as a name**, which is the one real engine diff this phase needs. And ✅ **the invocation is the adjudicator's
 own, not a slash command a driver runs** — the prompt arrives fully rendered on argv (0c), so there is
 no second session, no `Task`, and the container boundary and the session boundary are the same
 boundary.
@@ -990,9 +995,9 @@ must `touch` real files first.
 axis is the failure mode — it silently points a v1 dispatch at v0's bytes, or claim B at claim A's
 staging, and both produce plausible verdicts.
 
-**1d. Keep the judge's trace** (new; the first draft lost it). `find_transcript`
+**1d. Keep the adjudicator's trace** (new; the first draft lost it). `find_transcript`
 (`adapter.py:438-439`) globs the **host's** `~/.claude/projects`. Inside a container that directory
-is the container's, and it is discarded with the container — so containerizing silently ends judge
+is the container's, and it is discarded with the container — so containerizing silently ends adjudicator
 traceability, which is how the 61% stale-verdict contamination was found in the first place.
 ⚠ **And "silently" is literal — verified 2026-09-14.** The lookup is guarded: `trace_ref` starts
 `None`, the copy is behind `if src is not None`, and an `OSError` resets it to `None`
@@ -1007,7 +1012,7 @@ deliverable.
 ⚠ **Before 1e: do not inherit rad-eval's read scope.** Recovered from the authoring readback
 2026-09-09 and verified against code 2026-09-14; **corrected by Codex round 2**, which found the
 first version of this warning pointed at the wrong file. The source finding, verbatim: *"Engine side,
-same shape: one principal (the edit agent), two boundaries. The judge as a second, **less**-privileged
+same shape: one principal (the edit agent), two boundaries. The adjudicator as a second, **less**-privileged
 principal was never modeled — and the canonical READ scope **affirmatively grants**
 `release_train.json`, `context/*.md` and `meta-learnings.md`."*
 
@@ -1030,12 +1035,12 @@ by which it learns, not a leak); VAL gold is not, so nothing is written on a VAL
 
 ✅ **That docstring is the cleanest statement of §4g item 8 anywhere in the codebase**, and it sharpens
 the finding rather than weakening it: the corpus is **correctly open to one principal and an answer key
-for the other**. Copying rad-eval's posture wholesale hands the judge a release envelope that *names
+for the other**. Copying rad-eval's posture wholesale hands the program a release envelope that *names
 the path to the answer key*, through an allowlist, while every mount-set gate in this plan still
 reports green. A boundary defeated by inheritance, not by absence.
 
 ⚠ **Verification consequence — the reason this is Critical and not a wording nit.** A sentinel planted
-only in `release_train.json` **proves the wrong thing**: it would pass while the judge could still
+only in `release_train.json` **proves the wrong thing**: it would pass while the program could still
 follow `corpus.ref` and read `mistakes/<batch_id>.json`. **V2a-seal must plant and probe sentinels in
 both** — the release envelope *and* every corpus path reachable from a TRAIN release — or state
 plainly why denying `iter/` wholesale is sufficient and prove *that* instead.
@@ -1078,7 +1083,7 @@ the conflation:
 | Artifact | What it is | Status in a container |
 |---|---|---|
 | **The audit ledger** | one Merkle-chained row **per tool call**, written by the `PreToolUse` hooks, feeding the engine's four tripwires | ❌ empty — and **not because it is discarded**: container mode has no hooks, so there is nothing to write. rad-eval's `del audit_ledger` (`docker_agent.py:84`) is honest about that, not wasteful |
-| **The reasoning trace** | the judge's **session transcript** — what Phil is thinking of, and what the optimizer's blame analysis opens (`adapter.py:1920`, the S13 fix) | ⚠ lost **silently** in a container (`find_transcript` globs the *host's* `~/.claude/projects`) → ✅ **Phase 1d preserves it**, which is why 1d is not optional |
+| **The reasoning trace** | the adjudicator's **session transcript** — what Phil is thinking of, and what the optimizer's blame analysis opens (`adapter.py:1920`, the S13 fix) | ⚠ lost **silently** in a container (`find_transcript` globs the *host's* `~/.claude/projects`) → ✅ **Phase 1d preserves it**, which is why 1d is not optional |
 
 ✅ **And for paper-trail the ledger half changes nothing, because it was never wired.** `adapter.py:10-17`
 states it outright: *"The audit ledger is the engine's, and this consumer does not use it"* —
@@ -1135,7 +1140,7 @@ selftest sentinel's shape, not about whether the baseline gets one — ✅ and i
 **injected fake prefix**, so the selftests keep asserting real argv and no production-reachable branch
 can disable the boundary.
 
-**1g. The sentinel negative control** (§4g item 8). Plant sentinels and assert a judge **cannot**
+**1g. The sentinel negative control** (§4g item 8). Plant sentinels and assert the program **cannot**
 read them. This mirrors the one read-oriented control that shipped — `test_train_only_read_scope`
 (`tests/test_isolation_negative_control.py:173`), which asserts reads **succeed**. Its own plan
 classifies that control's *failure* as *"adapter-wiring bug, halt (not an isolation failure…)"*
@@ -1159,14 +1164,14 @@ its own terms — a new control in `isolation/negative_control.py` needs matchin
 change earns its place only if it is genuinely generic and tested upstream — otherwise it is our
 specifics living in three other consumers' repo.
 
-### Phase 2 — narrow what the judge sees: layers inside the box
+### Phase 2 — narrow what the program sees: layers inside the box
 
 Phase 1 makes things unreachable. Phase 2 reduces what is *exposed* even where the mount set already
 denies it — it removes the ambient-survey channel that actually fired in the 2026-09-09 run.
 
 **2a. A version-addressed working directory** (§4g item 2). `working_checkout` is already a
 constructor parameter (`adapter.py:628`), already exercised against a scratch dir
-(`adapter.py:2110-2130`); production simply passes the `REPO_ROOT` default. Per NF1 the judge's
+(`adapter.py:2110-2130`); production simply passes the `REPO_ROOT` default. Per NF1 the program's
 session needs only one file in cwd: `.claude/commands/sarol-eval-item.md`, the slash-command
 definition it runs.
 
@@ -1180,7 +1185,7 @@ close, and it would be invisible: both dispatches return plausible verdicts.
 So **cwd is addressed by program version**, and the cleanest form of that is already on disk: the
 per-iteration materialised snapshot contains the driver at the same relative path, is read-only
 (`materialize.py:100-107`, verified `dr-xr-xr-x`), and has no `.git` and no `CLAUDE.md`. So the
-judge's cwd can simply *be* the snapshot: one fewer directory, one fewer copy to keep in sync, one
+program's cwd can simply *be* the snapshot: one fewer directory, one fewer copy to keep in sync, one
 fewer mount, and version-addressing for free. The first draft's reason for a separate `/tmp` root was
 gold-adjacency (snapshots live under `~/.paper-trail/runs/`, two hops from `~/.paper-trail/gold`) —
 **inside the container that reason disappears**, since only the mount is visible.
@@ -1201,7 +1206,7 @@ process; each verdict must carry its own version's marker. A test that only chec
 exactly one file" passes on the broken design.
 
 **2b. A scope check beside the one that already works** (§4g item 1). A pure predicate in a new
-`isolation.py` returning a problem if any forbidden path sits inside the judge's readable tree.
+`isolation.py` returning a problem if any forbidden path sits inside the program's readable tree.
 
 ⚠ **Two loci, and the first draft conflated them.** The *scope predicate* belongs where
 `val_isolation_problem` is already raised — `dispatcher.py:549-551`, inside **`build_components`**
@@ -1250,7 +1255,7 @@ verified 2026-04-23"*). Both channels fired; the one producing the filename list
 `CLAUDE.md` auto-discovery"* — one flag for the row whose two env-var names are unverified, and
 `NEXT.md:461` already names `claude --bare --print …`. ✅ **Its blocker is gone.** Rule 3 records that
 `--bare`-style default toolsets **omit `Task`**, which was disqualifying while OQ1's option (i) kept
-the driver; OQ1 resolved to (ii), so the judge needs no `Task` and `--bare`'s omission is now a
+the driver; OQ1 resolved to (ii), so the adjudicator needs no `Task` and `--bare`'s omission is now a
 narrowing rather than a breakage. ⚠ **The remaining caveat is auth**: `--bare` refuses OAuth/keychain
 auth, and paper-trail authenticates with `CLAUDE_CODE_OAUTH_TOKEN` — an env var rather than a keychain
 read, but unverified. **V0b tests it. Pre-encoded fork:** the token survives `--bare` → use `--bare`;
@@ -1289,7 +1294,7 @@ construction sites (`dispatcher.py:582`, `:1019`, `:1089`, `:1205`; `adapter.py:
 fail — the same inertness, one layer up.
 
 **Use `runtime_pins`, not a new file.** `canary.py:16-36` states the rule: *a guard whose reference
-value is not under version control is not a guard.* `isolation.py` computes a hash over the judge's
+value is not under version control is not a guard.* `isolation.py` computes a hash over the program's
 actual configuration and the gate compares it against the manifest's **`runtime_pins`**. ⚠ An earlier
 draft invented a separate `isolation-pin.json` — itself an instance of building beside a mechanism
 aimed one dependency away (`runtime_pins` pins the paperclip CLI, which the only runnable profile
@@ -1312,7 +1317,7 @@ name them:
 | Image | image **digest** (not tag), pinned `CLAUDE_CODE_VERSION`, container user, workdir |
 | Boundary | the rendered mount set as `(source, target, mode)` triples **with each mount's role**, the network policy name, the egress allowlist |
 | Session | `--add-dir` set, env allowlist **names**, permission mode, `--permission-prompts` value, `--allowedTools` set |
-| Program | the judge fileset, the trace-persistence destination |
+| Program | the program fileset, the trace-persistence destination |
 
 Two rules on top: **names not values** for the env allowlist, so a rotated token does not read as a
 configuration change; and **the mount set as rendered**, so the pin is computed from the same bytes
@@ -1343,7 +1348,7 @@ the lessons sheet, `findings/`, and the `program-v*` tag namespace.
 optimizer is per run* — and the implementation of "per run" is a reset, not a clone. Concretely: the
 VM runner mints one run id per invocation and, before `build_components`, moves `meta-learnings.md`,
 the five `findings/iter-*.md` and `iter/` into the run archive, then **asserts each is absent**. Phase
-2a already builds a per-run working directory for the judge; this is the same move one level up, for
+2a already builds a per-run working directory for the program; this is the same move one level up, for
 the optimizer's inputs.
 
 Three consequences. ✅ **Gate H is satisfied rather than retired** — `check_run_scope.py` exists to
@@ -1398,9 +1403,9 @@ does not survive contact with what each half actually does.
 silently dropped — reasoning a requirement away in passing is this plan's own root cause:
 
 - **The driver session** (**OQ1**). Eliminated, not deferred: the dispatcher is deterministic, so
-  `dispatch_prompt.py` invokes the judge directly. What is *out of scope* is the consequence — the
-  judge stops being a Task subagent, so iterations 1-5 are not comparable across the change. Plan A's
-  baseline recut already had to run on the post-isolation instrument (61% of iter-5 judges read a
+  `dispatch_prompt.py` invokes the adjudicator directly. What is *out of scope* is the consequence — the
+  adjudicator stops being a Task subagent, so iterations 1-5 are not comparable across the change. Plan A's
+  baseline recut already had to run on the post-isolation instrument (61% of iter-5 adjudicator sessions read a
   stale verdict), so the recut absorbs the topology change; it is bundled, not free.
 - **The per-run git clone and `optimizer/run_clone.py`** (**OQ9**). Replaced by a run-start reset.
   Phil: there will never be parallel runs, and a clone's distinctive value is concurrent-namespace
@@ -1431,7 +1436,7 @@ silently dropped — reasoning a requirement away in passing is this plan's own 
   `freeze_program_v0.py` hardcodes a `FILESET` literal, and Stepback Phase F already crashed here (an
   `extractor_lib/`-only edit silently dropped by a program-v0-vintage `versioning.py`). Glob a program
   directory rather than list files — program-model work, separate from isolation.
-- The measurement redesign (§6 D1–D4), the artifact rewrite (§7.4), the judge-model A/B (§7.5).
+- The measurement redesign (§6 D1–D4), the artifact rewrite (§7.4), the adjudicator-model A/B (§7.5).
 
 ---
 
@@ -1440,7 +1445,7 @@ silently dropped — reasoning a requirement away in passing is this plan's own 
 **New — `optimizer/isolation.py`.** ⚠ **A thin consumer adapter over the engine's primitives — not a
 second Docker renderer (Codex round 2).** It composes `build_docker_cmd_prefix` and carries
 paper-trail's mount *contents as data*; every docker flag stays the engine's to emit. Scope predicate
-(`inner_scope_problem`), the judge's and the
+(`inner_scope_problem`), the adjudicator's and the
 optimizer's mount-set builders over the engine's generic params, the canonical container path map
 (1c), the env allowlist, the version-addressed cwd builder, the configuration hash. One module for
 one concern, matching this directory's one-module-per-concern convention. **Sister files:**
@@ -1449,7 +1454,7 @@ one concern, matching this directory's one-module-per-concern convention. **Sist
 
 **New — `optimizer/dispatch_prompt.py`.** Slot resolution, integrity checks, prompt rendering **and
 the dispatch itself** (0c + **OQ1**) — it reads the frozen prompt from the driver file, fills the
-slots, refuses on an unresolved one, and invokes the judge directly. ⚠ **This module replaces the
+slots, refuses on an unresolved one, and invokes the adjudicator directly. ⚠ **This module replaces the
 driver session**, so it is the one place the delivery path lives; per NF8 the optimizer may rewrite it
 (Phil: the optimizer may write Python), which is what keeps eliminating the driver *model* from being
 a removal of the optimizer's reach. Out of `adapter.py` (already ~2,900 lines) and out of
@@ -1504,7 +1509,7 @@ direct `SarolRunner` site, which `build_components` does not cover.
 **`optimizer/canary.py`** — one direct `SarolRunner` construction; opt-out or factory (1f).
 
 **`scripts/run_baseline.py`** — `:119-121` constructs `SarolRunner` directly. ⚠ This is the widest
-judge in the system and the one that produces Plan A's baseline recut, so it is the site the first
+adjudicator in the system and the one that produces Plan A's baseline recut, so it is the site the first
 draft's `build_components` gate would have missed. It takes its own version-addressed cwd and the
 **shipping** factory. ✅ **No opt-out** — OQ7 confirms the injected fake prefix is for the 19 selftest
 sites only; a baseline measured on an uncontained instrument would not be a weaker guarantee, it would
@@ -1531,10 +1536,10 @@ roles, network policy, session flags). Not a new file, and it cannot re-version 
 
 **`.claude/commands/sarol-eval-item.md`** — ⚠ **its role changes, its path and manifest slot do not**
 (**OQ1**). It stops being a slash command a driver session executes and becomes the file the
-dispatcher reads the judge's prompt out of. Trim the now-dead driver-facing prose — the dispatch
+dispatcher reads the adjudicator's prompt out of. Trim the now-dead driver-facing prose — the dispatch
 instructions (`:123-138`) and the prohibitions addressed to a session that no longer exists
 (`:43-50`), which are enforced by construction once no model sits in the delivery path — and keep the
-judge-facing prompt between the markers. This re-freezes `combined_hash`; it does **not** change the
+adjudicator-facing prompt between the markers. This re-freezes `combined_hash`; it does **not** change the
 manifest's entry count or scope, so the five count/scope selftests are untouched. ⚠ **Fully editable**
 (NF8): this is a default the optimizer may rewrite, not a contract.
 
@@ -1732,7 +1737,7 @@ dispatcher, and a model is the wrong thing to implement a dispatcher with.
 ⚠ **"Eliminate the driver session" ≠ "take the delivery path away from the optimizer."** What is
 removed is the **model**, not the **editability**: the driver file stays a manifest entry holding
 optimizer-authored prompt text (`DRIVER` is in `JUDGE_SCOPE` on Plan A's tip, `profiles.py:50`,
-`:58`), and the dispatcher reads it. What reaches the judge is 100% optimizer-authored either way.
+`:58`), and the dispatcher reads it. What reaches the adjudicator is 100% optimizer-authored either way.
 
 ⚠ **CORRECTED 2026-09-14 (Phil): the dispatcher itself is NOT optimizer-editable, and an earlier
 sentence here said it was.** It read *"Phil's ruling that the optimizer may write Python covers the
@@ -1745,9 +1750,9 @@ category, and it has a harder reason: **it is the thing that builds the containe
 
 | Surface | Who owns it | Why |
 |---|---|---|
-| The **prompt text** in the driver file | **the optimizer** — fully editable | it is what the judge is *told*; optimizing it is the point |
+| The **prompt text** in the driver file | **the optimizer** — fully editable | it is what the adjudicator is *told*; optimizing it is the point |
 | The **rubric / adjudicator prompt** (`JUDGE_SCOPE`) | **the optimizer** | same |
-| **`dispatch_prompt.py`** — slot-filling, refusal, invoking the judge | ⚠ **the harness. Never the optimizer** | it applies the container prefix; editable enforcement is not enforcement |
+| **`dispatch_prompt.py`** — slot-filling, refusal, invoking the adjudicator | ⚠ **the harness. Never the optimizer** | it applies the container prefix; editable enforcement is not enforcement |
 | The **scorer**, gold, the manifest | the harness | unchanged, and outside both containers |
 
 ⚠ **And Phil's 2026-09-11 "the optimizer may write Python" ruling is not in tension with this** — it
@@ -1769,10 +1774,10 @@ goes away. **`--bare` becomes available** — its omission of `Task` was the blo
 whole auto-memory / `CLAUDE.md` / dynamic-section row in one verified flag. **V2i is moot**: there is
 no Task subagent whose policy inheritance needs demonstrating, which was a named halt condition.
 
-⚠ **Two costs, both real, neither new.** First, **the measured condition changes** — the judge stops
+⚠ **Two costs, both real, neither new.** First, **the measured condition changes** — the adjudicator stops
 being a Task subagent and becomes a top-level `claude --print` session, so iterations 1-5 are not
 comparable across it. But this plan already owes Plan A a baseline recut on the post-isolation
-instrument (61% of iter-5 judges read a stale verdict), so the recut absorbs the topology change at no
+instrument (61% of iter-5 adjudicator sessions read a stale verdict), so the recut absorbs the topology change at no
 extra cost; it does not get to be *cheap*, it gets to be **bundled**. Second, **`--bare` refuses
 OAuth/keychain auth** and paper-trail authenticates with `CLAUDE_CODE_OAUTH_TOKEN` — an env var, not a
 keychain read, but unverified. **V0b tests it; pre-encoded fork:** token survives `--bare` → use it;
@@ -1797,7 +1802,7 @@ nothing can be added either). Consequences:
 - So a v0 dispatch and a v1 dispatch read from **different materialised snapshots**, each holding its
   own version's bytes. Nothing is lost and nothing is shared.
 
-✅ That is also exactly why **Phase 2a makes the judge's working directory the per-version snapshot**
+✅ That is also exactly why **Phase 2a makes the program's working directory the per-version snapshot**
 rather than a fixed folder — the snapshot *is* the version-addressing, already on disk, already
 read-only. "Ordinary new-version event" means: edit the file → freeze → `program-v1` exists with the
 new bytes, `program-v0` still resolves to the old ones.
@@ -1814,7 +1819,7 @@ at `:257` as *"fixed for the whole run, as always"*, and `:377` (plus the probe 
 one object every iteration. Both batch ids are iteration-free (`dispatcher.py:898`, `:816`). Proven on
 disk: batches `i1` and `i5` point claim `1059-13` at the identical staging dir, and one verdict file
 carries mtime `06:51` in a directory created `01:42` — **overwritten in place**. So iteration 5's
-judge ran in iteration 1's folder, on top of iteration 1's verdict. (Note the citations moved: this
+adjudicator ran in iteration 1's folder, on top of iteration 1's verdict. (Note the citations moved: this
 plan quoted `:193-194`, `:255`, `:345` against an older engine SHA.)
 
 **So the engine change is the answer, and OQ4 is why it stops being a close call.** This plan
@@ -1868,7 +1873,7 @@ work**, because crc needs the identical check and rebuilding it there would repe
 > small upstream change in `engine/loop.py`, because *"the defect is ours"* stopped being the deciding
 > argument.
 >
-> **It adds one design constraint, which is not extra work.** The judge/dispatcher container is the one
+> **It adds one design constraint, which is not extra work.** The program/dispatcher container is the one
 > thing nobody has built anywhere, and crc designed the identical gold-holding sibling. So
 > `optimizer/isolation.py` is written with its mount-set builder and path map **generic, with
 > paper-trail's paths as data** — shaped to lift, not lifted now. That is a way of writing the module,
@@ -1901,9 +1906,9 @@ because* a real `PreToolUse` hook denies every URL unconditionally, and that **"
 wiring at all, so that same app-layer policing doesn't exist"**
 (`2026-07-30-docker-vertex-only-egress-allowlist.md:123`).
 
-- **On the judge's path: redundant.** Its allowlist has `Bash` absent-or-reduced and `WebFetch` /
+- **On the program's path: redundant.** Its allowlist has `Bash` absent-or-reduced and `WebFetch` /
   `WebSearch` absent (and, per OQ1, no longer needs `Task`). With those tools ungranted there is no
-  per-call decision left for a hook to make. ✅ Retiring the file costs the judge nothing.
+  per-call decision left for a hook to make. ✅ Retiring the file costs the program nothing.
 - **On the optimizer's path: non-redundant, and a live gap.** The optimizer needs `Bash` — it edits and
   runs things — so `evaluate_bash`'s per-command granularity has real work to do that the mount set and
   a tool allowlist cannot. That gap is inherited knowingly by going container-first, and it is already
@@ -1960,7 +1965,7 @@ consequence: drop the "clone local, archive to mount" split from Phase 4; both s
 > engine's **backlog** grows; its **design** does not.
 >
 > **The one genuine architectural addition is paper-trail's, not the engine's:** the gold-holding
-> judge/dispatcher container, which crc's umbrella plan designed (`2026-07-10-…:60`, `:232-237`) and no
+> program/dispatcher container, which crc's umbrella plan designed (`2026-07-10-…:60`, `:232-237`) and no
 > repo has shipped. It gets built here, generically, so crc can adopt it rather than rebuild it — which
 > is a change *in* the engine's direction, not a change *to* the engine.
 
@@ -2009,7 +2014,7 @@ cross-model review found in the gates that matter most.
 | Gate | Vacuity risk | Assertion |
 |---|---|---|
 | **V2a-seal** | **empty deny list ⇒ zero probes ⇒ green, seal unproven**; and a **broad mount at an unexpected target** passes every path probe | list non-empty, expected entries by name **and count**, probe count equals list length; the rendered mount set equals an **exact** `(source, target, mode)` allowlist; no source is an **ancestor** of a forbidden path; probes enumerated **from the argv**; plus a positive control and a **negative control that must fail**. ⚠ **Sentinels in both the release envelope AND every `corpus.ref` path reachable from a TRAIN release** (Codex round 2) — gold is in `mistakes/<batch_id>.json`, not inline in `release_train.json`, so a release-only sentinel proves the wrong thing |
-| **V2c** | a refusal that only covers the sites we remembered ⇒ green while an ungated judge ships | assert the **count** of direct `SarolRunner` constructions (⚠ **22**, NF11) and classify each as containerized or explicitly opted out. ⚠ Count by constructor reachability, not by grep — a subclass inheriting `__init__` is bound by the refusal and matches no text search |
+| **V2c** | a refusal that only covers the sites we remembered ⇒ green while an ungated adjudicator ships | assert the **count** of direct `SarolRunner` constructions (⚠ **22**, NF11) and classify each as containerized or explicitly opted out. ⚠ Count by constructor reachability, not by grep — a subclass inheriting `__init__` is bound by the refusal and matches no text search |
 | **V4** | pin container emptied by a `cmd_write` refactor; pin read from the worktree; **a host-only hash ⇒ a swapped container leaves it unmoved** | round-trip re-freeze test; pin read from `git show HEAD:`; one divergence case per container component, image by **digest** not tag |
 | **V3b** | an exact-fileset assertion passes on a **single shared** cwd serving two program versions | V3b keeps the fileset assertion; **V3d** asserts each version's own driver bytes reached its own verdict |
 | **V1c** | a manifest with no matching entry leaves nothing to compare | assert the manifest resolves and the entry is present before comparing bytes |
@@ -2022,9 +2027,9 @@ cross-model review found in the gates that matter most.
 | **V2b** | a skipped suite reports no failures; and the historical "104" is a number from another machine | asserts **0 skipped**, and records **this run's** engine SHA, image digest, Docker version and pytest counts rather than reusing the old total |
 | **V0b** | a matrix row silently disappears and the rest still pass; a flag works in a scratch probe and is dropped by `_stage_command` | assert the **candidate count**, and assert each surviving flag appears in the **shipping argv**, not just in a probe |
 | **V0c** | a hand-built `docker run` proves the fixture, not the system | run the **real shipping topology** through the **same per-dispatch prefix factory** production uses. ⚠ **Corrected (Codex round 2):** that topology is now `dispatch_prompt.py` → `claude --print` **directly** — OQ1 removed the driver session, so this row previously demanded a driver→Task path the plan no longer builds. V0c must additionally assert **no subagent is spawned** and **`Task` is absent** from the allowlist |
-| **V1a** | two archived attempts overwrite each other and the gate still sees "an archive exists" | collision-proof archive names; assert the live verdict **and** error paths absent before each attempt; assert archives are **not** inside the judge's readable mount |
+| **V1a** | two archived attempts overwrite each other and the gate still sees "an archive exists" | collision-proof archive names; assert the live verdict **and** error paths absent before each attempt; assert archives are **not** inside the program's readable mount |
 | **V1b** | a fail-closed change that looks clean at the Runner breaks the seam it shares | trace the resolved OQ5 behaviour (fail-and-feed) end to end — Runner record → batch status → Scorer → release → corpus → optimizer-facing outcome |
-| **V2a-live** | a valid verdict proves the judge works, not that it was contained | plus non-null readable `trace_ref`, ⚠ **`Task` ABSENT and no subagent spawned** (corrected, Codex round 2 — this row said "`Task` available", which was the pre-OQ1 topology), exact in-container CLI version and image digest, token non-disclosure, and one adversarial read/write/egress attempt |
+| **V2a-live** | a valid verdict proves the adjudicator works, not that it was contained | plus non-null readable `trace_ref`, ⚠ **`Task` ABSENT and no subagent spawned** (corrected, Codex round 2 — this row said "`Task` available", which was the pre-OQ1 topology), exact in-container CLI version and image digest, token non-disclosure, and one adversarial read/write/egress attempt |
 | **V5** | "zero no-task sessions" is stochastic — a small batch can be clean by luck | the load-bearing assertion is that an **induced** no-task is detected and handled per OQ5; the observed zero is telemetry, not the gate |
 
 ⚠ **The pattern across all four holes is the same one the root-cause table names.** Each gate had a
@@ -2066,9 +2071,9 @@ the Runner actually builds — not only in the probe that discovered it.
 would be self-refuting. Also stop if a flag passes the probe and is absent from the shipping argv:
 that is the inert-mechanism pattern, caught one layer earlier than usual.
 
-**V0c — does a judge run in-container, under the shipping configuration, at what cost?** ⚠ **Through
+**V0c — does an adjudicator run in-container, under the shipping configuration, at what cost?** ⚠ **Through
 the real topology**, which OQ1 simplified: `dispatch_prompt.py` rendering the prompt and invoking the
-judge directly, launched by the **same per-dispatch prefix factory** production uses (1c) — no driver
+adjudicator directly, launched by the **same per-dispatch prefix factory** production uses (1c) — no driver
 session, no Task subagent. A hand-built `docker run` measures a fixture
 and tells us nothing about Phase 1c — and Phase 1c is where the review found the design could not
 work. ✅ Add one assertion the older topology could not make: **no subagent is spawned**, since `Task`
@@ -2081,11 +2086,11 @@ separate working dir (2a's open item).
 *Expected:* a valid verdict; an out-of-tree read **denied**, measured per layer so a pass says which
 one held; per-claim wall-clock and cost against the $0.183 median — **this is OQ3's cost number**; the
 in-container CLI version recorded.
-*Pre-encoded forks:* the allowlist denies a tool the judge needs → widen once and re-run, **not** fall
+*Pre-encoded forks:* the allowlist denies a tool the adjudicator needs → widen once and re-run, **not** fall
 back to bypass (the mount boundary is unaffected). The snapshot works as cwd → drop the separate
 working dir. The CLI needs to write to cwd → keep it, and record write access as the reason.
 *Stop:* container auth unresolved → halt the agentic control and report; do not improvise a credential
-path. ⚠ It does **not** block the non-agentic seal proof — but it **does** block the judge actually
+path. ⚠ It does **not** block the non-agentic seal proof — but it **does** block the adjudicator actually
 running inside the container, which is the seal. Phase 0 may land alone; **landing Phase 2 without
 Phase 1 means landing without isolation**, and must be described that way.
 
@@ -2100,8 +2105,8 @@ cached artifacts **without dispatching** and the archive code never runs.
 ⚠ **Three more assertions the first draft left out:** archive names are **collision-proof** (two
 attempts in the same second must not overwrite — a timestamp alone is not enough, so include the
 attempt index); the **error sidecar** path is asserted absent too, not just the verdict path; and the
-archive directory is **not inside the judge's readable mount**, or archiving a verdict hands the next
-judge the very thing this plan removes.
+archive directory is **not inside the program's readable mount**, or archiving a verdict hands the next
+program the very thing this plan removes.
 
 **V1b (fail closed, and the failure reaches the optimizer — OQ5 resolved to fail-and-feed).** Spy
 invoker returns exit 0, writes no verdict. *Expected, all four:* (1) the stale verdict on the
@@ -2158,7 +2163,7 @@ So the gate asserts the **rendered mount set** before it probes anything:
    `optimizer/findings/iter-1.md`, `optimizer/meta-learnings.md`, **`~/.paper-trail/gold/sarol-2024/…`**,
    and **`~/.paper-trail/benchmarks/…`**, each via a direct `docker run … cat`, reusing `run_probe` +
    `_build_common_fixture`.
-5. **Two controls.** A **positive** one: the judge's own staging and spec root *are* readable in the
+5. **Two controls.** A **positive** one: the program's own staging and spec root *are* readable in the
    same run, so a container that denies everything cannot pass as a seal. And a **negative** one:
    deliberately mount the repo at an unexpected target and assert the gate **FAILS** — without it,
    step 1 is untested and can be silently weakened to a subset check by anyone refactoring.
@@ -2172,9 +2177,9 @@ does not take, which is the same defect as `optimizer_isolation_hash` being a li
 *Stop:* **any** sentinel readable, or the negative control passing → halt. Do not weaken the
 assertion; report which mount granted it. This is the gate whose absence caused this plan.
 
-**V2a-live — agentic, gated on V0c.** One real `claude -p` judge session in-container on one staged
-claim. *Expected:* a valid verdict, proving the seal did not simply break the judge — **and a
-non-null, readable `trace_ref`** (per 1d), because a containerized judge with no trace is a less
+**V2a-live — agentic, gated on V0c.** One real `claude -p` adjudicator session in-container on one staged
+claim. *Expected:* a valid verdict, proving the seal did not simply break the adjudicator — **and a
+non-null, readable `trace_ref`** (per 1d), because a containerized adjudicator with no trace is a less
 diagnosable instrument than the defective one it replaces.
 
 **V2b — the permissive controls still pass.** `test_train_only_read_scope`
@@ -2240,12 +2245,12 @@ attempt failing with no layer identified, which is a green that proves nothing �
 and a sealed one look identical from outside.
 
 ⚠ **~~V2i — what the Task subagent inherits~~ — STRUCK by OQ1 (Phil, 2026-09-14).** It asked whether
-the driver's policy reaches the Task subagent the judge used to be. With the driver session eliminated
-the judge is the top-level session, the policy applies to it directly, and there is nothing to inherit
+the driver's policy reaches the Task subagent the adjudicator used to be. With the driver session eliminated
+the adjudicator is the top-level session, the policy applies to it directly, and there is nothing to inherit
 through. **Struck rather than marked green**, because a gate that passes for want of a subject is
 green-by-absence — the failure mode this plan's own rule names. ✅ What replaces it is smaller and
 stronger: V0c asserts **no subagent is spawned at all**, and V2h already probes the same four attempts
-against the judge session itself. ⚠ If a future change reintroduces a subagent in the delivery path,
+against the adjudicator session itself. ⚠ If a future change reintroduces a subagent in the delivery path,
 this gate comes back with it — rad-eval removed `Agent` from its allowlist precisely until inheritance
 was demonstrated, and that precedent is unchanged.
 
@@ -2280,7 +2285,7 @@ half. Do not let a green V3b stand in for either.
 
 **V3d (the driver's bytes match the version being scored).** Two program versions whose
 `sarol-eval-item.md` emits a distinct marker, dispatched in one process. *Expected:* each verdict
-carries **its own** version's marker, and the cwd the judge saw resolves under that version's
+carries **its own** version's marker, and the cwd the program saw resolves under that version's
 snapshot. *Stop:* both verdicts carry the same marker — the release payload then attributes one
 program's behaviour to another, silently, which is the failure this plan's measurement rests on not
 having.
@@ -2330,7 +2335,7 @@ time, so a green would prove nothing about the handling path. The load-bearing c
 non-zero metric despite any infra failure; per-claim cost within the V0c envelope; **in-container CLI
 version == host version**, recorded in the run manifest.
 ⚠ **Record the metric, and do not read a drop as a regression.** Removing 61% eval contamination
-should push the held-out number **down** — a judge that can no longer read the previous iteration's
+should push the held-out number **down** — a program that can no longer read the previous iteration's
 verdict for the same claim loses its self-consistency crutch. A lower number is the **expected
 signature of the fix working**. Stated because the first person to see it fall is otherwise likely to
 revert.
@@ -2344,7 +2349,7 @@ or a version/digest mismatch.
 
 ### Anticipated forks
 
-- **V0c's deny-by-default layer blocks a tool the judge needs** → widen the allowlist once and re-run;
+- **V0c's deny-by-default layer blocks a tool the adjudicator needs** → widen the allowlist once and re-run;
   do not fall back to bypass, the container boundary is unaffected.
 - **V0c's cost comes back high** → report the number and the per-run total. Information for Phil, not
   a decision to skip the container (OQ3).
@@ -2356,7 +2361,7 @@ or a version/digest mismatch.
 - **V0b shows `--bare` refuses the `CLAUDE_CODE_OAUTH_TOKEN` env var** → drop `--bare` and set §2c's
   last row flag by flag, recording the two unverified env-var names as a residual. ✅ The older form of
   this fork (`--bare` omits `Task`, so it conflicts with keeping the driver) is **closed**: OQ1
-  eliminated the driver, the judge needs no `Task`, and the omission is now a narrowing.
+  eliminated the driver, the adjudicator needs no `Task`, and the omission is now a narrowing.
 - **A delivery failure fires mid-run (OQ5 fail-and-feed)** → the iteration returns the failure to the
   optimizer rather than a score; record the delivery-failure count in the release breakdown so it is
   never read as a program-quality drop.
@@ -2364,9 +2369,9 @@ or a version/digest mismatch.
 - **V2a-seal leaks** → halt at Step 2 under any schedule pressure.
 - **V2a-seal's mount-set allowlist keeps needing entries** → each addition is a boundary widening and
   gets a written reason next to it; three or more means the mount set was designed wrong, so re-derive
-  it from what the judge reads rather than appending.
+  it from what the adjudicator reads rather than appending.
 - **V2c's census finds more than 22 construction sites** → the count moved under us; update the
-  assertion *and* say which sites appeared, because a new ungated judge is the defect this plan is
+  assertion *and* say which sites appeared, because a new ungated adjudicator is the defect this plan is
   about. ⚠ The baseline is **22** (NF11), not the 21 earlier drafts asserted, and the census must
   count `SarolRunner` **subclasses** too — `_RealInvokerRunner` (`adapter.py:2770`) reaches an
   `__init__` refusal while matching no search for `SarolRunner(`.
@@ -2378,7 +2383,7 @@ or a version/digest mismatch.
   design question about what the program *is*.
 - ✅ **~~V2i — the Task subagent does not inherit the driver's policy~~ → MOOT.** This was a named halt
   condition whose resolution was *"drop the subagent path"*; OQ1 dropped it up front, so there is no
-  subagent whose inheritance needs demonstrating and every flag applies to the judge directly. ⚠ V2i
+  subagent whose inheritance needs demonstrating and every flag applies to the adjudicator directly. ⚠ V2i
   is struck from the gate list rather than left green-by-absence — a gate that passes because its
   subject no longer exists must say so, not report a pass.
 - **V2h cannot attribute a failure to a layer** → treat as red. Re-run with one layer relaxed at a
@@ -2410,7 +2415,7 @@ namespace (recommendation: key on `combined_hash`), which is a decision to recor
 design. Then: the five findings archived (a
 Phase 4 precondition and the only copy); Step 0's probes run and recorded; **V2a-seal green,
 including its negative control** — a land with either red is not a land; **V2c's 22-site census
-green**, so no ungated judge ships; **V2d and V3d green**, because a reused prefix or a shared cwd
+green**, so no ungated adjudicator ships; **V2d and V3d green**, because a reused prefix or a shared cwd
 mis-attributes one program's behaviour to another and nothing downstream would show it; **V2h green with every result attributed to a layer**, since it covers the
 threats the mount set cannot (⚠ **V2i is struck, not waived** — OQ1 removed the Task subagent it
 tested); **V2e green**, so a containerized run is still auditable; the credential-by-name engine
@@ -2435,7 +2440,7 @@ five count/scope selftests (`adapter.py:1668`, `:1773` and its retrieval-scope a
 `profiles.py:262` and its retrieval-scope assertion) — update them individually.
 
 **Contract owed to Plan A's baseline recut.** It must run on the **post-isolation** instrument: 61% of
-iter-5 judges read a stale verdict, so a baseline measured today measures the contamination. The
+iter-5 adjudicator sessions read a stale verdict, so a baseline measured today measures the contamination. The
 landing order satisfies this. ✅ Its dependencies are now settled rather than pending: OQ5
 (fail-and-feed) and OQ7 (injected fake prefix — so `run_baseline.py` takes the shipping factory and
 gets **no** opt-out, which is what makes the recut and the iterations comparable at all). ⚠ Add OQ1 to
@@ -2454,16 +2459,20 @@ never reproduce it, since a restated imperative stays actionable to a model that
 `findings/iter-*.md`; run `--archive <run-id>` first. **Phase 4 retires it.** ⚠ It resolves paths from
 its own location, so running Plan A's copy from its worktree passes and says nothing about this tree).
 
-**Cleanup on land.** ⚠ **Owed BEFORE implementation, not on land — escalated by Codex round 2, which
-called it "not cosmetic because 'judge' vs 'program' changes the per-stage mount-set interpretation."**
-Agreed: an implementer reading "the judge's mount set" will build one mount set; reading "the program's"
-raises the question of which stage. That is the difference between a correct boundary and a latent gap,
-so the sweep is a pre-implementation blocker. ⚠ **Owed first: a naming consistency pass.** Phil's 2026-09-14 correction renamed
-the contained principal from *the judge* to *the program* (see *Who is who*), and the body below still
-says *judge* ~120 times — usually meaning the adjudicator stage, occasionally the program. The
-definitions section governs; the body has not been swept. Do that before implementation starts, not
-after, because the two readings differ exactly where it matters (a per-stage mount set versus a
-per-claim one). Then `/land` prunes the branch (local + remote) and the worktree, marks this plan
+**Cleanup on land.** ✅ **Both pre-implementation blockers are cleared (2026-09-15).** Codex round 2
+escalated the naming pass ahead of implementation, calling it *"not cosmetic because 'judge' vs
+'program' changes the per-stage mount-set interpretation"* — an implementer reading "the judge's mount
+set" builds one mount set, where "the program's" raises the question of which stage. That is the
+difference between a correct boundary and a latent gap, which is why it came first. Done:
+
+1. **Rebased onto Plan A's tip `f02d761`** — 21 commits replayed, the only conflicts being the two
+   tracker files. Verified there: 506/506 offline selftests across 13 modules, Gate A (40 checks),
+   Gate D, and the 10-entry freeze reproducing `combined_hash 7431a5bc98a9`.
+2. **Naming sweep applied** — 108 of 142 uses of *judge* rewritten to *the program* (container, mount
+   set, cwd, read boundary) or *the adjudicator* (the stage's role), including a proposed
+   `JudgeMounts` dataclass now `ProgramMounts`. The 34 kept are listed in *Who is who*.
+
+Then `/land` prunes the branch (local + remote) and the worktree, marks this plan
 `Status: Completed`, updates its `docs/plans/README.md` row, prunes the `NEXT.md` entry, and retires
 the scratch sentinel fixtures and any per-run working dirs.
 
@@ -2473,7 +2482,7 @@ load-bearing debt, but that is **already done** (`loop.py:192`, `:426-431`, with
 the consumer-side agent class is **ours**. What is genuinely owed upstream is smaller and named in
 that section: the by-name credential form (a **prerequisite** of Phase 1b, not a follow-up), audit
 rows from container sessions, permission-hook wiring, and validating the isolation label. The half of
-isolation this plan adds that nobody has built anywhere is the **judge/dispatcher container** — crc's
+isolation this plan adds that nobody has built anywhere is the **program/dispatcher container** — crc's
 umbrella plan designed it, no repo shipped it. Everything else here is re-aiming a built mechanism,
 which is the whole reason the shared package exists.
 Findings §4/§8 get promoted to `docs/journal/` on land, per `NEXT.md`.
