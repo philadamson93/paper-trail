@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="plan-sha256" content="684750a0113315e98b67e060e83f1773b3666ab3573a47deb78ce39e8022e02f">
+<meta name="plan-sha256" content="4ab81c513c04c397b5f0a9991626da5f6be3713168304f02ad2ef85d8353a9bb">
 <title>The isolation protocol — plan explainer</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128274;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -95,51 +95,51 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   <h1>The isolation protocol</h1>
   <p class="sub">Put both agents inside a locked box, so what they cannot read is a fact about the filesystem rather than a sentence in a prompt they are allowed to edit.</p>
   <div class="meta">
-    <span><b>Status</b> <b class="good">APPROVED 2026-09-15</b> &middot; Reviewed: Yes</span>
+    <span><b>Status</b> <b class="good">APPROVED 2026-09-15</b> &middot; Reviewed: Yes &middot; <span class="warn">edited since, naming sweep only</span></span>
     <span><b>Lands on</b> <code>sarol-optimizer-concurrent</code>, after Plan A</span>
-    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>684750a01133</code></span>
-    <span><b>2,380 lines</b> &middot; 9 questions resolved, <b class="warn">3 live</b></span>
-    <span><b>Generated</b> 2026-09-15 14:08</span>
+    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>4ab81c513c04</code></span>
+    <span><b>2,488 lines</b> &middot; all 12 questions resolved</span>
+    <span><b>Generated</b> 2026-09-15 16:12</span>
   </div>
 </header>
 
 <div class="card keep" data-changed="mod" data-section="changes">
-  <h2>What changed since you last looked <span class="chg">&#9679; 13 findings applied</span></h2>
-  <p>An independent cross-model review (Codex, its second pass on this plan) read the plan against the
-  live code in all three repos. <b>Thirteen findings applied, none disputed.</b> Its verdict was
-  <b class="bad">Blocked</b> &mdash; not because the design is wrong, but because three things in the
-  document would have sent an implementer down the wrong path.</p>
+  <h2>What changed since you last looked <span class="chg">&#9679; both blockers cleared</span></h2>
+  <p>Nothing about the design moved this round. The two things standing between this plan and the
+  first line of code are done, and the plan now says so.</p>
 
-  <p><b>The three that matter, and all three were corrections to claims I had made:</b></p>
   <ol>
-    <li><b>The permission-bypass flag is set in two places, not one.</b> I had written that it
-    wasn't ours to change. Wrong: we pass it ourselves for the program, and the shared engine passes
-    it for the optimizer. So the program's fix is <b>a local edit available now</b>, not something
-    waiting on upstream &mdash; and an implementer who only changed upstream would have left the
-    program running wide open while the diff looked like a fix.</li>
-    <li><b>The gold labels are one hop further away than the plan said, and that moves the test.</b>
-    The release file carries a <i>pointer</i>; the answer key is the file it points at. A sentinel
-    planted in the release would have passed while the program could still follow the pointer and
-    read the answers. See the chain below.</li>
-    <li><b>Old wiring was still in the test list.</b> After you cut the middleman session, two gates
-    still demanded the middleman-plus-subagent shape and required the subagent tool to be
-    <i>available</i>. They now assert the opposite.</li>
+    <li><b>The branch sits on top of Plan A now.</b> Twenty-one commits were replayed onto Plan A's
+    tip. Only two files collided &mdash; the plan index and the status page &mdash; and each kept its
+    own newer entry. This matters because the plan's argument about which files the optimizer may edit
+    rests on a ten-entry program fingerprint that only exists on Plan A's branch. On the old base that
+    fingerprint had eight entries and was missing the per-claim driver; it is there now, and it
+    recomputes. Checked on the rebased branch: <b>506 of 506 checks pass</b>, along with the
+    paper-fidelity gate, the empty-evidence gate, and the freeze.</li>
+    <li><b>The naming is swept.</b> 108 of the document's 142 uses of "judge" are rewritten &mdash;
+    to <b>the program</b> wherever the sentence was about the box, the mount set, the working folder,
+    or what may be read; to <b>the adjudicator</b> wherever it was about the stage doing the judging.
+    A mount-set type that had been named after the judge is renamed too. The 34 left are deliberate: a
+    real identifier in the code, the separate word "judgement", your own quoted words, quoted test
+    strings, and this page's own explanation of the naming.</li>
   </ol>
 
-  <p><b>Two genuinely new:</b> pinning the engine in a package file changes nothing unless the import
-  path changes too (today it reaches into a hardcoded folder in your home directory, in two separate
-  files) &mdash; and a <b>free dry run</b> is now the first gate: render every command for every
-  stage and profile, start no container, call no model, and assert no host paths leak in and no two
-  dispatches share a command. Cheapest check in the plan, covering the two defects most likely to
-  survive review.</p>
+  <p><b>So the next action is the free dry run</b> &mdash; render every command for every stage,
+  profile, claim and version; start no container; call no model; and assert no host paths leak in and
+  no two dispatches share a command.</p>
 
-  <p><b>Three new live questions</b> came out of it, listed in the questions panel: whether this
-  build covers all three pipeline stages or just the judging one (this one blocks starting), whether
-  the old environment-variable override survives the pin, and how program versions get identified.</p>
+  <p class="small">Also fixed: the plan's own status field still read "Draft" while the very next
+  sentence &mdash; and both trackers &mdash; said approved. It reads Approved now.</p>
 
-  <p class="small">Baseline: the plan as this page showed it before that review. &#9888; The previous
-  file's metadata claimed an older version than its own content, so a naive diff would have re-shown
-  you nine rounds of edits you have already reviewed and responded to. This is one round's delta.</p>
+  <p class="small">&#9888; Two things are still owed, and neither is a design question. This page was
+  one of them &mdash; it was stale against the swept plan, which is what this regeneration fixes. The
+  other: the rebase rewrote history, so the branch's copy on the server has diverged and updating it
+  needs a force-push and your say-so. Nothing has been pushed.</p>
+
+  <p class="small">Baseline: the plan exactly as this page last showed it
+  (<code>684750a01133</code>), so this is one round's delta and nothing older. &#9888; The sweep
+  touched wording in most sections, but only the sections flagged below changed in <i>meaning</i>.
+  Everywhere else it is the same plan in the agreed vocabulary.</p>
 </div>
 
 <div class="card keep" data-section="tldr">
@@ -237,10 +237,12 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   calls at all &mdash; it compares answers against gold and sits <i>outside both boxes</i>. It is
   never an agent. Where this plan talks about protecting "the scorer", it means that code and the
   gold it reads.</p>
-  <p class="small">&#9888; Known debt: the plan's own title and about 120 of its sentences still say
-  "judge" where they mean the judging stage. The definitions here govern. Sweeping the document is a
-  <b>blocker before implementation</b>, not a tidy-up, because the two readings differ exactly where
-  it matters &mdash; one mount set, or three.</p>
+  <p class="small">&#9888; <b>Paid.</b> This plan used to say "judge" in about 120 sentences where it
+  meant one of the two things above. 108 of 142 uses are now rewritten &mdash; <b>the program</b> for
+  the box, the mount set, the working folder and what may be read; <b>the adjudicator</b> for the
+  stage doing the judging. The 34 that remain are on purpose: a real identifier in the code, the
+  separate word "judgement", your own quoted words, quoted test strings, and the explanation just
+  above.</p>
 </div>
 
 <div class="card keep" data-section="repos">
@@ -266,8 +268,8 @@ ul,ol{padding-left:21px}li{margin:4px 0}
     <tr><td class="n">4</td><td><b>A deterministic dispatcher, in Python</b><br><span class="d">Reads the frozen prompt, fills the blanks, refuses if a blank is unresolved, and launches the judging session <b>directly</b>. No middleman session, no subagent. &#9888; <b>Harness-owned: the optimizer may never edit this.</b> It applies the box &mdash; a boundary its subject can rewrite is not a boundary.</span></td><td class="ph">0c</td></tr>
     <tr><td class="n">5</td><td><b>One place that refuses to run uncontained</b><br><span class="d">The constructor raises unless handed a container command. &#9888; <b>22 sites, but 19 are test-only</b> &mdash; three can run in production and one of those already accepts a substitute, so there are <b>two</b> to wire. It must sit at the constructor because there are three ways to reach a runner, including one that skips the usual setup entirely. &#9888; Plus a second refusal: reject any stage whose mount set does not exist yet.</span></td><td class="ph">1f</td></tr>
     <tr><td class="n">6</td><td><b>The isolation module</b><br><span class="d">&#9888; A <b>thin adapter over the engine's machinery</b>, not a second command renderer. One module, one concern: the scope check, both mount sets, the host-to-container path map, the environment allowlist, the version-tied working folder, and the configuration fingerprint. Written generically so it lifts out for crc.</span></td><td class="ph">2a, 2b, 3</td></tr>
-    <tr><td class="n">7</td><td><b>Keep the transcript</b><br><span class="d">The session text is already held in memory; write it out beside the answer. &#9888; Without this, putting the judge in a box <b>silently</b> ends traceability &mdash; the run still reports success while the transcript reference goes empty. And traceability is how the 61% contamination was found at all.</span></td><td class="ph">1d</td></tr>
-    <tr><td class="n">8</td><td><b>Per-round evidence folders</b><br><span class="d">Widen the engine's held-out inputs to accept a per-round form, mirroring what the training side already does; then assert the answer slot is empty before each dispatch. &#9888; Today round 5's judge runs in round 1's folder, on top of round 1's answer.</span></td><td class="ph">0a</td></tr>
+    <tr><td class="n">7</td><td><b>Keep the transcript</b><br><span class="d">The session text is already held in memory; write it out beside the answer. &#9888; Without this, putting the program in a box <b>silently</b> ends traceability &mdash; the run still reports success while the transcript reference goes empty. And traceability is how the 61% contamination was found at all.</span></td><td class="ph">1d</td></tr>
+    <tr><td class="n">8</td><td><b>Per-round evidence folders</b><br><span class="d">Widen the engine's held-out inputs to accept a per-round form, mirroring what the training side already does; then assert the answer slot is empty before each dispatch. &#9888; Today round 5's adjudicator runs in round 1's folder, on top of round 1's answer.</span></td><td class="ph">0a</td></tr>
     <tr><td class="n">9</td><td><b>A broken dispatch fails loudly</b><br><span class="d">No retry. A dispatch that produces no answer fails that claim under a <b>separate</b> count, is handed to the optimizer as feedback, and is never reported as program quality. &#9989; The engine landed the channel for this the same day &mdash; use it, do not build a second one.</span></td><td class="ph">0b</td></tr>
     <tr><td class="n">10</td><td><b>Pin the configuration</b><br><span class="d">One key recording the image <b>digest</b>, the mounts as actually rendered, the network policy and the session flags &mdash; read from the committed file, not the working copy. A guard whose reference value is editable in the same tree is not a guard.</span></td><td class="ph">3</td></tr>
     <tr><td class="n">11</td><td><b>Reset the run state at the start of each run</b><br><span class="d">Archive the lessons sheet, the findings files and the releases folder, then assert they are gone. &#9888; <b>Not</b> a per-run clone &mdash; you will never run two at once, and the defect is leftovers between <i>sequential</i> runs.</span></td><td class="ph">4</td></tr>
@@ -480,7 +482,7 @@ ul,ol{padding-left:21px}li{margin:4px 0}
 <p>Nothing downstream is measurable until this lands, and it is independent of the boxes.</p>
 <p><b>0a &mdash; give the held-out set a round number, then check the slot is empty.</b> Today the
 training side gets per-round inputs and the held-out side does not: the same object is reused every
-round, so round 5's judge runs in round 1's folder <i>on top of round 1's answer</i>. Proven on
+round, so round 5's adjudicator runs in round 1's folder <i>on top of round 1's answer</i>. Proven on
 disk: two rounds point the same claim at the identical directory, and one answer file is timestamped
 four hours after the folder that contains it. That is the 61% contamination. The fix is a two-line
 widening upstream, mirroring what the training side already accepts &mdash; plus a check that the
@@ -567,7 +569,7 @@ repository-global, so a second run re-mints the first run's (question 12).</p><l
     <thead><tr><th>What leaked</th><th>The mechanism that existed</th><th>Where it was pointed instead</th></tr></thead>
     <tbody>
     <tr><td>The driver file</td><td>the frozen manifest</td><td>left it out until this week</td></tr>
-    <tr><td>Notes addressed to the driver</td><td>an existing scope gate</td><td>scoped to the judge's read path only</td></tr>
+    <tr><td>Notes addressed to the driver</td><td>an existing scope gate</td><td>scoped to the program's read path only</td></tr>
     <tr><td>The optimizer's hypothesis log</td><td>code that asserts a reset happens</td><td>nothing implemented one</td></tr>
     <tr><td>The evidence envelope</td><td>the runtime pins</td><td>pins a tool the running profile never invokes</td></tr>
     <tr><td>The scorer</td><td>a re-hash check on contract files</td><td>the ten markdown entries &mdash; <b>no Python file is in the manifest at all</b></td></tr>
@@ -649,7 +651,7 @@ pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-d
   ancestor of a forbidden path. &#9888; Markers go in the release <b>and</b> in every answer-key path
   reachable from it.</p>
   <p><b>What to expect end to end, said in advance.</b> Removing the contamination should push the
-  held-out number <b>down</b>. A judge that can no longer read the previous round's answer for the
+  held-out number <b>down</b>. A program that can no longer read the previous round's answer for the
   same claim loses its crutch. <b>A lower number is the signature of the fix working</b> &mdash;
   written down now because the first person to see it fall will otherwise read it as a regression.</p>
   <p class="small">&#9888; One gate was <b>struck rather than marked green</b>: the subagent-inheritance
@@ -661,19 +663,20 @@ pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-d
 
 <div class="card keep" data-section="landing" data-changed="mod">
   <h2>Landing <span class="chg">&#9679; changed</span></h2>
-  <div class="chgnote"><b>What changed:</b> rebasing onto Plan A is now a hard precondition, and the
-  naming sweep is a blocker before implementation rather than cleanup on land.</div>
-  <p><b>Three things must happen before any code is written:</b> rebase onto Plan A's tip; sweep the
-  ~120 stale uses of "judge" (not cosmetic &mdash; it changes whether a reader builds one mount set or
-  three); and answer question 10.</p>
+  <div class="chgnote"><b>What changed:</b> both things that had to happen before any code are done,
+  so what is left in this section is the merge itself.</div>
+  <p><b>The preconditions are cleared.</b> The branch is rebased onto Plan A's tip &mdash; checked
+  there by 506 of 506 checks, the paper-fidelity and empty-evidence gates, and the freeze &mdash; and
+  the naming sweep is applied. Question 10 is answered too: this build covers the adjudication step
+  only, which is the single stage the measurement harness dispatches.</p>
   <p><b>Before it merges:</b> the marker test green including its must-fail control &mdash; a land
-  with either red is not a land; the site census green so no ungated judge ships; the per-dispatch and
+  with either red is not a land; the site census green so no ungated adjudicator ships; the per-dispatch and
   per-version gates green, because a reused command or a shared folder mis-attributes one program's
   behaviour to another and nothing downstream would show it; the transcript check green; and the
   credential-by-name change landed upstream first, since it is a prerequisite rather than a
   follow-up.</p>
   <p><b>Owed to the sibling plan:</b> its baseline re-measurement must run on the <i>post-isolation</i>
-  instrument. 61% of the last run's judges read a stale answer, so a baseline measured today measures
+  instrument. 61% of the last run's adjudicator sessions read a stale answer, so a baseline measured today measures
   the contamination. It also now absorbs the topology change from cutting the middleman &mdash;
   bundled, not free.</p>
   <label class="fb" for="fb-landing">Your notes on landing</label>
@@ -690,32 +693,30 @@ pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-d
 <div class="foot">
   <button id="copy">Copy feedback as Claude prompt</button>
   <span class="n" id="pend">nothing entered yet</span>
-  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>684750a01133</code></span>
+  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>4ab81c513c04</code></span>
 </div>
 
 <script>
-const PLAN_SHA="684750a0113315e98b67e060e83f1773b3666ab3573a47deb78ce39e8022e02f";
+const PLAN_SHA="4ab81c513c04c397b5f0a9991626da5f6be3713168304f02ad2ef85d8353a9bb";
 const PLAN_PATH="docs/plans/isolation-protocol.md";
 const PLAN_BRANCH="sarol-optimizer-concurrent";
 
 const CHANGES={
   round:"diff",
-  baseline:"the plan as this page last showed it, before the round-2 review",
+  baseline:"the plan exactly as this page last showed it (684750a01133) — one round's delta, nothing older",
   sections:{
-    "changes":{s:"new"},
-    "p1":{s:"changed"},
-    "g-manifest":{s:"changed"},
-    "landing":{s:"changed"},
-    "verify":{s:"changed"}
+    "changes":{s:"changed",note:"Both pre-coding blockers are cleared: the rebase onto Plan A, and the naming sweep."},
+    "whoiswho":{s:"changed",note:"The naming debt this section recorded is paid — 108 of 142 uses rewritten, and the 34 deliberate keeps are now named."},
+    "landing":{s:"changed",note:"Both blockers are done, so what is left here is the merge; the next action moved to the free dry run."}
   },
-  oqs:{10:{s:"new"},11:{s:"new"},12:{s:"new"}}
+  oqs:{}
 };
 
 const OQS=[
  {n:1,resolved:"Cut the middleman \u2014 the dispatcher is deterministic, so Python does it (you, 2026-09-14).",
-  plain:"Keep the middleman session that hands the judge its task, or cut it out?",
+  plain:"Keep the middleman session that hands the adjudicator its task, or cut it out?",
   orig:"Keeping it was the smallest change to what was actually measured. Cutting it removes a model from the delivery path and saves about 10% of spend.",
-  rec:"RESOLVED, against this plan's recommendation. Its 224 lines do three things and Python already owns two of them. <b>What it buys:</b> the no-task failure class disappears structurally \u2014 both delivery bugs were shell a <i>model</i> improvised, and 13 of 561 sessions began with no task; Python cannot improvise. The subagent tool comes off the permission list, a one-flag hygiene setting becomes usable, and a whole verification gate is struck. <b>The cost, plainly:</b> the judge stops being a subagent, so the five measured rounds are not comparable across the change \u2014 but the sibling plan already owed a re-measurement on the post-isolation instrument, so it is bundled, not free.",
+  rec:"RESOLVED, against this plan's recommendation. Its 224 lines do three things and Python already owns two of them. <b>What it buys:</b> the no-task failure class disappears structurally \u2014 both delivery bugs were shell a <i>model</i> improvised, and 13 of 561 sessions began with no task; Python cannot improvise. The subagent tool comes off the permission list, a one-flag hygiene setting becomes usable, and a whole verification gate is struck. <b>The cost, plainly:</b> the adjudicator stops being a subagent, so the five measured rounds are not comparable across the change \u2014 but the sibling plan already owed a re-measurement on the post-isolation instrument, so it is bundled, not free.",
   resp:"You pushed back on my recommendation and you were right. &#9888; One thing I got wrong in applying it, which you then caught: I wrote that your \"the optimizer may write Python\" ruling covers this dispatcher. <b>It does not.</b> The dispatcher is harness code \u2014 it is what applies the box, and a boundary its subject can edit is not a boundary. The prompt text stays fully yours to optimize; the code that fills and launches it does not."},
  {n:2,resolved:"Per-round folders, via the shared-engine change (you, 2026-09-14).",
   plain:"Fix the stale-answer problem in our own code, or change the shared engine three projects depend on?",

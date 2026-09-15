@@ -2,7 +2,7 @@ Reference: docs/claude_ops.md
 
 # The isolation protocol — putting the agentic program inside the shared substrate
 
-**Status: Draft** (rewritten 2026-09-11 against the shared engine's landed substrate; Codex review
+**Status: Approved** (rewritten 2026-09-11 against the shared engine's landed substrate; Codex review
 applied 2026-09-13; Phil's explain-plan feedback applied 2026-09-14; Codex round 2 applied and
 **approved by Phil via `/explain-plan` 2026-09-15 at plan-sha `942a5f0c9948`**) · **Reviewed: Yes**
 ⚠ **Approved ≠ ready to code — but the two preconditions are now cleared (2026-09-15).** Both are
