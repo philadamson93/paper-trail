@@ -174,6 +174,29 @@ works, and Phase 2b builds Read 1 *beside it, reusing its containment idiom* —
 "re-aim what exists" thesis in one line. ⚠ And note the asymmetry the root-cause table is about:
 reviews audited Read 2 (the direction with a test) and never Read 1 (the direction with only prose).
 
+⚠ **CORRECTION 2026-09-15 (Phil): "only the adjudicator is implemented" was wrong, and wrong in a way
+that reads as though the product were half-built. It is not.** Phil: *"we've been running paper-trail
+end to end for months. We're just moving it into this agentic optimization system."* Correct. Two
+different things were being conflated, and this plan said the wrong one:
+
+| | **paper-trail, the product** | **the sarol-2024 eval harness** |
+|---|---|---|
+| What runs it | `/paper-trail` — a **698-line orchestrator** (`.claude/commands/paper-trail.md`) | `/sarol-eval-item` — a small benchmark driver |
+| Stages | **all three, end to end**: extractor → adjudicator → verifier. *"Each claim is processed by two subagents in sequence, then a third verifier subagent"* (`:383`) | **the adjudicator alone** |
+| Status | ✅ **built and running for months** | ✅ built, deliberately narrow |
+| Why narrow | — | under `retrieval` the evidence is produced **mechanically by Python** first, so the measurement isolates *adjudication quality* rather than confounding it with retrieval |
+
+⇒ `IMPLEMENTED_STAGES = ("adjudicator",)` and `STAGE_NOT_IMPLEMENTED` describe **what the eval harness
+dispatches**, not what the product can do. The product's extractor and verifier are live; they are
+simply not what the optimizer is currently pointed at. ⚠ Anywhere this plan says "not implemented",
+read "not yet dispatched by the eval harness."
+
+✅ **And the product already enforces the boundary this plan cares about.** `paper-trail.md:388`:
+*"**Pass 2 — Adjudicator** reads only the evidence JSON + the rubric, **no paper**."* So
+"the adjudicator must not see the paper" is not a measurement convenience invented here — it is a
+**standing product invariant**, and the mount set is simply the first mechanism that would *enforce*
+it rather than request it.
+
 **The stages, and why "judge" is the wrong name for the boundary.**
 `ALL_STAGES = ("extractor", "adjudicator", "verifier")` (`profiles.py:57`). The `retrieval` profile —
 Phase 1, the only runnable one today — sets `stages=("adjudicator",)`, so **the program currently
@@ -226,15 +249,15 @@ accident.** The convention from here:
    this plan's own root cause. **Open decision (Phil):** does this plan derive the extractor and
    verifier mount sets — enforcing an evidence-condition boundary it has scoped out — or stay
    adjudicator-only and hand Phase 2 a named gap?
-3. ⚠ **"Cost triples" — explained and downgraded 2026-09-15 (Phil asked where the 3× comes from).**
-   The 3× is simply **three stages per claim instead of one**: `ALL_STAGES = ("extractor",
-   "adjudicator", "verifier")`, and the `agentic` profile's own docstring says *"three sessions per
-   claim"*. So boxing every session would cost 3 × 561 instead of 1 × 561. **But it cannot happen
-   today** — `IMPLEMENTED_STAGES = ("adjudicator",)` and the driver aborts the other two with
-   `STAGE_NOT_IMPLEMENTED`, so the figure is about a configuration that does not run. ⇒ Report V0c
-   per **stage-dispatch** (so the number stays meaningful if the pipeline ever grows) but **do not
-   budget for 3×** — today's cost is 1 × 561, about 14 minutes of container startup on a multi-hour
-   run.
+3. **"Cost triples" — what the 3× is, corrected twice now.** The 3× is **three stages per claim
+   instead of one**: the product runs extractor → adjudicator → verifier, *"two subagents in
+   sequence, then a third verifier subagent"* (`paper-trail.md:383`). ⚠ **The scope of the claim is
+   what needed fixing, not the arithmetic.** It is not hypothetical to the product — the product
+   already runs three. It is about **what the optimizer boxes and measures**: today the eval harness
+   dispatches the adjudicator alone, so containerization cost is **1 × 561**, roughly 14 minutes of
+   startup on a multi-hour run. If the harness is extended to optimize the full pipeline (the
+   `agentic` profile, which is designed for exactly that), it becomes **3 × 561**. ⇒ Report V0c per
+   **stage-dispatch** so the figure survives that change; budget for 1× today.
 
 ⚠ **Neither principal is the *scorer*.** `SarolScorer` is deterministic Python making zero model
 calls; it compares verdicts to gold and sits **outside both containers**. Never an agent, never
@@ -605,11 +628,14 @@ V2c were all sized against it.
 
 **NF12 — two cost/topology facts the plan states wrongly** (new 2026-09-14).
 
-- **A claim costs one nested session today, not three.** `profiles.py:67` sets
-  `IMPLEMENTED_STAGES = ("adjudicator",)`, and the driver aborts `STAGE_NOT_IMPLEMENTED` for the other
-  stages. `adapter.py`'s "three nested Claude Code sessions one claim costs" describes the `agentic` /
-  `paperclip` profiles, which **cannot run today**. Any arithmetic keyed to three stages is describing
-  an unrunnable configuration.
+- **A claim costs the optimizer one nested session today, not three** — ⚠ **and the wording here was
+  corrected 2026-09-15, because it read as a claim about the product.** `profiles.py:67` sets
+  `IMPLEMENTED_STAGES = ("adjudicator",)` and `/sarol-eval-item` aborts `STAGE_NOT_IMPLEMENTED` for
+  the other two, so **the eval harness** dispatches one session per claim. `adapter.py`'s "three
+  nested Claude Code sessions one claim costs" describes the `agentic` / `paperclip` profiles, which
+  the **harness** cannot dispatch yet. ⚠ **None of that is true of the product**, which runs all three
+  stages end to end and has for months (`paper-trail.md:383`). So cost arithmetic for *this plan*
+  keys on 1 session/claim; arithmetic about *paper-trail's* pipeline keys on 3.
 - **The driver→subagent hop is prose, not structure.** `.claude/commands/sarol-eval-item.md:134` says
   *"Dispatch the filled text as the entire prompt of exactly one general-purpose subagent"* — and that
   is the entire enforcement. The file has **no YAML frontmatter and no `allowed-tools`**, and there is
@@ -1577,35 +1603,37 @@ OQ7.
 ✅ **OQ10, OQ11 and OQ12 resolved 2026-09-15.** All twelve are now closed. OQ10 dissolved rather
 than being decided — the mechanism it asked for already exists.
 
-**OQ10 — ✅ RESOLVED 2026-09-15 (Phil): paper-trail is one adjudication step, and the refusal this
-question asked for is already built.** Phil: *"I don't know what you mean 'judging stage only'.
-Paper-trail is one thing. It receives claims and evidence and adjudicates."*
+**OQ10 — ✅ RESOLVED 2026-09-15 (Phil): build the mount set for what the optimizer dispatches today
+— the adjudicator — and the refusal this question asked for already exists.** ⚠ **Re-resolved the
+same day**: the first version of this resolution said "paper-trail is one adjudication step", which
+misread Phil's answer as a statement about the *product*. It is not. **The product runs all three
+stages end to end and has for months** (see the correction in *Who is who*); what is narrow is the
+**eval harness**, which dispatches the adjudicator alone so the measurement isolates adjudication
+quality instead of confounding it with retrieval.
 
-⚠ **That is the correct product model, and it matches the only configuration that can run.** Under
-`retrieval` — Phase 1, the live profile — the evidence envelope is produced **mechanically by Python
-before any session starts** (`evidence_producer="bm25"`), and the agent adjudicates. One session, one
-claim, one mount set. The three-stage pipeline (`extractor` → `adjudicator` → `verifier`) is
-*designed* but **not built**: `IMPLEMENTED_STAGES = ("adjudicator",)` (`profiles.py:67`) and the
-driver aborts the other two with `STAGE_NOT_IMPLEMENTED`, whose own text says why — *"Phase 1 runs
-the adjudicator alone; the evidence envelope is produced mechanically, so no extractor session
-runs."*
+Phil's two statements are consistent and both matter: *"Paper-trail is one thing. It receives claims
+and evidence and adjudicates"* — that is exactly the harness's condition, claims plus
+mechanically-retrieved evidence in, verdict out — and *"we've been running paper-trail end to end for
+months"* — that is the product. My question was built on a distinction that does not bite yet.
+
+**What this plan builds: one mount set**, for the adjudicator dispatch, because that is the only
+session the optimizer currently launches.
 
 ✅ **And the hard refusal this plan proposed adding already exists.** `profiles.unrunnable_reason`
 (`:177-182`) computes `missing = [s for s in prof.stages if s not in IMPLEMENTED_STAGES]` and refuses
-the profile at **preflight, before anything is spent**. ⚠ Worth knowing: `DEFAULT_PROFILE = AGENTIC`
-(`:152`) — the *default* profile is the unrunnable three-stage one, so that check is load-bearing
-today, not theoretical. ⇒ **Phase 1f's "second refusal" is struck as a new mechanism** and becomes a
-one-line requirement instead: *the container work must not bypass `unrunnable_reason`* — it runs at
-preflight and must keep running there. This plan's own thesis, one more time: the mechanism existed;
-point the container at it rather than building a second one.
+the profile at **preflight, before anything is spent**. ⚠ `DEFAULT_PROFILE = AGENTIC` (`:152`) — the
+*default* is the three-stage profile the harness cannot yet dispatch, so that check is load-bearing
+today, not theoretical. ⇒ Phase 1f's "second refusal" is **struck as a new mechanism** and becomes a
+one-line requirement: the container work must not bypass or relocate `unrunnable_reason`. Building a
+second gate beside a working one is the pattern this plan's root-cause table is made of.
 
-**What this plan therefore builds:** **one** mount set, for the adjudication step. If the three-stage
-pipeline is ever built, per-stage mount sets come with it — the container command already keys on the
-stage (`adapter.py:866`, `_stage_command(stage, …)` at `:700`), so the seam is there and unused.
-⚠ Recorded as a **named consequence, not a gap**: a future session that widens `IMPLEMENTED_STAGES`
-must derive the new stages' mount sets in the same change, and the evidence-finding stage is the
-awkward one, since it must read the paper while adjudication must not (which is measurement
-integrity, not leakage — see *Who is who*).
+⚠ **Named consequence, not a gap.** When the harness is extended to optimize the extractor and
+verifier — the `agentic` profile exists for that — **per-stage mount sets come with it**, and the
+container command already keys on the stage (`adapter.py:866`, `_stage_command(stage, …)` at `:700`),
+so the seam is there and unused. ✅ **The spec for those mount sets is already written, by the
+product**: `paper-trail.md:387-388` has the extractor read the paper and the adjudicator read *"only
+the evidence JSON + the rubric, no paper."* So the per-stage mount distinction is not a new design
+question — it is an existing product invariant that nothing currently enforces.
 
 **OQ11 — ✅ RESOLVED 2026-09-15 (my call, after Phil said the question was unreadable): demote the
 override to development-only.** The question was badly asked, so here it is in plain terms.

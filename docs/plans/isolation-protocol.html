@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="plan-sha256" content="5d12d53feab5b032af408c4c5e603364f30b7622bc896b5d33c57b9ce8fe16ec">
+<meta name="plan-sha256" content="942a5f0c9948126a1c24ff14a7d9c7cda437a32dad3bd7ad8c6421d25506cd2f">
 <title>The isolation protocol — plan explainer</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128274;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -97,7 +97,7 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   <div class="meta">
     <span><b>Status</b> Draft &middot; Reviewed: No</span>
     <span><b>Lands on</b> <code>sarol-optimizer-concurrent</code>, after Plan A</span>
-    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>5d12d53feab5</code></span>
+    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>942a5f0c9948</code></span>
     <span><b>2,380 lines</b> &middot; 9 questions resolved, <b class="warn">3 live</b></span>
     <span><b>Generated</b> 2026-09-15 14:08</span>
   </div>
@@ -200,12 +200,23 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   "re-aim what you already have" idea in one line. &#9888; And it is the asymmetry the root-cause
   table is about: reviews audited Read 2, the direction that had a test, and never Read 1, the
   direction that had only prose.</div>
-  <p><b>Where "the judge" fits.</b> The program has three stages: one finds the evidence, one judges
-  the claim, one spot-checks. <b>The profile running today uses only the judging stage</b>, which is
-  why the judge and the program have looked like the same thing. They are not &mdash; the full
-  pipeline runs three sessions per claim and the judge is one of them. So "judge" is fine as the
-  <i>role</i> of the judging stage, but naming the <b>box</b> after it freezes in a temporary
-  accident.</p>
+  <p><b>Where "the judge" fits.</b> The pipeline has three stages: one finds the evidence, one judges
+  the claim, one spot-checks. So "judge" is fine as the <i>role</i> of the judging stage, but naming
+  the <b>box</b> after it mistakes a part for the whole.</p>
+  <div class="chgnote"><b>&#9888; Correction &mdash; I wrote that "only the judging stage is
+  implemented", which was wrong and read as though your product were half-built.</b>
+  <span class="chg">&#9679; corrected</span> It is not. Two different things were being run together:
+  <table><thead><tr><th></th><th>paper-trail, the product</th><th>the benchmark eval harness</th></tr></thead><tbody>
+  <tr><td>run by</td><td>a <b>698-line orchestrator</b></td><td>a small one-stage benchmark driver</td></tr>
+  <tr><td>stages</td><td><b>all three, end to end</b> &mdash; "two subagents in sequence, then a third verifier subagent"</td><td>the judging stage alone</td></tr>
+  <tr><td>status</td><td>&#9989; <b>built, running for months</b></td><td>&#9989; built, deliberately narrow</td></tr>
+  <tr><td>why narrow</td><td>&mdash;</td><td>the evidence is prepared by plain Python first, so the measurement isolates <i>judging quality</i> rather than mixing it with retrieval</td></tr>
+  </tbody></table>
+  So wherever this plan says "not implemented", read <b>"not yet dispatched by the eval harness"</b>.
+  &#9989; And your product <i>already</i> enforces the boundary this plan cares about: its own spec
+  says the judging pass reads <b>only the evidence and the rubric, no paper</b>. That rule is a
+  standing product invariant &mdash; the mounts would be the first thing to actually <i>enforce</i> it
+  rather than ask for it.</div>
   <div class="chgnote"><b>Three things that name was hiding, all design changes:</b>
   <ul>
     <li><b>The box is per stage, not per claim.</b> The dispatch loop already runs once per stage. A
@@ -214,13 +225,13 @@ ul,ol{padding-left:21px}li{margin:4px 0}
     The evidence-finding stage has to read the paper; the judging stage should get only the finished
     evidence. Invisible today because the evidence is prepared by plain Python before any session
     starts.</li>
-    <li>&#9888; <b>"The cost triples" &mdash; you asked where the 3&times; comes from, and it needs
-    downgrading.</b> <span class="chg">&#9679; corrected</span> It is three stages per claim instead
-    of one, so boxing every session would cost 3 &times; 561 rather than 1 &times; 561. <b>But that
-    cannot happen today</b> &mdash; only the adjudication stage is implemented, and the other two
-    abort if asked. So measure per stage, so the number stays meaningful if the pipeline ever grows,
-    but <b>do not budget for 3&times;</b>: today it is 1 &times; 561, roughly 14 minutes of container
-    startup across a multi-hour run.</li>
+    <li><b>Where the 3&times; comes from</b> <span class="chg">&#9679; corrected twice</span> &mdash;
+    three stages per claim instead of one. <b>The arithmetic was fine; the scope was wrong.</b> It is
+    not hypothetical to your product, which already runs three. It is about <i>what the optimizer
+    boxes and measures</i>: today the harness dispatches the judging stage alone, so it is
+    <b>1 &times; 561</b>, roughly 14 minutes of container startup across a multi-hour run. Extend the
+    harness to optimize the whole pipeline and it becomes <b>3 &times; 561</b>. Measure per stage so
+    the figure survives that; budget for 1&times; today.</li>
   </ul></div>
   <p>&#9888; <b>Neither of them is the scorer.</b> The scorer is plain Python that makes no model
   calls at all &mdash; it compares answers against gold and sits <i>outside both boxes</i>. It is
@@ -679,11 +690,11 @@ pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-d
 <div class="foot">
   <button id="copy">Copy feedback as Claude prompt</button>
   <span class="n" id="pend">nothing entered yet</span>
-  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>5d12d53feab5</code></span>
+  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>942a5f0c9948</code></span>
 </div>
 
 <script>
-const PLAN_SHA="5d12d53feab5b032af408c4c5e603364f30b7622bc896b5d33c57b9ce8fe16ec";
+const PLAN_SHA="942a5f0c9948126a1c24ff14a7d9c7cda437a32dad3bd7ad8c6421d25506cd2f";
 const PLAN_PATH="docs/plans/isolation-protocol.md";
 const PLAN_BRANCH="sarol-optimizer-concurrent";
 
