@@ -938,8 +938,8 @@ the claim returns **one prefix for all three stages** the moment the `agentic` p
 since the stages need *different* mounts (the extractor needs the paper; the adjudicator must not see
 it), that is a silent boundary widening, not merely a stale path. Today `retrieval` runs one stage, so
 the defect is latent rather than live. With it comes a **canonical container path map**
-— a single place that says host path → container path (`/workspace/program`, `/workspace/staging`,
-`/workspace/cwd`) — and **every** host path that crosses into the container is translated through it:
+— a single place that says host path → container path (`/workspace/snapshot`, `/workspace/staging`,
+`/workspace/trace`, `/workspace/paper`) — and **every** host path that crosses into the container is translated through it:
 the argv, `--add-dir`, `workdir`, and any path interpolated into prompt text. A path that is correct
 in argv and stale in the prompt is a dispatch the adjudicator cannot complete, and it will look like a
 model failure.
@@ -958,13 +958,13 @@ left as a host path:
 
 ```
 docker run --rm
-  -v <runs>/<run_id>/iter3-current:/workspace/program:ro      # the version being scored
+  -v <runs>/<run_id>/program-<version>:/workspace/snapshot:ro # the version being scored
   -v <staging>/<claim_id>:/workspace/staging:rw               # this claim only
   -v <runs>/<run_id>/traces/<claim_id>:/workspace/trace:rw    # 1d, so the trace survives --rm
   --network <profile>                                         # paper-trail's allowlist
   --env CLAUDE_CODE_OAUTH_TOKEN                               # by NAME, not KEY=VALUE (1b)
   -u <container_uid>
-  -w /workspace/program                                       # cwd = the snapshot (2a)
+  -w /workspace/snapshot                                      # cwd = the snapshot (2a)
   <image>@<digest>                                            # digest, not tag (Phase 3)
   claude --print
     --permission-prompts none --permission-mode <non-bypass>
@@ -973,6 +973,17 @@ docker run --rm
     '<rendered adjudicator prompt, /workspace/... paths only>'       # rendered by Python (0c), not a slash command
 ```
 
+⚠ **`/workspace/snapshot`, not `/workspace/program` — corrected 2026-09-15, when Step 0a first
+rendered this shape against the real renderer rather than describing it.** The engine **reserves**
+four container paths — `/workspace/program`, `/workspace/writable`, `/workspace/mistakes.json`,
+`/workspace/context` — and rejects any `extra_ro_mounts` target that collides with, nests under, or
+sits above one (`docker_prefix.py:66`, `:236`). It reserves them **even when nothing is mounted
+there**, which is exactly our case: the engine mounts `/workspace/program` only when
+`edit_agent_mounts` is supplied, and the program has no editing agent. So the path the first draft
+named was simultaneously unmounted *and* unusable, and `build_docker_cmd_prefix` raises on it. A
+sibling path keeps the **zero engine diff** this phase claims. The alternative — passing
+`edit_agent_mounts` just to claim the name — would declare an editing agent the program does not
+have and drag the editable-file overlays in with it.
 Four things to read off it. **Every path is a container path** — `--add-dir`, the workdir, and the
 paths inside the prompt text all come from the same map, and a `/home/philadamson/...` string
 anywhere in this command is a bug V2d catches. **Nothing here is constant across dispatches**: the

@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="plan-sha256" content="4ab81c513c04c397b5f0a9991626da5f6be3713168304f02ad2ef85d8353a9bb">
+<meta name="plan-sha256" content="a3e4921e27bf9b667ea5e41b2feef11b6f201d1cb95b958107e9cff56d3cd282">
 <title>The isolation protocol — plan explainer</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128274;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -97,14 +97,14 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   <div class="meta">
     <span><b>Status</b> <b class="good">APPROVED 2026-09-15</b> &middot; Reviewed: Yes &middot; <span class="warn">edited since, naming sweep only</span></span>
     <span><b>Lands on</b> <code>sarol-optimizer-concurrent</code>, after Plan A</span>
-    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>4ab81c513c04</code></span>
-    <span><b>2,488 lines</b> &middot; all 12 questions resolved</span>
-    <span><b>Generated</b> 2026-09-15 16:12</span>
+    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>a3e4921e27bf</code></span>
+    <span><b>2,499 lines</b> &middot; all 12 questions resolved</span>
+    <span><b>Generated</b> 2026-09-15 16:33</span>
   </div>
 </header>
 
 <div class="card keep" data-changed="mod" data-section="changes">
-  <h2>What changed since you last looked <span class="chg">&#9679; both blockers cleared</span></h2>
+  <h2>What changed since you last looked <span class="chg">&#9679; blockers cleared, first gate green</span></h2>
   <p>Nothing about the design moved this round. The two things standing between this plan and the
   first line of code are done, and the plan now says so.</p>
 
@@ -122,6 +122,15 @@ ul,ol{padding-left:21px}li{margin:4px 0}
     A mount-set type that had been named after the judge is renamed too. The 34 left are deliberate: a
     real identifier in the code, the separate word "judgement", your own quoted words, quoted test
     strings, and this page's own explanation of the naming.</li>
+    <li><b>The first gate is built and green, and it found something.</b> The free dry run renders
+    every dispatch and checks the command instead of describing it: 44 checks, no container, no
+    model, nothing spent. It immediately caught a real error in this plan. The plan said to mount the
+    program snapshot at <code>/workspace/program</code>; the engine <i>reserves</i> that path and
+    refuses it, even though it mounts nothing there in our configuration. So the shape the plan drew
+    could not have run. It is corrected to a sibling path, which keeps the promise that this phase
+    needs no engine change. Five deliberate breakages were then fed to the gate &mdash; the bypass
+    flag back on, a host path in the prompt, the subagent tool back on the list, the snapshot no
+    longer keyed to the version, the adjudicator handed the paper &mdash; and it failed on each.</li>
   </ol>
 
   <p><b>So the next action is the free dry run</b> &mdash; render every command for every stage,
@@ -693,11 +702,11 @@ pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-d
 <div class="foot">
   <button id="copy">Copy feedback as Claude prompt</button>
   <span class="n" id="pend">nothing entered yet</span>
-  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>4ab81c513c04</code></span>
+  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>a3e4921e27bf</code></span>
 </div>
 
 <script>
-const PLAN_SHA="4ab81c513c04c397b5f0a9991626da5f6be3713168304f02ad2ef85d8353a9bb";
+const PLAN_SHA="a3e4921e27bf9b667ea5e41b2feef11b6f201d1cb95b958107e9cff56d3cd282";
 const PLAN_PATH="docs/plans/isolation-protocol.md";
 const PLAN_BRANCH="sarol-optimizer-concurrent";
 
