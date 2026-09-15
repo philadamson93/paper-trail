@@ -246,7 +246,7 @@ session should build, and the disagreement is a defect to fix here.
 | 11 | **A run-start reset** — archive `meta-learnings.md`, the five `findings/iter-*.md` and `iter/` to the run archive, then assert absent; the VM runner mints the run id. ⚠ **Not** a per-run git clone (**OQ9**) | `run_hillclimb_vm.sh`, `optimizer/isolation.py` | 4 |
 | 12 | **The sentinel negative control** — sentinels planted in gold, the benchmark tree, `iter/` and the optimizer's findings; a judge must **fail** to read each, and the control has a negative control of its own | `isolation/negative_control.py` + tests (upstream) | 1g |
 
-**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin), **plus** one backward-compatible type widening in `engine/loop.py` for item 8, **plus** making `--dangerously-skip-permissions` a caller choice in `engine/claude_wrapper.py:130` — currently unconditional, so item 2's deny-by-default layer does not exist until it lands. That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
+**Upstream, in one line:** four small files (by-name credential env, the generic seal control, its test, the CLI re-pin), **plus** one backward-compatible type widening in `engine/loop.py` for item 8, **plus** making `--dangerously-skip-permissions` a caller choice in `engine/claude_wrapper.py:130` — currently unconditional, and needed for the **optimizer** path. ⚠ **Not needed for the judge**: paper-trail passes that flag itself at `adapter.py:713`, so the judge's deny-by-default layer is a local edit available now (Codex round 2). That last one corrects this plan's earlier claim of *"no change to `engine/`"* — see **OQ8**'s answer for why it is still small.
 
 **What we are deliberately not building** is its own section (*Deliberately out of scope*), and three things left it on 2026-09-14: the driver **session** (item 4 replaces it), the per-run **git clone** and `optimizer/run_clone.py` (item 11 replaces it), and the tag-scoped **settings file** (**OQ6** retires it).
 
@@ -817,12 +817,20 @@ Two separate holes:
   readable **inside** the session. Denying that needs a credential broker — out of scope, stated so
   nobody reads this as solved.
 
-⚠ **The flag we want to replace is not ours to pass — found 2026-09-14, and it makes this a
-prerequisite.** `--dangerously-skip-permissions` is set unconditionally by the **shared wrapper**
-(`claude_wrapper.py:130`), not by the consumer, so "we will use different flags" is an upstream change
-(a **sixth** engine file), not a local choice. Until it lands, a container session has no hook layer
-*and* no permission gate: Write/Edit/Bash are ungated within the mount set. The mount set still holds
-— but the second layer this phase claims does not exist yet.
+⚠ **`--dangerously-skip-permissions` is passed in TWO places, and the requirement splits by path.**
+⚠ **Corrected 2026-09-14 (Codex round 2) — an earlier version of this paragraph said the flag was
+"not ours to pass", which is half wrong and would have left the judge on bypass.** Both are real:
+
+| Path | Who passes it | What has to change |
+|---|---|---|
+| **The program / judge** | **ours** — `adapter.py:713`, in `_stage_command`'s own argv | **a local edit.** No upstream dependency, no prerequisite. This is the principal this plan is about, so the deny-by-default layer is available to us **now** |
+| **The optimizer** (via `DockerAgent`/`claude_wrapper`) | the **shared wrapper**, unconditionally (`agentic-label-opt/engine/claude_wrapper.py:130`, arg built `:128`) | an **upstream** change making bypass caller-selectable, preserving today's behaviour for rad-eval and crc unless they opt in |
+
+⚠ **The failure mode this correction prevents:** an implementer who changes only the shared wrapper
+leaves `_stage_command` still emitting `--dangerously-skip-permissions`, and the judge — the principal
+whose containment is the point of this plan — runs on bypass while the upstream diff looks like the
+fix. **Acceptance check (new):** no shipping judge argv contains `--dangerously-skip-permissions`;
+assert on the argv the Runner actually builds, not on the wrapper.
 
 ⚠ **Also adopt deny-by-default inside the container**, replacing `--dangerously-skip-permissions`:
 `--permission-prompts none` (`claude --help`: *"nobody: anything that would prompt is denied
@@ -946,19 +954,40 @@ change as 1c, not after — a containerized run with no trace cannot be audited,
 deliverable.
 
 ⚠ **Before 1e: do not inherit rad-eval's read scope.** Recovered from the authoring readback
-2026-09-09 and verified against code 2026-09-14. The finding, verbatim: *"Engine side, same shape: one
-principal (the edit agent), two boundaries. The judge as a second, **less**-privileged principal was
-never modeled — and the canonical READ scope **affirmatively grants** `release_train.json`,
-`context/*.md` and `meta-learnings.md`."* Confirmed: rad-eval's `READ_WHITELIST`
-(`hooks/policy.py:178`) lists `release_train.json` (`:183`) and `meta-learnings.md` (`:194`).
+2026-09-09 and verified against code 2026-09-14; **corrected by Codex round 2**, which found the
+first version of this warning pointed at the wrong file. The source finding, verbatim: *"Engine side,
+same shape: one principal (the edit agent), two boundaries. The judge as a second, **less**-privileged
+principal was never modeled — and the canonical READ scope **affirmatively grants**
+`release_train.json`, `context/*.md` and `meta-learnings.md`."*
 
-✅ **That is correct for rad-eval and catastrophic for us**, and the difference is the whole of §4g
-item 8. Those grants exist because that whitelist belongs to the **optimizer**, which legitimately
-reads its own lessons sheet and the TRAIN release. Paper-trail's program principal must never see
-either — `release_train.json` **carries per-claim gold labels**. ⚠ So the read scope is
-**per-principal**, exactly as item 8 said: copying rad-eval's posture wholesale would hand the judge
-the gold file by name, through an allowlist, while every mount-set gate in this plan still reported
-green. A boundary defeated by inheritance, not by absence.
+**What rad-eval actually grants** (`hooks/policy.py:178`): release files by **glob** —
+`iter/*/release_*.json` (`:183-187`), which includes `release_train.json` — and `meta-learnings.md`
+**by name** (`:194`). ⚠ An earlier draft said both were by-name; the glob is wider, not narrower.
+
+⚠ **And the gold is one hop further than this plan said. This correction matters because it moves the
+sentinel.** Per-claim gold labels are **not inline in `release_train.json`**. The chain is:
+
+```
+iter/<n>/release_train.json   →  corpus.ref            →  mistakes/<batch_id>.json
+(envelope: counts, metrics,      (a path string,           (the answer key: per-claim
+ profile, retrieval_k)            adapter.py:1537)          "gold_label", adapter.py:1224)
+```
+
+`_write_mistakes` (`adapter.py:1178`) writes that corpus, and its own docstring is explicit:
+*"**This file contains gold labels.** TRAIN gold is fully open to the optimizer (that is the mechanism
+by which it learns, not a leak); VAL gold is not, so nothing is written on a VAL call."*
+
+✅ **That docstring is the cleanest statement of §4g item 8 anywhere in the codebase**, and it sharpens
+the finding rather than weakening it: the corpus is **correctly open to one principal and an answer key
+for the other**. Copying rad-eval's posture wholesale hands the judge a release envelope that *names
+the path to the answer key*, through an allowlist, while every mount-set gate in this plan still
+reports green. A boundary defeated by inheritance, not by absence.
+
+⚠ **Verification consequence — the reason this is Critical and not a wording nit.** A sentinel planted
+only in `release_train.json` **proves the wrong thing**: it would pass while the judge could still
+follow `corpus.ref` and read `mistakes/<batch_id>.json`. **V2a-seal must plant and probe sentinels in
+both** — the release envelope *and* every corpus path reachable from a TRAIN release — or state
+plainly why denying `iter/` wholesale is sufficient and prove *that* instead.
 
 **1e. The optimizer's container.** Model on **rad-eval's `src/optimizer_loop/docker_agent.py`** — 198
 lines, on `main`, actually run: prefix delegated to the engine, a fresh temp writable staging tree,
@@ -1019,6 +1048,16 @@ accepts an injected runner** (`run = runner or adapter.SarolRunner(...)`), so it
 mechanism at all. That leaves **two** production sites to wire. The 19 `adapter.py` sites are
 selftest ceremony: real work to type, but zero production risk, and they should be described that way
 rather than as *"the largest surface"*.
+
+⚠ **Second refusal, same locus: reject any stage whose mount set does not exist (Codex round 2,
+Critical).** The container keys on `(stage, claim, version)`, but only the adjudicator's mount set is
+derived (**OQ10**). So the constructor — or the preflight — must **refuse a profile requesting any
+stage without a specified, tested mount set**, naming the stage. Without it, enabling the `agentic`
+profile silently runs the extractor and verifier inside a boundary designed for neither, and the
+symptom would be a plausible verdict rather than an error. ⚠ This refusal is required under **OQ10
+option (i)** and harmless under option (ii), so it is specified here regardless of which wins — it is
+what makes "adjudicator-only" a *scope* rather than a latent gap. Its negative control: construct with
+`stages=("extractor",)` and assert the refusal fires, naming `extractor`.
 
 ✅ Every site is then either containerized or visibly opted out, and the count is assertable
 (**V2c**) — ⚠ **against 22, and counting subclasses, not against 21 by grep.**
@@ -1334,7 +1373,10 @@ silently dropped — reasoning a requirement away in passing is this plan's own 
 
 ## Files to Modify
 
-**New — `optimizer/isolation.py`.** Scope predicate (`inner_scope_problem`), the judge's and the
+**New — `optimizer/isolation.py`.** ⚠ **A thin consumer adapter over the engine's primitives — not a
+second Docker renderer (Codex round 2).** It composes `build_docker_cmd_prefix` and carries
+paper-trail's mount *contents as data*; every docker flag stays the engine's to emit. Scope predicate
+(`inner_scope_problem`), the judge's and the
 optimizer's mount-set builders over the engine's generic params, the canonical container path map
 (1c), the env allowlist, the version-addressed cwd builder, the configuration hash. One module for
 one concern, matching this directory's one-module-per-concern convention. **Sister files:**
@@ -1349,7 +1391,14 @@ driver session**, so it is the one place the delivery path lives; per NF8 the op
 a removal of the optimizer's reach. Out of `adapter.py` (already ~2,900 lines) and out of
 `isolation.py` (different concern). **Reuse target:** `evidence_producers.py:201-216`.
 
-**`pyproject.toml`** — ⚠ **a new file: paper-trail has no packaging file of any kind today.** The
+**`pyproject.toml`** — ⚠ **the pin alone does not change what gets imported (Codex round 2).** Today the
+engine is resolved by `sys.path` injection from a hardcoded home path (`adapter.py:102`, `engine_path()`
+`:117-118`), duplicated in `scripts/materialize_smoke.py:39`. Adding a revision pin is adequate **only
+if the runtime import path also changes to use the installed package** — otherwise the pin is a
+decorative file and runs still bind to whatever is in that working tree. State explicitly: does
+`engine_path()` become selftest/development-only, how do scripts launch under `uv`, and is
+`$AGENTIC_LABEL_OPT` still honoured as an override? (That last one is **OQ11**.)
+⚠ **a new file: paper-trail has no packaging file of any kind today.** The
 dependency on `agentic-label-opt` is real and live (see 1a); what this adds is the **pin** that
 replaces a hardcoded home-directory path. `agentic-label-opt` pinned to a
 git **revision** under `[tool.uv.sources]`, copying rad-eval's shape (1a). Nothing else in this plan
@@ -1458,7 +1507,11 @@ OQ2 and `engine/claude_wrapper.py` by the 2026-09-14 code audit:
   (`:217`), a per-version callable that **fails closed** rather than falling back to a stale value —
   copy that failure posture. Update the docstring at `:257`, which currently states the opposite (*"`val_inputs` is unaffected
   (fixed for the whole run, as always)"*). Backward compatible — a plain `RunInputs` still works, so
-  the other two consumers need no change. Tests: an iteration-keyed VAL batch reaches
+  the other two consumers need no change. ⚠ **Tests must prove the compatibility, not assume it
+  (Codex round 2):** one case asserting an existing **plain `RunInputs`** caller still works — that is
+  rad-eval's and crc's current shape — and one callable case that reaches **both** VAL consumption
+  sites, the per-iteration score at `:377` *and* the post-commit probe at `:475`, since a callable
+  resolved at one and not the other is a silent half-fix. Tests: an iteration-keyed VAL batch reaches
   `runner.run`, and the plain form still does.
 
 ⚠ **Paper-trail's own sentinels and auth stay here, not upstream.** An upstream addition earns its
@@ -1481,10 +1534,41 @@ and no test suite" while this plan's verification rests on a 447-check suite. Re
 
 ## Open Questions
 
-Nine numbered, **all nine resolved** as of 2026-09-14. Kept in full rather than deleted, because
-several were resolved *against* this plan's own recommendation and the reasoning is what a fresh
-session needs. Resolution order on the day: OQ4, OQ5, OQ8 first, then OQ9 (which set the scope),
-then OQ1, OQ2, OQ6, OQ7.
+**OQ1-OQ9 are all resolved** as of 2026-09-14, and **three new ones (OQ10-OQ12) were raised by the
+Codex round-2 review.** The first nine are kept in full rather than deleted, because several were
+resolved *against* this plan's own recommendation and the reasoning is what a fresh session needs.
+Resolution order on the day: OQ4, OQ5, OQ8 first, then OQ9 (which set the scope), then OQ1, OQ2, OQ6,
+OQ7.
+
+⚠ **OQ10 must be answered before implementation starts** — it decides what Phase 1c builds.
+
+**OQ10 — is this implementation adjudicator-only, or does it derive the extractor and verifier mount
+sets now?** (Codex round 2, Critical.) The plan keys the container on `(stage, claim, version)` — right
+— but derives **only** the adjudicator's mount set, leaving the other two stages as prose. Codex's
+objection is about handoff, not design: an open decision sitting inside a document that otherwise tells
+an implementer exactly what to build is a gap, because the reachable `agentic` profile needs all three.
+Options: **(i) adjudicator-only**, with a **hard preflight that refuses any non-adjudicator stage**
+until its mount set is specified and tested — scope stays small and the gap cannot be entered by
+accident; **(ii) derive all three now** — more work up front, and the extractor's mount set is the one
+that must include the paper while the adjudicator's must not. *Recommendation: (i).* Only `retrieval`
+runs today (`IMPLEMENTED_STAGES = ("adjudicator",)`), so (ii) specifies a boundary for a profile that
+cannot yet run — but (i) is only safe **with** the refusal, which is why the refusal is written into
+Phase 1f regardless of which option wins.
+
+**OQ11 — after `pyproject.toml` exists, does `$AGENTIC_LABEL_OPT` stay a supported override?**
+(Codex round 2.) The pin only binds what gets imported if the runtime import path changes too; today
+both the adapter (`adapter.py:102`, `:117-118`) and `scripts/materialize_smoke.py:39` resolve the
+engine from a hardcoded home path. Options: keep the env override as a documented development escape
+hatch, or demote it to selftest-only so production always imports the pinned package.
+*Recommendation: demote it* — an override that silently changes which engine bytes run is the same
+class of drift the pin exists to close. ⚠ Either way the answer has to be stated, or an implementer
+will add the pin and leave the `sys.path` injection in place, which changes nothing.
+
+**OQ12 — for `program-v*` identity, are tags namespaced per run, or replaced by the manifest's
+`combined_hash`, before Phase 4 lands?** (Codex round 2, and already flagged in OQ9's resolution.)
+Tags are repository-global, so a second run re-mints the first run's. *Recommendation: key on
+`combined_hash`* — it is committed, already uniquely identifies a program version, and is already what
+the Phase 3 configuration pin keys on, so it removes a mechanism rather than adding one.
 
 **OQ9 — ✅ RESOLVED 2026-09-14 (Phil): no per-run clone. A run-start reset instead.** Phil: *"I don't
 think we're ever going to have multiple runs in parallel… a run is always going to be operating from
@@ -1825,7 +1909,7 @@ cross-model review found in the gates that matter most.
 
 | Gate | Vacuity risk | Assertion |
 |---|---|---|
-| **V2a-seal** | **empty deny list ⇒ zero probes ⇒ green, seal unproven**; and a **broad mount at an unexpected target** passes every path probe | list non-empty, expected entries by name **and count**, probe count equals list length; the rendered mount set equals an **exact** `(source, target, mode)` allowlist; no source is an **ancestor** of a forbidden path; probes enumerated **from the argv**; plus a positive control and a **negative control that must fail** |
+| **V2a-seal** | **empty deny list ⇒ zero probes ⇒ green, seal unproven**; and a **broad mount at an unexpected target** passes every path probe | list non-empty, expected entries by name **and count**, probe count equals list length; the rendered mount set equals an **exact** `(source, target, mode)` allowlist; no source is an **ancestor** of a forbidden path; probes enumerated **from the argv**; plus a positive control and a **negative control that must fail**. ⚠ **Sentinels in both the release envelope AND every `corpus.ref` path reachable from a TRAIN release** (Codex round 2) — gold is in `mistakes/<batch_id>.json`, not inline in `release_train.json`, so a release-only sentinel proves the wrong thing |
 | **V2c** | a refusal that only covers the sites we remembered ⇒ green while an ungated judge ships | assert the **count** of direct `SarolRunner` constructions (⚠ **22**, NF11) and classify each as containerized or explicitly opted out. ⚠ Count by constructor reachability, not by grep — a subclass inheriting `__init__` is bound by the refusal and matches no text search |
 | **V4** | pin container emptied by a `cmd_write` refactor; pin read from the worktree; **a host-only hash ⇒ a swapped container leaves it unmoved** | round-trip re-freeze test; pin read from `git show HEAD:`; one divergence case per container component, image by **digest** not tag |
 | **V3b** | an exact-fileset assertion passes on a **single shared** cwd serving two program versions | V3b keeps the fileset assertion; **V3d** asserts each version's own driver bytes reached its own verdict |
@@ -1833,15 +1917,15 @@ cross-model review found in the gates that matter most.
 | **V3a** | a truncated forbidden set ⇒ fewer cases ⇒ still green | assert the set's **length**, one case per entry including the two absolute ones |
 | **V3c** | an empty `--add-dir` set trivially satisfies "no entry is an ancestor of `$REPO`" | assert the set equals **exactly** the two expected paths |
 | **V2e** | a `trace_ref` field that exists but points nowhere | non-empty file **and** the claim id present in its content; at run scale, trace count equals dispatch count |
-| **V2f** | grepping for a token that was never set ⇒ nothing found ⇒ green | assert the variable **name** is present in the argv before asserting the **value** is absent |
+| **V2f** | grepping for a token that was never set ⇒ nothing found ⇒ green | assert the variable **name** is present in the argv before asserting the **value** is absent. ⚠ **Check both command surfaces** (Codex round 2): the **consumer's** argv from `_stage_command` *and* the **wrapper's** recorded command — bypass and token disclosure can each be fixed in one and missed in the other |
 | **V2h** (⚠ V2i struck by OQ1) | every attempt failing ⇒ green, but a broken container looks identical to a sealed one | each result attributed to a **named layer**, plus a positive control that must **succeed** (staging read). ⚠ V2i's own removal is the rule applied to this plan: it is struck, not reported green, because its subject no longer exists |
 | **V1d** | — | **the prototype**: asserts the checks *ran*, not that they passed |
 | **V2b** | a skipped suite reports no failures; and the historical "104" is a number from another machine | asserts **0 skipped**, and records **this run's** engine SHA, image digest, Docker version and pytest counts rather than reusing the old total |
 | **V0b** | a matrix row silently disappears and the rest still pass; a flag works in a scratch probe and is dropped by `_stage_command` | assert the **candidate count**, and assert each surviving flag appears in the **shipping argv**, not just in a probe |
-| **V0c** | a hand-built `docker run` or a direct judge prompt proves the fixture, not the system | run the **real driver→Task topology** through the **same per-dispatch prefix factory** production uses |
+| **V0c** | a hand-built `docker run` proves the fixture, not the system | run the **real shipping topology** through the **same per-dispatch prefix factory** production uses. ⚠ **Corrected (Codex round 2):** that topology is now `dispatch_prompt.py` → `claude --print` **directly** — OQ1 removed the driver session, so this row previously demanded a driver→Task path the plan no longer builds. V0c must additionally assert **no subagent is spawned** and **`Task` is absent** from the allowlist |
 | **V1a** | two archived attempts overwrite each other and the gate still sees "an archive exists" | collision-proof archive names; assert the live verdict **and** error paths absent before each attempt; assert archives are **not** inside the judge's readable mount |
 | **V1b** | a fail-closed change that looks clean at the Runner breaks the seam it shares | trace the resolved OQ5 behaviour (fail-and-feed) end to end — Runner record → batch status → Scorer → release → corpus → optimizer-facing outcome |
-| **V2a-live** | a valid verdict proves the judge works, not that it was contained | plus non-null readable `trace_ref`, `Task` available, exact in-container CLI version and image digest, token non-disclosure, and one adversarial read/write/egress attempt |
+| **V2a-live** | a valid verdict proves the judge works, not that it was contained | plus non-null readable `trace_ref`, ⚠ **`Task` ABSENT and no subagent spawned** (corrected, Codex round 2 — this row said "`Task` available", which was the pre-OQ1 topology), exact in-container CLI version and image digest, token non-disclosure, and one adversarial read/write/egress attempt |
 | **V5** | "zero no-task sessions" is stochastic — a small batch can be clean by luck | the load-bearing assertion is that an **induced** no-task is detected and handled per OQ5; the observed zero is telemetry, not the gate |
 
 ⚠ **The pattern across all four holes is the same one the root-cause table names.** Each gate had a
@@ -1849,7 +1933,19 @@ mechanism that worked, aimed at the cases its author had in mind: the probe list
 the host-side config, the file count. None of them was wrong; all of them were pointed slightly
 elsewhere. That is worth stating here because it is the reason this plan was reviewed twice.
 
-### Step 0 — two probes, about $1
+### Step 0 — a free dry run, then two probes, about $1
+
+⚠ **Step 0a, new and free (Codex round 2): render every prefix without spending anything.** Before any
+paid session, enumerate the full `(stage × profile × claim × program version)` matrix and assert on the
+**generated argv and mount set** alone — no container started, no model called. *Expected:* every path
+in every argv is a container path (no `/Users/…` or `/home/…` string anywhere — the V2d defect class);
+each stage either resolves a specified mount set or trips the stage refusal (1f); no two dispatches
+share a prefix; `Task` absent; no `--dangerously-skip-permissions`. *Stop:* any host path, any silently
+reused prefix, any unspecified stage that does **not** trip the refusal. This is the cheapest gate in
+the plan and it covers the two defects most likely to survive review — a reused prefix and an
+unhandled stage — so it runs **first**.
+
+### Step 0b — two probes, about $1
 
 **V0b — do the named flags and env vars exist, and do they do anything?** Matrix: `--add-dir`,
 `--exclude-dynamic-system-prompt-sections`, `--no-session-persistence`, `--setting-sources`,
@@ -2226,7 +2322,10 @@ cross-model pass is worth running.
 
 **Merge sequence.** Plan A finished first, so: this plan rebases onto its tip, implements against a
 10-entry manifest (`combined_hash 7431a5bc98a9`) and Plan A's three new preflight gates, then lands
-after it. ⚠ **Rebase before you read the manifest — verified 2026-09-14.** On *this* branch the
+after it. ⚠ **HARD PRECONDITION, not a warning (Codex round 2): do not begin implementation before
+rebasing onto Plan A's tip.** An implementer who starts on this branch will find the file OQ1's whole
+argument rests on is absent from the manifest, and will reasonably conclude the plan is wrong.
+⚠ **Rebase before you read the manifest — verified 2026-09-14.** On *this* branch the
 manifest has **8 entries, `combined_hash 0a02710cbd88`, and does not contain the driver file at all**;
 the 10-entry manifest carrying `.claude/commands/sarol-eval-item.md` exists only on Plan A's branch
 (`origin/feat/optimizer-prompt-latitude`, tip `f02d761`). So an implementer who starts here will find
@@ -2256,7 +2355,11 @@ never reproduce it, since a restated imperative stays actionable to a model that
 `findings/iter-*.md`; run `--archive <run-id>` first. **Phase 4 retires it.** ⚠ It resolves paths from
 its own location, so running Plan A's copy from its worktree passes and says nothing about this tree).
 
-**Cleanup on land.** ⚠ **Owed first: a naming consistency pass.** Phil's 2026-09-14 correction renamed
+**Cleanup on land.** ⚠ **Owed BEFORE implementation, not on land — escalated by Codex round 2, which
+called it "not cosmetic because 'judge' vs 'program' changes the per-stage mount-set interpretation."**
+Agreed: an implementer reading "the judge's mount set" will build one mount set; reading "the program's"
+raises the question of which stage. That is the difference between a correct boundary and a latent gap,
+so the sweep is a pre-implementation blocker. ⚠ **Owed first: a naming consistency pass.** Phil's 2026-09-14 correction renamed
 the contained principal from *the judge* to *the program* (see *Who is who*), and the body below still
 says *judge* ~120 times — usually meaning the adjudicator stage, occasionally the program. The
 definitions section governs; the body has not been swept. Do that before implementation starts, not
