@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="plan-sha256" content="7aa06b6b754892fb66bbe80aac4ed49075bafa72db380fe3c7867f37a68b6732">
+<meta name="plan-sha256" content="5d12d53feab5b032af408c4c5e603364f30b7622bc896b5d33c57b9ce8fe16ec">
 <title>The isolation protocol — plan explainer</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128274;</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -97,7 +97,7 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   <div class="meta">
     <span><b>Status</b> Draft &middot; Reviewed: No</span>
     <span><b>Lands on</b> <code>sarol-optimizer-concurrent</code>, after Plan A</span>
-    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>7aa06b6b7548</code></span>
+    <span><b>Plan</b> <a href="isolation-protocol.md">isolation-protocol.md</a> &middot; <code>5d12d53feab5</code></span>
     <span><b>2,380 lines</b> &middot; 9 questions resolved, <b class="warn">3 live</b></span>
     <span><b>Generated</b> 2026-09-15 14:08</span>
   </div>
@@ -183,11 +183,23 @@ ul,ol{padding-left:21px}li{margin:4px 0}
     <tbody>
     <tr><td class="n">is</td><td>the labelling pipeline itself &mdash; <b>one session per stage, per claim</b></td><td>the agent that <b>edits</b> the program between rounds</td></tr>
     <tr><td class="n">runs</td><td>every stage &times; every claim. Today <b>1 &times; 561</b>; with the full pipeline <b>3 &times; 561</b></td><td><b>once per round</b> &mdash; about 5 times in a run</td></tr>
-    <tr><td class="n">never reads</td><td><b>gold labels</b>, the benchmark data, the optimizer's findings and hypotheses</td><td>&mdash;</td></tr>
+    <tr><td class="n">never reads</td><td><b>gold labels</b>, the benchmark data, the optimizer's findings and hypotheses</td><td>&#9888; <b>not "nothing" &mdash; you were right.</b> The <b>held-out set's per-claim behaviour</b>: it sees <i>one number</i> from the held-out split, never which claims it got wrong or what it answered. Also never held-out gold &mdash; the corpus it learns from is training-only, deliberately. <span class="chg">&#9679; corrected</span></td></tr>
     <tr><td class="n">never writes</td><td>&mdash;</td><td>the scorer, gold, the releases folder, the manifest &mdash; it would be marking its own homework</td></tr>
     <tr><td class="n">in a box</td><td>&#10060; <b>no. This plan adds it.</b> Nobody has built one, anywhere</td><td>&#9989; built and really run &mdash; <b>in rad-eval</b>; &#10060; not here</td></tr>
     </tbody>
   </table>
+  <div class="chgnote"><b>So there are two read boundaries, not one &mdash; and this page under-counted.</b>
+  They are mirror images, which is why one fix generalises:
+  <table><thead><tr><th>Boundary</th><th>Who is shut out</th><th>From what</th><th>Enforced today?</th></tr></thead><tbody>
+  <tr><td>Read 1</td><td>the <b>program</b></td><td>gold, the benchmark data, the optimizer's workspace</td><td>&#10060; <b>no &mdash; this plan builds it</b></td></tr>
+  <tr><td>Read 2</td><td>the <b>optimizer</b></td><td>the held-out set's per-claim detail</td><td>&#9989; <b>yes, and it works</b></td></tr>
+  <tr><td>Write</td><td>the <b>optimizer</b></td><td>the scorer, gold, the releases, the manifest</td><td>&#9888; by convention, not by mounts</td></tr>
+  </tbody></table>
+  &#9989; <b>Read 2 is the model, not a footnote.</b> It is the one read check in the system that
+  already works, and this plan builds Read 1 <i>beside it, reusing its logic</i> &mdash; the whole
+  "re-aim what you already have" idea in one line. &#9888; And it is the asymmetry the root-cause
+  table is about: reviews audited Read 2, the direction that had a test, and never Read 1, the
+  direction that had only prose.</div>
   <p><b>Where "the judge" fits.</b> The program has three stages: one finds the evidence, one judges
   the claim, one spot-checks. <b>The profile running today uses only the judging stage</b>, which is
   why the judge and the program have looked like the same thing. They are not &mdash; the full
@@ -202,7 +214,13 @@ ul,ol{padding-left:21px}li{margin:4px 0}
     The evidence-finding stage has to read the paper; the judging stage should get only the finished
     evidence. Invisible today because the evidence is prepared by plain Python before any session
     starts.</li>
-    <li><b>The cost triples</b> with the full pipeline. Measure per stage, not per claim.</li>
+    <li>&#9888; <b>"The cost triples" &mdash; you asked where the 3&times; comes from, and it needs
+    downgrading.</b> <span class="chg">&#9679; corrected</span> It is three stages per claim instead
+    of one, so boxing every session would cost 3 &times; 561 rather than 1 &times; 561. <b>But that
+    cannot happen today</b> &mdash; only the adjudication stage is implemented, and the other two
+    abort if asked. So measure per stage, so the number stays meaningful if the pipeline ever grows,
+    but <b>do not budget for 3&times;</b>: today it is 1 &times; 561, roughly 14 minutes of container
+    startup across a multi-hour run.</li>
   </ul></div>
   <p>&#9888; <b>Neither of them is the scorer.</b> The scorer is plain Python that makes no model
   calls at all &mdash; it compares answers against gold and sits <i>outside both boxes</i>. It is
@@ -233,7 +251,7 @@ ul,ol{padding-left:21px}li{margin:4px 0}
   <table><thead><tr><th></th><th>What</th><th>Phase</th></tr></thead><tbody>
     <tr><td class="n">1</td><td><b>Pin the engine we already use</b><br><span class="d">&#9888; The dependency is live &mdash; our dispatcher drives its loop, our adapter implements its four protocols. What is missing is the <b>pin</b>. There is no package file at all; the engine is found by pushing a hardcoded home-directory path onto the import path, in two separate files. So a run binds to whatever is in that folder at that moment, uncommitted edits included. &#9888; The pin alone changes nothing unless the import path changes too.</span></td><td class="ph">1a</td></tr>
     <tr><td class="n">2</td><td><b>The program's box, built per stage-dispatch</b><br><span class="d">Keyed on stage, claim and version &mdash; <b>not</b> on the claim alone. The judging stage sees: this claim's scratch space (writable), the frozen spec (read only), the program snapshot as its working folder (read only), a folder to keep its transcript. Nothing else. &#9888; The other two stages need their own mount sets when the full pipeline runs &mdash; only the judging stage's is worked out (question 10).</span></td><td class="ph">1b, 1c</td></tr>
-    <tr><td class="n">3</td><td><b>The optimizer's box</b><br><span class="d">Copied from rad-eval's working example: a temporary writable area, results copied back afterwards, and the scorer, gold, releases and manifest <b>absent from its mounts</b> &mdash; so "the optimizer cannot edit the scorer" holds by construction, not by a rule we ask it to respect.</span></td><td class="ph">1e</td></tr>
+    <tr><td class="n">3</td><td><b>The optimizer's box</b><br><span class="d">&#9888; <b>You were right &mdash; the machinery is already built and shared, and "copy rad-eval's" was misleading.</b> <span class="chg">&#9679; corrected</span> The <b>shared engine</b> owns the whole command-rendering layer &mdash; mounts, network, container user, credentials, the image, the seal tests &mdash; and we are a consumer of it, with <b>zero engine changes needed for the mounts</b>. The engine also defines what an agent must look like, as an interface, but deliberately <b>ships no real agent</b>. What each consumer writes is its own roughly 200-line adapter implementing that interface and calling the machinery. rad-eval wrote theirs; <b>we have none</b>, and theirs is the only real implementation anywhere &mdash; so it is the worked example for writing ours, not a capability to borrow. The boundary itself is unchanged: the scorer, gold, the releases and the manifest are simply <b>not in its mounts</b>.</span></td><td class="ph">1e</td></tr>
     <tr><td class="n">4</td><td><b>A deterministic dispatcher, in Python</b><br><span class="d">Reads the frozen prompt, fills the blanks, refuses if a blank is unresolved, and launches the judging session <b>directly</b>. No middleman session, no subagent. &#9888; <b>Harness-owned: the optimizer may never edit this.</b> It applies the box &mdash; a boundary its subject can rewrite is not a boundary.</span></td><td class="ph">0c</td></tr>
     <tr><td class="n">5</td><td><b>One place that refuses to run uncontained</b><br><span class="d">The constructor raises unless handed a container command. &#9888; <b>22 sites, but 19 are test-only</b> &mdash; three can run in production and one of those already accepts a substitute, so there are <b>two</b> to wire. It must sit at the constructor because there are three ways to reach a runner, including one that skips the usual setup entirely. &#9888; Plus a second refusal: reject any stage whose mount set does not exist yet.</span></td><td class="ph">1f</td></tr>
     <tr><td class="n">6</td><td><b>The isolation module</b><br><span class="d">&#9888; A <b>thin adapter over the engine's machinery</b>, not a second command renderer. One module, one concern: the scope check, both mount sets, the host-to-container path map, the environment allowlist, the version-tied working folder, and the configuration fingerprint. Written generically so it lifts out for crc.</span></td><td class="ph">2a, 2b, 3</td></tr>
@@ -589,11 +607,18 @@ is a hard precondition, not a warning.</b></p><label class="fb" for="fb-g-manife
 engine advanced three commits mid-session, and again within the same day. Re-read them against the
 pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-drift">Your notes</label><textarea id="fb-g-drift" data-section="g-drift"></textarea></div></details></div>
 <div class="card keep" data-section="oqs-intro">
-  <h2>Open questions &mdash; <b class="warn">3 live</b>, 9 resolved</h2>
-  <p>You resolved the original nine yesterday, and chose to keep the reasoning rather than fold it
-  into the spec &mdash; the right call, since several were resolved <i>against</i> this plan's own
-  recommendation and the reasoning is the only record of why. <b>Three new ones came out of the
-  round-2 review.</b> Question 10 blocks starting work.</p>
+  <h2>Open questions &mdash; <b class="good">all twelve resolved</b></h2>
+  <p>You resolved the original nine, and chose to keep the reasoning rather than fold it into the
+  spec &mdash; the right call, since several were resolved <i>against</i> this plan's own
+  recommendation and the reasoning is the only record of why. The three from the round-2 review are
+  now closed too. <span class="chg">&#9679; all resolved</span></p>
+  <p>&#9989; <b>Question 10 dissolved rather than being decided</b>, which is the best outcome
+  available: you said paper-trail is one thing that receives claims and evidence and adjudicates
+  &mdash; and that matches the only configuration that can actually run. Better still, the refusal I
+  proposed adding <b>already exists</b> and fires at preflight before anything is spent. So a
+  mechanism got pointed at instead of built. <b>Question 11</b> I answered myself once you said the
+  question was unreadable &mdash; it was an implementation detail, not a call for you. <b>Question
+  12</b> you left to me.</p>
 </div>
 <div id="oqs"></div>
 
@@ -654,11 +679,11 @@ pinned commit before editing anything upstream.</p><label class="fb" for="fb-g-d
 <div class="foot">
   <button id="copy">Copy feedback as Claude prompt</button>
   <span class="n" id="pend">nothing entered yet</span>
-  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>7aa06b6b7548</code></span>
+  <span class="n" style="margin-left:auto">saved in this browser as you type &middot; plan <code>5d12d53feab5</code></span>
 </div>
 
 <script>
-const PLAN_SHA="7aa06b6b754892fb66bbe80aac4ed49075bafa72db380fe3c7867f37a68b6732";
+const PLAN_SHA="5d12d53feab5b032af408c4c5e603364f30b7622bc896b5d33c57b9ce8fe16ec";
 const PLAN_PATH="docs/plans/isolation-protocol.md";
 const PLAN_BRANCH="sarol-optimizer-concurrent";
 
@@ -719,18 +744,20 @@ const OQS=[
   orig:"The reviewer called it not buildable by a fresh session \u2014 it named a helper and left out who makes the clone, what happens on resume, the version-tag policy, and every place assuming the old repository root.",
   rec:"RESOLVED \u2014 the clone is gone, replaced by a reset at the start of each run: archive the lessons sheet, the findings and the releases folder, then assert they are absent. Struck with it: the provisioner, the resume design, the tag policy, and the rewrite of what \"the repository root\" means \u2014 which was the change with the most reach in this plan and is now simply not made. &#9989; Two things improve: the fresh-run gate is now <b>satisfied</b> rather than retired, and Phase 4 stops being coupled to the optimizer's box.",
   resp:"You said there will never be parallel runs, so you could not see the concern. <b>You are right that parallelism is not the concern, and this plan failed to say so.</b> The problem is sequential: the lessons sheet is injected into every optimizer session and had never been reset between runs, so run 2 opens carrying run 1's hypotheses. That happens with runs strictly one after another. <b>But your ruling still kills the clone</b> \u2014 a clone buys a reset <i>plus</i> an independent namespace for overlapping runs, and you will never have the second."},
- {n:10,gate:true,
+ {n:10,resolved:"paper-trail is one adjudication step \u2014 and the refusal this asked for already exists (you, 2026-09-15).",
   plain:"Does this build cover all three pipeline stages, or only the judging one?",
   orig:"The plan keys the box on stage \u2014 right \u2014 but derives only the judging stage's mounts, leaving the other two as prose. The objection is about handoff, not design: an open decision sitting inside a document that otherwise tells an implementer exactly what to build is a gap, because the full pipeline needs all three.",
-  rec:"<b>(i) Judging stage only</b>, with a hard refusal that rejects any other stage until its mounts are specified \u2014 scope stays small and the gap cannot be entered by accident. <b>(ii) Derive all three now</b> \u2014 more work up front, and the evidence-finding stage's mounts are the tricky ones, since it must read the paper while the judging stage must not. <i>Recommendation: (i).</i> Only one stage runs today, so (ii) specifies a boundary for a pipeline that cannot yet run \u2014 but (i) is only safe <b>with</b> the refusal, which is why the refusal is in the plan either way. &#9888; This one blocks starting work."},
- {n:11,gate:true,
-  plain:"After we add a package file, does the old environment-variable override still work?",
+  rec:"RESOLVED, and it dissolved rather than being decided. Your model is correct and it matches the only runnable configuration: under the live profile the evidence envelope is produced <b>mechanically by Python before any session starts</b>, and the agent adjudicates. One session, one claim, one mount set. The three-stage pipeline is <i>designed but not built</i> \u2014 only the adjudication stage is implemented and the driver aborts the other two. &#9989; <b>And the hard refusal this plan proposed adding already exists</b>: a preflight check refuses any profile asking for an unimplemented stage, before anything is spent. Worth knowing that the <i>default</i> profile is the unrunnable three-stage one, so that check is load-bearing today rather than theoretical. \u21d2 So Phase 1f\u2019s \"second refusal\" is struck as a new mechanism and becomes a one-line requirement: the container work must not bypass the check that already works.",
+  resp:"You said: <i>\"I don't know what you mean 'judging stage only'. Paper-trail is one thing. It receives claims and evidence and adjudicates.\"</i> <b>That is right, and my question was built on a distinction that does not matter yet.</b> This plan therefore builds <b>one</b> mount set. If the three-stage pipeline is ever built, per-stage mount sets come with it \u2014 the container command already keys on the stage, so the seam exists and sits unused. Recorded as a named consequence rather than a gap: whoever widens the implemented stages derives the new mount sets in the same change, and the evidence-finding stage is the awkward one, because it must read the paper while adjudication must not."},
+ {n:11,resolved:"Demote the override to development-only (my call, after you said the question was unreadable).",
+  plain:"After we add a package file, does the old override still work?",
   orig:"The pin only binds what gets imported if the import path changes too. Today both the adapter and a helper script resolve the engine from a hardcoded home-directory path.",
-  rec:"Keep the override as a documented development escape hatch, or demote it to tests-only so production always imports the pinned package. <i>Recommendation: demote it</i> \u2014 an override that silently changes which engine code runs is the same drift the pin exists to close. &#9888; Either way the answer has to be stated, or an implementer adds the pin, leaves the old path-poking in place, and nothing actually changes."},
- {n:12,gate:true,
+  rec:"RESOLVED by me, since this was an implementation detail rather than a product call. <b>What it actually is, in plain terms:</b> when this code needs the shared engine, it does not import an installed package \u2014 it pushes a folder path onto Python\u2019s import path and imports from there. The folder is hardcoded to a location in your home directory, and an environment variable can point it somewhere else. <b>Why it matters:</b> whatever is in that folder at that moment is what runs, uncommitted edits included, and nothing records which engine code produced a number \u2014 the same drift this plan complains about everywhere else, sitting in our own import statement. <b>The decision:</b> add the pin <i>and</i> change the import to use the installed package; the override survives only as a development escape hatch for tests, never on a path that produces a reportable number. &#9888; The half not to skip: <b>the pin alone changes nothing</b> if the path-poking stays. Both edits, or neither is worth doing.",
+  resp:"You said \"idk what this means\" \u2014 fair, the question was written in machinery rather than consequence. That is my error, not a comprehension gap. The consequence is the only part that matters: today two different runs can silently use two different versions of the shared engine, and nothing in the results would show it."},
+ {n:12,resolved:"Key program identity on the manifest fingerprint, not git tags (your call, delegated).",
   plain:"How does a program version get identified \u2014 by git tag, or by the manifest fingerprint?",
   orig:"Tags are repository-global, so a second run re-mints the first run's. This is the one thing the per-run clone gave for free and the reset does not.",
-  rec:"Namespace the tags per run, or stop using tags as the identity and rely on the manifest fingerprint. <i>Recommendation: the fingerprint</i> \u2014 it is committed, already identifies a version uniquely, and is already what the configuration pin keys on, so it removes a mechanism rather than adding one. A ten-line decision, not a design."}
+  rec:"RESOLVED \u2014 key on the manifest fingerprint. <i>Chosen because it removes a mechanism rather than adding one:</i> the fingerprint is already committed, already identifies a program version uniquely, and is already what the configuration pin keys on. Namespacing tags per run would have meant inventing a naming scheme and teaching every reader of a tag about it. &#9888; Tags can stay as a human convenience; what changes is that <b>nothing load-bearing keys on them</b> \u2014 the release payload, the pin and the frontier all key on the fingerprint."}
 ];
 
 const root=document.getElementById('oqs');
