@@ -49,3 +49,10 @@ src/scripts/__pycache__/
 # belt-and-suspenders in case someone drops one under the tree.
 *-service-account*.json
 gcp-credentials*.json
+
+# Plan docs, reviewer output and rendered explainers. These are authored on the shared
+# mount now (planning/paper-trail/), which is inside the secure environment, so they cost no
+# document review there. The 20 files already tracked here stay tracked — gitignore does
+# not untrack anything; this only stops NEW ones being committed. `git add -f` if one is
+# ever genuinely wanted.
+docs/plans/
