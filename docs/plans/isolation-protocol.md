@@ -854,9 +854,28 @@ three siblings consume; that buys naming, not capability.
 ⚠ **But the mount set does not cover credentials or network, and the first draft implied it did.**
 Two separate holes:
 
-- **Network policy is required and has no default.** `"none"` — what the existing controls use —
-  would deny the adjudicator its own API calls, so it would fail rather than be isolated. Use
-  **`network_policy="open"`** + **`adc_path=None`** + `CLAUDE_CODE_OAUTH_TOKEN`
+- **Network policy — ⚠ REVISED 2026-09-16 (Phil asked what `"open"` is actually for).** This bullet
+  used to frame the choice as `"none"` vs `"open"`: `"none"` would deny the adjudicator its own API
+  calls, therefore `"open"`. **That is a false dichotomy and it picked the wrong answer.** `"open"`
+  is plain bridge networking; the engine files it under `_UNRESTRICTED_NETWORK_POLICIES` and states
+  it *"seals nothing on the network axis"*. It was built for crc on a justification that does not
+  transfer — *"its dataset is private, so the data-leakage risk ... doesn't apply"* — and it makes
+  **V2h unsatisfiable**, since "an outbound request to a non-allowlisted host must fail" cannot pass
+  when no host is disallowed. It also contradicts the 2026-07-20 ruling that paper-trail's allowlist
+  *"must name Anthropic's API explicitly, not leave it implicit"*.
+  ⇒ **The target is a host allowlist** on the generic primitive — the profile this plan already calls
+  *"ours to own (Phil, 2026-08-18)"* two paragraphs below, and which `rad-eval` has run for real.
+  `HostAllowlistNetworkStack` takes **no `adc_path` at all**, so the credential-free shape comes free
+  and the trap described below does not arise on that path. Under `retrieval` the list is **one host**,
+  because the evidence is produced mechanically and the adjudicator needs no literature APIs.
+  ⚠ **Blocked on one engine addition, not on a decision:** the stack fixes its command in `__init__`
+  from a single mount set while standing the network and sidecar up in `__enter__`, so one stack
+  serves one container — a Squid sidecar per dispatch at 561 dispatches. Rendering further dispatches
+  onto a standing network is item 7 of
+  `agentic-label-opt/docs/plans/2026-09-16-contained-nested-sessions.md`. Until it lands, the code
+  runs on `"open"` as a **recorded stand-in** (`optimizer/isolation.py`, `network_policy` is a
+  required argument so nothing defaults to unrestricted).
+  The historical shape, for reference: **`network_policy="open"`** + **`adc_path=None`** + `CLAUDE_CODE_OAUTH_TOKEN`
   (`isolation/open_profile.py:68-72`). ⚠ **Two traps verified 2026-09-14.** `adc_path` defaults to a
   **real credential path**, not `None` (`gcp_credentials.py:35`), so *omitting* it gives the
   credential-bearing shape — `None` must be passed explicitly. And `adc_path=None` is honoured **only

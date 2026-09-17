@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import inspect
 import os
 import pathlib
 import sys
@@ -356,6 +357,19 @@ def inner_command(
     return cmd
 
 
+#: The egress shape this path is meant to end up on: a host allowlist naming exactly what the
+#: program legitimately needs. Under `retrieval` -- the only runnable profile -- the evidence is
+#: produced mechanically beforehand, so the adjudicator needs no literature APIs and the list is a
+#: single host. One permitted destination is about as provable as an egress boundary gets.
+#:
+#: Not yet reachable: see the note in `dispatch_prefix` for the one engine addition it waits on.
+TARGET_EGRESS = "host-allowlist"
+
+#: What the engine calls the unrestricted policy. Named here so a reader of this module does not
+#: have to know that `"open"` means "no egress restriction at all".
+UNRESTRICTED_EGRESS = "open"
+
+
 def dispatch_prefix(
     *,
     stage: str,
@@ -364,6 +378,7 @@ def dispatch_prefix(
     snapshot_dir: pathlib.Path,
     trace_dir: pathlib.Path,
     image: str,
+    network_policy: str,
     paper_dir: pathlib.Path | None = None,
     container_user: str | None = None,
     build=None,
@@ -384,10 +399,25 @@ def dispatch_prefix(
     )
     builder = build or _import_engine()
     return builder(
-        # "open" is the tier paper-trail authenticates on, and the only policy that honours
-        # adc_path=None. Under "vertex-only" an explicit None is coerced back to a real credential
-        # path (`docker_prefix.py:557-560`), which is the credential-bearing shape.
-        network_policy="open",
+        # ⚠ **The target is a host allowlist, not this.** `"open"` is plain bridge networking; the
+        # engine files it under `_UNRESTRICTED_NETWORK_POLICIES` and says it "seals nothing on the
+        # network axis" (`docker_prefix.py:49-54`). It was built for crc, whose justification --
+        # "its dataset is private, so the data-leakage risk ... doesn't apply" -- does not transfer
+        # to a program whose entire purpose is that it must not reach the gold labels. It also makes
+        # the plan's own egress gate unsatisfiable: "an outbound request to a non-allowlisted host
+        # must fail" cannot pass when there is no non-allowlisted host.
+        #
+        # The replacement is `HostAllowlistNetworkStack(allowed_hosts=[<the API host>])` -- already
+        # built, already run for real by rad-eval, and it takes no `adc_path` at all, so the
+        # credential-free shape comes free rather than needing the `None` trap below.
+        #
+        # ⚠ Blocked on one engine addition, NOT on a decision (Phil, 2026-09-16): the stack fixes its
+        # command in `__init__` from a single mount set while creating the network and sidecar in
+        # `__enter__`, so one stack serves one container -- a sidecar per dispatch at 561 dispatches.
+        # Rendering further dispatches onto a standing network is item 7 of
+        # `agentic-label-opt/docs/plans/2026-09-16-contained-nested-sessions.md`. Switch here when it
+        # lands; until then this is a recorded stand-in, not a choice.
+        network_policy=network_policy,
         image_tag=image,
         # ⚠ Explicit None. The default is a real credential path (`gcp_credentials.py:35`), so
         # *omitting* this argument is what grants the credential, not what withholds it.
@@ -472,6 +502,7 @@ def _dry_run_matrix(build):
                         snapshot_dir=snapshot,
                         trace_dir=trace,
                         image="ghcr.io/example/paper-trail@sha256:" + "0" * 64,
+                        network_policy=UNRESTRICTED_EGRESS,
                         build=build,
                     )
                     prompt = (
@@ -722,9 +753,23 @@ def _selftest() -> int:
             unspecified_stage_problem("retrieval") is None,
         ),
         # -- what we asked the engine for ----------------------------------------------------------
+        # ⚠ This used to assert `network_policy == "open"` as though that were a property worth
+        # having. It is the opposite: the engine files `"open"` under its unrestricted set. A gate
+        # certifying the wrong answer is worse than no gate, so what is asserted now is that the
+        # caller had to choose, and that the stand-in is visible rather than silent.
         (
-            "every render passes the open network policy",
-            bool(calls) and all(c["network_policy"] == "open" for c in calls),
+            "the caller must state an egress policy; nothing defaults to unrestricted",
+            "network_policy" in inspect.signature(dispatch_prefix).parameters
+            and inspect.signature(dispatch_prefix).parameters["network_policy"].default
+            is inspect.Parameter.empty,
+        ),
+        (
+            "...and the target egress shape is recorded as a host allowlist, not this stand-in",
+            TARGET_EGRESS == "host-allowlist" and UNRESTRICTED_EGRESS == "open",
+        ),
+        (
+            "the dry run is honest about running on the unrestricted stand-in today",
+            bool(calls) and all(c["network_policy"] == UNRESTRICTED_EGRESS for c in calls),
         ),
         (
             "every render passes adc_path=None explicitly, since omitting it grants a credential",
