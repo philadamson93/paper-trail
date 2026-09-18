@@ -4,7 +4,12 @@ Reference: docs/claude_ops.md
 
 **Status: Approved** (rewritten 2026-09-11 against the shared engine's landed substrate; Codex review
 applied 2026-09-13; Phil's explain-plan feedback applied 2026-09-14; Codex round 2 applied and
-**approved by Phil via `/explain-plan` 2026-09-15 at plan-sha `942a5f0c9948`**) · **Reviewed: Yes**
+**approved by Phil via `/explain-plan` 2026-09-15 at plan-sha `942a5f0c9948`**) · **Reviewed: Stale**
+⚠ **Reviewed demoted to Stale — this plan was substantively revised after Phil read it.** Twice: the
+egress shape changed on 2026-09-16, and on **2026-09-17 the general machinery landed in the shared
+engine** and came out of here. Re-read before implementing, and read
+*What the engine landed, and what this plan now deletes* first — it is the only section that
+describes the current division of work.
 ⚠ **Approved ≠ ready to code — but the two preconditions are now cleared (2026-09-15).** Both are
 recorded in *Landing & cleanup*: the branch is **rebased onto Plan A's tip `f02d761`**, and the
 **"judge" naming sweep is done** — 108 of 142 uses rewritten, to *the program* where the text named
@@ -76,8 +81,10 @@ steps point here. A plan whose evidence base is git-ignored has no evidence base
 - **Item 8 said "model N principals, not one" and "a *per-principal* mount manifest."** This plan
   collapsed that into a fixed two — *the judge* and *the optimizer* — and then derived **one** mount
   set. That is exactly the error Phil corrected on 2026-09-14 (*"we have the agentic program and the
-  optimizer; judge is one PART of the program"*), and the per-stage mount-set gap in *Who is who* is
-  literally what "per-principal mount manifest" was asking for. ⚠ Note also that item 8 scopes this as
+  optimizer; judge is one PART of the program"*). ⚠ **Read that quote carefully — it names TWO
+  principals, the program and the optimizer, and a stage is not one of them.** *Who is who* quoted it
+  and then derived per-stage mount sets in the next breath, which Phil struck on 2026-09-17. "A
+  per-principal mount manifest" means one grant for the program and one for the optimizer. ⚠ Note also that item 8 scopes this as
   **engine** work; this plan made it consumer work (see OQ4).
 - **Item 6 said "per-iteration staging."** This plan recommended a consumer-side archive instead and
   called the engine change too costly. Phil's OQ2 ruling restored the source finding — without being
@@ -218,13 +225,41 @@ accident.** The convention from here:
   (`JUDGE_SCOPE`, and the selftest `("retrieval runs the judge alone", RETRIEVAL.stages ==
   ("adjudicator",))`, `profiles.py:266`). ⚠ **Never for the container or the mount set.**
 
-⚠ **Three consequences the "judge container" framing hid. These are design changes, not wording:**
+🚩 **RULING — Phil, 2026-09-17. The program is ONE entity for data visibility. Consequences 1
+and 2 below are STRUCK.** In his words: *we've decided several times now that the entire program is
+one entity in terms of data visibility. While there are "stages" nominally, nothing experimentally
+warrants or benefits from splitting in this way. In fact the optimizer may freely choose to edit the
+topology of a program making such divides a nuisance and unnecessary.*
 
-1. **The boundary is per `(stage, claim, version)`, not per `(claim, version)`.** The dispatch loop is
-   `for stage in self.profile.stages:` (`adapter.py:866`), and `_stage_command(stage, claim,
-   materialized_path)` (`:700`) already takes the stage. **Phase 1c's prefix factory must key on it
-   too** — as written it keys on the claim and the materialised path only.
-2. **Mount sets differ per stage, and this plan only ever derived the adjudicator's.** The extractor
+**What it settles.** There is **one grant for the program**, whatever stages it happens to run. Not
+one per stage — and not "one now, with its own grant for the extractor later", which was this plan's
+reading on 2026-09-17 and is also wrong. The optimizer is allowed to restructure the program: merge
+stages, split them differently, drop one. A boundary drawn on today's stage names would fight the
+thing the experiment exists to measure.
+
+⚠ **This resolves a contradiction the plan was already carrying.** Item 2 below concedes the
+adjudicator-and-paper question is *measurement integrity, not leakage*, and **NF10** assigns that
+class to Plan A and Gate F rather than to this plan — and then item 2 kept the per-stage split
+anyway. What actually holds the evidence condition steady is the release pinning `profile` and
+`retrieval_k`, which the plan states itself. The mount set was never the mechanism.
+
+⚠ **Consequence for the code, so nobody re-derives it.** `StageMounts`, `stage_mount_set()` and
+every selftest keyed on `(stage, claim, version)` encode the struck design — including a branch that
+hands the extractor the paper. Adopting the engine's `SessionScope` deletes them, and the uniqueness
+rule becomes **per grant**, exactly as the engine's own docstring says. ⚠ The Step 0a dry run is
+46/46 green today **partly on those assertions**, so expect its count and its wording to move when
+they go. A green that asserts the wrong shape is not a green worth keeping.
+
+⚠ **Three consequences the "judge container" framing hid. ⚠ The first two are STRUCK by the ruling
+above and kept only because the reasoning is why we thought otherwise. The third stands:**
+
+1. ~~**The boundary is per `(stage, claim, version)`, not per `(claim, version)`.**~~ **STRUCK
+   2026-09-17.** Still true of the **command**: the dispatch loop is
+   `for stage in self.profile.stages:` (`adapter.py:866`) and `_stage_command(stage, claim,
+   materialized_path)` (`:700`) does take the stage. Not true of the **grant**: one program, one
+   mount set, keyed on `(claim, version)`.
+2. ~~**Mount sets differ per stage, and this plan only ever derived the adjudicator's.**~~ **STRUCK
+   2026-09-17.** The extractor
    produces evidence from the source (`evidence_producer="extractor"`, `source_mode="pdf"`), so it
    needs the paper mounted; the adjudicator reads the finished evidence envelope and should not get
    the paper. Under `retrieval` the evidence is produced by ordinary Python beforehand
@@ -246,16 +281,15 @@ accident.** The convention from here:
    (*"never pre-read the paper … is measurement integrity, not leakage"*), assigning that class to
    Plan A and Gate F rather than here. So the earlier wording contradicted the plan's own finding.
 
-   ✅ **Per-stage mount sets are still the right design, for a reason worth stating precisely:** the
-   mount set is a *cheap, structural* way to enforce a measurement-integrity property that is
-   otherwise only prose the optimizer can edit — the adjudicator cannot read the paper because it is
-   not mounted, not because it was asked not to. That is strictly better than an instruction, and it
-   is the same argument this plan makes for gold. ⚠ But it must be **labelled** as measurement
-   integrity, because NF10's scope rule sends that class to Plan A, and an unlabelled
-   measurement-integrity guarantee hiding inside an isolation plan is how requirements get lost —
-   this plan's own root cause. **Open decision (Phil):** does this plan derive the extractor and
-   verifier mount sets — enforcing an evidence-condition boundary it has scoped out — or stay
-   adjudicator-only and hand Phase 2 a named gap?
+   🚩 **ANSWERED 2026-09-17 (Phil) — neither. Per-stage mount sets are NOT the design.** The text
+   that stood here argued they were a cheap, structural way to enforce a measurement-integrity
+   property the optimizer could otherwise edit away. The ruling above overrides it: the program is
+   one entity for data visibility, nothing experimentally warrants the split, and the optimizer may
+   rewrite the topology regardless. ⇒ **One grant for the program.** The evidence condition stays
+   honest the way **NF10** already said it does — the release pins `profile` and `retrieval_k`, and
+   Plan A's Gate F owns that class — not by withholding a mount. ✅ The open decision that used to
+   sit here (derive the extractor and verifier mount sets, or hand Phase 2 a named gap?) is
+   **closed: there is nothing to derive.**
 3. **"Cost triples" — what the 3× is, corrected twice now.** The 3× is **three stages per claim
    instead of one**: the product runs extractor → adjudicator → verifier, *"two subagents in
    sequence, then a third verifier subagent"* (`paper-trail.md:383`). ⚠ **The scope of the claim is
@@ -277,6 +311,75 @@ are deliberate — the `JUDGE_SCOPE` code symbol (6), the separate word *judgeme
 words, the quoted selftest and validator strings, and this section's own discussion of the naming.
 
 
+## What the engine landed, and what this plan now deletes
+
+**Added 2026-09-17, the day the capability landed.** `agentic-label-opt`
+`docs/plans/2026-09-16-contained-nested-sessions.md` is **Completed** — merged to `main` at
+**`592862f`**, with **367 tests passing, none skipped**, every live container probe actually executed,
+and 34 of 34 deliberately-broken variants caught. That plan was carved out of this one. So every
+section below that still describes building the general boundary machinery here describes work that
+no longer exists. ⚠ **Read this section before Phase 1.**
+
+**Why it moved.** Phil, 2026-09-15: *most of this should go in agentic-label-opt, not build to lift
+later.* The engine plan's origin note records how it went wrong: a ruling from 2026-07-20 said build
+this as a general engine capability, the ruling was written into crc's repo and never reached the
+engine, and this plan then spent two months designing it consumer-side under an explicit
+"zero engine diff" goal.
+
+### The four things we no longer build
+
+| What this plan specified | What the engine provides at `592862f` |
+|---|---|
+| Our own mount vocabulary — `Mount`, `StageMounts`, `stage_mount_set()` | **`SessionScope`** (`isolation/session_scope.py`) — a frozen grant of `program`, `readable`, `writable`, `workdir`, `denied`. `scope_problem()` validates it before anything starts; `build_contained_session_prefix()` renders it through the `build_docker_cmd_prefix` that already existed. It emits no Docker flags of its own, which is what keeps it from being a second mount vocabulary |
+| `inner_command_host_leak()` — our host-path check over rendered argv | **`host_path_leak(told, scope)`** — the same check upstream, and it takes the grant, so it can tell a leaked path from a legitimately granted one |
+| The per-dispatch prefix factory (1c) | **`HostAllowlistNetworkStack.render_dispatch(...)`** — one standing network, a fresh container per dispatch, each grant's command provably distinct |
+| The generic half of the sentinel seal control (1g) | **`isolation/negative_control.py`** — `build_scenario`, `run_probe` and the generic seal probe, landed and exercised by the engine's own suite |
+
+⇒ **`optimizer/isolation.py` shrinks to what is actually paper-trail's:** which host directory holds
+what, which secrets, which hosts the network may reach. The 919-line module built for Step 0a keeps
+its dry run and its consumer predicates (`unspecified_stage_problem`, `bypass_flag_problem`) and hands
+the boundary machinery back.
+
+### Two blockers this plan was waiting on are cleared
+
+1. **Credentials by name.** Phase 1 could not land because the renderer emitted only `-e KEY=VALUE`,
+   so the rendered command carried **no auth at all**. The engine landed **`inherit_env`**, rendered
+   as `--env NAME`, and it *refuses* a `KEY=VALUE` string rather than quietly passing it through. The
+   token no longer reaches host argv or the metadata log. ⚠ It is still visible **inside** the
+   session — denying that needs a credential broker and stays out of scope.
+2. **The egress shape.** `network_policy="open"` seals nothing (the engine files it under
+   `_UNRESTRICTED_NETWORK_POLICIES`; it was built for crc), and the host-allowlist alternative fixed
+   its command prefix at construction while standing the network up on entry — one stack, one
+   container, which a loop dispatching per claim cannot use. `render_dispatch` splits those two
+   moments apart, so the one-host allowlist this plan wants is now reachable.
+
+### Phil's two corrections of 2026-09-16 are now structural, not edits we owe
+
+Both were booked as code changes owed to `optimizer/isolation.py`. Adopting `SessionScope` applies
+them by construction instead, which is the better outcome — a rule the module could drift away from
+becomes a shape it cannot express:
+
+- **The per-stage mount split goes — entirely.** Phil overruled it: stages are a pipeline
+  convenience, and the boundary that matters is program↛gold. The engine's grant has **no stage
+  dimension at all**, so adopting it drops the split rather than us remembering to.
+  ⚠ **Corrected 2026-09-17, because this plan got it wrong twice.** An earlier version of this
+  bullet said the extractor would get *"its own grant"* when it is dispatched for real. That is
+  still the struck design, just deferred. The ruling is that **the program is one entity for data
+  visibility**: one grant, whatever stages it runs, because the optimizer may rewrite the topology
+  and a stage-shaped divide would fight it. See the ruling in *Who is who*.
+- **The grant covers a worker's whole life, with N a parameter.** The engine states it in
+  `session_scope.py`'s own docstring: mount the staging **root**, not one item, and the uniqueness
+  gate is **per-grant, not per-item**. ⚠ At today's N=1 the correct and incorrect rules are
+  indistinguishable — so a wrong gate here passes unnoticed now and mis-attributes results the
+  moment N moves.
+
+### What is still ours
+
+The engine built the boundary. paper-trail still owes the **pin** (item 1, target `592862f`), the
+mount *contents*, wiring the adjudicator's container into `SarolRunner.process`, trace persistence,
+the single refusal locus, the run-start reset, and our own sentinel contents. That is the consumer
+slice, and it is smaller than the rest of this document implies.
+
 ## What we are building
 
 Added 2026-09-14 because Phil asked the question this plan was not answering: *"we're discussing these
@@ -286,12 +389,12 @@ session should build, and the disagreement is a defect to fix here.
 
 | # | What | Where | Phase |
 |---|---|---|---|
-| 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39`. So a run binds to whatever that tree holds at that moment. Copy rad-eval's shape: a git **revision** under `[tool.uv.sources]` (it pins `rev = "3bbe6c4"`), which means **creating** our first `pyproject.toml` | `pyproject.toml` | 1a |
-| 2 | **The program's container**, built **per stage-dispatch** by a factory owned by `SarolRunner.process(claim)` — keyed on `(stage, claim, version)`, ⚠ **not** on the claim alone. Adjudicator-stage mount set: claim staging (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). Nothing else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks` denied by absence. ⚠ The extractor and verifier stages need **their own** mount sets when Phase 2 runs; only the adjudicator's is derived here | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
+| 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39` and again in `optimizer/isolation.py:68`, `:71`. So a run binds to whatever that tree holds at that moment. Copy rad-eval's shape: a git **revision** under `[tool.uv.sources]`, which means **creating** our first `pyproject.toml`. ⚠ **Pin target is `592862f`** — the engine commit that landed the contained-session capability. Per **OQ11** the `$AGENTIC_LABEL_OPT` override survives as development-only, which is what stops the pin being decorative | `pyproject.toml` | 1a |
+| 2 | **The program's container** — ⚠ **rewritten 2026-09-17: the boundary machinery is the engine's now.** Fill one **`SessionScope`** and hand it to `build_contained_session_prefix`; the per-dispatch container comes from `render_dispatch` on a standing network. The **program's** grant — one, not one per stage: the claim **staging root** (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). `denied` names `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks`, so the negative control has something to probe. ⚠ **No stage dimension** — see *What the engine landed* | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
 | 3 | **The optimizer's container**, modelled on rad-eval's `docker_agent.py`: temp writable staging, copy-back into the live tree, and the scorer / gold / `iter/` / manifest **absent from the mount set** — so "the optimizer cannot edit the scorer" holds by construction | `optimizer/isolation.py` | 1e |
 | 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the adjudicator **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
 | 5 | **One refusal locus** — `SarolRunner.__init__` raises absent an explicit prefix factory. ⚠ **22 sites, not 21**, and it must cover three reach-paths (`build_components`, direct construction, and a pre-built `components=` dict that skips the gate). ✅ Only **3 ship**; the other 19 are selftests, and `canary.py` already accepts an injected runner. Offline tests opt out with an **injected fake prefix**, never a boolean | `optimizer/adapter.py`, `dispatcher.py`, `canary.py`, `scripts/run_baseline.py` | 1f, **NF11**, **OQ7** |
-| 6 | **The isolation module** — scope predicate, both mount-set builders, the canonical host→container path map, the env allowlist, the version-addressed cwd builder, the configuration hash. ⚠ Shaped so the boundary machinery lifts into the shared engine for crc; only the mount *contents* are ours | new `optimizer/isolation.py` | 2a, 2b, 3, **OQ4** |
+| 6 | **The isolation module, now thin** — ⚠ **shrunk 2026-09-17.** The scope vocabulary, both validators, the host-path leak check and the seal control all landed upstream. What stays is paper-trail's own: the mount *contents*, the env allowlist, our host list, the version-addressed cwd builder, the configuration hash, and the consumer predicates (`unspecified_stage_problem`, `bypass_flag_problem`) | `optimizer/isolation.py` | 2a, 2b, 3, **OQ4** |
 | 7 | **Trace persistence** — the streamed session JSON written beside the verdict as `trace_ref`, because `find_transcript` globs the *host's* `~/.claude/projects` and goes blind in a container | `optimizer/adapter.py` | 1d |
 | 8 | **Per-iteration held-out staging** — `val_inputs` accepts `Callable[[int], RunInputs]`, mirroring `train_inputs` in the same signature; the Runner asserts the live verdict path is absent before dispatch | `engine/loop.py` (upstream), `optimizer/adapter.py` | 0a, **OQ2** |
 | 9 | **Fail-and-feed on a no-verdict dispatch** — a distinguishable delivery-failure count keyed **only** on `UNREADABLE:`, handed to the engine's **newly-landed** stop-reason + partial-run channel (`82f547d`) rather than a new one, never scored as program quality and never summed into the mistake corpus | `optimizer/adapter.py` | 0b, **OQ5** |
@@ -840,10 +943,15 @@ path; the pin is what the runtime imports. ⚠ Pinning to `main` instead of a re
 reintroduces exactly the drift that made the stale README outrank live code in this plan's first
 draft.
 
-**1b. The program's per-stage mount set** (§4g item 8). Grant: `{claim staging (rw), materialized spec root (ro),
-version-addressed cwd (ro)}`. Everything else — `iter/`, `optimizer/findings/`, `meta-learnings.md`,
-`optimizer/context/`, **`~/.paper-trail/gold`**, **`~/.paper-trail/benchmarks`** — is denied by
-absence *and* asserted denied.
+**1b. The program's mount set** (§4g item 8). ⚠ **One grant for the whole program — Phil overruled
+the split on 2026-09-16 and ruled out the deferred version of it on 2026-09-17; the engine's grant
+has no stage dimension to put it in either way.** One `SessionScope`:
+`{claim staging root (rw), materialized spec root (ro), version-addressed cwd (ro), trace dir (rw)}`.
+Everything else — `iter/`, `optimizer/findings/`, `meta-learnings.md`, `optimizer/context/`,
+**`~/.paper-trail/gold`**, **`~/.paper-trail/benchmarks`** — goes in `denied`: unreachable by absence
+*and* probed by the negative control. ⚠ **Mount the staging root, not one claim** — the grant scopes
+a worker's whole life and N is a parameter, so a per-claim mount is the N=1 special case, not the
+design.
 
 ✅ **Zero engine diff for the mounts themselves.** `build_docker_cmd_prefix` (`:444-464`) already
 exposes `extra_ro_mounts`, `writable_mounts`, `workdir`, `env`, `container_user`, `adc_path`, and an
@@ -1472,7 +1580,11 @@ silently dropped — reasoning a requirement away in passing is this plan's own 
 
 ## Files to Modify
 
-**New — `optimizer/isolation.py`.** ⚠ **A thin consumer adapter over the engine's primitives — not a
+**New — `optimizer/isolation.py`.** ⚠ **Smaller than described here since 2026-09-17** — the scope
+vocabulary, both validators, the host-path leak check and the seal control are the engine's now
+(`592862f`); see *What the engine landed*. What remains is the mount contents, the env allowlist, our
+host list, the version-addressed cwd builder, the configuration hash and the consumer predicates.
+⚠ **A thin consumer adapter over the engine's primitives — not a
 second Docker renderer (Codex round 2).** It composes `build_docker_cmd_prefix` and carries
 paper-trail's mount *contents as data*; every docker flag stays the engine's to emit. Scope predicate
 (`inner_scope_problem`), the adjudicator's and the
@@ -1502,6 +1614,15 @@ dependency on `agentic-label-opt` is real and live (see 1a); what this adds is t
 replaces a hardcoded home-directory path. `agentic-label-opt` pinned to a
 git **revision** under `[tool.uv.sources]`, copying rad-eval's shape (1a). Nothing else in this plan
 imports until this lands.
+✅ **Verified 2026-09-17 that the pin can actually resolve our imports.** The engine's own
+`pyproject.toml` declares `[tool.setuptools.packages.find] include = ["engine*", "isolation*"]` and
+its build metadata lists `adapter`, `engine`, `isolation` at top level — so `import
+isolation.session_scope` and `import engine.loop` resolve from the **installed** package, not only
+from a path import. Worth stating because the reverse would have made this whole item unbuildable,
+and packaging that exports one module and not the others is a common way for exactly that to happen.
+⚠ One wrinkle an implementer will hit: the engine's *own* suite needs the repo root on `sys.path`
+(`PYTHONPATH=. uv run pytest`), because the checkout is not installed into its venv. That is an
+engine-side ergonomics quirk, not a packaging defect, and it does not affect the pin.
 
 **`optimizer/adapter.py`** — the largest surface, and bigger than the first draft said:
 - the **per-dispatch prefix factory** called from `SarolRunner.process(claim)`, and the **refusal in
@@ -1666,13 +1787,23 @@ today, not theoretical. ⇒ Phase 1f's "second refusal" is **struck as a new mec
 one-line requirement: the container work must not bypass or relocate `unrunnable_reason`. Building a
 second gate beside a working one is the pattern this plan's root-cause table is made of.
 
-⚠ **Named consequence, not a gap.** When the harness is extended to optimize the extractor and
-verifier — the `agentic` profile exists for that — **per-stage mount sets come with it**, and the
-container command already keys on the stage (`adapter.py:866`, `_stage_command(stage, …)` at `:700`),
-so the seam is there and unused. ✅ **The spec for those mount sets is already written, by the
-product**: `paper-trail.md:387-388` has the extractor read the paper and the adjudicator read *"only
-the evidence JSON + the rubric, no paper."* So the per-stage mount distinction is not a new design
-question — it is an existing product invariant that nothing currently enforces.
+⚠ **Named consequence, not a gap — and rewritten twice on 2026-09-17, so read the ruling not this
+paragraph.** When the harness is extended to optimize the extractor and verifier — the `agentic`
+profile exists for that — **the grant does not change**: the program is one entity for data
+visibility, so a wider program means a wider single grant, not a grant per stage. The container
+*command* still keys on the stage (`adapter.py:866`, `_stage_command(stage, …)` at `:700`); the
+*mount set* does not. ⚠ Two earlier versions of this paragraph said otherwise — first "per-stage
+mount sets come with it", then "each of those stages gets its own grant". Both are struck.
+
+⚠ **And so is the argument that used to close this paragraph.** It read: *the spec for those mount
+sets is already written, by the product — `paper-trail.md:387-388` has the extractor read the paper
+and the adjudicator read "only the evidence JSON + the rubric, no paper", so the per-stage mount
+distinction is not a new design question but an existing product invariant that nothing enforces.*
+**That conflates a product-topology description with a containment boundary.** `paper-trail.md:388`
+describes how the program is arranged **today**, and the optimizer is free to rearrange it. Pinning
+the container's mount set to that arrangement would freeze a topology the experiment is meant to let
+the optimizer explore. The invariant stays a product statement; it is not a thing the mount set
+enforces.
 
 **OQ11 — ✅ RESOLVED 2026-09-15 (my call, after Phil said the question was unreadable): demote the
 override to development-only.** The question was badly asked, so here it is in plain terms.
@@ -1994,10 +2125,14 @@ consequence: drop the "clone local, archive to mount" split from Phase 4; both s
 > designed here, and the engine's plans already name three of the four as explicitly deferred. So the
 > engine's **backlog** grows; its **design** does not.
 >
-> **The one genuine architectural addition is paper-trail's, not the engine's:** the gold-holding
-> program/dispatcher container, which crc's umbrella plan designed (`2026-07-10-…:60`, `:232-237`) and no
-> repo has shipped. It gets built here, generically, so crc can adopt it rather than rebuild it — which
-> is a change *in* the engine's direction, not a change *to* the engine.
+> ⚠ **This last paragraph was the premise the engine reversed, and it is kept only to show what
+> changed.** It read: *"the one genuine architectural addition is paper-trail's, not the engine's —
+> the gold-holding program/dispatcher container … gets built here, generically, so crc can adopt it
+> rather than rebuild it."* **That is no longer true, and building it here to lift later is exactly
+> what Phil ruled against** (2026-09-15: *most of this should go in agentic-label-opt, not build to
+> lift later*). The container was built **in the engine** and landed at `592862f` on 2026-09-17. The
+> answer to Phil's question above is therefore the opposite of what this section said: the engine
+> surface was the **larger** of the two, and paper-trail's is the remainder.
 
 ---
 
@@ -2073,8 +2208,11 @@ elsewhere. That is worth stating here because it is the reason this plan was rev
 paid session, enumerate the full `(stage × profile × claim × program version)` matrix and assert on the
 **generated argv and mount set** alone — no container started, no model called. *Expected:* every path
 in every argv is a container path (no `/Users/…` or `/home/…` string anywhere — the V2d defect class);
-each stage either resolves a specified mount set or trips the stage refusal (1f); no two dispatches
-share a prefix; `Task` absent; no `--dangerously-skip-permissions`. *Stop:* any host path, any silently
+⚠ **the per-stage assertions here are struck (2026-09-17)** — they encoded one mount set per stage.
+What to assert instead: **every stage of one program version renders the SAME mount set**, because
+the grant is the program's; an unimplemented stage still trips the stage refusal (1f), which is about
+whether a stage is *implemented*, not what it may see; and **no two distinct grants** share a
+prefix — per-grant uniqueness, not per-stage; `Task` absent; no `--dangerously-skip-permissions`. *Stop:* any host path, any silently
 reused prefix, any unspecified stage that does **not** trip the refusal. This is the cheapest gate in
 the plan and it covers the two defects most likely to survive review — a reused prefix and an
 unhandled stage — so it runs **first**.
@@ -2426,7 +2564,13 @@ or a version/digest mismatch.
 
 ## Landing & cleanup
 
-**Branch.** `feat/optimizer-isolation-protocol`, cut from Plan A's tip — **`f02d761`** as of
+**Branch.** ⚠ **Corrected 2026-09-17 — the work is on `sarol-optimizer-concurrent`, in the worktree
+`.claude/worktrees/merge-concurrent` (tip `6b61c2f`).** The branch named below was the plan's
+intention and was never cut; origin still sits at `7360f12`, so the first push needs
+**`--force-with-lease`** (the rebase diverged it) — **authorised by Phil 2026-09-17**. Historical
+intent follows.
+
+**Branch (as planned).** `feat/optimizer-isolation-protocol`, cut from Plan A's tip — **`f02d761`** as of
 2026-09-13, five commits past the `94a376f` this plan's citations were taken against (not
 `sarol-optimizer-concurrent`'s older `591eb02`), in its own worktree `~/paper-trail-isolation`. The
 primary checkout holds `meta-learnings.md` modified plus five untracked `findings/iter-*.md` with no
@@ -2448,8 +2592,9 @@ including its negative control** — a land with either red is not a land; **V2c
 green**, so no ungated adjudicator ships; **V2d and V3d green**, because a reused prefix or a shared cwd
 mis-attributes one program's behaviour to another and nothing downstream would show it; **V2h green with every result attributed to a layer**, since it covers the
 threats the mount set cannot (⚠ **V2i is struck, not waived** — OQ1 removed the Task subagent it
-tested); **V2e green**, so a containerized run is still auditable; the credential-by-name engine
-change **landed upstream first** (Phase 1b is a prerequisite, not a follow-up); then `/review-implementation` → `/commit-review` → `/phi-vet`. No PHI is
+tested); **V2e green**, so a containerized run is still auditable; ✅ the credential-by-name engine change **has landed upstream** — `inherit_env` at `592862f`, so this
+prerequisite is **cleared**, not pending; ✅ the host-allowlist egress shape is now renderable per
+dispatch (`render_dispatch`), which was the other thing holding Phase 1; then `/review-implementation` → `/commit-review` → `/phi-vet`. No PHI is
 expected anywhere here (claim ids and sentinel strings only), but the repo is gated. ✅ Codex credits
 are restored, and this is a **rewrite** of a plan whose only review covered a different structure — a
 cross-model pass is worth running.
