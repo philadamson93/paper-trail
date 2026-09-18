@@ -59,17 +59,20 @@ _HERE = pathlib.Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:  # importable as a script and as a module
     sys.path.insert(0, str(_HERE))
 
+import engine_pin  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 
 #: Repo root: experiments/sarol-2024/optimizer/isolation.py -> up 3. Same derivation as adapter.py.
 REPO_ROOT = _HERE.parents[2]
 
-#: Where `agentic-label-opt` is checked out. Same default and same override as `adapter.py:102`.
-DEFAULT_ENGINE = pathlib.Path.home() / "Documents" / "Misc" / "Projects" / "agentic-label-opt"
+#: Where `agentic-label-opt` is checked out. ⚠ **Re-exported from `engine_pin`, not redefined
+#: (2026-09-18)** -- this used to be a third copy of the same literal.
+DEFAULT_ENGINE = engine_pin.DEFAULT_ENGINE
 
 
 def engine_path() -> pathlib.Path:
-    return pathlib.Path(os.environ.get("AGENTIC_LABEL_OPT", DEFAULT_ENGINE)).expanduser()
+    """Delegates to :mod:`engine_pin`, the single definition."""
+    return engine_pin.engine_path()
 
 
 def _import_engine():
@@ -89,7 +92,10 @@ def _import_engine():
     """
     import importlib  # noqa: PLC0415
 
-    path = engine_path()
+    # ⚠ Capability-probed, not just pin-checked (2026-09-18): this module needs SessionScope,
+    # inherit_env and render_dispatch specifically, and ancestry alone would not notice a later
+    # commit that removed one. Memoized, so the probe's import cost is paid once.
+    path = engine_pin.require_engine(probe_capabilities=True)
     saved = list(sys.path)
     try:
         sys.path[:] = [p for p in sys.path if p and pathlib.Path(p).resolve() != _HERE]

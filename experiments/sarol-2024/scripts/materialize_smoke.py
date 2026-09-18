@@ -36,7 +36,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 MANIFEST = Path(__file__).resolve().parents[1] / "program-v0" / "manifest.json"
-DEFAULT_ENGINE = Path.home() / "Documents" / "Misc" / "Projects" / "agentic-label-opt"
+# ⚠ **Re-exported from `optimizer/engine_pin.py`, not redefined (2026-09-18).** This was the third
+# independent copy of the same path literal, and the one furthest from the code that maintains it.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "optimizer"))
+import engine_pin  # noqa: E402
+
+DEFAULT_ENGINE = engine_pin.DEFAULT_ENGINE
 
 # The only fields engine.schemas.ManifestEntry declares that our manifest also carries.
 ENGINE_FIELDS = {"path", "freeze_policy", "contract_file", "optional"}
@@ -74,6 +79,16 @@ def main() -> int:
     if not (args.engine / "engine" / "materialize.py").exists():
         print(f"SKIP: engine not found at {args.engine}")
         return 1
+
+    # ⚠ Present is not the same as correct (2026-09-18). An engine checkout parked on another
+    # session's branch satisfies the existence check above and then feeds this smoke a manifest
+    # contract from a different version of the engine -- which is exactly the failure this script
+    # exists to catch, arriving through the back door. Absence still SKIPs; wrong version refuses.
+    problem = engine_pin.pin_problem(args.engine)
+    if problem is not None and os.environ.get(engine_pin.OVERRIDE_ENV) != "1":
+        print(f"FAIL: {problem}")
+        return 1
+
     sys.path.insert(0, str(args.engine))
     from engine.materialize import materialize
     from engine.schemas import ManifestEntry, ProgramManifest

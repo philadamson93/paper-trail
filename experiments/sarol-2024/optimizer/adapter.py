@@ -90,6 +90,7 @@ if str(_SCRIPTS) not in sys.path:
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import engine_pin  # noqa: E402
 import evidence_producers  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import validate_sarol  # noqa: E402
@@ -98,8 +99,10 @@ import validate_sarol  # noqa: E402
 REPO_ROOT = _HERE.parents[2]
 MANIFEST_PATH = _HERE.parent / "program-v0" / "manifest.json"
 
-#: Where `agentic-label-opt` is checked out. Same default as `scripts/materialize_smoke.py`.
-DEFAULT_ENGINE = pathlib.Path.home() / "Documents" / "Misc" / "Projects" / "agentic-label-opt"
+#: Where `agentic-label-opt` is checked out. ⚠ **Re-exported, not redefined (2026-09-18).** This
+#: was one of three separate copies of the same path literal; `engine_pin` now owns it, so a
+#: re-pin cannot leave one copy behind. Kept as a name because callers import it.
+DEFAULT_ENGINE = engine_pin.DEFAULT_ENGINE
 
 #: Bumped 0.1.0 -> 0.2.0 when the `profile` key entered the release payloads (C6.5). A consumer
 #: reading a 0.1.0 release cannot tell which rung produced the number, and the engine's frontier is
@@ -115,13 +118,21 @@ STAGES: tuple[str, ...] = profiles_mod.ALL_STAGES
 
 
 def engine_path() -> pathlib.Path:
-    return pathlib.Path(os.environ.get("AGENTIC_LABEL_OPT", DEFAULT_ENGINE)).expanduser()
+    """Delegates to :mod:`engine_pin`, which is the single definition (2026-09-18)."""
+    return engine_pin.engine_path()
 
 
 def _import_engine():
     """Import the engine's schema types. Kept in a function so this module is importable (and
-    self-testable) on a machine without the engine checked out."""
-    path = engine_path()
+    self-testable) on a machine without the engine checked out.
+
+    ⚠ **Refuses an engine that does not carry the pin (2026-09-18).** Until now the only version
+    check lived in ``scripts/vm/run_hillclimb_vm.sh``, so every other entry point -- this one,
+    ``dispatcher``, ``canary``, ``sampling``, ``run_baseline`` -- imported whatever happened to be
+    in that directory. ``require_engine`` is memoized, so the ~20 call sites cost one ``git``
+    invocation between them. Override with ``SAROL_ALLOW_ENGINE_DIVERGENCE=1``.
+    """
+    path = engine_pin.require_engine()
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
     from engine import schemas  # noqa: PLC0415

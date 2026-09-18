@@ -46,42 +46,25 @@ echo "  python:  $("$PY" -V) ($PY)"
 # so it survives an engine re-pin.
 : "${AGENTIC_LABEL_OPT:?STOP: AGENTIC_LABEL_OPT must point at the agentic-label-opt engine checkout (its DEFAULT_ENGINE is a Mac-only path)}"
 [ -d "$AGENTIC_LABEL_OPT" ] || fail "AGENTIC_LABEL_OPT=$AGENTIC_LABEL_OPT is not a directory"
-PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" - <<'PYENG' || fail "the engine at AGENTIC_LABEL_OPT lacks the LoopStop-hardening contract -- re-pin to the landed hardening SHA"
-import inspect
-from engine.loop import LoopStop
-from engine.versioning import EmptyCommitError  # noqa: F401  (must exist)
-assert "reason" in inspect.signature(LoopStop.__init__).parameters, "LoopStop has no reason kwarg"
-raise SystemExit(0)
-PYENG
-ENG_SHA="$(git -C "$AGENTIC_LABEL_OPT" rev-parse --short HEAD 2>/dev/null || echo '?')"
-
-# Plan A declares 82f547d the compatible engine: the SHA the five-iteration run actually used.
-# The feature check above catches an engine that is too OLD, but not one that has DIVERGED -- a
-# checkout parked on an unrelated feature branch can carry LoopStop.reason and EmptyCommitError and
-# still break the adapter seam. Measured 2026-09-09: a sibling branch crashed dispatcher --selftest
-# with `'function' object has no attribute 'batch_id'` while satisfying every feature probe.
+# ⚠ **The engine version check moved to `optimizer/engine_pin.py` on 2026-09-18.** It used to live
+# only here, which meant this runner was the one entry point that checked -- `adapter`, `dispatcher`,
+# `canary`, `sampling`, `run_baseline` and `materialize_smoke` all imported whatever happened to be
+# sitting in that directory. The module carries the pin, the ancestry test, the capability probe
+# (including the LoopStop.reason / EmptyCommitError checks that used to be the heredoc below) and
+# the same SAROL_ALLOW_ENGINE_DIVERGENCE=1 override this script has always documented.
 #
-# So assert ANCESTRY, not equality: 82f547d must be reachable from HEAD. That still permits a
-# forward re-pin (the whole point of the contract check above).
-#
-# Be precise about what this does and does not catch. It detects an engine that PREDATES or FORKED
-# BELOW the declared-compatible commit -- the common real failure, e.g. a checkout parked on another
-# session's branch. It does NOT catch a branch cut FROM 82f547d that later broke the adapter seam:
-# the pin is still an ancestor and this passes cleanly. For that, the feature probe above and the
-# dispatcher selftest are the backstop.
-# Deliberate override: SAROL_ALLOW_ENGINE_DIVERGENCE=1.
-ENGINE_PIN="82f547dac49394005781df62892d41d9b26dfb09"
-if [ "${SAROL_ALLOW_ENGINE_DIVERGENCE:-0}" != "1" ]; then
-  if ! git -C "$AGENTIC_LABEL_OPT" cat-file -e "$ENGINE_PIN^{commit}" 2>/dev/null; then
-    fail "the engine checkout does not contain the declared-compatible commit $ENGINE_PIN at all -- wrong repo, or a shallow clone. Fetch it, or set SAROL_ALLOW_ENGINE_DIVERGENCE=1 to proceed anyway."
-  fi
-  if ! git -C "$AGENTIC_LABEL_OPT" merge-base --is-ancestor "$ENGINE_PIN" HEAD 2>/dev/null; then
-    ENG_BRANCH="$(git -C "$AGENTIC_LABEL_OPT" branch --show-current 2>/dev/null || echo 'detached')"
-    fail "engine at $ENG_SHA (branch '$ENG_BRANCH') has DIVERGED from the declared-compatible $ENGINE_PIN, which is not an ancestor of HEAD. This is usually a checkout left on another session's feature branch. Check out a commit containing the pin, or set SAROL_ALLOW_ENGINE_DIVERGENCE=1 if the divergence is intended."
-  fi
-  echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK; contains pin ${ENGINE_PIN:0:7})"
+# Keeping the SHA in one place is the point: the pin here went 28 commits stale, and because the
+# test is ancestry, it kept passing against engines missing everything the isolation work needs.
+PIN_MODULE="$REPO_ROOT/experiments/sarol-2024/optimizer/engine_pin.py"
+[ -f "$PIN_MODULE" ] || fail "the engine pin module is missing at $PIN_MODULE"
+if ENGINE_REPORT="$("$PY" "$PIN_MODULE" 2>&1)"; then
+  printf '%s\n' "$ENGINE_REPORT" | sed 's/^/  /'
+elif [ "${SAROL_ALLOW_ENGINE_DIVERGENCE:-0}" = "1" ]; then
+  printf '%s\n' "$ENGINE_REPORT" | sed 's/^/  /'
+  echo "  engine:  ^^ ENGINE PIN CHECK OVERRIDDEN -- proceeding against a non-conforming engine"
 else
-  echo "  engine:  $AGENTIC_LABEL_OPT @ $ENG_SHA (LoopStop-hardening contract OK; ENGINE PIN CHECK OVERRIDDEN)"
+  printf '%s\n' "$ENGINE_REPORT" >&2
+  fail "the engine checkout does not satisfy the pin (diagnosis above). Check out a commit containing it, or set SAROL_ALLOW_ENGINE_DIVERGENCE=1 if the divergence is intended."
 fi
 
 # Program-integrity gates. These run BEFORE any money is spent, and they fail closed.
