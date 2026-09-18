@@ -2428,11 +2428,19 @@ is decoration. Also confirm the `CachingRunner` + `BudgetGuard` wrapping survive
 path.
 
 **V2d — one prefix per dispatch.** Two claims × two program versions in a single process.
-*Expected:* four distinct prefixes; each dispatch's `--add-dir`, workdir, and any path in prompt text
-resolve to **that** claim's staging and **that** version's snapshot; no host absolute path survives
-anywhere in the rendered argv or prompt. *Stop:* any prefix reused across either axis, or any host
-path reaching the container — a `/home/philadamson/...` string inside the container is a dispatch
-that cannot complete and will read as a model failure.
+*Expected:* **four render calls**, each handed the grant for the version being scored; each
+dispatch's `--add-dir`, workdir, and any path in prompt text resolve to **that** claim's staging and
+**that** version's snapshot; no host absolute path survives anywhere in the rendered argv or prompt.
+*Stop:* fewer than four renders, a dispatch carrying another version's snapshot, or any host path
+reaching the container — a `/home/philadamson/...` string inside the container is a dispatch that
+cannot complete and will read as a model failure.
+⚠ **"Four *distinct* prefixes" was the earlier wording and it is wrong now — corrected 2026-09-18
+after the gate was built.** The grant lost its per-claim dimension when Phil made the staging root,
+not the claim directory, the unit granted (2026-09-16): two claims staged under one root share one
+mount set *by design*, so their rendered prefixes are byte-identical and distinctness cannot be
+asserted. Counting the render calls is what separates "rendered per dispatch" from "rendered once
+and reused", which identical argv cannot. ⚠ Asserting distinctness here would have forced an
+implementer to re-derive the struck per-claim grant.
 
 **V2e — the trace survives containerization.** Run one containerized dispatch. *Expected:* a
 `trace_ref` exists, points at a non-empty file, and its content is the session stream for **that**
