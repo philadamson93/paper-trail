@@ -52,8 +52,8 @@ Three things this module is still deliberately strict about:
 rendered shape into the manifest's ``runtime_pins`` (Phase 3).
 
 Sister files: ``dispatcher.py:467`` (``val_isolation_problem``) for the ``-> str | None`` problem
-idiom these predicates follow; ``adapter.py:711`` (``_stage_command``) for the uncontained argv these
-replace; ``engine_pin.py`` for which engine commit is required and what it buys.
+idiom these predicates follow; ``adapter.SarolRunner._inner_command`` for the caller that builds
+every dispatch through them; ``engine_pin.py`` for which engine commit is required and what it buys.
 
 Run the dry run — the cheapest gate in the plan, no container, no model, no spend::
 
@@ -361,7 +361,8 @@ def program_scope(
 
     ⚠ **No ``stage`` parameter, and that absence is the design.** Phil struck the per-stage split on
     2026-09-17; the engine's grant has no stage dimension to put one in either way. The dispatch
-    *command* still carries a stage (``adapter._stage_command``); the *grant* does not.
+    *dispatch* still carries a stage (``adapter.SarolRunner._inner_command`` takes one, and
+    refuses any stage with no prompt of its own); the *grant* does not.
 
     Raises:
         ValueError: the profile would need a paper mount this grant does not carry
@@ -424,11 +425,12 @@ def unspecified_stage_problem(profile) -> str | None:
 def bypass_flag_problem(inner_command: list[str]) -> str | None:
     """Is the permission bypass still on this path? Returns a problem, or None.
 
-    The flag is passed in two places and only one of them is ours: ``_stage_command`` builds it into
-    the program's own argv (``adapter.py:714``), which is a local edit with no upstream dependency.
-    The other is the shared wrapper on the *optimizer's* path. An implementer who changes only the
-    wrapper leaves the program on bypass while the diff looks like the fix, so this asserts on the
-    argv the Runner actually builds.
+    The flag is passed in two places and only one of them is ours: this module's
+    :func:`inner_command` builds the program's own argv, which is a local edit with no upstream
+    dependency. The other is the shared wrapper on the *optimizer's* path. An implementer who
+    changes only the wrapper leaves the program on bypass while the diff looks like the fix, so
+    this asserts on the argv the Runner actually builds -- ``SarolRunner._inner_command`` calls it
+    on every dispatch and refuses rather than sending one.
     """
     if "--dangerously-skip-permissions" in inner_command:
         return (

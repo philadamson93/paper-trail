@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import shutil
 import sys
 from typing import Any
 
@@ -65,6 +66,16 @@ CANARY_DIR = _HERE / "canary"
 #: A dedicated seed, unrelated to `sampling.SEED`, so the canary claim is not a function of any
 #: run's draw and does not move when a ramp or VAL size changes.
 CANARY_SEED = 20260903
+
+
+def _force_rmtree(path: pathlib.Path) -> None:
+    """Remove a materialized tree. ``materialize()`` chmods it read-only, directories included."""
+    if not path.exists():
+        return
+    for child in sorted(path.rglob("*"), reverse=True):
+        child.chmod(0o700)
+    path.chmod(0o700)
+    shutil.rmtree(path)
 
 
 def portable_staging_dir(staging: pathlib.Path) -> str:
@@ -269,7 +280,13 @@ def pin(
         **({"model": model} if model else {}),
     )
     schemas = adapter._import_engine()
-    materialized = store.repo_root
+    # ⚠ **The frozen program, materialized — not the repo root, which this passed until 2026-09-18.**
+    # The container grant mounts the program read-only and the engine refuses a mount containing a
+    # denied path, so a repo-root program mount refuses every canary pin before it dispatches. The
+    # pin also *should* run on the same bytes the scored runs do: it guards them.
+    materialized_root = CANARY_DIR / "materialized" / prof.name
+    _force_rmtree(materialized_root)
+    materialized = adapter.materialize_program(store, materialized_root)
 
     observed: list[str | None] = []
     resolved_models: list[str] = []
@@ -440,6 +457,60 @@ def _selftest() -> int:
                  "nondeterminism cannot become a hard stop", unstable_refused),
                 ("...and no pin file is left behind by the refusal",
                  not pin_path("retrieval").exists()),
+            ]
+
+            # ...and the same path driven through the REAL Runner, because every gate above
+            # injects a `runner` and therefore never builds a container grant at all. That is
+            # exactly how this site was left refusing every pin when the dispatch became
+            # contained: `pin()` handed the Runner the REPO ROOT as its program mount, the engine
+            # refuses a mount containing a denied path, and no gate here noticed (2026-09-18).
+            # A spy invoker keeps it free; what is asserted is that a dispatch was rendered at
+            # all, and that it mounts the materialized program rather than the checkout.
+            real_dispatches: list[list[str]] = []
+            real_pin_claim = adapter.ClaimRecord(
+                claim_id="C1",
+                citekey="k1",
+                staging_dir=pathlib.Path(tmp) / "real" / "run" / "train" / "staging" / "C1",
+                source_mode="corpus",
+            )
+            adapter._staged_batch(pathlib.Path(tmp) / "real")
+            real_runner = adapter.SarolRunner(
+                adapter.SarolProgramStore(),
+                invoke=lambda cmd, cwd, t_: real_dispatches.append(list(cmd)) or adapter.InvocationResult(
+                    exit_code=0, cost_usd=0.0, duration_seconds=0.1
+                ),
+                paperclip_version_probe=lambda: adapter.SarolProgramStore().runtime_pins[
+                    "paperclip_cli"
+                ],
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(),
+            )
+            try:
+                pin(profile="retrieval", repeat=1, runner=real_runner,
+                    claim=real_pin_claim, program_store=adapter.SarolProgramStore())
+            except RuntimeError:
+                pass  # no verdict file is written by a spy, so the pin itself cannot complete
+            real_program_mounts = [
+                host
+                for cmd in real_dispatches
+                for host, container, _mode in isolation_mod.rendered_mounts(cmd)
+                if container == isolation_mod.CONTAINER_PROGRAM
+            ]
+            checks += [
+                ("the REAL Runner's canary pin gets past the grant and actually dispatches",
+                 len(real_dispatches) == 1),
+                ("...mounting the materialized program, not the checkout, which the engine "
+                 "refuses because the repo holds denied paths",
+                 len(real_program_mounts) == 1
+                 and pathlib.Path(real_program_mounts[0]).name == "retrieval"
+                 and "materialized" in real_program_mounts[0]),
+                ("...and the checkout itself is nowhere in the mount set",
+                 all(
+                     pathlib.Path(host) != adapter.REPO_ROOT
+                     for cmd in real_dispatches
+                     for host, _c, _m in isolation_mod.rendered_mounts(cmd)
+                 )),
             ]
         finally:
             CANARY_DIR = original

@@ -91,6 +91,7 @@ if str(_SCRIPTS) not in sys.path:
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import dispatch_prompt  # noqa: E402
 import engine_pin  # noqa: E402
 import evidence_producers  # noqa: E402
 # ⚠ Bound under the bare name `isolation` in `sys.modules` whatever we alias it to here, and the
@@ -450,21 +451,13 @@ def _parse_stream_meta(stdout: str) -> "tuple[str | None, str | None]":
     return session_id, model
 
 
-def find_transcript(session_id: str) -> "pathlib.Path | None":
-    """The on-disk transcript for a nested session, or None.
-
-    Globs `~/.claude/projects/*/` rather than recomputing Claude Code's project-slug rule
-    (path separators AND dots both become dashes, so `.claude/worktrees` slugs to
-    `--claude-worktrees`). Reimplementing that rule would be a second copy of somebody else's
-    private convention, silently wrong the day it changes; a glob over ~60 directories costs
-    nothing against a claim that costs an LLM session.
-    """
-    if not session_id:
-        return None
-    root = pathlib.Path.home() / ".claude" / "projects"
-    for candidate in root.glob(f"*/{session_id}.jsonl"):
-        return candidate
-    return None
+#: ⚠ **``find_transcript`` was deleted on 2026-09-18, and it should stay deleted.** It globbed the
+#: HOST's ``~/.claude/projects/`` for a nested session's transcript. A contained session writes that
+#: directory inside its own ``--rm`` container, so the glob finds nothing — and since the lookup was
+#: guarded at every step, the result was not an error but a null ``trace_ref`` under a run that
+#: still reported ``status: ok``. The replacement is not a mount: ``InvocationResult.stream`` is the
+#: same bytes, already captured, and persisting them host-side also stops citing evidence for a
+#: published result out of a cache Claude Code owns and prunes.
 
 
 def headless_claude_invoke(
@@ -583,9 +576,116 @@ class ClaimRecord:
             # `portable_staging_dir`, which keeps the committed pin free of an absolute home
             # path) survives a move between checkouts. Joining an absolute path with a root
             # yields the absolute path unchanged, so batches that still carry one are untouched.
-            staging_dir=REPO_ROOT / obj["staging_dir"],
+            #
+            # ⚠ **And `.resolve()`d here, once, rather than at each use.** The container grant
+            # holds resolved host paths, so a claim carrying the unresolved spelling of the same
+            # directory silently disables the host-path leak check: on macOS a batch written with
+            # `/var/folders/...` never matches a grant holding `/private/var/folders/...`, and the
+            # guard returns "no leak" for a prompt full of host paths. Found by mutation, 2026-09-18.
+            staging_dir=(REPO_ROOT / obj["staging_dir"]).resolve(),
             source_mode=obj.get("source_mode", "pdf"),
         )
+
+
+def materialize_program(
+    store: "SarolProgramStore", dest: pathlib.Path, *, tag: str = "program-v0"
+) -> pathlib.Path:
+    """Write the frozen program into ``dest`` and return it, ready to be a container's program mount.
+
+    ⚠ **A Runner can no longer be pointed at the repo root, and that is the containment change.**
+    The grant puts ``program_dir`` in as a read-only mount and the engine refuses a mount that
+    contains a denied path -- and the repo root contains three of them (``optimizer/findings``,
+    ``meta-learnings.md``, ``optimizer/context``). So every caller that used to hand the Runner a
+    checkout now hands it a materialized tree instead. `canary.pin` was the last one, and it was
+    refused outright until this existed (found by review, 2026-09-18).
+
+    ⚠ **Two older copies of this sequence remain**, in ``scripts/run_baseline.py:110-126`` and
+    ``scripts/materialize_smoke.py:93-120``. They work and they are verified; they should adopt
+    this helper next time either is touched, rather than in a slice that cannot run the baseline
+    it would be changing.
+
+    ``tag`` is resolved to its COMMIT: ``program-v0`` is an annotated tag, so a bare rev-parse
+    returns the tag object's sha -- a different id for the same program, which would make one run
+    look like two systems.
+    """
+    _import_engine()  # puts the engine on sys.path, with its own message if it is absent
+    from engine.materialize import materialize  # noqa: PLC0415
+    from engine.schemas import ManifestEntry, ProgramManifest  # noqa: PLC0415
+
+    fields = set(inspect.signature(ManifestEntry).parameters)
+    manifest = ProgramManifest(
+        entries=tuple(
+            ManifestEntry(**{k: v for k, v in entry.items() if k in fields})
+            for entry in store.raw["entries"]
+        ),
+        combined_hash=store.raw["combined_hash"],
+    )
+    sha = subprocess.run(
+        ["git", "-C", str(store.repo_root), "rev-parse", f"{tag}^{{commit}}"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    dest = pathlib.Path(dest)
+    materialize(manifest, sha, repo_root=store.repo_root, dest=dest)
+    return dest
+
+
+def staging_root(claim: ClaimRecord) -> pathlib.Path:
+    """The host directory granted to the container for this claim — its staging dir's parent.
+
+    The **root**, not the claim's own directory: a grant scopes a worker's whole life, and one
+    session per claim is the N=1 case of that rather than the design (Phil, 2026-09-16). Every
+    claim staged under one root therefore shares one grant, and each dispatch names its own item
+    inside it.
+    """
+    return claim.staging_dir.resolve().parent
+
+
+def container_staging(claim: ClaimRecord, scope) -> str:
+    """Where this claim's staged tree appears **inside** the container, read off the grant.
+
+    ⚠ **Derived from the mount set, not computed beside it** — the idiom ``isolation.add_dirs``
+    already uses. The mount set is what makes a path real inside the container, so deriving this
+    from anything else lets the two disagree silently, and a prompt naming a directory that does
+    not exist is a dispatch the adjudicator cannot complete: it reads as a model failure rather
+    than as the wiring bug it is.
+
+    Raises:
+        ValueError: the grant mounts nothing as staging, or mounts a tree this claim is not
+            staged under — i.e. it is some other claim's grant.
+    """
+    mounted = next(
+        (
+            pathlib.Path(host)
+            for host, container in scope.writable
+            if container == isolation_mod.CONTAINER_STAGING
+        ),
+        None,
+    )
+    if mounted is None:
+        raise ValueError(
+            f"UNDISPATCHABLE:this grant mounts nothing at {isolation_mod.CONTAINER_STAGING}, so "
+            f"claim {claim.claim_id} has nowhere to read its evidence or write its verdict"
+        )
+    try:
+        rel = claim.staging_dir.resolve().relative_to(mounted)
+    except ValueError:
+        raise ValueError(
+            f"UNDISPATCHABLE:claim {claim.claim_id} is staged at {claim.staging_dir}, outside the "
+            f"{mounted} this grant mounts at {isolation_mod.CONTAINER_STAGING} — this is another "
+            "claim's grant, and the prompt would name a path that does not exist in the container"
+        ) from None
+    # Exactly one level down, and that is the grant's shape rather than a formatting rule: the
+    # staging root holds the claims and each request names an item inside it (Phil, 2026-09-16).
+    # A grant one level higher still renders a consistent path, so nothing downstream would
+    # notice -- while handing the container everything beside the staging root, which on the real
+    # layout is the optimizer's own scores.
+    if len(rel.parts) != 1:
+        raise ValueError(
+            f"UNDISPATCHABLE:this grant mounts {mounted}, which is not claim "
+            f"{claim.claim_id}'s own staging root but {len(rel.parts)} levels above it. That "
+            "grants the container everything else under it too"
+        )
+    return "/".join((isolation_mod.CONTAINER_STAGING, *rel.parts))
 
 
 @dataclass
@@ -652,12 +752,153 @@ _RUNNER_SITE_FILES = (
 #: How many places construct a Runner. ⚠ **If this number moves, read the new site before changing
 #: it.** The container boundary is only as good as the set of sites that take one, and a count is
 #: the only thing that notices a new site quietly copying `fake_container()` from its neighbour.
-#: The census, which the plan put at 22 before this change: **19** selftests in this file, its
-#: `_RealInvokerRunner` subclass (the 23rd the plan warned matches no text search), and **3** that
-#: can run outside a test -- `dispatcher.build_components`, `canary.pin` and
-#: `scripts/run_baseline.py`. Plus **4** added here to watch the constructor's refusal actually
-#: fire: two passing an explicit `None`, one a tag-named image, one the accepted shipping shape.
-_EXPECTED_RUNNER_SITES = 27
+#: The census, which the plan put at 22 before this change: **22** selftests in this file, its
+#: `_RealInvokerRunner` subclass (the one the plan warned matches no text search), **1** selftest
+#: in `canary.py`, and **3** that can run outside a test -- `dispatcher.build_components`,
+#: `canary.pin` and `scripts/run_baseline.py`. Plus **4** to watch the constructor's refusal
+#: actually fire: two passing an explicit `None`, one a tag-named image, one the accepted
+#: shipping shape.
+#: ⚠ Four selftest sites arrived with the contained dispatch (1f-b): a Runner whose session
+#: streams nothing, which controls the trace no longer being read off the host; the two-version
+#: Runner that proves the prefix is rendered per dispatch (V2d); the empty-batch refusal; and
+#: `canary.py`'s real Runner, which is the only gate that builds a grant on the canary's own path.
+_EXPECTED_RUNNER_SITES = 31
+
+
+#: The claim every dispatch gate stages, and the corpus line that answers it.
+_GATE_CLAIM_TEXT = "deep learning reconstruction accelerates MRI fourfold"
+
+
+def _materialized_program(root: pathlib.Path, name: str = "mat") -> pathlib.Path:
+    """A materialized program tree holding the one frozen file a dispatch reads: the prompt.
+
+    Copied from the repo rather than faked, so a gate asserting on the rendered prompt asserts on
+    the real slots. A tree without it is not a program the Runner can dispatch, which is why these
+    gates cannot keep passing a bare temp directory as the materialized path.
+    """
+    dest = root / name / dispatch_prompt.TEMPLATE_REL
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(REPO_ROOT / dispatch_prompt.TEMPLATE_REL, dest)
+    return root / name
+
+
+def _staged_batch(
+    root: pathlib.Path,
+    *,
+    claim_ids: Sequence[str] = ("C1",),
+    split: str = "train",
+    citekey: str = "k1",
+    name: str | None = None,
+) -> "tuple[pathlib.Path, pathlib.Path]":
+    """One batch staged on disk, in the layout a contained run actually has.
+
+    ⚠ **The shape is load-bearing, not tidiness.** The grant denies the optimizer's output root and
+    grants the staging root *inside* it, so the flat layout these gates used to use — staging as a
+    sibling of the materialized program — is refused by the engine for granting a mount that sits
+    above a denied path. Production would be refused for the same reason, which is the point of
+    making the fixture match it::
+
+        <root>/mat/                            the materialized program: read-only, and the cwd
+        <root>/run/<split>/                    the optimizer's output root: DENIED
+        <root>/run/<split>/staging/            the staging root: the one writable grant
+        <root>/run/<split>/staging/<claim_id>/ one claim
+
+    Each claim gets both a corpus to retrieve over (so the mechanical producer under ``retrieval``
+    does real work) and a finished envelope (so a gate that only renders a command needs no
+    producer run). Returns ``(output_root, batch_path)``.
+    """
+    out_root = root / "run" / split
+    staging_dir_root = out_root / "staging"
+    for claim_id in claim_ids:
+        staging = staging_dir_root / claim_id
+        (staging / "ledger" / "evidence").mkdir(parents=True, exist_ok=True)
+        (staging / "pdfs" / citekey).mkdir(parents=True, exist_ok=True)
+        (staging / "staging_info.json").write_text(
+            json.dumps(
+                {
+                    "citekey": citekey,
+                    "claim_text_normalized": _GATE_CLAIM_TEXT,
+                    "source_mode": "corpus",
+                    "multi_cit_context": "single",
+                    "source_description": "corpus-chunks (N=3)",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (staging / "pdfs" / citekey / "content.txt").write_text(
+            "L1 [p?]: a fourfold acceleration was achieved for MRI reconstruction\n"
+            "L2 [p?]: unrelated sentence about cardiology cohorts\n"
+            "L3 [p?]: deep learning methods were applied throughout\n",
+            encoding="utf-8",
+        )
+        (staging / "ledger" / "evidence" / f"{claim_id}.json").write_text(
+            json.dumps(
+                {
+                    "claim_id": claim_id,
+                    "run_id": "run_test",
+                    "citekey": citekey,
+                    "claim_text": _GATE_CLAIM_TEXT,
+                    "claim_type": dict(evidence_producers.STAGED_CLAIM_TYPE),
+                }
+            ),
+            encoding="utf-8",
+        )
+    batch = root / (name or f"batch-{split}.json")
+    batch.write_text(
+        json.dumps(
+            {
+                "claims": [
+                    {
+                        "claim_id": claim_id,
+                        "citekey": citekey,
+                        "staging_dir": str(staging_dir_root / claim_id),
+                    }
+                    for claim_id in claim_ids
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return out_root, batch
+
+
+#: Markdown delimiters that wrap a path in the adjudicator's prompt. ⚠ **Stripped before the
+#: host-path leak check, and that is not cosmetic.** The engine tokenizes on shell-ish separators
+#: (whitespace, ``:``, ``=``, quotes, brackets) — so a path written as `` `/host/path` ``, which is
+#: how every path in the prompt template is written, begins with a backtick, is not seen as a path
+#: at all, and the guard returns "no leak" for a prompt made entirely of host paths. Found by
+#: mutation on 2026-09-18; worth pushing upstream, since any consumer handing a worker markdown
+#: has the same hole.
+_MARKDOWN_DELIMITERS = str.maketrans({c: " " for c in "`*<>{}|"})
+
+
+def _unmarked(text: str) -> str:
+    """``text`` with markdown delimiters blanked, so a path inside them is still a path."""
+    return text.translate(_MARKDOWN_DELIMITERS)
+
+
+def _claim_dispatched(cmd) -> str:
+    """Which claim a rendered dispatch names, read off its container staging path.
+
+    ⚠ Returns ``"?"`` rather than raising when the marker is absent. The gates' spy invokers call
+    this, and a spy that raises turns a check that should go RED into a crashed suite -- which
+    would let a mutation that breaks the module pass for a mutation the gates caught.
+    """
+    marker = isolation_mod.CONTAINER_STAGING + "/"
+    tail = cmd[-1] if cmd else ""
+    return tail.split(marker)[1].split("/")[0] if marker in tail else "?"
+
+
+def _manifest_of(res) -> "dict[str, Any]":
+    """The run manifest a Runner returned, or ``{}`` when it refused before writing one.
+
+    Indexing ``artifact_refs[0]`` straight turns a REFUSED run into a traceback, and a crashed
+    suite is not a red check: a mutation that breaks the module must not be able to pass for a
+    guard that caught it. So the gates read through this and assert on the contents.
+    """
+    if not getattr(res, "artifact_refs", ()):
+        return {}
+    return json.loads(pathlib.Path(res.artifact_refs[0].path).read_text(encoding="utf-8"))
 
 
 def _raises_valueerror(fn) -> bool:
@@ -860,39 +1101,94 @@ class SarolRunner:
 
     # -- dispatch ----------------------------------------------------------------------------
 
-    def _stage_command(
-        self, stage: str, claim: ClaimRecord, materialized_path: pathlib.Path
+    def _inner_command(
+        self,
+        stage: str,
+        claim: ClaimRecord,
+        *,
+        scope,
+        materialized_path: pathlib.Path,
+        run_id: str,
     ) -> list[str]:
-        # Paths are quoted. They are interpolated into a single slash-command string that the
-        # nested session parses as `--flag value`, so an unquoted path containing a space splits
-        # into two arguments and the command aborts ARGS_INVALID. Neither this checkout nor the
-        # staging tree has spaces today, which is exactly why this would be found late and in a
-        # paid run rather than here.
-        prompt = (
-            f"/{self.command_name} --stage {stage} --claim {claim.claim_id} "
-            f'--staging "{claim.staging_dir}" --spec-root "{materialized_path}"'
+        """The adjudicator's own argv, in container paths only.
+
+        ⚠ **This replaced a slash command, and that is OQ1 rather than a refactor.** The old form
+        told a *driver* session to run ``/sarol-eval-item``, which then spawned the adjudicator as
+        a subagent -- so the container boundary and the session boundary were two different things
+        and the inner one was inherited rather than stated. Now the prompt is rendered here
+        (``dispatch_prompt``) and arrives on argv: one container, one session, one boundary.
+
+        Every path in it is a container path. The template is read from the **host** copy of the
+        materialized tree while ``spec_root`` names where that same tree is mounted inside the
+        container -- the one place the two spellings legitimately differ, which is why
+        ``dispatch_prompt.render`` takes them separately.
+
+        Raises:
+            ValueError: the stage has no prompt to render, the evidence the prompt points at is
+                missing or disagrees with staging (``dispatch_prompt`` raises, with its own
+                ``CODE:detail`` prefixes), or the assembled command still carries the permission
+                bypass or a host path the container cannot resolve.
+        """
+        if stage not in profiles_mod.IMPLEMENTED_STAGES:
+            raise ValueError(
+                f"STAGE_UNIMPLEMENTED:{stage} -- only {', '.join(profiles_mod.IMPLEMENTED_STAGES)} "
+                "has a prompt to render, so there is nothing to dispatch for this stage. "
+                "`profiles.unrunnable_reason` refuses such a profile at preflight before any "
+                "spend; reaching here means that check was bypassed"
+            )
+        prompt = dispatch_prompt.render(
+            staging_dir=claim.staging_dir,
+            claim_id=claim.claim_id,
+            run_id=run_id,
+            run_output_dir=container_staging(claim, scope),
+            spec_root=isolation_mod.CONTAINER_PROGRAM,
+            template_root=materialized_path,
         )
-        return [
-            "claude",
-            "--dangerously-skip-permissions",
-            "-p",
-            prompt,
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--model",
-            self.model,
-            # "project", not "" -- "" silently disables the whole hook stack. Note this reads
-            # .claude/settings.json from the *cwd*, which is why cwd is a real checkout.
-            "--setting-sources",
-            "project",
-            "--strict-mcp-config",
-            # The hard stop. Without it the only bound on a single nested session is the
-            # wall-clock timeout, which a cheap-but-endless session satisfies while still
-            # spending. The engine will not stop it either.
-            "--max-budget-usd",
-            str(self.per_call_max_budget_usd),
-        ]
+        # The audit copy, beside the evidence and the verdict. Not an input to anything -- the
+        # prompt travels on argv -- but a surprising verdict is only readable against the exact
+        # text that produced it.
+        dispatch_prompt.write_rendered(claim.staging_dir, claim.claim_id, prompt)
+        cmd = isolation_mod.inner_command(
+            scope=scope,
+            prompt=prompt,
+            model=self.model,
+            max_budget_usd=self.per_call_max_budget_usd,
+        )
+        # Both predicates are the existing ones, called on the argv this Runner actually built --
+        # the surface an implementer who fixes only the shared wrapper would leave untouched.
+        # ⚠ The leak scan takes the prompt and the inner argv, NEVER the docker line: the host side
+        # of every bind mount is a host path necessarily, so scanning the whole command is vacuous.
+        for problem in (
+            isolation_mod.bypass_flag_problem(cmd),
+            isolation_mod.told_host_path_problem([_unmarked(prompt), *cmd], scope),
+        ):
+            if problem is not None:
+                raise ValueError(f"UNDISPATCHABLE:{problem}")
+        return cmd
+
+    def _dispatch_command(
+        self,
+        stage: str,
+        claim: ClaimRecord,
+        *,
+        scope,
+        materialized_path: pathlib.Path,
+        run_id: str,
+        render_prefix,
+    ) -> list[str]:
+        """The whole command line: this dispatch's container prefix, then the adjudicator's argv.
+
+        The prefix is rendered **per dispatch** rather than fixed at construction, because the
+        program mount moves per iteration and the staging mount per staging root. One prefix reused
+        across either axis silently points a v1 dispatch at v0's bytes, and both produce plausible
+        verdicts.
+
+        This is also the seam a gate overrides to stand a cheap process in for ``claude`` without
+        stubbing the invoker, so the real process machinery still runs.
+        """
+        return list(render_prefix(scope)) + self._inner_command(
+            stage, claim, scope=scope, materialized_path=materialized_path, run_id=run_id
+        )
 
     def command_path(self) -> pathlib.Path | None:
         """Where the nested slash command is expected to live, if it exists at all."""
@@ -907,12 +1203,14 @@ class SarolRunner:
         return None
 
     def missing_command_error(self) -> str | None:
-        """Fail loudly when the command the Runner dispatches does not exist.
+        """Fail loudly when the committed `/sarol-eval-item` file is missing.
 
-        Without this the first real run burns a session per stage and fails somewhere inside
-        Claude Code with an unrelated-looking message. `/sarol-eval-item` is named as a Task 5
-        eval-arm deliverable and is not built yet, so this preflight is the honest boundary
-        between "the adapter is wired" and "the pipeline can actually run".
+        ⚠ **It is no longer what gets dispatched, and the name now overstates what this checks.**
+        Since OQ1 the adjudicator is invoked directly with a prompt rendered by ``dispatch_prompt``
+        (from ``prompts/adjudicator-dispatch-sarol.md``), so nothing runs a slash command. The file
+        is still a frozen manifest entry and still the human-readable statement of the eval arm, so
+        its absence still means the checkout is incomplete -- but the check that actually guards a
+        dispatch is ``_inner_command``, which refuses rather than sending one.
         """
         if not self.require_command:
             return None
@@ -978,6 +1276,17 @@ class SarolRunner:
                 ),
             )
 
+        # An empty batch has nothing to grant a container for, and nothing to score either: the
+        # Scorer's coverage rule would divide by zero and a manifest naming no claims cannot reach
+        # the frontier as a number. Refuse it where the batch is read, rather than letting it
+        # surface as a StopIteration when the boundary looks for a grant to stand up on.
+        if not claims:
+            return artifacts(
+                "infra_error",
+                code="EMPTY_BATCH",
+                message=f"{inputs.input_ref} names no claims, so there is nothing to dispatch",
+            )
+
         # Namespace every Runner call under the materialized version it actually ran (Bug 3).
         # The engine calls this Runner THREE times per iteration -- TRAIN and current-VAL against
         # `iter<n>-current`, then the post-commit probe against `iter<n>-<tag>` -- and
@@ -999,6 +1308,44 @@ class SarolRunner:
         # the repo's working tree, which the optimizer may already have edited past this version.
         rubric_path = materialized_path / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
         rollup_order = validate_sarol.load_rollup_order(rubric_path)
+
+        # Where the optimizer's own numbers land, and therefore what the program must not read.
+        # Every root this Runner could write to, not only this split's: the VAL root in particular
+        # has to stay denied on a TRAIN run, which is what `dispatcher.val_isolation_problem`
+        # exists to check.
+        denied_roots = [pathlib.Path(p) for p in self.output_roots.values()]
+        if self.output_root is not None:
+            denied_roots.append(pathlib.Path(self.output_root))
+        if explicit is None:
+            denied_roots.append(pathlib.Path(out_root))
+
+        # The grant, built BEFORE anything is dispatched. A grant the engine refuses is an
+        # infrastructure failure of this run, not a bad verdict, and finding that out after the
+        # first claim has been paid for is the expensive way to learn it.
+        #
+        # One grant per staging ROOT rather than per claim: a grant scopes a worker's whole life,
+        # and the canary is staged under the repo while the batch is staged under the run's output
+        # root, so a batch legitimately spans two roots. Built here, read-only inside the workers,
+        # so nothing mutates shared state under the pool.
+        try:
+            grants = {
+                root: isolation_mod.program_scope(
+                    profile=self.profile.name,
+                    program_dir=materialized_path,
+                    staging_root=root,
+                    output_roots=denied_roots,
+                )
+                for root in sorted(
+                    {
+                        staging_root(c)
+                        for c in ([self.canary.claim] if self.canary is not None else []) + claims
+                    }
+                )
+            }
+        except ValueError as exc:
+            return artifacts(
+                "infra_error", code="PROGRAM_GRANT_REFUSED", message=str(exc)[:300]
+            )
 
         def process(claim: ClaimRecord) -> dict[str, Any]:
             record: dict[str, Any] = {
@@ -1027,24 +1374,41 @@ class SarolRunner:
                     return record
 
             for stage in self.profile.stages:
-                cmd = self._stage_command(stage, claim, materialized_path)
+                try:
+                    cmd = self._dispatch_command(
+                        stage,
+                        claim,
+                        scope=grants[staging_root(claim)],
+                        materialized_path=materialized_path,
+                        run_id=inputs.batch_id,
+                        render_prefix=render_prefix,
+                    )
+                except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                    # The dispatch was never sent, so nothing was spent and no verdict exists.
+                    # `program_error` rather than `invalid_output` for the same reason the evidence
+                    # producer's failure above takes it: the program did not run and emit something
+                    # the contract rejects, the pipeline failed to put it in front of the model.
+                    record["status"] = "program_error"
+                    record["detail"] = f"dispatch not built: {str(exc)[:300]}"
+                    return record
                 res = self.invoke(cmd, self.working_checkout, self.per_call_timeout_seconds)
-                # Copy the judge's own reasoning trace in beside the manifests, rather than
-                # only pointing at `~/.claude/projects/`. That directory is a cache Claude Code
-                # owns and prunes; a trace cited as evidence for a result cannot live somewhere
-                # that may garbage-collect it. Copy failures are deliberately non-fatal -- a
-                # missing trace is worth less than a claim, and must never cost one.
+                # Keep the adjudicator's own reasoning trace (1d). ⚠ **These are the bytes already
+                # in hand, not a copy out of `~/.claude/projects/`** -- a `--rm` container discards
+                # its own copy of that directory, and the old lookup was guarded at every step, so
+                # containerizing would have made every `trace_ref` null while the run still
+                # reported `status: ok`. Persisting the captured stream is also strictly better
+                # than what the uncontained path did, which was to cite evidence for a published
+                # result out of a cache Claude Code owns and prunes. Write failures stay non-fatal
+                # -- a missing trace is worth less than a claim, and must never cost one.
                 trace_ref = None
-                if res.session_id:
-                    src = find_transcript(res.session_id)
-                    if src is not None:
-                        dest = out_dir / "traces" / f"{claim.claim_id}-{stage}.jsonl"
-                        try:
-                            dest.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copyfile(src, dest)
-                            trace_ref = str(dest)
-                        except OSError:
-                            trace_ref = None
+                if res.stream:
+                    dest = out_dir / "traces" / f"{claim.claim_id}-{stage}.jsonl"
+                    try:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(res.stream, encoding="utf-8")
+                        trace_ref = str(dest)
+                    except OSError:
+                        trace_ref = None
                 record["stages"][stage] = {
                     "exit_code": res.exit_code,
                     "cost_usd": res.cost_usd,
@@ -1093,180 +1457,192 @@ class SarolRunner:
                 record["status"] = "invalid_output"
             return record
 
-        # The round-trip canary, BEFORE any scored claim (D46). A run whose instrument moved is
-        # not a run that scored worse -- it is not a run at all.
-        canary_record = None
-        if self.canary is not None:
-            canary_record = process(self.canary.claim)
-            observed = (canary_record.get("validation") or {}).get("overall_verdict")
-            if canary_record["status"] != "ok" or observed != self.canary.expected_verdict:
-                return artifacts(
-                    "infra_error",
-                    code="CANARY_FAILED",
-                    message=(
-                        f"canary {self.canary.claim.claim_id} expected "
-                        f"{self.canary.expected_verdict!r}, observed {observed!r} "
-                        f"(status={canary_record['status']}) -- the scorer or pipeline moved; "
-                        "numbers from this run are not comparable to earlier ones"
-                    ),
-                    n=batch_totals([canary_record])[0],
-                    cost=batch_totals([canary_record])[1],
-                )
-
-        manifest_path = out_dir / "run_manifest.json"
-
-        def write_manifest(records: "list[dict[str, Any]]", *, complete: bool) -> None:
-            """Write the run manifest. Called after EVERY claim, not only at the end.
-
-            The Runner wrote per-claim verdicts incrementally but its manifest only after the whole
-            batch, so a killed run left finished claims on disk with nothing pointing at them. The
-            v0 baseline survived its interruption at 37/50 only because a manifest was rebuilt by
-            hand over the claims that happened to finish -- ad-hoc recovery standing in for a
-            missing feature, on the single most expensive artifact of the run.
-
-            A partial manifest is safe to leave lying around: `requested_count` still names the
-            full batch, so `SarolScorer`'s coverage check reports `scored: False` with a coverage
-            reason rather than letting a half-finished batch reach the frontier as a real number.
-            `complete` says the same thing directly, for whoever is reading the file by hand.
-            """
-            # Roll the validator's own invalid-label counts up to the batch. The Scorer merges
-            # these rather than re-deriving them, because `parse_verdict` only ever sees the
-            # OVERALL label: an invalid SUB-CLAIM verdict under a valid overall verdict would
-            # otherwise score clean and disappear from error_class_counts entirely.
-            _subs, _cost = batch_totals(
-                ([canary_record] if canary_record is not None else []) + list(records)
-            )
-            validator_counts: dict[str, int] = {}
-            for rec in records:
-                for key, n in (
-                    (rec.get("validation") or {}).get("error_class_counts") or {}
-                ).items():
-                    validator_counts[key] = validator_counts.get(key, 0) + n
-            payload = json.dumps(
-                    {
-                        "batch_id": inputs.batch_id,
-                        "split": inputs.split,
-                        # C6.5: macro-F1 under two profiles measures two different systems, and
-                        # the engine's frontier is a bare scalar that cannot tell them apart.
-                        # Stamping the profile here is the consumer-side half of keeping them
-                        # distinguishable.
-                        "profile": self.profile.name,
-                        # Run identity, same rule as `retrieval_k`: a macro-F1 without the
-                        # instrument that produced it is not a result. Resolved id, taken from
-                        # what the sessions reported rather than from the requested alias, and
-                        # None only if no stage ever reported one.
-                        "model": next(
-                            (
-                                st.get("model")
-                                for rec in records
-                                for st in (rec.get("stages") or {}).values()
-                                if st.get("model")
-                            ),
-                            None,
+        # The container boundary, stood up ONCE for the whole batch and torn down on every exit
+        # path including the early returns below. Once, not per claim, because the shipping
+        # boundary owns a Docker network and a Squid sidecar: at 561 dispatches a sidecar each is
+        # not a boundary anyone keeps, which is exactly how this code ended up running on the
+        # unrestricted policy as a stand-in before. What IS per dispatch is the rendered prefix --
+        # `render_prefix(scope)` below, called with that dispatch's own grant.
+        #
+        # There is no branch here that skips it. `container` is refused at construction when it is
+        # absent, and the selftests inject a fake *renderer* rather than switching the boundary
+        # off, so nothing that produces or guards a number can be measured on a different
+        # instrument than the baseline it is compared against.
+        with self.container.open_boundary(grants[next(iter(grants))]) as render_prefix:
+            # The round-trip canary, BEFORE any scored claim (D46). A run whose instrument moved is
+            # not a run that scored worse -- it is not a run at all.
+            canary_record = None
+            if self.canary is not None:
+                canary_record = process(self.canary.claim)
+                observed = (canary_record.get("validation") or {}).get("overall_verdict")
+                if canary_record["status"] != "ok" or observed != self.canary.expected_verdict:
+                    return artifacts(
+                        "infra_error",
+                        code="CANARY_FAILED",
+                        message=(
+                            f"canary {self.canary.claim.claim_id} expected "
+                            f"{self.canary.expected_verdict!r}, observed {observed!r} "
+                            f"(status={canary_record['status']}) -- the scorer or pipeline moved; "
+                            "numbers from this run are not comparable to earlier ones"
                         ),
-                        "profile_stages": list(self.profile.stages),
-                        "retrieval_k": self.profile.retrieval_k,
-                        # The Scorer's coverage assertion compares against what was actually ASKED
-                        # of the Runner, not against however many records came back.
-                        "requested_count": len(claims),
-                        # False until the last claim lands. A reader finding this file after a
-                        # kill knows immediately whether it describes a finished batch.
-                        "complete": complete,
-                        "claims": records,
-                        "validator_error_class_counts": validator_counts,
-                        "canary": canary_record,
-                        # Derived from the records rather than read off a mutable counter.
-                        # The canary is included because the counter it replaces was incremented
-                        # by the canary's own dispatch too -- dropping it here would have silently
-                        # under-reported every run's cost by one claim.
-                        "sub_invocation_count": _subs,
-                        "cost_usd": _cost,
-                    },
-                    indent=2,
-            )
-            # Atomic: serialize to a sibling temp file, then rename over the target. A plain
-            # `write_text` truncates first, so a kill mid-write leaves a TORN manifest -- and this
-            # file is rewritten after every claim precisely so a killed run stays salvageable.
-            # Unreadable JSON at the moment of the kill would defeat the whole point of writing it
-            # early. `os.replace` is atomic within a directory on POSIX, so a reader sees either
-            # the previous complete manifest or the new one, never a half of either.
+                        n=batch_totals([canary_record])[0],
+                        cost=batch_totals([canary_record])[1],
+                    )
+
+            manifest_path = out_dir / "run_manifest.json"
+
+            def write_manifest(records: "list[dict[str, Any]]", *, complete: bool) -> None:
+                """Write the run manifest. Called after EVERY claim, not only at the end.
+
+                The Runner wrote per-claim verdicts incrementally but its manifest only after the whole
+                batch, so a killed run left finished claims on disk with nothing pointing at them. The
+                v0 baseline survived its interruption at 37/50 only because a manifest was rebuilt by
+                hand over the claims that happened to finish -- ad-hoc recovery standing in for a
+                missing feature, on the single most expensive artifact of the run.
+
+                A partial manifest is safe to leave lying around: `requested_count` still names the
+                full batch, so `SarolScorer`'s coverage check reports `scored: False` with a coverage
+                reason rather than letting a half-finished batch reach the frontier as a real number.
+                `complete` says the same thing directly, for whoever is reading the file by hand.
+                """
+                # Roll the validator's own invalid-label counts up to the batch. The Scorer merges
+                # these rather than re-deriving them, because `parse_verdict` only ever sees the
+                # OVERALL label: an invalid SUB-CLAIM verdict under a valid overall verdict would
+                # otherwise score clean and disappear from error_class_counts entirely.
+                _subs, _cost = batch_totals(
+                    ([canary_record] if canary_record is not None else []) + list(records)
+                )
+                validator_counts: dict[str, int] = {}
+                for rec in records:
+                    for key, n in (
+                        (rec.get("validation") or {}).get("error_class_counts") or {}
+                    ).items():
+                        validator_counts[key] = validator_counts.get(key, 0) + n
+                payload = json.dumps(
+                        {
+                            "batch_id": inputs.batch_id,
+                            "split": inputs.split,
+                            # C6.5: macro-F1 under two profiles measures two different systems, and
+                            # the engine's frontier is a bare scalar that cannot tell them apart.
+                            # Stamping the profile here is the consumer-side half of keeping them
+                            # distinguishable.
+                            "profile": self.profile.name,
+                            # Run identity, same rule as `retrieval_k`: a macro-F1 without the
+                            # instrument that produced it is not a result. Resolved id, taken from
+                            # what the sessions reported rather than from the requested alias, and
+                            # None only if no stage ever reported one.
+                            "model": next(
+                                (
+                                    st.get("model")
+                                    for rec in records
+                                    for st in (rec.get("stages") or {}).values()
+                                    if st.get("model")
+                                ),
+                                None,
+                            ),
+                            "profile_stages": list(self.profile.stages),
+                            "retrieval_k": self.profile.retrieval_k,
+                            # The Scorer's coverage assertion compares against what was actually ASKED
+                            # of the Runner, not against however many records came back.
+                            "requested_count": len(claims),
+                            # False until the last claim lands. A reader finding this file after a
+                            # kill knows immediately whether it describes a finished batch.
+                            "complete": complete,
+                            "claims": records,
+                            "validator_error_class_counts": validator_counts,
+                            "canary": canary_record,
+                            # Derived from the records rather than read off a mutable counter.
+                            # The canary is included because the counter it replaces was incremented
+                            # by the canary's own dispatch too -- dropping it here would have silently
+                            # under-reported every run's cost by one claim.
+                            "sub_invocation_count": _subs,
+                            "cost_usd": _cost,
+                        },
+                        indent=2,
+                )
+                # Atomic: serialize to a sibling temp file, then rename over the target. A plain
+                # `write_text` truncates first, so a kill mid-write leaves a TORN manifest -- and this
+                # file is rewritten after every claim precisely so a killed run stays salvageable.
+                # Unreadable JSON at the moment of the kill would defeat the whole point of writing it
+                # early. `os.replace` is atomic within a directory on POSIX, so a reader sees either
+                # the previous complete manifest or the new one, never a half of either.
+                #
+                # Cost noted and accepted: this reserializes the whole manifest per claim, which is
+                # O(n^2) in batch size. At the real rungs (10-200 claims) that is microseconds against
+                # a claim that costs a full LLM session -- ~$1 and ~100s measured. Salvageability is
+                # worth more than the arithmetic; revisit only if a rung ever approaches the full 2,141.
+                tmp_path = manifest_path.with_name(manifest_path.name + ".tmp")
+                tmp_path.write_text(payload, encoding="utf-8")
+                os.replace(tmp_path, manifest_path)
+
+            # Dispatch. Claims are independent units of work -- each one is its own nested session,
+            # writing its verdict under its OWN `claim.staging_dir` and its trace under its own
+            # `<claim_id>-<stage>.jsonl` -- so running several at once changes wall-clock and nothing
+            # else. Every session, prompt, subagent and materialized tree is byte-identical to what
+            # serial dispatch produced, which is the whole reason this is safe: it does not move the
+            # instrument, so baselines measured serially stay comparable.
             #
-            # Cost noted and accepted: this reserializes the whole manifest per claim, which is
-            # O(n^2) in batch size. At the real rungs (10-200 claims) that is microseconds against
-            # a claim that costs a full LLM session -- ~$1 and ~100s measured. Salvageability is
-            # worth more than the arithmetic; revisit only if a rung ever approaches the full 2,141.
-            tmp_path = manifest_path.with_name(manifest_path.name + ".tmp")
-            tmp_path.write_text(payload, encoding="utf-8")
-            os.replace(tmp_path, manifest_path)
+            # THREADS, not processes: `process` spends ~all of its time blocked in `communicate()`
+            # waiting on a `claude` subprocess, so the GIL is released throughout and processes would
+            # buy nothing while breaking the closure.
+            #
+            # Results are collected BY SUBMISSION INDEX, not by arrival and not by `claim_id`:
+            #   - by index, so the manifest stays in input order and byte-deterministic regardless of
+            #     which claim finishes first (`SarolScorer` keys on `record["claim_id"]` and does not
+            #     require order, but a manifest that reshuffles between runs is a diffing hazard);
+            #   - by index rather than `claim_id`, so a duplicated id in a batch cannot silently
+            #     collapse two records into one.
+            #
+            # Salvageability is delivered by writing the manifest INSIDE the worker (see
+            # `process_and_record`), not by how finished futures are collected here -- which is why
+            # this loop is free to consume them in completion order for prompt failure detection.
+            indexed: dict[int, dict[str, Any]] = {}
+            # Guards BOTH the shared `indexed` dict and the manifest write. Held only for a JSON
+            # dump, never across a dispatch, so it does not serialize the actual work.
+            ledger_lock = threading.Lock()
 
-        # Dispatch. Claims are independent units of work -- each one is its own nested session,
-        # writing its verdict under its OWN `claim.staging_dir` and its trace under its own
-        # `<claim_id>-<stage>.jsonl` -- so running several at once changes wall-clock and nothing
-        # else. Every session, prompt, subagent and materialized tree is byte-identical to what
-        # serial dispatch produced, which is the whole reason this is safe: it does not move the
-        # instrument, so baselines measured serially stay comparable.
-        #
-        # THREADS, not processes: `process` spends ~all of its time blocked in `communicate()`
-        # waiting on a `claude` subprocess, so the GIL is released throughout and processes would
-        # buy nothing while breaking the closure.
-        #
-        # Results are collected BY SUBMISSION INDEX, not by arrival and not by `claim_id`:
-        #   - by index, so the manifest stays in input order and byte-deterministic regardless of
-        #     which claim finishes first (`SarolScorer` keys on `record["claim_id"]` and does not
-        #     require order, but a manifest that reshuffles between runs is a diffing hazard);
-        #   - by index rather than `claim_id`, so a duplicated id in a batch cannot silently
-        #     collapse two records into one.
-        #
-        # Salvageability is delivered by writing the manifest INSIDE the worker (see
-        # `process_and_record`), not by how finished futures are collected here -- which is why
-        # this loop is free to consume them in completion order for prompt failure detection.
-        indexed: dict[int, dict[str, Any]] = {}
-        # Guards BOTH the shared `indexed` dict and the manifest write. Held only for a JSON
-        # dump, never across a dispatch, so it does not serialize the actual work.
-        ledger_lock = threading.Lock()
+            def process_and_record(index: int, claim: ClaimRecord) -> dict[str, Any]:
+                """Dispatch one claim, then fold it into the running manifest before releasing the
+                worker.
 
-        def process_and_record(index: int, claim: ClaimRecord) -> dict[str, Any]:
-            """Dispatch one claim, then fold it into the running manifest before releasing the
-            worker.
+                The manifest write lives HERE, in the worker, rather than in the main thread
+                collecting finished futures -- and that placement is load-bearing, not incidental.
+                Collecting on the main thread lets a worker pick up its next claim the instant the
+                previous one returns, i.e. BEFORE the manifest naming the finished one has been
+                written. At `max_workers=1` that silently weakens the incremental-manifest guarantee
+                the salvage path depends on, which is precisely what the two `seen_partials` gates
+                below caught when this was written the other way round. Writing inside the worker
+                restores the exact serial ordering at N=1 (dispatch, write, dispatch, write) and at
+                N>1 still lands each claim in the manifest as it finishes.
+                """
+                record = process(claim)
+                with ledger_lock:
+                    indexed[index] = record
+                    write_manifest([indexed[i] for i in sorted(indexed)], complete=False)
+                return record
 
-            The manifest write lives HERE, in the worker, rather than in the main thread
-            collecting finished futures -- and that placement is load-bearing, not incidental.
-            Collecting on the main thread lets a worker pick up its next claim the instant the
-            previous one returns, i.e. BEFORE the manifest naming the finished one has been
-            written. At `max_workers=1` that silently weakens the incremental-manifest guarantee
-            the salvage path depends on, which is precisely what the two `seen_partials` gates
-            below caught when this was written the other way round. Writing inside the worker
-            restores the exact serial ordering at N=1 (dispatch, write, dispatch, write) and at
-            N>1 still lands each claim in the manifest as it finishes.
-            """
-            record = process(claim)
-            with ledger_lock:
-                indexed[index] = record
-                write_manifest([indexed[i] for i in sorted(indexed)], complete=False)
-            return record
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as pool:
-            futures = [
-                pool.submit(process_and_record, i, claim) for i, claim in enumerate(claims)
-            ]
-            try:
-                # `as_completed`, NOT submission order: this has to notice the first failure in
-                # TIME, because every claim still queued behind it is real money. Iterating
-                # `futures` in order would sit on a slow claim 0 while later failures went unseen.
-                for future in concurrent.futures.as_completed(futures):
-                    # Re-raises whatever a worker raised, rather than burying it in a future.
-                    future.result()
-            except BaseException:
-                # Fail fast, as the serial loop did. Cancelling is a no-op for a claim already
-                # running -- a dispatched nested session cannot be unsent -- but it stops every
-                # QUEUED claim from starting. Without this the executor's own shutdown drains the
-                # whole batch first, so an exception on claim 3 of 300 would still pay for the
-                # remaining 297. The old `for claim in claims:` loop stopped at claim 3, and
-                # matching that is the point: propagation alone was not the contract, not
-                # spending the rest of the batch was.
-                for pending in futures:
-                    pending.cancel()
-                raise
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+                futures = [
+                    pool.submit(process_and_record, i, claim) for i, claim in enumerate(claims)
+                ]
+                try:
+                    # `as_completed`, NOT submission order: this has to notice the first failure in
+                    # TIME, because every claim still queued behind it is real money. Iterating
+                    # `futures` in order would sit on a slow claim 0 while later failures went unseen.
+                    for future in concurrent.futures.as_completed(futures):
+                        # Re-raises whatever a worker raised, rather than burying it in a future.
+                        future.result()
+                except BaseException:
+                    # Fail fast, as the serial loop did. Cancelling is a no-op for a claim already
+                    # running -- a dispatched nested session cannot be unsent -- but it stops every
+                    # QUEUED claim from starting. Without this the executor's own shutdown drains the
+                    # whole batch first, so an exception on claim 3 of 300 would still pay for the
+                    # remaining 297. The old `for claim in claims:` loop stopped at claim 3, and
+                    # matching that is the point: propagation alone was not the contract, not
+                    # spending the rest of the batch was.
+                    for pending in futures:
+                        pending.cancel()
+                    raise
 
         results: list[dict[str, Any]] = [indexed[i] for i in sorted(indexed)]
         write_manifest(results, complete=True)
@@ -2316,48 +2692,128 @@ def _selftest() -> int:
              and shipped.parent == REPO_ROOT / ".claude" / "commands"),
         ]
 
-        # The hard per-call spend cap has to be in the command vector, not just in a docstring.
-        cmd_vector = SarolRunner(
-            store, per_call_max_budget_usd=1.25, require_command=False, container=isolation_mod.fake_container()
-        )._stage_command(
-            "adjudicator",
-            ClaimRecord(claim_id="C1", citekey="k", staging_dir=pathlib.Path("/tmp/s")),
-            pathlib.Path("/tmp/mat"),
-        )
-        checks += [
-            ("the nested command carries a hard --max-budget-usd",
-             "--max-budget-usd" in cmd_vector),
-            ("...with the configured value",
-             cmd_vector[cmd_vector.index("--max-budget-usd") + 1] == "1.25"),
-            ("...alongside the timeout, which alone would not bound spend",
-             "--max-budget-usd" in cmd_vector and "-p" in cmd_vector),
-        ]
+        # The hard per-call spend cap has to be in the command vector, not just in a docstring --
+        # and the whole rendered dispatch is checked here, because containerizing is exactly the
+        # kind of change that can drop a flag while every other gate still passes.
+        with tempfile.TemporaryDirectory() as _cmd_tmp:
+            _cmd_tmp = pathlib.Path(_cmd_tmp)
+            _cmd_mat = _materialized_program(_cmd_tmp)
+            _cmd_out, _cmd_batch = _staged_batch(_cmd_tmp)
+            _cmd_claim = load_batch(_cmd_batch)[0]
+            _cmd_scope = isolation_mod.program_scope(
+                profile="retrieval",
+                program_dir=_cmd_mat,
+                staging_root=staging_root(_cmd_claim),
+                output_roots=[_cmd_out],
+            )
+            _cmd_runner = SarolRunner(
+                store,
+                per_call_max_budget_usd=1.25,
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(),
+            )
+            # ⚠ A refusal here has to read as a RED CHECK, not a traceback. A crashed suite
+            # reports nothing, and a mutation that crashes the module would otherwise pass for a
+            # mutation these gates caught.
+            try:
+                cmd_vector = _cmd_runner._inner_command(
+                    "adjudicator",
+                    _cmd_claim,
+                    scope=_cmd_scope,
+                    materialized_path=_cmd_mat,
+                    run_id="b",
+                )
+                _cmd_full = _cmd_runner._dispatch_command(
+                    "adjudicator",
+                    _cmd_claim,
+                    scope=_cmd_scope,
+                    materialized_path=_cmd_mat,
+                    run_id="b",
+                    render_prefix=lambda sc: ["docker", "run", "--rm", "img"],
+                )
+            except Exception:  # noqa: BLE001 -- the assertions below are the report
+                cmd_vector, _cmd_full = [""], [""]
+            checks += [
+                ("the nested command carries a hard --max-budget-usd",
+                 "--max-budget-usd" in cmd_vector),
+                ("...with the configured value",
+                 "--max-budget-usd" in cmd_vector
+                 and cmd_vector[cmd_vector.index("--max-budget-usd") + 1] == "1.25"),
+                ("...alongside the timeout, which alone would not bound spend",
+                 "--max-budget-usd" in cmd_vector and "--print" in cmd_vector),
+                # OQ1: the prompt arrives on argv, so there is no driver session and no slash
+                # command. A dispatch that reverted to one would pass every gate above.
+                ("the adjudicator is invoked directly, not through a slash command",
+                 not any(a.startswith("/sarol-eval-item") for a in cmd_vector)),
+                ("...with the rendered prompt as the last argument",
+                 _GATE_CLAIM_TEXT in cmd_vector[-1]),
+                ("...and no unfilled slot left in it",
+                 "{{" not in cmd_vector[-1]),
+                ("the permission bypass is gone from the argv we build",
+                 "--dangerously-skip-permissions" not in cmd_vector),
+                # ...and the leak check can actually see a path written the way the prompt
+                # writes them. The second clause is the control: hand the engine the raw markdown
+                # and it reports nothing, which is why the delimiters are blanked first.
+                ("a host path wrapped in markdown is still read as a host path",
+                 isolation_mod.told_host_path_problem(
+                     [_unmarked(f"evidence at `{_cmd_claim.staging_dir}/x.json`")], _cmd_scope
+                 ) is not None
+                 and isolation_mod.told_host_path_problem(
+                     [f"evidence at `{_cmd_claim.staging_dir}/x.json`"], _cmd_scope
+                 ) is None),
+                # 1c: every path the session is told is a container path. A host path here is a
+                # dispatch the adjudicator cannot complete, and it reads like a model failure.
+                ("every path the session is told is a container path",
+                 isolation_mod.told_host_path_problem([*cmd_vector], _cmd_scope) is None),
+                ("...including the staging path in the prompt, which names /workspace",
+                 container_staging(_cmd_claim, _cmd_scope) in cmd_vector[-1]
+                 and str(_cmd_claim.staging_dir) not in cmd_vector[-1]),
+                ("the dispatch is the container prefix followed by that argv",
+                 _cmd_full[:4] == ["docker", "run", "--rm", "img"]
+                 and _cmd_full[4:] == cmd_vector),
+                # The exact bytes the adjudicator was given, kept beside its evidence.
+                ("the prompt handed over is recorded for audit",
+                 (_cmd_claim.staging_dir / "ledger" / "prompts" / "C1.md").is_file()),
+                # A grant for a different staging root would render a container path that
+                # resolves to nothing, and the session would fail looking for its own evidence.
+                ("a claim dispatched under another root's grant is refused rather than sent",
+                 _raises_valueerror(lambda: _cmd_runner._inner_command(
+                     "adjudicator",
+                     _cmd_claim,
+                     scope=isolation_mod.program_scope(
+                         profile="retrieval",
+                         program_dir=_cmd_mat,
+                         staging_root=_cmd_tmp / "elsewhere",
+                         output_roots=[_cmd_out],
+                     ),
+                     materialized_path=_cmd_mat,
+                     run_id="b",
+                 ))),
+                # ...and a stage with no prompt of its own is refused too, rather than being
+                # handed the adjudicator's.
+                ("a stage with no implementation is refused, not given the adjudicator's prompt",
+                 _refusal_mentions(
+                     lambda: _cmd_runner._inner_command(
+                         "extractor",
+                         _cmd_claim,
+                         scope=_cmd_scope,
+                         materialized_path=_cmd_mat,
+                         run_id="b",
+                     ),
+                     "STAGE_UNIMPLEMENTED",
+                 )),
+            ]
 
         # Runner: a timeout surfaces as status="timeout", never as an exception.
         with tempfile.TemporaryDirectory() as tmp:
-            batch = pathlib.Path(tmp) / "batch.json"
-            staging = pathlib.Path(tmp) / "staging"
-            staging.mkdir()
-            # A minimally staged claim, in `stage_claim.py`'s own shape, so the mechanical
-            # evidence producer has something real to retrieve over under the retrieval profile.
-            (staging / "staging_info.json").write_text(json.dumps({
-                "citekey": "k1",
-                "claim_text_normalized": "deep learning reconstruction accelerates MRI fourfold",
-                "source_mode": "corpus",
-                "multi_cit_context": "single",
-                "source_description": "corpus-chunks (N=3)",
-            }), encoding="utf-8")
-            handle = staging / "pdfs" / "k1"
-            handle.mkdir(parents=True)
-            (handle / "content.txt").write_text(
-                "L1 [p?]: a fourfold acceleration was achieved for MRI reconstruction\n"
-                "L2 [p?]: unrelated sentence about cardiology cohorts\n"
-                "L3 [p?]: deep learning methods were applied throughout\n",
-                encoding="utf-8",
-            )
-            batch.write_text(json.dumps({"claims": [
-                {"claim_id": "C1", "citekey": "k1", "staging_dir": str(staging)}
-            ]}), encoding="utf-8")
+            # A staged claim and a materialized program, in the layout a contained run has: the
+            # program mounted read-only as the cwd, the staging root the one writable grant, and
+            # the optimizer's output roots denied. The flat layout this gate used to build --
+            # everything directly under `tmp` -- is refused by the engine now, because granting a
+            # mount that sits above a denied path is exactly what the grant is for.
+            mat = _materialized_program(pathlib.Path(tmp))
+            _, batch = _staged_batch(pathlib.Path(tmp))
 
             def timeout_invoke(cmd, cwd, t):
                 return InvocationResult(
@@ -2370,9 +2826,10 @@ def _selftest() -> int:
                 output_root=pathlib.Path(tmp) / "out",
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
+                profile="retrieval",
             container=isolation_mod.fake_container(), )
             res = r.run(
-                pathlib.Path(tmp),
+                mat,
                 schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
             )
             checks += [
@@ -2392,11 +2849,10 @@ def _selftest() -> int:
                 output_roots={"val": ns_root},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
+                profile="retrieval",
             container=isolation_mod.fake_container(), )
-            mat_current = pathlib.Path(tmp) / "iter1-current"
-            mat_probe = pathlib.Path(tmp) / "iter1-program-v1"
-            mat_current.mkdir(exist_ok=True)
-            mat_probe.mkdir(exist_ok=True)
+            mat_current = _materialized_program(pathlib.Path(tmp), "iter1-current")
+            mat_probe = _materialized_program(pathlib.Path(tmp), "iter1-program-v1")
             val_inputs = schemas.RunInputs(
                 input_ref=str(batch), batch_id="b", split="val"
             )
@@ -2420,15 +2876,12 @@ def _selftest() -> int:
             # something pointing at the claims that finished. Asserted by spying on the
             # filesystem mid-batch rather than by reading the final file, which would prove
             # nothing about when it appeared.
-            multi_batch = pathlib.Path(tmp) / "multi.json"
-            multi_batch.write_text(json.dumps({"claims": [
-                {"claim_id": f"C{i}", "citekey": f"k{i}", "staging_dir": str(staging)}
-                for i in range(3)
-            ]}), encoding="utf-8")
+            _, multi_batch = _staged_batch(
+                pathlib.Path(tmp), claim_ids=("C0", "C1", "C2"), name="multi.json"
+            )
             inc_root = pathlib.Path(tmp) / "inc-out"
-            # (claims recorded so far, complete flag) sampled from inside the batch. The default
-            # profile dispatches three stages per claim, so this fires more than once per claim --
-            # what matters is that a manifest is READABLE mid-batch and honestly marked partial.
+            # (claims recorded so far, complete flag) sampled from inside the batch -- what matters
+            # is that a manifest is READABLE mid-batch and honestly marked partial.
             seen_partials: list[tuple[int, Any]] = []
 
             torn: list[str] = []
@@ -2457,16 +2910,14 @@ def _selftest() -> int:
                 output_roots={"train": inc_root},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
+                profile="retrieval",
             container=isolation_mod.fake_container(), )
-            mat_m = pathlib.Path(tmp) / "m"
-            mat_m.mkdir(exist_ok=True)
+            mat_m = _materialized_program(pathlib.Path(tmp), "m")
             inc_res = inc_runner.run(
                 mat_m,
                 schemas.RunInputs(input_ref=str(multi_batch), batch_id="inc", split="train"),
             )
-            final_manifest = json.loads(
-                pathlib.Path(inc_res.artifact_refs[0].path).read_text(encoding="utf-8")
-            )
+            final_manifest = _manifest_of(inc_res)
             checks += [
                 ("a manifest exists BEFORE the batch finishes, so a killed run is salvagable "
                  "without rebuilding one by hand", bool(seen_partials)),
@@ -2519,9 +2970,9 @@ def _selftest() -> int:
                 output_roots={"train": crash_root},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
+                profile="retrieval",
             container=isolation_mod.fake_container(), )
-            mat_c = pathlib.Path(tmp) / "c"
-            mat_c.mkdir(exist_ok=True)
+            mat_c = _materialized_program(pathlib.Path(tmp), "c")
             pathlib.Path.write_text = _half_write
             try:
                 crash_runner.run(
@@ -2551,24 +3002,30 @@ def _selftest() -> int:
             ]
 
             # --------------------------------------------------------------------------------
-            # The judge's own reasoning trace, and the instrument that produced it.
+            # The adjudicator's own reasoning trace, and the instrument that produced it.
             #
-            # `--output-format stream-json --verbose` streams the full trace through the pipe
-            # `headless_claude_invoke` reads, which parsed the cost out and dropped the rest;
-            # Claude Code separately persisted the same session under `~/.claude/projects/`.
-            # 691 transcripts survived the 2026-09-02 run with nothing linking any of them to a
-            # claim. These gates pin the link, the copy, and the model record.
+            # ⚠ **Where the trace comes from changed with containment (1d).** It used to be copied
+            # out of the HOST's `~/.claude/projects/`, keyed on the session id. A contained session
+            # writes that directory inside a `--rm` container, which discards it — and because the
+            # old lookup was guarded at every step, every `trace_ref` would have come back null
+            # while the run still reported `status: ok`. The bytes are already in hand: the same
+            # `--output-format stream-json --verbose` output the cost is parsed from. So the home
+            # directory below is now the NEGATIVE CONTROL rather than the source — it exists, it is
+            # empty, and the trace still has to appear.
             _fake_home = pathlib.Path(tmp) / "fakehome"
             _sid = "11111111-2222-3333-4444-555555555555"
-            _slug_dir = _fake_home / ".claude" / "projects" / "some-slug"
-            _slug_dir.mkdir(parents=True, exist_ok=True)
-            _transcript_body = '{"type":"system","subtype":"init","model":"claude-haiku-4-5"}\n'
-            (_slug_dir / f"{_sid}.jsonl").write_text(_transcript_body, encoding="utf-8")
+            (_fake_home / ".claude" / "projects" / "some-slug").mkdir(parents=True, exist_ok=True)
+            _stream_body = (
+                '{"type":"system","subtype":"init","session_id":"%s",'
+                '"model":"claude-haiku-4-5"}\n'
+                '{"type":"assistant","text":"the adjudicator thinking out loud"}\n'
+                '{"type":"result","total_cost_usd":0.0}\n' % _sid
+            )
 
             def _trace_invoke(cmd, cwd, t):
                 return InvocationResult(
                     exit_code=0, cost_usd=0.0, duration_seconds=0.1,
-                    session_id=_sid, model="claude-haiku-4-5",
+                    session_id=_sid, model="claude-haiku-4-5", stream=_stream_body,
                 )
 
             _trace_out = pathlib.Path(tmp) / "traceout"
@@ -2578,11 +3035,12 @@ def _selftest() -> int:
                 output_roots={"train": _trace_out},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
+                profile="retrieval",
             container=isolation_mod.fake_container(), )
-            _mat_t = pathlib.Path(tmp) / "t"
-            _mat_t.mkdir(exist_ok=True)
+            _mat_t = _materialized_program(pathlib.Path(tmp), "t")
             # Patched so the Runner's OWN resolution path is exercised, rather than testing a
-            # root parameter the production call never passes.
+            # root parameter the production call never passes. With the cache empty, a Runner that
+            # still reached for it records no trace at all.
             _real_home = pathlib.Path.home
             pathlib.Path.home = staticmethod(lambda: _fake_home)
             try:
@@ -2595,10 +3053,27 @@ def _selftest() -> int:
             finally:
                 pathlib.Path.home = _real_home
 
-            _tman = json.loads(
-                pathlib.Path(_tres.artifact_refs[0].path).read_text(encoding="utf-8")
+            # The converse: a session that streamed nothing gets no trace path invented for it.
+            _quiet_out = pathlib.Path(tmp) / "quietout"
+            _quiet_res = SarolRunner(
+                store,
+                invoke=lambda cmd, cwd, t: InvocationResult(
+                    exit_code=0, cost_usd=0.0, duration_seconds=0.1, session_id=_sid
+                ),
+                output_roots={"train": _quiet_out},
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(),
+            ).run(
+                _materialized_program(pathlib.Path(tmp), "q"),
+                schemas.RunInputs(input_ref=str(multi_batch), batch_id="q", split="train"),
             )
-            _tclaim = _tman["claims"][0]
+            _qman = _manifest_of(_quiet_res)
+            _qstage = next(iter(((_qman.get("claims") or [{}])[0].get("stages") or {}).values()), {})
+
+            _tman = _manifest_of(_tres)
+            _tclaim = (_tman.get("claims") or [{}])[0]
             _tstage = next(iter((_tclaim.get("stages") or {}).values()), {})
             _tref = _tstage.get("trace_ref")
             # A real subprocess emitting a real stream-json line: no LLM, no spend, but the
@@ -2636,13 +3111,22 @@ def _selftest() -> int:
                 ("...and the RESOLVED model id rather than the alias that was requested -- an "
                  "alias moves when a new release ships, so it cannot identify an instrument",
                  _tstage.get("model") == "claude-haiku-4-5"),
-                ("the trace is COPIED into the run root, not merely pointed at inside "
-                 "~/.claude/projects, which is a cache Claude Code prunes",
+                ("the trace lands in the run root, taken from the stream the run already "
+                 "captured rather than from ~/.claude/projects, which a --rm container discards "
+                 "and Claude Code prunes",
                  bool(_tref) and pathlib.Path(_tref).exists()
                  and str(_trace_out) in str(_tref)),
-                ("...byte-identical to the session Claude Code wrote",
+                ("...byte-identical to what the session streamed back",
                  bool(_tref)
-                 and pathlib.Path(_tref).read_text(encoding="utf-8") == _transcript_body),
+                 and pathlib.Path(_tref).read_text(encoding="utf-8") == _stream_body),
+                # The control for the line above: the host cache was present and EMPTY for that
+                # run, so a Runner still globbing it would have recorded no trace at all.
+                ("...with the host transcript cache empty throughout, which is what a contained "
+                 "session leaves behind",
+                 not list((_fake_home / ".claude" / "projects").glob("*/*.jsonl"))),
+                ("a session that streamed nothing records no trace, rather than a path to an "
+                 "empty file standing in for evidence",
+                 _qstage.get("trace_ref") is None),
                 ("the run manifest carries the model as run identity, the same rule as "
                  "retrieval_k: a macro-F1 without its instrument is not a result",
                  _tman.get("model") == "claude-haiku-4-5"),
@@ -2650,24 +3134,21 @@ def _selftest() -> int:
                  "iteration and the optimizer is one",
                  SarolRunner(store, require_command=False, container=isolation_mod.fake_container()).model == DEFAULT_JUDGE_MODEL
                  and DEFAULT_JUDGE_MODEL == "haiku"),
-                ("a session that reported no id yields no trace_ref rather than a broken path",
-                 find_transcript("") is None),
             ]
 
             # The round-trip canary: a moved instrument stops the run before any scored claim.
+            _staged_batch(pathlib.Path(tmp), claim_ids=("CANARY",), name="canary.json")
             canary_claim = ClaimRecord(
-                claim_id="CANARY", citekey="canary", staging_dir=staging
+                claim_id="CANARY",
+                citekey="k1",
+                staging_dir=pathlib.Path(tmp) / "run" / "train" / "staging" / "CANARY",
             )
             dispatched_claims: list[str] = []
 
             def canary_invoke(cmd, cwd, t):
-                joined = " ".join(cmd)
-                for token in joined.split():
-                    if token.startswith("--claim"):
-                        pass
-                dispatched_claims.append(
-                    joined.split("--claim ")[1].split()[0] if "--claim " in joined else "?"
-                )
+                # ⚠ Read off the container path, not a `--claim` flag: since OQ1 the claim is
+                # named by the rendered prompt and the staging path inside it, not by argv.
+                dispatched_claims.append(_claim_dispatched(cmd))
                 return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
 
             # No verdict file exists, so validation fails -> the canary cannot match -> stop.
@@ -2677,10 +3158,11 @@ def _selftest() -> int:
                 output_root=pathlib.Path(tmp) / "out2",
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
+                profile="retrieval",
                 canary=CanarySpec(claim=canary_claim, expected_verdict="ACCURATE"),
             container=isolation_mod.fake_container(), )
             canary_res = canary_runner.run(
-                pathlib.Path(tmp),
+                mat,
                 schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
             )
             checks += [
@@ -2695,15 +3177,17 @@ def _selftest() -> int:
 
             # C6.1 -- the profile decides what gets dispatched. This is the check that would have
             # caught the landed `for stage in STAGES` loop running Phase 2 under a Phase 1 label.
-            stages_seen: list[str] = []
+            # ⚠ **The stage is no longer readable off argv** (OQ1: no `--stage` flag, because there
+            # is no slash command), so what is counted here is dispatches per claim against the
+            # profile's own stage list -- and, for agentic, that there are none at all.
+            dispatches: list[str] = []
 
             def stage_spy(cmd, cwd, t_):
-                joined = " ".join(cmd)
-                stages_seen.append(joined.split("--stage ")[1].split()[0])
+                dispatches.append(cmd[-1])
                 return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
 
             def run_under(profile_name):
-                stages_seen.clear()
+                dispatches.clear()
                 runner = SarolRunner(
                     store,
                     invoke=stage_spy,
@@ -2713,23 +3197,39 @@ def _selftest() -> int:
                     profile=profile_name,
                 container=isolation_mod.fake_container(), )
                 res_ = runner.run(
-                    pathlib.Path(tmp),
+                    mat,
                     schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
                 )
-                return list(stages_seen), res_
+                return list(dispatches), res_
 
-            retr_stages, retr_res = run_under("retrieval")
-            agentic_stages, _ = run_under("agentic")
-            retr_manifest = json.loads(
-                pathlib.Path(retr_res.artifact_refs[0].path).read_text(encoding="utf-8")
-            )
+            retr_prompts, retr_res = run_under("retrieval")
+            agentic_prompts, agentic_res = run_under("agentic")
+            retr_manifest = _manifest_of(retr_res)
             checks += [
                 ("under retrieval the Runner dispatches the adjudicator alone",
-                 set(retr_stages) == {"adjudicator"}),
+                 len(retr_prompts) == len(profiles_mod.RETRIEVAL.stages)
+                 and profiles_mod.RETRIEVAL.stages == ("adjudicator",)),
                 ("...one session per claim, not three",
-                 len(retr_stages) == 1 and len(agentic_stages) == 3),
-                ("...and agentic still runs all three, in order",
-                 agentic_stages == list(profiles_mod.ALL_STAGES)),
+                 len(retr_prompts) == 1),
+                ("...and what it dispatches is the adjudicator's own prompt, pointed at the "
+                 "rubric inside the container",
+                 bool(retr_prompts)
+                 and f"{isolation_mod.CONTAINER_PROGRAM}/experiments/sarol-2024/specs/"
+                 "verdict_schema_sarol.md" in retr_prompts[0]),
+                # agentic used to dispatch three sessions here. It cannot any more, and the reason
+                # is the grant rather than the stage list: its extractor reads the source paper and
+                # the grant mounts none, so it is refused before anything is dispatched. Running it
+                # would have had the extractor fail looking for a paper, which reads as a model
+                # error rather than a missing mount.
+                ("agentic is refused outright, because the grant carries no paper for its "
+                 "extractor to read",
+                 agentic_res.status == "infra_error"
+                 and agentic_res.error is not None
+                 and agentic_res.error.code == "PROGRAM_GRANT_REFUSED"),
+                ("...naming the mount it would need, not just failing",
+                 agentic_res.error is not None
+                 and "paper" in agentic_res.error.message_redacted),
+                ("...without dispatching a single session", not agentic_prompts),
                 # C6.5: the frontier is a bare scalar, so the profile has to be recoverable from
                 # the artifacts or two different experiments become indistinguishable after the
                 # fact.
@@ -2741,16 +3241,129 @@ def _selftest() -> int:
                  retr_manifest["profile_stages"] == ["adjudicator"]),
             ]
 
+            # A batch naming no claims has nothing to grant a container for and nothing to score.
+            _empty_batch = pathlib.Path(tmp) / "empty.json"
+            _empty_batch.write_text(json.dumps({"claims": []}), encoding="utf-8")
+            _empty_dispatched: list[str] = []
+            _empty_runner = SarolRunner(
+                store,
+                invoke=lambda cmd, cwd, t: _empty_dispatched.append("x") or InvocationResult(
+                    exit_code=0, cost_usd=0.0, duration_seconds=0.1
+                ),
+                output_root=pathlib.Path(tmp) / "empty-out",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(),
+            )
+            try:
+                _empty_res = _empty_runner.run(
+                    mat,
+                    schemas.RunInputs(
+                        input_ref=str(_empty_batch), batch_id="mt", split="train"
+                    ),
+                )
+            except BaseException:  # noqa: BLE001 -- "never raises" is the contract under test
+                _empty_res = None
+            checks += [
+                ("an empty batch is refused up front rather than scored as a perfect run",
+                 _empty_res is not None
+                 and _empty_res.status == "infra_error"
+                 and _empty_res.error is not None
+                 and _empty_res.error.code == "EMPTY_BATCH"),
+                ("...and nothing is dispatched for it", not _empty_dispatched),
+            ]
+
+            # ------------------------------------------------------------------------------
+            # V2d: two claims x two program versions, in one process. A prefix built once and
+            # reused across either axis is the failure mode -- it points a v1 dispatch at v0's
+            # bytes, or claim B at claim A's staging, and both produce a plausible verdict. So
+            # the assertion is on the PAIRING: every dispatch's program mount is its own
+            # version and its own claim, not merely that four dispatches happened.
+            # ------------------------------------------------------------------------------
+            _, v_batch = _staged_batch(
+                pathlib.Path(tmp), claim_ids=("V1", "V2"), name="versions.json"
+            )
+            v_cmds: list[list[str]] = []
+
+            def _version_spy(cmd, cwd, t_):
+                v_cmds.append(list(cmd))
+                return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+
+            v_mats = [
+                _materialized_program(pathlib.Path(tmp), "iter2-v0"),
+                _materialized_program(pathlib.Path(tmp), "iter2-v1"),
+            ]
+            # The renderer records the grant it was handed, once per call -- which is what makes
+            # "rendered per dispatch" assertable at all. Reading only the final argv cannot tell a
+            # prefix rendered four times from one rendered once and reused, because two claims
+            # under one staging root legitimately produce the SAME mount set.
+            v_renders: list = []
+            v_runner = SarolRunner(
+                store,
+                invoke=_version_spy,
+                output_root=pathlib.Path(tmp) / "versions-out",
+                paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(calls=v_renders),
+            )
+            for _v_mat in v_mats:
+                v_runner.run(
+                    _v_mat,
+                    schemas.RunInputs(
+                        input_ref=str(v_batch), batch_id="vv", split="train"
+                    ),
+                )
+
+            def _program_mount(argv):
+                return next(
+                    (host for host, container, _mode in isolation_mod.rendered_mounts(argv)
+                     if container == isolation_mod.CONTAINER_PROGRAM),
+                    None,
+                )
+
+            def _claim_told(argv):
+                return _claim_dispatched(argv)
+
+            _v_pairs = sorted((_program_mount(c), _claim_told(c)) for c in v_cmds)
+            checks += [
+                ("two claims across two program versions dispatch four containers (V2d)",
+                 len(v_cmds) == 4),
+                ("...each mounting the version it was asked to score, and each told its own "
+                 "claim",
+                 _v_pairs == sorted(
+                     (str(m), cid) for m in v_mats for cid in ("V1", "V2")
+                 )),
+                # ⚠ The mount set is deliberately shared by claims under one staging root, so
+                # identical argv is NOT evidence of a reused prefix. Counting the render calls is.
+                ("...with the prefix rendered once per dispatch rather than once per grant and "
+                 "reused, which identical argv could not distinguish",
+                 len(v_renders) == 4),
+                ("...each render handed the grant for the version being scored",
+                 sorted(str(s.program) for s in v_renders)
+                 == sorted(str(m) for m in v_mats for _ in range(2))),
+                ("...and all four mount the staging root read-write, the one place the "
+                 "program may write",
+                 all(
+                     any(
+                         container == isolation_mod.CONTAINER_STAGING and mode == "rw"
+                         for _h, container, mode in isolation_mod.rendered_mounts(c)
+                     )
+                     for c in v_cmds
+                 )),
+            ]
+
             # ==========================================================================
             # Concurrent dispatch. Claims are independent, so the ONLY thing `max_workers`
             # may change is wall-clock -- not which sessions run, not what they are told,
             # and not a single number in the manifest.
             # ==========================================================================
-            conc_batch = pathlib.Path(tmp) / "conc.json"
-            conc_batch.write_text(json.dumps({"claims": [
-                {"claim_id": f"P{7 - i}", "citekey": f"k{i}", "staging_dir": str(staging)}
-                for i in range(8)
-            ]}), encoding="utf-8")
+            _, conc_batch = _staged_batch(
+                pathlib.Path(tmp),
+                claim_ids=tuple(f"P{7 - i}" for i in range(8)),
+                name="conc.json",
+            )
 
             # Tracks how many dispatches are in flight at once, and dispatches claims with
             # DESCENDING durations so the last-submitted claim finishes first. That ordering
@@ -2760,13 +3373,18 @@ def _selftest() -> int:
             inflight_lock = threading.Lock()
 
             def concurrent_invoke(cmd, cwd, t_):
-                claim_id = cmd[3].split("--claim ")[1].split()[0]
+                # The claim is named by the container staging path in the rendered prompt now,
+                # not by a `--claim` flag (OQ1).
+                claim_id = _claim_dispatched(cmd)
+                # A dispatch this spy cannot attribute gets no sleep rather than a crash, so a
+                # mutation shows up as a red check below instead of a traceback.
+                _rank = int(claim_id[1:]) if claim_id[1:].isdigit() else 0
                 with inflight_lock:
                     inflight["now"] += 1
                     inflight["peak"] = max(inflight["peak"], inflight["now"])
                 # The FIRST-submitted claim (P7) is the slowest and the last (P0) the
                 # fastest, so completion order is the reverse of submission order.
-                time.sleep(0.05 * (1 + int(claim_id[1:])))
+                time.sleep(0.05 * (1 + _rank))
                 with inflight_lock:
                     inflight["now"] -= 1
                 return InvocationResult(exit_code=0, cost_usd=0.25, duration_seconds=0.1)
@@ -2785,15 +3403,13 @@ def _selftest() -> int:
                 container=isolation_mod.fake_container(), )
                 t0 = time.monotonic()
                 res_ = runner_.run(
-                    pathlib.Path(tmp),
+                    mat,
                     schemas.RunInputs(
                         input_ref=str(conc_batch), batch_id="cc", split="train"
                     ),
                 )
                 elapsed = time.monotonic() - t0
-                man = json.loads(
-                    pathlib.Path(res_.artifact_refs[0].path).read_text(encoding="utf-8")
-                )
+                man = _manifest_of(res_)
                 return man, res_, elapsed, inflight["peak"]
 
             par_man, par_res, par_elapsed, par_peak = run_conc(4, "conc-par")
@@ -2855,10 +3471,13 @@ def _selftest() -> int:
 
             # A duplicated claim_id in one batch must not collapse two records into one. This
             # is why results are collected by SUBMISSION INDEX and not keyed on claim_id.
+            # Both entries point at one real staged claim: the refusal fires on the repeated id
+            # before any grant is built, so what matters is that the batch is otherwise valid.
+            _dup_staging = pathlib.Path(tmp) / "run" / "train" / "staging" / "C1"
             dup_batch = pathlib.Path(tmp) / "dup.json"
             dup_batch.write_text(json.dumps({"claims": [
-                {"claim_id": "D1", "citekey": "k", "staging_dir": str(staging)},
-                {"claim_id": "D1", "citekey": "k", "staging_dir": str(staging)},
+                {"claim_id": "D1", "citekey": "k1", "staging_dir": str(_dup_staging)},
+                {"claim_id": "D1", "citekey": "k1", "staging_dir": str(_dup_staging)},
             ]}), encoding="utf-8")
             dup_dispatched: list[str] = []
             dup_runner = SarolRunner(
@@ -2898,18 +3517,26 @@ def _selftest() -> int:
             # time. `sh` stands in for `claude` so this costs nothing and touches no API, but
             # the process machinery is the production path, not a stub.
             # ------------------------------------------------------------------------------
-            real_batch = pathlib.Path(tmp) / "real.json"
-            real_batch.write_text(json.dumps({"claims": [
-                {"claim_id": f"R{i}", "citekey": "k", "staging_dir": str(staging)}
-                for i in range(8)
-            ]}), encoding="utf-8")
+            _, real_batch = _staged_batch(
+                pathlib.Path(tmp),
+                claim_ids=tuple(f"R{i}" for i in range(8)),
+                name="real.json",
+            )
             real_inflight = {"now": 0, "peak": 0}
             real_lock = threading.Lock()
 
             class _RealInvokerRunner(SarolRunner):
-                """Real `headless_claude_invoke`, with `sh` in place of the `claude` binary."""
+                """Real `headless_claude_invoke`, with `sh` in place of the whole dispatch.
 
-                def _stage_command(self, stage, claim, materialized_path):
+                ⚠ The override is the WHOLE command, prefix included: standing `sh` in for the
+                inner argv alone would leave the container prefix in front of it, and this gate is
+                about the process machinery -- Popen, the process group, the pipe drain -- not
+                about Docker, which it must not need.
+                """
+
+                def _dispatch_command(
+                    self, stage, claim, *, scope, materialized_path, run_id, render_prefix
+                ):
                     # Emits the same stream-json init + result lines the production parser reads
                     # cost, session_id and the resolved model out of.
                     return ["sh", "-c", (
@@ -2951,20 +3578,20 @@ def _selftest() -> int:
             )
             _t0 = time.monotonic()
             real_res = real_runner.run(
-                pathlib.Path(tmp),
+                mat,
                 schemas.RunInputs(input_ref=str(real_batch), batch_id="rr", split="train"),
             )
             real_elapsed = time.monotonic() - _t0
-            real_man = json.loads(
-                pathlib.Path(real_res.artifact_refs[0].path).read_text(encoding="utf-8")
-            )
+            real_man = _manifest_of(real_res)
             real_stages = [
-                st for rec in real_man["claims"] for st in (rec.get("stages") or {}).values()
+                st
+                for rec in (real_man.get("claims") or [])
+                for st in (rec.get("stages") or {}).values()
             ]
             checks += [
                 ("the REAL invoker survives concurrent use -- 8 nested process trees spawned "
                  "from 4 threads, each in its own process group",
-                 real_inflight["peak"] > 1 and len(real_man["claims"]) == 8),
+                 real_inflight["peak"] > 1 and len(real_man.get("claims") or []) == 8),
                 ("...with every claim's cost parsed out of its OWN process's stdout, not "
                  "cross-wired between concurrent pipes",
                  len(real_stages) == 8
@@ -2985,16 +3612,16 @@ def _selftest() -> int:
             # by default -- `ThreadPoolExecutor.__exit__` calls `shutdown(wait=True)`, which
             # DRAINS every already-submitted claim before the exception is allowed out. On a
             # 300-claim paid batch that is 297 claims of spend after the failure.
-            fail_batch = pathlib.Path(tmp) / "fail.json"
-            fail_batch.write_text(json.dumps({"claims": [
-                {"claim_id": f"X{i}", "citekey": "k", "staging_dir": str(staging)}
-                for i in range(12)
-            ]}), encoding="utf-8")
+            _, fail_batch = _staged_batch(
+                pathlib.Path(tmp),
+                claim_ids=tuple(f"X{i}" for i in range(12)),
+                name="fail.json",
+            )
             dispatched_ids: list[str] = []
             dispatch_lock = threading.Lock()
 
             def exploding_invoke(cmd, cwd, t_):
-                cid = cmd[3].split("--claim ")[1].split()[0]
+                cid = _claim_dispatched(cmd)
                 with dispatch_lock:
                     dispatched_ids.append(cid)
                 if cid == "X1":
@@ -3014,7 +3641,7 @@ def _selftest() -> int:
             raised = None
             try:
                 fail_runner.run(
-                    pathlib.Path(tmp),
+                    mat,
                     schemas.RunInputs(
                         input_ref=str(fail_batch), batch_id="ff", split="train"
                     ),
@@ -3022,8 +3649,7 @@ def _selftest() -> int:
             except RuntimeError as exc:
                 raised = exc
             fail_man_path = (
-                pathlib.Path(tmp) / "conc-fail" / "train" / pathlib.Path(tmp).name
-                / "run_manifest.json"
+                pathlib.Path(tmp) / "conc-fail" / "train" / mat.name / "run_manifest.json"
             )
             fail_man = (
                 json.loads(fail_man_path.read_text(encoding="utf-8"))
