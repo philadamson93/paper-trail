@@ -197,6 +197,22 @@ def build_envelope(
     }
 
 
+def read_staging_info(staging_dir: "pathlib.Path | str") -> dict[str, Any]:
+    """What staging exposes to an agent about one claim. **The single reader of this file.**
+
+    Factored out of :func:`produce` on 2026-09-18 so ``dispatch_prompt`` fills the adjudicator's
+    prompt slots from the same bytes the evidence envelope was built from. Two readers would let
+    the prompt and the evidence disagree about the claim text, and nothing downstream could see
+    it: the judge would be reasoning about one sentence while its evidence was retrieved for
+    another, and the verdict would look perfectly well-formed.
+
+    Reads only what an agent may read — never the benchmark rows, never gold.
+    """
+    return json.loads(
+        (pathlib.Path(staging_dir) / "staging_info.json").read_text(encoding="utf-8")
+    )
+
+
 def produce(
     staging_dir: "pathlib.Path | str",
     claim_id: str,
@@ -211,7 +227,7 @@ def produce(
     handle. It never reads the benchmark rows and never reads gold.
     """
     staging = pathlib.Path(staging_dir)
-    info = json.loads((staging / "staging_info.json").read_text(encoding="utf-8"))
+    info = read_staging_info(staging)
     citekey = info["citekey"]
     claim_text = info["claim_text_normalized"]
 
