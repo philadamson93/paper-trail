@@ -389,7 +389,7 @@ session should build, and the disagreement is a defect to fix here.
 
 | # | What | Where | Phase |
 |---|---|---|---|
-| 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39` and again in `optimizer/isolation.py:68`, `:71`. So a run binds to whatever that tree holds at that moment. Copy rad-eval's shape: a git **revision** under `[tool.uv.sources]`, which means **creating** our first `pyproject.toml`. ⚠ **Pin target is `592862f`** — the engine commit that landed the contained-session capability. Per **OQ11** the `$AGENTIC_LABEL_OPT` override survives as development-only, which is what stops the pin being decorative | `pyproject.toml` | 1a |
+| 1 | **Pin the engine dependency that already exists** — ⚠ the dependency is live (our dispatcher drives its loop, our adapter implements its four protocols); what is missing is the **pin**. paper-trail has **no packaging file of any kind**, and resolves the engine by injecting a hardcoded home path onto `sys.path` (`adapter.py:102`, `:117-118`) — duplicated in `scripts/materialize_smoke.py:39` and again in `optimizer/isolation.py:68`, `:71`. So a run binds to whatever that tree holds at that moment. ⚠ **CORRECTED 2026-09-18 — a pin already exists, and this item was written as though none did.** `scripts/vm/run_hillclimb_vm.sh:73` declares `ENGINE_PIN=82f547d` and enforces it by **ancestry** (`merge-base --is-ancestor`), so a forward re-pin still passes; it sits behind a capability probe (`LoopStop.reason`, `EmptyCommitError`) and a documented `SAROL_ALLOW_ENGINE_DIVERGENCE=1` override, and its comments cite a measured 2026-09-09 incident. So the true gap is narrower and different: (a) that pin is **28 commits stale** and, because ancestry holds, it **still passes against an engine with no `SessionScope` at all**; (b) it guards **one of four** resolution sites — `adapter.py:102`/`:118`, `isolation.py:68`/`:72` and `materialize_smoke.py:39`/`:71` have no check; (c) the repo uses **no uv** — a named interpreter (`$PAPER_TRAIL_PYTHON`, else `~/.local/bin/python3.13`) plus `PYTHONPATH`. ⇒ **How to close it is now OQ13**, because adding a `pyproject.toml` beside the existing check would be a second mechanism for one job — the very pattern this plan calls its own root cause. ✅ rad-eval's precedent is real and verified: `agentic-label-opt = { git = …, rev = "3bbe6c4" }`. ⚠ **Pin target either way is `592862f`** | ✅ **BUILT 2026-09-18** (`eccf27b`) per **OQ13**'s resolution: new `optimizer/engine_pin.py` is the one place the pin lives, the three duplicate path literals delegate to it, both `_import_engine` seams refuse a non-conforming engine, and the runner's inline check calls it. Packaging deferred | `optimizer/engine_pin.py`, `adapter.py`, `isolation.py`, `materialize_smoke.py`, `run_hillclimb_vm.sh` | 1a |
 | 2 | **The program's container** — ⚠ **rewritten 2026-09-17: the boundary machinery is the engine's now.** Fill one **`SessionScope`** and hand it to `build_contained_session_prefix`; the per-dispatch container comes from `render_dispatch` on a standing network. The **program's** grant — one, not one per stage: the claim **staging root** (rw), materialised spec root (ro), the program snapshot as cwd (ro), a trace dir (rw). `denied` names `iter/`, `optimizer/findings/`, `meta-learnings.md`, `~/.paper-trail/gold`, `~/.paper-trail/benchmarks`, so the negative control has something to probe. ⚠ **No stage dimension** — see *What the engine landed* | `optimizer/adapter.py`, `optimizer/isolation.py` | 1b, 1c |
 | 3 | **The optimizer's container**, modelled on rad-eval's `docker_agent.py`: temp writable staging, copy-back into the live tree, and the scorer / gold / `iter/` / manifest **absent from the mount set** — so "the optimizer cannot edit the scorer" holds by construction | `optimizer/isolation.py` | 1e |
 | 4 | **A deterministic dispatcher in Python** — reads the frozen prompt from the driver file, fills slots from `ledger/evidence/<claim_id>.json` + `staging_info.json`, refuses on an unresolved slot, and invokes the adjudicator **directly**. No driver *session*, no `Task` subagent | new `optimizer/dispatch_prompt.py` | 0c, **OQ1** |
@@ -525,6 +525,8 @@ them, flagged where they apply.
    unreproducible. The clone is on `main`, three commits behind `origin/main`, as of 2026-09-14.
    rad-eval pins it as a git revision under `[tool.uv.sources]`. ⚠ Adopting that shape here means
    **creating** paper-trail's first packaging file, which is more work than adding a line to one.
+
+   ⚠ **CORRECTED 2026-09-18 — the paragraph above overstates the gap.** The **VM runner already pins the engine** (`scripts/vm/run_hillclimb_vm.sh:73`, `ENGINE_PIN=82f547d`), by ancestry rather than equality so a forward re-pin is permitted, behind a feature probe and an explicit override. It is a considered mechanism with an incident behind it, not an absence. What is actually true: it is **28 commits stale** and still passes by ancestry, so it would happily run the isolation work against an engine that has no `SessionScope`; and it guards only the VM path, leaving the three `sys.path` sites unchecked. **Closing that is OQ13.**
 3. **A paper-trail egress profile.** Phil's ruling 2026-08-18: the network profile is **paper-trail's
    own to own** — adding one to the engine's policy registry re-litigates a resolved question. Build
    it on the generic host-allowlist primitive, which already accepts a caller-supplied host list.
@@ -1760,8 +1762,54 @@ resolved *against* this plan's own recommendation and the reasoning is what a fr
 Resolution order on the day: OQ4, OQ5, OQ8 first, then OQ9 (which set the scope), then OQ1, OQ2, OQ6,
 OQ7.
 
-✅ **OQ10, OQ11 and OQ12 resolved 2026-09-15.** All twelve are now closed. OQ10 dissolved rather
+✅ **OQ10, OQ11 and OQ12 resolved 2026-09-15.** OQ10 dissolved rather
 than being decided — the mechanism it asked for already exists.
+✅ **OQ13 opened and resolved 2026-09-18** on the same discovery pattern: the engine pin this plan
+said did not exist, does. All thirteen are closed.
+
+**OQ13 — ✅ RESOLVED 2026-09-18 (Phil): C — fix the pin now, packaging later. BUILT the same day,
+commit `eccf27b`.** What shipped: a new `optimizer/engine_pin.py` holding the pin, the ancestry
+test, the capability probe and the override; `ENGINE_PIN` bumped `82f547d` → `592862f`;
+`adapter.engine_path`, `isolation.engine_path` and `materialize_smoke`'s default all delegate to it
+(they were three copies of one path literal); `adapter._import_engine` and `isolation._import_engine`
+now refuse a non-conforming engine, the latter with the capability probe; and
+`run_hillclimb_vm.sh`'s 37-line inline check is replaced by a call to the module, so the SHA exists
+in exactly one place. ⚠ **The shell's old `LoopStop.reason` / `EmptyCommitError` probe was folded
+into `capability_problem`, not dropped** — it guards a different failure (a mid-run abort losing the
+partial-run summary). Negative-controlled 10/10 against a real pre-pin engine worktree, a missing
+directory, a non-git directory, an unrelated repo, and the override. Suite after: **493 offline
+checks green across 8 modules**, dry run still 46/46. Packaging (`pyproject.toml`, a lockfile,
+moving entry points to `uv run`) is deferred as its own work.
+
+**The original question, for the record:** ⚠ **This question exists because the plan's item 1 was written on a false premise** —
+that paper-trail pins nothing. It does, in `run_hillclimb_vm.sh`. What the pin is missing is
+freshness and reach, not existence.
+
+**What is actually broken today, under either answer:** the declared pin `82f547d` predates the
+contained-session capability by **28 commits**, and the check is an *ancestry* test — so an engine
+checkout sitting anywhere at or after `82f547d` passes, including one with no `SessionScope`,
+no `inherit_env` and no `render_dispatch`. The isolation work would then fail at import, or quietly
+not be exercised. **Bumping the pin to `592862f` and adding a capability probe for the new symbols
+is correct under every option** — but it is deliberately NOT applied yet, because it makes the
+runner refuse engines it accepts today, which is a behaviour change on the live hill-climb path.
+
+- **A — extend what exists.** Bump `ENGINE_PIN` to `592862f`, add a `SessionScope`/`inherit_env`
+  probe beside the `LoopStop` one, and lift the whole check into something the three `sys.path`
+  sites also call. No new dependency system. Small. Keeps one mechanism for one job.
+- **B — adopt `uv` properly.** Create `experiments/sarol-2024/pyproject.toml` plus a lockfile,
+  pin `agentic-label-opt` by `rev` as rad-eval does, and convert the runner and entry points to
+  `uv run`, retiring `PYTHONPATH`. Bigger. Gives a real lockfile covering *all* dependencies, not
+  just the engine, and matches the sibling consumer.
+- **C — A now, B later.** Unblocks the isolation work immediately and leaves packaging as its own
+  piece of work.
+
+⚠ **The trap in doing B naively:** a `pyproject.toml` that nobody's runtime consults is the
+"decorative file" this plan's *Files to Modify* already warns about, and a second version mechanism
+beside a working one is the pattern the plan's own root-cause table is made of. B is only worth
+doing if the entry points actually move to `uv run`.
+
+**Recommendation: C.** The stale pin is a live defect and A fixes it in minutes; B is real work that
+should not block the boundary this plan exists to build.
 
 **OQ10 — ✅ RESOLVED 2026-09-15 (Phil): build the mount set for what the optimizer dispatches today
 — the adjudicator — and the refusal this question asked for already exists.** ⚠ **Re-resolved the

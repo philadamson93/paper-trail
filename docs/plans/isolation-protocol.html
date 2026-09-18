@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="plan-sha256" content="2e7ad2c21891311f632092051194fffd94379e9aaddce0f6cef55400aa3ab521">
+<meta name="plan-sha256" content="76e03742b19e8bbb8dbf99efda42fc72f29a9f1d95f88048872727b104830c84">
 <title>The isolation protocol — plan explainer</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -128,8 +128,8 @@ li{margin:4px 0}
     <div><b>Status</b><br>Approved 2026-09-15 · <span class="chip c-chg">Reviewed: Stale</span></div>
     <div><b>Repo / branch</b><br>paper-trail · <code>sarol-optimizer-concurrent</code></div>
     <div><b>Worktree</b><br><code>.claude/worktrees/merge-concurrent</code> (tip <code>6b61c2f</code>)</div>
-    <div><b>Source plan</b><br><a href="isolation-protocol.md">isolation-protocol.md</a> · 2,663 lines</div>
-    <div><b>Plan SHA-256</b><br><code>2e7ad2c21891</code></div>
+    <div><b>Source plan</b><br><a href="isolation-protocol.md">isolation-protocol.md</a> · 2,711 lines</div>
+    <div><b>Plan SHA-256</b><br><code>76e03742b19e</code></div>
     <div><b>Generated</b><br>2026-09-17 · engine at <code>592862f</code></div>
   </div>
 </div>
@@ -173,6 +173,14 @@ li{margin:4px 0}
       one paragraph that had become flatly false.</td>
       <td>Four things this plan said it would build are already built elsewhere. The remaining work
       is smaller, and nothing is waiting on another repo any more.</td>
+    </tr>
+    <tr>
+      <td><b>2026-09-18</b><br>first step built</td>
+      <td>The engine version check was rewritten and the required version moved forward. A
+      thirteenth question opened and closed along the way.</td>
+      <td>Building it exposed a false claim in the plan: it said paper-trail pinned nothing. It did,
+      but the pin was 28 commits stale and would have accepted an engine missing everything this
+      work needs.</td>
     </tr>
   </table>
 </div>
@@ -518,27 +526,39 @@ better outcome:</p>
 </details>
 
 <details data-section="step-1a" data-changed>
-<summary>1a — pin which version of the engine we run against <span class="chip c-chg">changed</span></summary>
+<summary>1a — pin which version of the engine we run against <span class="chip c-ok">built 2026-09-18</span></summary>
 <div class="whatchanged">Now names the actual target, <code>592862f</code>, and records that the pin
 will genuinely work — which was worth checking, because the reverse would have sunk the item.</div>
-<p><b>The problem.</b> paper-trail depends on the engine at runtime — our dispatcher drives its loop,
-our adapter implements its four interfaces — but has <b>no packaging file of any kind</b>. It finds
-the engine by pointing at a folder in the home directory, in three separate places. So a run binds to
-whatever happens to be sitting in that folder at that moment: whichever branch is checked out,
-including uncommitted edits. The bytes under test are unrecorded and the run is not reproducible.
-That is this plan's own root cause in miniature.</p>
+<div class="card note">
+  <p><b>This page said something untrue here, and building it is what caught it.</b> The plan
+  claimed paper-trail pinned nothing. It did — the VM runner has checked the engine version since
+  2026-09-09, with a real incident behind it. What was wrong was subtler and worse: that check had
+  gone <b>28 commits stale</b>, and because it asks "is the required version somewhere in this
+  checkout's history" rather than "is it this exact one", an engine missing <i>everything</i> this
+  work needs sailed straight through. It also only covered the VM path — the other three ways into
+  the engine had no check at all.</p>
+</div>
+<p><b>What was built (2026-09-18).</b> One module now holds the required version, the check, and the
+override; the required version moved forward to the one carrying this work; the three duplicated
+copies of "where the engine lives" all defer to it; both import paths refuse an engine that does not
+qualify; and the runner's 37 lines of inline checking became a call to that module, so the version
+exists in exactly one place instead of two that can drift.</p>
+<p><b>Proved it fails, not just that it passes.</b> Ten checks against a real engine checkout parked
+before the required version, a missing folder, a folder that is not a repository, an unrelated
+repository, and the documented override — plus the engine we actually use, so the test can tell the
+two apart. Afterwards: 493 checks still green across eight modules.</p>
 <p><b>The fix.</b> Copy what rad-eval already does: pin a git revision in a packaging file. Target is
 <b><code>592862f</code></b>. This creates paper-trail's first <code>pyproject.toml</code>, so it is
 more work than adding a line to an existing file.</p>
-<div class="card ok">
-  <p><b>Checked, because the item would be unbuildable otherwise.</b> A pin only helps if the
-  installed package actually exposes what we import. The engine's packaging includes both of the
-  pieces we need, so importing them from the installed package works — it does not only work from a
-  folder path. Packaging that exports one module and quietly omits the others is a common way for
-  exactly this to fail.</p>
+<div class="card note">
+  <p><b>What it still does not catch, said plainly so it is not over-trusted.</b> Uncommitted edits
+  in the engine folder are invisible to a history check — they are reported in the run log but not
+  refused, because refusing them would make engine development impossible. And a branch taken from
+  the required version that later broke something still passes the history test; the capability
+  check and the existing selftests are the backstop there.</p>
 </div>
-<p><b>Files:</b> new <code>pyproject.toml</code>; the three hardcoded paths become
-development-only.</p>
+<p><b>Deferred:</b> proper dependency packaging — a lockfile covering every dependency, not just the
+engine. Worth doing, but it is its own piece of work and the boundary should not wait on it.</p>
 <textarea class="section-feedback" data-id="step-1a" placeholder="Comments on this section..."></textarea>
 </details>
 
@@ -677,10 +697,11 @@ originated as a paper-trail citation that resolves to nothing.</div>
 <!-- ============ OPEN QUESTIONS ============ -->
 <h2>Open questions</h2>
 <div class="card ok">
-  <p><b>All twelve are closed, and nothing new opened this round.</b> That is worth stating plainly:
-  the engine landing answered questions rather than raising them. The list below is kept because
-  several were resolved <i>against</i> this plan's own recommendation, and the reasoning is what a
-  fresh session needs.</p>
+  <p><b>All thirteen are closed.</b> Twelve were closed before this round; the engine landing
+  answered questions rather than raising them. A thirteenth opened and closed on 2026-09-18, when
+  building the first step showed the plan had asserted something untrue about the code. The list is
+  kept because several were resolved <i>against</i> this plan's own recommendation, and the
+  reasoning is what a fresh session needs.</p>
 </div>
 <div id="oqs"></div>
 
@@ -701,7 +722,7 @@ originated as a paper-trail citation that resolves to nothing.</div>
 <script>
 const PLAN_PATH = "docs/plans/isolation-protocol.md";
 const PLAN_BRANCH = "sarol-optimizer-concurrent";
-const PLAN_SHA = "2e7ad2c21891311f632092051194fffd94379e9aaddce0f6cef55400aa3ab521";
+const PLAN_SHA = "76e03742b19e8bbb8dbf99efda42fc72f29a9f1d95f88048872727b104830c84";
 const STEM = "isolation-protocol";
 
 const OQS = [
@@ -728,12 +749,15 @@ const OQS = [
  [11,"Does the hardcoded engine path survive the pin?",
     "Resolved 2026-09-15: demoted to development-only. This is what stops the pin being a decorative file while runs keep binding to whatever is in the folder."],
  [12,"What identifies a program version?",
-    "Resolved 2026-09-15: key it on the manifest's combined hash."]
+    "Resolved 2026-09-15: key it on the manifest's combined hash."],
+ [13,"The engine version check paper-trail already had was stale and only covered one way in. Patch it, or build proper dependency packaging?",
+    "Resolved 2026-09-18 (Phil): patch it now, packaging later — and it was built the same day. The check moved into one module that every entry point uses, the required version was moved forward to the one carrying this work, and the three duplicated copies of the engine's location now all defer to it. Proper packaging (a lockfile covering every dependency) is deferred to its own piece of work."]
 ];
 
 const OQNOTE = {
   4: "Acted on 2026-09-17: this is the question whose answer moved the machinery upstream.",
-  11: "Now load-bearing for step 1a — the pin target is 592862f."
+  11: "Now load-bearing for step 1a — the pin target is 592862f.",
+  13: "Raised AND answered AND built on 2026-09-18. This one exists because the plan asserted paper-trail pinned nothing; it did."
 };
 
 const box = document.getElementById('oqs');
