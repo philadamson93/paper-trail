@@ -63,6 +63,7 @@ Run the dry run — the cheapest gate in the plan, no container, no model, no sp
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import functools
 import importlib
@@ -71,7 +72,7 @@ import os
 import pathlib
 import sys
 import types
-from typing import Sequence
+from typing import Any, Sequence
 
 _HERE = pathlib.Path(__file__).resolve().parent
 
@@ -178,13 +179,19 @@ def _import_engine() -> types.SimpleNamespace:
 #: sibling path is gone and the default workdir needs no override. A check below asserts this
 #: constant still equals the engine's ``_DEFAULT_WORKDIR``, so a change upstream shows up here as a
 #: failed dry run rather than a container starting in an empty directory.
+#:
+#: ⚠ **This is also where ``{{spec_root}}`` points, and a second mount for it was deleted on
+#: 2026-09-18.** The grant used to carry a separate ``/workspace/spec`` alongside a
+#: version-addressed snapshot, on the reasoning that the materialized tree is chmod'd read-only and
+#: so cannot be a working checkout. Two things make that wrong. The plan's own step 2a concludes the
+#: cwd should simply *be* the materialized snapshot — it already holds the program at the same
+#: relative paths, is already read-only, and already has no ``.git`` and no ``CLAUDE.md``, so
+#: version-addressing comes free and there is one fewer copy to keep in sync. And the "must be a
+#: working checkout" reason died with the slash command: a contained session is handed its prompt on
+#: argv (``dispatch_prompt``) and states its own permissions, so it never reads ``.claude/`` from the
+#: cwd and needs no settings file there. ⇒ **one tree, mounted once, read-only, and it is the cwd.**
+#: The deleted alternative also required a second directory that nothing in this repo creates.
 CONTAINER_PROGRAM = "/workspace/program"
-
-#: The materialized spec root — the frozen bytes of this program version, which is what
-#: ``{{spec_root}}`` points at. Read-only. Separate from the cwd because the materialized tree is
-#: chmod'd read-only and its ``.claude/`` symlinks materialize as plain files, so it cannot itself be
-#: a working checkout (``adapter.py:654``).
-CONTAINER_SPEC = "/workspace/spec"
 
 #: The staging **root** — every claim's staged evidence, and the only writable place the program gets
 #: besides its trace.
@@ -196,17 +203,21 @@ CONTAINER_SPEC = "/workspace/spec"
 #: transport already assumes — inputs by reference, never inline.
 CONTAINER_STAGING = "/workspace/staging"
 
-#: The session transcripts. Writable and mounted because the container is `--rm`, and a contained
-#: adjudicator with no trace is a less useful instrument than an uncontained one (1d).
-CONTAINER_TRACE = "/workspace/trace"
-
 #: Every container path this module will ever mount. One place, so a reader can see the whole surface.
 CONTAINER_PATHS: tuple[str, ...] = (
     CONTAINER_PROGRAM,
-    CONTAINER_SPEC,
     CONTAINER_STAGING,
-    CONTAINER_TRACE,
 )
+
+#: ⚠ **There is deliberately no trace mount, and one was deleted on 2026-09-18.** A ``--rm``
+#: container discards its own ``~/.claude/projects``, so containerizing would silently end
+#: adjudicator traceability — and silently is literal: ``trace_ref`` starts ``None`` and every
+#: failure path resets it to ``None``, so every trace would be ``null`` while the run still reported
+#: ``status: ok``. The fix is not a mount. Plan item 1d: the adapter **already holds the streamed
+#: session JSON** (it is the captured stdout that ``_parse_stream_meta`` reads), so it is persisted
+#: host-side beside the verdict. That is strictly better than what the uncontained path did, which
+#: was to glob the host's ``~/.claude/projects`` — a cache Claude Code owns and prunes, i.e. evidence
+#: for a published result living somewhere that may garbage-collect it.
 
 #: Passed by NAME, never as `KEY=VALUE`. paper-trail authenticates with an env var, so the value in
 #: host argv would land in the wrapper's `meta.json` too. ⚠ **This works now** — the engine's
@@ -304,18 +315,6 @@ def denied_paths(*, output_roots: Sequence[pathlib.Path]) -> tuple[pathlib.Path,
 # =================================================================================================
 
 
-def version_snapshot_dir(
-    runs_root: pathlib.Path, run_id: str, version: str
-) -> pathlib.Path:
-    """The read-only snapshot of one program version — the cwd the session runs in (2a).
-
-    Version-addressed rather than a single ``current`` directory: with one shared directory, round
-    5's adjudicator runs in round 1's folder on top of round 1's verdict, which is the contamination
-    the per-version path removes.
-    """
-    return runs_root / run_id / f"program-{version}"
-
-
 def evidence_source_problem(profile) -> str | None:
     """Would this profile's program read the source paper? Returns a problem, or None.
 
@@ -350,13 +349,15 @@ def evidence_source_problem(profile) -> str | None:
 def program_scope(
     *,
     profile,
-    snapshot_dir: pathlib.Path,
-    spec_root: pathlib.Path,
+    program_dir: pathlib.Path,
     staging_root: pathlib.Path,
-    trace_root: pathlib.Path,
     output_roots: Sequence[pathlib.Path],
 ):
     """The program's grant: one :class:`SessionScope` for one program version.
+
+    ``program_dir`` is the **materialized** tree for the version being scored — never the working
+    checkout, which the optimizer may already have edited past this version, and which holds the
+    files this grant exists to keep out.
 
     ⚠ **No ``stage`` parameter, and that absence is the design.** Phil struck the per-stage split on
     2026-09-17; the engine's grant has no stage dimension to put one in either way. The dispatch
@@ -374,12 +375,13 @@ def program_scope(
 
     engine = _import_engine()
     scope = engine.SessionScope(
-        program=pathlib.Path(snapshot_dir),
-        readable=((pathlib.Path(spec_root), CONTAINER_SPEC),),
-        writable=(
-            (pathlib.Path(staging_root), CONTAINER_STAGING),
-            (pathlib.Path(trace_root), CONTAINER_TRACE),
-        ),
+        # The materialized tree, mounted once: the program's bytes, the cwd, and what
+        # ``{{spec_root}}`` resolves to inside the container. Version-addressed because the
+        # materialized path already is (``adapter`` namespaces it per call, ``iter<n>-<tag>``), so
+        # a v0 dispatch cannot land in v1's directory.
+        program=pathlib.Path(program_dir),
+        readable=(),
+        writable=((pathlib.Path(staging_root), CONTAINER_STAGING),),
         workdir=CONTAINER_PROGRAM,
         denied=denied_paths(output_roots=output_roots),
     )
@@ -612,6 +614,136 @@ def dispatch_prefix(
 
 
 # =================================================================================================
+# What a Runner is configured with (1f)
+# =================================================================================================
+
+
+@dataclasses.dataclass(frozen=True)
+class ContainerConfig:
+    """Everything a Runner needs to put each of its dispatches in a container, stated once per run.
+
+    ⚠ **No value of this means "no container".** ``open_boundary`` is always a boundary; the
+    selftests inject a *fake renderer* rather than switching the boundary off (OQ7), so no
+    production-reachable branch can disable it. There is deliberately no ``contained: bool``, no
+    ``None`` fallback and no environment override — an opt-out for anything that produces or guards
+    a reportable number would make the baseline and the iterations measured on different
+    instruments, which is not a weaker guarantee but an invalid comparison.
+
+    ``open_boundary`` takes the run's grant and returns a context manager yielding a callable that
+    renders one dispatch's prefix. It is a context manager because the shipping boundary owns a
+    Docker network and a Squid sidecar that must be torn down on every exit path, and it is opened
+    **once per batch** rather than per claim — see :func:`allowlist_stack` for why.
+    """
+
+    image: str
+    hosts: tuple[str, ...]
+    open_boundary: Any
+
+
+def container_problem(config) -> str | None:
+    """Why this Runner cannot dispatch into a container, or ``None``. The 1f refusal, as a predicate.
+
+    Called from ``SarolRunner.__init__`` — the one place all three routes to a Runner pass through
+    (``build_components``, direct construction, and a pre-built ``components=`` dict that skips
+    ``build_components`` entirely). A gate in ``build_components`` would miss the baseline recut
+    *and* the ``components=`` path while the suite reported green.
+    """
+    if config is None:
+        return (
+            "no container configuration was given, so this Runner would dispatch the program "
+            "with the run of whatever directory it was pointed at. Pass "
+            "isolation.shipping_container(image=...) for anything that produces or guards a "
+            "number, or isolation.fake_container() in a selftest"
+        )
+    for field in ("image", "hosts", "open_boundary"):
+        if not hasattr(config, field):
+            return f"the container configuration has no {field!r}; expected an isolation.ContainerConfig"
+    if "@sha256:" not in str(config.image):
+        return (
+            f"the container image {config.image!r} is named by tag, not by digest. A tag is not a "
+            "version: an image rebuilt from the same Dockerfile on a newer base layer keeps the "
+            "tag and changes the bytes, so a run pinned by tag cannot say what it ran on"
+        )
+    if not config.hosts:
+        return (
+            "the egress allowlist is empty, which denies every destination including the API the "
+            "adjudicator needs to think; use a real deny-all policy if that is the intent"
+        )
+    if not callable(config.open_boundary):
+        return "the container configuration's open_boundary is not callable"
+    return None
+
+
+def shipping_container(
+    *, image: str, hosts: Sequence[str] = EGRESS_ALLOWED_HOSTS
+) -> ContainerConfig:
+    """The real boundary: a one-host egress allowlist, and a fresh container per dispatch.
+
+    What every site that produces or guards a number takes — ``build_components``,
+    ``scripts/run_baseline.py`` and the canary.
+    """
+
+    def open_boundary(scope):
+        @contextlib.contextmanager
+        def entered():
+            stack = allowlist_stack(scope=scope, image=image, hosts=hosts)
+            with stack:
+                yield lambda dispatch_scope: allowlist_dispatch_prefix(
+                    scope=dispatch_scope, stack=stack
+                )
+
+        return entered()
+
+    return ContainerConfig(image=image, hosts=tuple(hosts), open_boundary=open_boundary)
+
+
+#: A digest-shaped stand-in, so a selftest asserts the shape production must use.
+FAKE_IMAGE = "ghcr.io/example/paper-trail@sha256:" + "0" * 64
+
+
+def fake_container(
+    *, calls: list | None = None, image: str = FAKE_IMAGE
+) -> ContainerConfig:
+    """A recording stand-in for the 19 selftest construction sites. **Selftests only.**
+
+    ⚠ **This is a fake *renderer*, not an opt-out**, and the difference is the whole of OQ7. It
+    still emits docker-shaped argv, so a selftest asserting on a command asserts on the same shape
+    production builds; what it does not do is start anything. A boolean that skipped the prefix
+    would let a selftest pass while proving nothing about the argv, and would put a
+    boundary-disabling branch in reachable code.
+
+    Nothing stops a *production* site importing this, which is why the count of construction sites
+    is asserted (V2c) rather than trusted: a new site taking the fake changes that count.
+    """
+    recorded = calls if calls is not None else []
+
+    def open_boundary(scope):
+        @contextlib.contextmanager
+        def entered():
+            def render(dispatch_scope) -> list[str]:
+                recorded.append(dispatch_scope)
+                argv = ["docker", "run", "--rm", "--network", "fake-internal"]
+                if dispatch_scope.program is not None:
+                    argv += ["-v", f"{dispatch_scope.program}:{CONTAINER_PROGRAM}:ro"]
+                for host, container in dispatch_scope.readable:
+                    argv += ["-v", f"{host}:{container}:ro"]
+                for host, container in dispatch_scope.writable:
+                    argv += ["-v", f"{host}:{container}:rw"]
+                for name in ENV_ALLOWLIST:
+                    argv += ["--env", name]
+                argv += ["-w", dispatch_scope.workdir, image]
+                return argv
+
+            yield render
+
+        return entered()
+
+    return ContainerConfig(
+        image=image, hosts=EGRESS_ALLOWED_HOSTS, open_boundary=open_boundary
+    )
+
+
+# =================================================================================================
 # Step 0a — the free dry run. No container started, no model called, nothing spent.
 # =================================================================================================
 
@@ -625,10 +757,9 @@ def _dry_paths(version: str) -> dict:
     train_root = runs_root / "run_dry" / "train"
     val_root = runs_root / "run_dry" / "val"
     return {
-        "snapshot_dir": version_snapshot_dir(runs_root, "run_dry", version),
-        "spec_root": runs_root / "run_dry" / "materialized" / version,
+        # Shaped like a real materialized path, which `adapter` namespaces per call.
+        "program_dir": runs_root / "run_dry" / "materialized" / f"iter0-{version}",
         "staging_root": train_root / "staging",
-        "trace_root": runs_root / "run_dry" / "traces",
         "output_roots": (train_root, val_root),
     }
 
@@ -806,6 +937,20 @@ def _replaced(scope, **fields):
     return dataclasses.replace(scope, **fields)
 
 
+def _fake_render(scope) -> list[str]:
+    """One dispatch rendered through the selftest stand-in, for comparing against the real one."""
+    with fake_container().open_boundary(scope) as render:
+        return render(scope)
+
+
+def _fake_render_calls(scope) -> list:
+    """What the stand-in recorded, so the recording itself is asserted rather than assumed."""
+    seen: list = []
+    with fake_container(calls=seen).open_boundary(scope) as render:
+        render(scope)
+    return seen
+
+
 def _raises(fn, *, want: str | None = None) -> bool:
     """Did ``fn`` refuse with a ``ValueError``, optionally one whose message contains ``want``?"""
     try:
@@ -959,14 +1104,17 @@ def _selftest() -> int:
         (
             "...and so is a grant whose readable mount is an ancestor of a denied path",
             engine.scope_problem(
-                _replaced(a_scope, readable=((stage_claim.GOLD_ROOT.parent.parent, CONTAINER_SPEC),))
+                _replaced(
+                    a_scope,
+                    writable=((stage_claim.GOLD_ROOT.parent.parent, CONTAINER_STAGING),),
+                )
             )
             is not None,
         ),
         (
-            "...which is why granting the repo root is refused outright",
+            "...which is why granting the repo root as the program tree is refused outright",
             _raises(
-                lambda: program_scope(profile="retrieval", **{**dry, "spec_root": REPO_ROOT}),
+                lambda: program_scope(profile="retrieval", **{**dry, "program_dir": REPO_ROOT}),
                 want="is reachable through",
             ),
         ),
@@ -1154,13 +1302,65 @@ def _selftest() -> int:
             "...and no environment value of any kind is passed through as KEY=VALUE by us",
             all(not c.get("env") for c in dispatch_calls + plain_calls),
         ),
+        # -- the Runner's configuration, and the 1f refusal ----------------------------------------
+        (
+            "a Runner given no container configuration is refused, naming what to pass",
+            (lambda r: r is not None and "shipping_container" in r)(container_problem(None)),
+        ),
+        (
+            "...and an image named by tag rather than digest is refused",
+            (lambda r: r is not None and "not by digest" in r)(
+                container_problem(shipping_container(image="ghcr.io/example/paper-trail:latest"))
+            ),
+        ),
+        (
+            "...and an empty egress allowlist is refused",
+            container_problem(shipping_container(image=FAKE_IMAGE, hosts=())) is not None,
+        ),
+        (
+            "...while both the shipping and the selftest configurations are accepted",
+            container_problem(shipping_container(image=FAKE_IMAGE)) is None
+            and container_problem(fake_container()) is None,
+        ),
+        (
+            "the configuration carries no way to switch the boundary off",
+            not [
+                f.name
+                for f in dataclasses.fields(ContainerConfig)
+                if f.name
+                in ("contained", "enabled", "skip", "bypass", "opt_out", "uncontained", "dry_run")
+            ]
+            and all(
+                f.type is not bool for f in dataclasses.fields(ContainerConfig)
+            ),
+        ),
+        (
+            "the shipping configuration names the one-host allowlist, not the unrestricted policy",
+            shipping_container(image=FAKE_IMAGE).hosts == EGRESS_ALLOWED_HOSTS,
+        ),
+        (
+            "the selftest stand-in renders the SAME mount set as the real renderer",
+            (
+                lambda fake: tuple(sorted(rendered_mounts(fake)))
+                == _expected_mounts(a_scope)
+            )(_fake_render(a_scope)),
+        ),
+        (
+            "...and is docker-shaped and digest-pinned, so a selftest asserts production's shape",
+            _fake_render(a_scope)[:2] == ["docker", "run"]
+            and any("@sha256:" in a for a in _fake_render(a_scope)),
+        ),
+        (
+            "...and records the grant it was asked to render, so a selftest can assert on it",
+            (lambda seen: len(seen) == 1 and seen[0] is a_scope)(_fake_render_calls(a_scope)),
+        ),
         # -- against the real engine renderer ------------------------------------------------------
         (
             "the engine's argv starts a container and nothing else ran to find out",
             all(g["prefix"][:2] == ["docker", "run"] for g in grants),
         ),
         (
-            "the rendered argv mounts exactly the four granted paths, in the right modes, no extras",
+            "the rendered argv mounts exactly the two granted paths, in the right modes, no extras",
             all(
                 tuple(sorted(rendered_mounts(g["prefix"]))) == _expected_mounts(g["scope"])
                 for g in grants
@@ -1182,7 +1382,7 @@ def _selftest() -> int:
             "the program is read-only and only staging and trace are writable",
             all(
                 {c for _h, c, mode in rendered_mounts(g["prefix"]) if mode == "rw"}
-                == {CONTAINER_STAGING, CONTAINER_TRACE}
+                == {CONTAINER_STAGING}
                 and (str(g["scope"].program), CONTAINER_PROGRAM, "ro")
                 in rendered_mounts(g["prefix"])
                 for g in grants
