@@ -15,6 +15,21 @@ Hand-editing a file whose whole job is to carry hashes is how hashes go stale, s
     freeze_program_v0.py --verify --tree <ref>
                                      also check every entry against a composed tree,
                                      which is the OQ6 tag's real gate
+    freeze_program_v0.py --retag [<ref>]
+                                     verify <ref> (default HEAD) and, only if it is a
+                                     faithful composition, move the `program-v0` tag to it
+
+⚠ **The tag is what the engine materializes from, not your working tree.** `materialize()` is
+handed `rev_parse("program-v0")`, so the tag decides which program a run actually executes. Before
+`--retag` existed, refreshing the manifest was one command and moving the tag was an undocumented
+manual step -- so the manifest stayed current while the tag drifted. It did exactly that between
+2026-09-07 and 2026-09-18, across the paper-verbatim reset, and two gates caught it
+(`--verify --tree program-v0` here, which `run_hillclimb_vm.sh` blocks on, and
+`materialize_smoke.py`). `--retag` exists so the fix lives next to the check.
+
+⚠ **`--retag` does not push.** A tag that moved locally changes nothing on the VM, which fetches
+it; the command prints the push line and leaves it to you, because overwriting a published tag
+should be a decision rather than a side-effect.
 
 The `sha256`/`source`/`source_refs` fields are adapter-owned extras. `ManifestEntry` does not
 declare them (engine/schemas.py), so the adapter strips them before handing anything to the
@@ -196,6 +211,75 @@ def cmd_verify(args) -> int:
     return 0
 
 
+#: The tag the engine materializes the program from.
+PROGRAM_TAG = "program-v0"
+
+
+def cmd_retag(args) -> int:
+    """Move :data:`PROGRAM_TAG` to a ref, but only if that ref is a faithful composition.
+
+    The ordering is the whole point: **verify, then move.** A `--retag` that tagged first and
+    checked afterwards would let one mistyped ref publish a program nobody meant to run, and the
+    gates downstream would then be arguing with a tag that is already wrong. Refusing costs a
+    second; a bad tag costs a run.
+    """
+    target = args.retag if isinstance(args.retag, str) and args.retag else "HEAD"
+    sha = rev_parse(f"{target}^{{commit}}")
+    m = json.loads(MANIFEST.read_text())
+
+    # A tag names a commit, so uncommitted edits are NOT in it. Tagging HEAD with a dirty program
+    # tree produces a tag that disagrees with the files in front of you -- the same class of
+    # confusion this command exists to end, arriving from the other direction.
+    paths = [e["path"] for e in m["entries"]]
+    dirty = subprocess.run(
+        ["git", "-C", str(REPO), "status", "--porcelain", "--", *paths],
+        capture_output=True, text=True,
+    ).stdout.strip()
+    if dirty:
+        print("REFUSING to move the tag: these program files have uncommitted changes, which a")
+        print("tag cannot capture. Commit them first, then re-run.")
+        for line in dirty.splitlines():
+            print(f"    {line}")
+        return 1
+
+    print(f"Verifying {target} ({sha[:12]}) before moving {PROGRAM_TAG} ...")
+    if cmd_verify(argparse.Namespace(tree=target)) != 0:
+        print(f"REFUSING to move {PROGRAM_TAG}: {target} is not a faithful composition (above).")
+        return 1
+
+    was = rev_parse(f"{PROGRAM_TAG}^{{commit}}") if _tag_exists() else None
+    if was == sha:
+        print(f"{PROGRAM_TAG} already points at {sha[:12]}; nothing to do.")
+        return 0
+
+    message = (
+        f"Move {PROGRAM_TAG} to {sha[:12]}, verified {len(m['entries'])}/{len(m['entries'])} "
+        f"against the manifest's source refs and against the tree itself "
+        f"(combined_hash {m['combined_hash'][:12]})"
+    )
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "tag", "-f", "-a", PROGRAM_TAG, sha, "-m", message],
+        capture_output=True, text=True,
+    )
+    if out.returncode != 0:
+        print(f"FAIL: could not move the tag: {out.stderr.strip()}")
+        return 1
+
+    print(f"moved {PROGRAM_TAG}: {was[:12] if was else '(new)'} -> {sha[:12]}")
+    print(f"  undo:  git tag -f -a {PROGRAM_TAG} {was[:12]} -m '<why>'" if was else "")
+    print(f"  ⚠ NOT on the remote yet -- the VM fetches this tag, so until you run:")
+    print(f"      git push --force origin {PROGRAM_TAG}")
+    print(f"    a VM run still materializes the old program.")
+    return 0
+
+
+def _tag_exists() -> bool:
+    return subprocess.run(
+        ["git", "-C", str(REPO), "rev-parse", "--verify", "--quiet", f"refs/tags/{PROGRAM_TAG}"],
+        capture_output=True,
+    ).returncode == 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=False)
@@ -204,6 +288,9 @@ def main() -> int:
     p.add_argument("--selftest", action="store_true",
                    help="round-trip a COPY and assert runtime_pins survives a re-freeze")
     p.add_argument("--tree", help="also verify every entry against this composed tree/tag")
+    p.add_argument("--retag", nargs="?", const="HEAD", default=None, metavar="REF",
+                   help=f"verify REF (default HEAD) and, only if faithful, move the "
+                        f"program-v0 tag to it. Does not push.")
     p.add_argument("--main-ref", default="main")
     p.add_argument("--sarol-ref", default="HEAD")
     p.add_argument("--date", default="2026-09-01")
@@ -215,6 +302,8 @@ def main() -> int:
         return cmd_selftest(args)
     if args.verify:
         return cmd_verify(args)
+    if args.retag is not None:
+        return cmd_retag(args)
     p.print_help()
     return 2
 
