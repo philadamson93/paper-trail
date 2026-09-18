@@ -68,6 +68,7 @@ from __future__ import annotations
 import concurrent.futures
 import dataclasses
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -92,6 +93,12 @@ if str(_HERE) not in sys.path:
 
 import engine_pin  # noqa: E402
 import evidence_producers  # noqa: E402
+# ⚠ Bound under the bare name `isolation` in `sys.modules` whatever we alias it to here, and the
+# ENGINE's package is also called `isolation`. `isolation._import_engine()` swaps the engine's in and
+# puts ours back; it restores `sys.modules` as well as `sys.path`, which it did not on first write
+# (fixed 2026-09-18 after review) — without that, this import would silently start resolving to the
+# engine's package after the first dispatch.
+import isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import validate_sarol  # noqa: E402
 
@@ -336,6 +343,14 @@ class InvocationResult:
     #: A number is only reportable alongside the instrument that produced it, and the alias is
     #: not the instrument -- it is a pointer that moves when Anthropic ships a new Haiku.
     model: str | None = None
+    #: The session's whole `stream-json` output, as captured. ⚠ **Retained rather than parsed and
+    #: dropped (1d, 2026-09-18).** The judge's reasoning trace used to be recovered by globbing the
+    #: HOST's `~/.claude/projects` for `session_id` — which a contained session does not write to,
+    #: because a `--rm` container discards its own. Worse, the lookup is guarded at every step, so
+    #: inside a container every `trace_ref` would be `null` while the run still reported `status:
+    #: ok`. This is the same bytes, already in hand, and it does not depend on a cache Claude Code
+    #: owns and prunes.
+    stream: str = ""
 
 
 #: A seam, so every offline gate below can drive the Runner without spending money. The real
@@ -512,6 +527,7 @@ def headless_claude_invoke(
         detail=(stderr or "").strip()[:500],
         session_id=session_id,
         model=model,
+        stream=stdout or "",
     )
 
 
@@ -625,6 +641,123 @@ def batch_totals(records: "Iterable[dict[str, Any]]") -> "tuple[int, float]":
     return subs, cost
 
 
+#: Every file that constructs a Runner. Checked by source inspection in `_selftest` (V2c).
+_RUNNER_SITE_FILES = (
+    _HERE / "adapter.py",
+    _HERE / "dispatcher.py",
+    _HERE / "canary.py",
+    _HERE.parent / "scripts" / "run_baseline.py",
+)
+
+#: How many places construct a Runner. ⚠ **If this number moves, read the new site before changing
+#: it.** The container boundary is only as good as the set of sites that take one, and a count is
+#: the only thing that notices a new site quietly copying `fake_container()` from its neighbour.
+#: The census, which the plan put at 22 before this change: **19** selftests in this file, its
+#: `_RealInvokerRunner` subclass (the 23rd the plan warned matches no text search), and **3** that
+#: can run outside a test -- `dispatcher.build_components`, `canary.pin` and
+#: `scripts/run_baseline.py`. Plus **4** added here to watch the constructor's refusal actually
+#: fire: two passing an explicit `None`, one a tag-named image, one the accepted shipping shape.
+_EXPECTED_RUNNER_SITES = 27
+
+
+def _raises_valueerror(fn) -> bool:
+    """Did ``fn`` refuse with a ``ValueError``? Used for the constructor's refusal controls."""
+    try:
+        fn()
+    except ValueError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def _refusal_mentions(fn, needle: str) -> bool:
+    """Did ``fn``'s refusal actually name ``needle``? A refusal nobody can act on is half a gate."""
+    try:
+        fn()
+    except ValueError as exc:
+        return needle in str(exc)
+    except Exception:
+        return False
+    return False
+
+
+def _runner_construction_sites() -> "list[dict[str, Any]]":
+    """Every Runner construction in the repo, found by parsing the source (V2c).
+
+    ⚠ **Parsed, not text-searched, and the first version of this was text-searched and wrong in two
+    ways at once.** It matched its own docstring — which mentions the constructor by name — and the
+    paren-matching then ran away through the prose that followed, so it reported 3 sites in a file
+    holding 20 and called that a pass. A check that miscounts in the safe direction is worse than
+    no check: it certifies a boundary over sites it never saw. Parsing has neither failure mode,
+    because a name inside a string is not a call.
+
+    A registry populated at import time would also have been wrong here: the property is about code
+    that *exists*, so a new site that forgets the boundary must show up even if no test runs it.
+
+    Subclass constructions count. ``_RealInvokerRunner`` does not override the constructor, so it
+    reaches the same refusal while matching no search for the parent's name. A subclass *definition*
+    is not a call, so it is naturally excluded rather than needing a special case.
+
+    ⚠ **What this does NOT catch, stated because a guard whose limits are unwritten gets
+    over-trusted:** it matches the callee by *name*, so a construction through a local alias
+    (``Runner = SarolRunner; Runner(store)``) is invisible to it. That is not the failure this
+    guards — the failure is a new site that simply forgets the boundary, which does match by name —
+    and the constructor's own refusal still fires either way at run time. The census exists to make
+    a forgotten site fail *offline*, not to be the only thing standing between here and a leak.
+    """
+    import ast  # noqa: PLC0415
+
+    wanted = {"SarolRunner", "_RealInvokerRunner"}
+    sites: "list[dict[str, Any]]" = []
+    for path in _RUNNER_SITE_FILES:
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text)
+        selftest_line = next(
+            (
+                node.lineno
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef) and node.name == "_selftest"
+            ),
+            None,
+        )
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = (
+                func.id
+                if isinstance(func, ast.Name)
+                else func.attr
+                if isinstance(func, ast.Attribute)
+                else None
+            )
+            if name not in wanted:
+                continue
+            stated = [kw for kw in node.keywords if kw.arg == "container"]
+            sites.append(
+                {
+                    "file": path.name,
+                    "line": node.lineno,
+                    "states_container": bool(stated),
+                    "uses_fake": any(
+                        "fake_container" in ast.unparse(kw.value) for kw in stated
+                    ),
+                    # An explicit `container=None` is the ONE legitimate way to say "this site is
+                    # here to watch the refusal fire". It still counts as stating a container --
+                    # the plan's requirement is that every site is *visible* about it -- but no
+                    # site that can run outside a selftest may use it.
+                    "states_none": any(
+                        isinstance(kw.value, ast.Constant) and kw.value.value is None
+                        for kw in stated
+                    ),
+                    "in_selftest": selftest_line is not None
+                    and node.lineno > selftest_line,
+                }
+            )
+    return sites
+
+
 class SarolRunner:
     """Dispatches the frozen program over a batch of claims and reports what happened.
 
@@ -649,7 +782,26 @@ class SarolRunner:
         profile=None,
         output_roots: "dict[str, pathlib.Path] | None" = None,
         max_workers: int = 1,
+        container: "isolation_mod.ContainerConfig | None" = None,
     ) -> None:
+        # ⚠ **The 1f refusal locus, and it is here rather than in `build_components` for a
+        # measured reason.** There are THREE ways to reach a Runner: through `build_components`,
+        # by direct construction (`canary.py`, `scripts/run_baseline.py`), and by handing
+        # `run_optimization` a pre-built `components=` dict that skips `build_components` entirely
+        # (`dispatcher.py:604`, `:748`). Only the constructor sits under all three — a gate in
+        # `build_components` would miss the baseline recut AND the `components=` path while the
+        # suite reported green.
+        #
+        # `container` is declared with a `None` default only so this message can replace a bare
+        # TypeError. It is not optional: there is no value of it meaning "no container", and
+        # nothing that produces or guards a reportable number gets an opt-out, because a baseline
+        # measured uncontained against iterations measured contained is not a weaker guarantee but
+        # an invalid comparison.
+        container_refusal = isolation_mod.container_problem(container)
+        if container_refusal is not None:
+            raise ValueError(f"refusing to build a Runner: {container_refusal}")
+        self.container = container
+
         self.program_store = program_store
         # A real checkout, not the materialized tree: that tree is chmod'd read-only, its `.claude/`
         # symlinks materialize as regular files containing their target string, and the orchestrator
@@ -1757,15 +1909,15 @@ def _selftest() -> int:
     # Probe the manifest's OWN pin for the match cases so a future pin bump (e.g. 0.5.11 -> 0.7.48)
     # doesn't turn these into spurious failures; the mismatch case uses a version the pin can never be.
     _pin = store.runtime_pins["paperclip_cli"]
-    pinned_ok = SarolRunner(store, paperclip_version_probe=lambda: _pin)
-    pinned_bad = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.0.0")
-    pinned_absent = SarolRunner(store, paperclip_version_probe=lambda: None)
+    pinned_ok = SarolRunner(store, paperclip_version_probe=lambda: _pin, container=isolation_mod.fake_container())
+    pinned_bad = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.0.0", container=isolation_mod.fake_container())
+    pinned_absent = SarolRunner(store, paperclip_version_probe=lambda: None, container=isolation_mod.fake_container())
     checks += [
         ("the pinned paperclip version passes preflight", pinned_ok.paperclip_pin_error() is None),
         ("a wrong version is caught", pinned_bad.paperclip_pin_error() is not None),
         ("a missing CLI is caught", pinned_absent.paperclip_pin_error() is not None),
         ("a cosmetic banner change is not a spurious mismatch",
-         SarolRunner(store, paperclip_version_probe=lambda: _normalize_version(_pin)).paperclip_pin_error() is None),
+         SarolRunner(store, paperclip_version_probe=lambda: _normalize_version(_pin), container=isolation_mod.fake_container()).paperclip_pin_error() is None),
     ]
 
     # -- version normalisation ---------------------------------------------------------------
@@ -2114,7 +2266,7 @@ def _selftest() -> int:
             return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
 
         bad_runner = SarolRunner(
-            store, invoke=spy, paperclip_version_probe=lambda: "paperclip, version 0.0.1"
+            store, invoke=spy, paperclip_version_probe=lambda: "paperclip, version 0.0.1", container=isolation_mod.fake_container()
         )
         art = bad_runner.run(
             pathlib.Path("/nonexistent"),
@@ -2136,7 +2288,7 @@ def _selftest() -> int:
                 working_checkout=pathlib.Path(empty_checkout),
                 invoke=spy,
                 paperclip_version_probe=ok_pin,
-            )
+            container=isolation_mod.fake_container(), )
             art_cmd = missing_cmd.run(
                 pathlib.Path("/nonexistent"),
                 schemas.RunInputs(input_ref="/nonexistent/batch.json", batch_id="b", split="train"),
@@ -2156,7 +2308,7 @@ def _selftest() -> int:
         # experiments/sarol-2024/commands/, but Claude Code only discovers .claude/commands/ from
         # the session cwd -- so a copy in either of the other two would satisfy this preflight and
         # still fail at dispatch. Pin the location that works.
-        shipped = SarolRunner(store, paperclip_version_probe=ok_pin).command_path()
+        shipped = SarolRunner(store, paperclip_version_probe=ok_pin, container=isolation_mod.fake_container()).command_path()
         checks += [
             ("the repo ships /sarol-eval-item", shipped is not None),
             ("...in .claude/commands/, the only place a nested session resolves it",
@@ -2166,7 +2318,7 @@ def _selftest() -> int:
 
         # The hard per-call spend cap has to be in the command vector, not just in a docstring.
         cmd_vector = SarolRunner(
-            store, per_call_max_budget_usd=1.25, require_command=False
+            store, per_call_max_budget_usd=1.25, require_command=False, container=isolation_mod.fake_container()
         )._stage_command(
             "adjudicator",
             ClaimRecord(claim_id="C1", citekey="k", staging_dir=pathlib.Path("/tmp/s")),
@@ -2218,7 +2370,7 @@ def _selftest() -> int:
                 output_root=pathlib.Path(tmp) / "out",
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
-            )
+            container=isolation_mod.fake_container(), )
             res = r.run(
                 pathlib.Path(tmp),
                 schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
@@ -2240,7 +2392,7 @@ def _selftest() -> int:
                 output_roots={"val": ns_root},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
-            )
+            container=isolation_mod.fake_container(), )
             mat_current = pathlib.Path(tmp) / "iter1-current"
             mat_probe = pathlib.Path(tmp) / "iter1-program-v1"
             mat_current.mkdir(exist_ok=True)
@@ -2305,7 +2457,7 @@ def _selftest() -> int:
                 output_roots={"train": inc_root},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
-            )
+            container=isolation_mod.fake_container(), )
             mat_m = pathlib.Path(tmp) / "m"
             mat_m.mkdir(exist_ok=True)
             inc_res = inc_runner.run(
@@ -2367,7 +2519,7 @@ def _selftest() -> int:
                 output_roots={"train": crash_root},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
-            )
+            container=isolation_mod.fake_container(), )
             mat_c = pathlib.Path(tmp) / "c"
             mat_c.mkdir(exist_ok=True)
             pathlib.Path.write_text = _half_write
@@ -2426,7 +2578,7 @@ def _selftest() -> int:
                 output_roots={"train": _trace_out},
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
-            )
+            container=isolation_mod.fake_container(), )
             _mat_t = pathlib.Path(tmp) / "t"
             _mat_t.mkdir(exist_ok=True)
             # Patched so the Runner's OWN resolution path is exercised, rather than testing a
@@ -2496,7 +2648,7 @@ def _selftest() -> int:
                  _tman.get("model") == "claude-haiku-4-5"),
                 ("the judge defaults to the cheap model, since the judge is ~113 sessions an "
                  "iteration and the optimizer is one",
-                 SarolRunner(store, require_command=False).model == DEFAULT_JUDGE_MODEL
+                 SarolRunner(store, require_command=False, container=isolation_mod.fake_container()).model == DEFAULT_JUDGE_MODEL
                  and DEFAULT_JUDGE_MODEL == "haiku"),
                 ("a session that reported no id yields no trace_ref rather than a broken path",
                  find_transcript("") is None),
@@ -2526,7 +2678,7 @@ def _selftest() -> int:
                 paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                 require_command=False,
                 canary=CanarySpec(claim=canary_claim, expected_verdict="ACCURATE"),
-            )
+            container=isolation_mod.fake_container(), )
             canary_res = canary_runner.run(
                 pathlib.Path(tmp),
                 schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
@@ -2559,7 +2711,7 @@ def _selftest() -> int:
                     paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
                     require_command=False,
                     profile=profile_name,
-                )
+                container=isolation_mod.fake_container(), )
                 res_ = runner.run(
                     pathlib.Path(tmp),
                     schemas.RunInputs(input_ref=str(batch), batch_id="b", split="train"),
@@ -2630,7 +2782,7 @@ def _selftest() -> int:
                     require_command=False,
                     profile="retrieval",
                     max_workers=workers,
-                )
+                container=isolation_mod.fake_container(), )
                 t0 = time.monotonic()
                 res_ = runner_.run(
                     pathlib.Path(tmp),
@@ -2720,7 +2872,7 @@ def _selftest() -> int:
                 require_command=False,
                 profile="retrieval",
                 max_workers=4,
-            )
+            container=isolation_mod.fake_container(), )
             dup_res = dup_runner.run(
                 pathlib.Path(tmp),
                 schemas.RunInputs(input_ref=str(dup_batch), batch_id="dd", split="train"),
@@ -2793,6 +2945,9 @@ def _selftest() -> int:
                 profile="retrieval",
                 max_workers=4,
                 output_root=pathlib.Path(tmp) / "conc-real",
+                # ⚠ The 23rd site. A subclass that does not override `__init__`, so it reaches the
+                # same refusal while matching no text search for `SarolRunner(`.
+                container=isolation_mod.fake_container(),
             )
             _t0 = time.monotonic()
             real_res = real_runner.run(
@@ -2855,7 +3010,7 @@ def _selftest() -> int:
                 require_command=False,
                 profile="retrieval",
                 max_workers=2,
-            )
+            container=isolation_mod.fake_container(), )
             raised = None
             try:
                 fail_runner.run(
@@ -2886,6 +3041,61 @@ def _selftest() -> int:
             ]
     else:
         checks.append((f"engine not found at {engine_path()} -- engine-facing checks SKIPPED", True))
+
+    # -- the container boundary, and the census of who takes one (1f / V2c) ----------------------
+    _sites = _runner_construction_sites()
+    _production = [x for x in _sites if not x["in_selftest"]]
+    _store_for_refusal = SarolProgramStore(repo_root=REPO_ROOT)
+    checks += [
+        ("every place that constructs a Runner states a container",
+         bool(_sites) and all(x["states_container"] for x in _sites)),
+        (f"...and there are exactly {_EXPECTED_RUNNER_SITES} of them, so a new site has to be read",
+         len(_sites) == _EXPECTED_RUNNER_SITES),
+        ("...of which exactly three can run outside a selftest",
+         len(_production) == 3),
+        ("...and they are build_components, the canary and the baseline recut",
+         {x["file"] for x in _production}
+         == {"dispatcher.py", "canary.py", "run_baseline.py"}),
+        ("no site that can run outside a selftest uses the selftest stand-in",
+         not [x for x in _production if x["uses_fake"]]),
+        ("...nor opts out with an explicit None, which only a refusal control may do",
+         not [x for x in _production if x["states_none"]]),
+        ("...and the only sites that do opt out are the refusal controls, which are selftests",
+         all(x["in_selftest"] for x in _sites if x["states_none"])),
+        ("...and both command-line entry points build the real one-host boundary",
+         "shipping_container" in (_HERE / "dispatcher.py").read_text(encoding="utf-8")
+         and "shipping_container"
+         in (_HERE.parent / "scripts" / "run_baseline.py").read_text(encoding="utf-8")),
+        # Negative controls: the refusal has to be watched failing, or it proves nothing.
+        ("a Runner built with no container is refused, before anything is dispatched",
+         _raises_valueerror(lambda: SarolRunner(_store_for_refusal, container=None))),
+        ("...and the refusal says what to pass instead",
+         _refusal_mentions(
+             lambda: SarolRunner(_store_for_refusal, container=None), "shipping_container"
+         )),
+        ("...and an image named by tag rather than digest is refused too",
+         _raises_valueerror(
+             lambda: SarolRunner(
+                 _store_for_refusal,
+                 container=isolation_mod.shipping_container(
+                     image="ghcr.io/example/paper-trail:latest"
+                 ),
+             )
+         )),
+        ("...while a digest-pinned shipping container is accepted",
+         SarolRunner(
+             _store_for_refusal,
+             container=isolation_mod.shipping_container(image=isolation_mod.FAKE_IMAGE),
+         ).container is not None),
+        # 1d: the judge's trace no longer depends on a cache Claude Code prunes.
+        ("the invocation result carries the session stream, so a contained trace is recoverable",
+         "stream" in {f.name for f in dataclasses.fields(InvocationResult)}),
+        # ⚠ Scoped to the function's OWN source. Grepping the whole file for the keyword was a
+        # check that could never fail, because this very line contains the string it looked for --
+        # the same self-reference that made the first census report 3 sites out of 20 (2026-09-18).
+        ("...and the real invoker fills it from what it captured rather than dropping it",
+         "stream=" in inspect.getsource(headless_claude_invoke)),
+    ]
 
     failed_n = 0
     for name, ok in checks:

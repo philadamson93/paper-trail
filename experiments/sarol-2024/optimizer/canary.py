@@ -53,6 +53,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import adapter  # noqa: E402
+import isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 
@@ -194,6 +195,9 @@ def pin(
     runner=None,
     program_store=None,
     claim: "adapter.ClaimRecord | None" = None,
+    #: The container boundary. Unused when `runner` is injected, which is how the selftests drive
+    #: this without a boundary at all.
+    container: "isolation_mod.ContainerConfig | None" = None,
 ) -> dict[str, Any]:
     """Dispatch the chosen claim `repeat` times through the REAL Runner and record the verdict.
 
@@ -254,8 +258,15 @@ def pin(
         encoding="utf-8",
     )
 
+    # ⚠ **No opt-out here, and the reason is what the canary is for.** It GUARDS the baseline, so
+    # a canary measured on an uncontained instrument would certify an instrument nothing else runs
+    # on. An injected `runner` still overrides this for the selftests, which is why this site needed
+    # no new mechanism (1f).
     run = runner or adapter.SarolRunner(
-        store, profile=prof.name, **({"model": model} if model else {})
+        store,
+        profile=prof.name,
+        container=container,
+        **({"model": model} if model else {}),
     )
     schemas = adapter._import_engine()
     materialized = store.repo_root

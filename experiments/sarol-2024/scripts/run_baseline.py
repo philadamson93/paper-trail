@@ -34,6 +34,7 @@ for _p in (str(_OPT), str(_HERE)):
         sys.path.insert(0, _p)
 
 import adapter  # noqa: E402
+import isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 
@@ -63,6 +64,16 @@ def main(argv: "list[str] | None" = None) -> int:
         default="program-v0",
         help="which frozen program to score. Defaults to the v0 starting point; pass the loop's "
              "best_tag (e.g. program-v3) to re-score an OPTIMIZED program on the same VAL sample.",
+    )
+    ap.add_argument(
+        "--image",
+        required=True,
+        help=(
+            "the container image every judge dispatch runs in, BY DIGEST. Required and with no "
+            "uncontained mode: this script produces the baseline every later iteration is "
+            "compared against, so measuring it outside the boundary the iterations run inside "
+            "would not be a weaker guarantee -- it would be an invalid comparison."
+        ),
     )
     ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
     ap.add_argument("--per-call-timeout-seconds", type=float, default=900.0)
@@ -125,6 +136,9 @@ def main(argv: "list[str] | None" = None) -> int:
         output_roots={"val": out_root / "out"},
         per_call_max_budget_usd=args.per_call_max_budget_usd,
         per_call_timeout_seconds=args.per_call_timeout_seconds,
+        # The shipping boundary, not a stand-in: this is the widest adjudicator in the system and
+        # the one that produces the baseline recut (1f).
+        container=isolation_mod.shipping_container(image=args.image),
     )
     inputs = RunInputs(input_ref=str(batch), batch_id=f"{args.run_id}", split="val")
 

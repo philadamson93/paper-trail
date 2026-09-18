@@ -59,6 +59,7 @@ if str(_HERE) not in sys.path:
 
 import adapter  # noqa: E402
 import canary as canary_mod  # noqa: E402
+import isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 from adapter import STAGES, SarolProgramStore  # noqa: E402
@@ -517,6 +518,10 @@ def build_components(
     #: see its constructor for why the default is 1 and why raising it does not move the
     #: instrument.
     max_workers: int = 1,
+    #: The container boundary every dispatch renders onto. Threaded, not defaulted: this function
+    #: is one of three routes to a Runner and the refusal lives in the constructor, which is the
+    #: only place all three pass through. Building a second gate here would miss the other two.
+    container: "isolation_mod.ContainerConfig | None" = None,
 ):
     """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
 
@@ -562,6 +567,7 @@ def build_components(
             profile=prof,
             output_roots=roots,
             max_workers=max_workers,
+            container=container,
             **({"model": model} if model else {}),
         ),
         store,
@@ -1250,7 +1256,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ]
 
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
-    parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False)
+    parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False, container=isolation_mod.fake_container())
 
     # argv -> run_optimization, with the real parser. `run_optimization` is stubbed so nothing
     # is dispatched, materialized or spent: the assertion is purely that the flag survives the
@@ -1269,7 +1275,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
     globals()["run_optimization"] = _capture_run_optimization
     try:
         main([
-            "--run", "--max-workers", "6",
+            "--run", "--image", isolation_mod.FAKE_IMAGE, "--max-workers", "6",
             "--max-budget-usd", "1", "--run-id", "gate", "--train-n", "1",
             "--materialize-root", "/tmp/pt-gate-mat",
             "--train-output-root", "/tmp/pt-gate-train",
@@ -1397,13 +1403,11 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # the quote is worse than no flag, because the quote then lies with authority.
         ("--model reaches the constructed Runner, not merely the cost table",
          build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, model="sonnet"
-         )["runner"].inner.model == "sonnet"),
+             max_budget_usd=1e9, train_n=1, require_command=False, model="sonnet", container=isolation_mod.fake_container())["runner"].inner.model == "sonnet"),
         ("...and with no --model the judge takes the one documented default, so 'unspecified' "
          "means exactly one thing across dispatcher, canary and adapter",
          build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False
-         )["runner"].inner.model == adapter.DEFAULT_JUDGE_MODEL),
+             max_budget_usd=1e9, train_n=1, require_command=False, container=isolation_mod.fake_container())["runner"].inner.model == adapter.DEFAULT_JUDGE_MODEL),
         ("...and that model reaches the CANARY check too, so a run cannot be judged by one model "
          "against a pin measured with another",
          _model_reaches_canary),
@@ -1414,13 +1418,11 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # a rate limit rather than as a dropped flag.
         ("--max-workers reaches the constructed Runner",
          build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, max_workers=6
-         )["runner"].inner.max_workers == 6),
+             max_budget_usd=1e9, train_n=1, require_command=False, max_workers=6, container=isolation_mod.fake_container())["runner"].inner.max_workers == 6),
         ("...and the default is serial, so concurrency is opt-in and every existing baseline "
          "was measured under the same dispatch the default still gives",
          build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False
-         )["runner"].inner.max_workers == 1),
+             max_budget_usd=1e9, train_n=1, require_command=False, container=isolation_mod.fake_container())["runner"].inner.max_workers == 1),
         ("...and the CLI flag reaches the RUN, not merely the parser -- the defect that shipped "
          "for --profile and was nearly repeated for --model",
          _cli_max_workers == 6),
@@ -1603,7 +1605,7 @@ def _selftest() -> int:
              _raises_valueerror(lambda: build_components(
                  max_budget_usd=1.0, train_n=1,
                  program_store=_FakeStore(repo),
-                 val_output_root=inside))),
+                 val_output_root=inside, container=isolation_mod.fake_container()))),
         ]
 
         # The CLI is where this broke: `--profile` was parsed, used to price the run, then dropped
@@ -1619,7 +1621,7 @@ def _selftest() -> int:
         globals()["run_optimization"] = _recorder
         try:
             main([
-                "--run", "--profile", "retrieval",
+                "--run", "--image", isolation_mod.FAKE_IMAGE, "--profile", "retrieval",
                 "--run-id", "r1", "--train-n", "10", "--max-budget-usd", "1",
                 "--train-inputs", "t.json", "--val-inputs", "v.json",
                 "--materialize-root", str(repo),
@@ -1627,7 +1629,7 @@ def _selftest() -> int:
                 "--val-output-root", _outside,
             ])
             no_roots = main([
-                "--run", "--run-id", "r", "--train-n", "10", "--max-budget-usd", "1",
+                "--run", "--image", isolation_mod.FAKE_IMAGE, "--run-id", "r", "--train-n", "10", "--max-budget-usd", "1",
                 "--train-inputs", "t", "--val-inputs", "v",
                 "--materialize-root", str(repo),
             ])
@@ -1998,6 +2000,21 @@ def main(argv: "list[str] | None" = None) -> int:
             "and any canary pinned under the previous model; the canary refuses that mismatch."
         ),
     )
+    ap.add_argument(
+        "--image",
+        # ⚠ Not `required=True`: this parser also serves `--selftest`, which starts no container
+        # and so needs no image. Refused in the run branch instead (below), where it is actually
+        # needed -- an argparse-level requirement would make the free offline gate unrunnable.
+        default=None,
+        help=(
+            "the container image every judge dispatch runs in, BY DIGEST "
+            "(name@sha256:...). Required, and there is no uncontained mode: the program is "
+            "scored inside a mount boundary that cannot reach the gold labels, and a run "
+            "measured outside one is not comparable with any run measured inside one. A tag is "
+            "refused -- an image rebuilt on a newer base layer keeps its tag and changes its "
+            "bytes, so a tag cannot say what the run ran on."
+        ),
+    )
     ap.add_argument("--train-n", type=int, default=None)
     ap.add_argument("--iterations", type=int, default=1)
     ap.add_argument("--run-id", default=None)
@@ -2102,6 +2119,17 @@ def main(argv: "list[str] | None" = None) -> int:
         if str(_eng) not in sys.path:
             sys.path.insert(0, str(_eng))
         from engine.loop import LoopStop  # noqa: PLC0415
+        # Ordinary CLI argument validation, NOT a second boundary gate -- the boundary refusal
+        # lives in `SarolRunner.__init__` and still fires if this is somehow bypassed. This exists
+        # only so a missing flag reads as a missing flag rather than as a digest complaint about
+        # the value `None`.
+        if not args.image:
+            print(
+                "REFUSED  --image is required: every judge dispatch runs in a container and "
+                "there is no uncontained mode. Pass the image by digest (name@sha256:...).",
+                file=sys.stderr,
+            )
+            return 1
         try:
             run, budget = run_optimization(
                 iterations=args.iterations,
@@ -2134,6 +2162,10 @@ def main(argv: "list[str] | None" = None) -> int:
                 # `build_components`, which hands it to the Runner.
                 run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
                 resume=args.resume,
+                # Rides `**component_kwargs` into `build_components`, which hands it to the
+                # Runner, whose constructor refuses without it. Same lesson as --profile and
+                # --model: a flag that reaches the estimate and not the run is worse than no flag.
+                container=isolation_mod.shipping_container(image=args.image),
                 **({"model": args.model} if args.model else {}),
             )
         except BudgetExceeded as exc:
