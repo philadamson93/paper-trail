@@ -1295,6 +1295,32 @@ exact moment this plan owes Plan A a clean baseline. Pinning the image to the ho
 explicit deliverable, the version is recorded in the run manifest beside `model`/`profile`/
 `retrieval_k`, and **V5 asserts parity**.
 
+🚩 **V5's reference changed on 2026-09-19, by Phil's ruling, and the paragraph above is superseded
+on one point: the image is no longer held to *the host*.** The check was built as host-versus-image
+equality and it went red the morning the Mac auto-updated Claude Code 2.1.277 → 2.1.278, with
+nothing about the experiment having changed. Phil: *"this feels like brittle design… our code
+shouldn't break because of a mac autoupdate."* Re-derived, he is right about more than the
+ergonomics:
+
+- **The host is the wrong object.** Since containment every scored dispatch runs *inside the image*.
+  The host CLI runs the optimizer session, which produces no number anyone reports. So the equality
+  could not fail for a reason that moves a result.
+- **And the obvious repair was the actual harm.** Clearing the red by rebuilding the image to match
+  the new host swaps the instrument mid-experiment — precisely what V5 exists to prevent. The check
+  was pushing toward the failure it was written to catch.
+
+**What V5 asserts instead:** the image contains the Claude Code **its own committed tag claims**
+(`paper-trail-isolation:2.1.277` must really run 2.1.277). The reference is a constant already in
+the repo, so it is portable to any machine, immune to a host update, and moved only by a deliberate
+edit. Its negative controls are real images, not fabricated strings: a genuine image under a lying
+tag, and the shared image whose `:latest` tag makes no version claim at all. The host version is
+still **recorded** in the run manifest as provenance — it is simply not gated on.
+
+⚠ **This is coarser than a digest and does not replace Phase 3.** Two builds of 2.1.277 are
+different images wearing the same label. Pinning exact image identity stays **V4's** job, which
+already requires the configuration hash to move when the digest moves at an unchanged tag. Do not
+cite V5 as pinning the image.
+
 ⚠ **Shared-repo footprint: four files, not one.** The first draft said one and that was wrong even on
 its own terms — a new control in `isolation/negative_control.py` needs matching assertions in
 `tests/test_isolation_negative_control.py`, and re-pinning the image's CLI version touches
@@ -1308,6 +1334,47 @@ specifics living in three other consumers' repo.
 
 Phase 1 makes things unreachable. Phase 2 reduces what is *exposed* even where the mount set already
 denies it — it removes the ambient-survey channel that actually fired in the 2026-09-09 run.
+
+✅ **Re-scoped 2026-09-19, after Phase 1 landed. Most of this phase is already true — verify it, do
+not rebuild it.** This section was written before the engine's grant arrived, and the container it
+brought delivers by construction what 2a and 2b were going to build by hand. What each item still
+owes, checked against the code and against a live container today:
+
+| Item | State | Where it is already proved |
+|---|---|---|
+| 2a, the version-addressed cwd | **done** — the grant mounts the per-iteration materialized tree and the engine renders `-w /workspace/program` over it, so cwd *is* the version being scored | `isolation.py` selftests 11, 12, 26 |
+| 2a, command discovery | **owed** — `command_path()` still resolves against the host checkout | `adapter.py:1193` |
+| 2b, the scope check | **done** — the engine's `scope_problem` refuses a mount that is or contains a denied path, `SECRET_ROOTS` carries the two absolute trees, and the refusal sits in `SarolRunner.__init__` | selftests 15–20, 52–55, 71–74 |
+| 2c, the env row | **done** — a container environment is deny-by-default and the only passthrough is `--env NAME` | selftests 48–51; `docker_prefix.py:502` |
+| 2c, `--add-dir` | **done** — derived from the grant, cwd excluded | selftest 27 |
+| 2c, `CLAUDE_CONFIG_DIR` fresh | **done by `--rm`** — the image ships no `~/.claude` at all, so there is no state to carry and nothing to point a variable at | probed, below |
+| 2c, `--no-session-persistence` | **owed** — cheap, accepted, and not yet on the argv | — |
+| 2c, `--exclude-dynamic-system-prompt-sections` | **rejected, see below** | — |
+| 2c, `--bare` | **deferred, see below** | — |
+
+🚩 **`--exclude-dynamic-system-prompt-sections` does not do what this plan says it does, and adopting
+it would have been a check that looks like it applies but does not.** The table above used to list it
+against "dynamic injection, including the git-state section". The CLI's own help (2.1.278) says it
+*"move[s] per-machine sections (cwd, env info, memory paths, git status) from the system prompt into
+the first user message"* — a prompt-cache optimization. The content still reaches the model. It closes
+no channel, so it is **not** adopted, and the flag must not be cited as closing one. What actually
+kills the git-state section is the cwd having no `.git`, which is what this plan said all along and
+what V3b asserts.
+
+⚠ **`--bare` is deferred, not adopted.** Its one caveat was auth, and that is still untested: the
+token is not on this machine, so the V0b probe cannot run here. It also buys very little inside the
+container — probed today, the image has no `~/.claude`, no `CLAUDE.md` anywhere, no settings file and
+no plugins, so the things `--bare` skips are already absent. Residual: if a later run has the token to
+hand, probe it; the flag parses and reaches the same "Not logged in" state as a plain invocation, so
+nothing about `--bare` itself refuses.
+
+✅ **Probed in a live container 2026-09-19, do not re-derive.** Under the shipping user (`1000:1000`,
+the engine's default) the image runs Claude Code 2.1.277 with `HOME=/home/node`, writable. cwd is
+`/workspace/program` holding exactly the manifest's ten files. There is **no `.git` and no `CLAUDE.md`
+in cwd or in any ancestor**, none anywhere on the image, and **no `~/.claude`** — so auto-memory has
+nothing to load and the project-context row needs no flag. The container environment is six variables,
+none of them the host's. ⚠ An earlier probe in this same session used `--user $(id -u)`, which is
+**not** the shipping user and resolves `HOME=/`; that is a fixture artefact, not the shipping shape.
 
 **2a. A version-addressed working directory** (§4g item 2). `working_checkout` is already a
 constructor parameter (`adapter.py:628`), already exercised against a scratch dir
@@ -2507,12 +2574,23 @@ a single shared directory holding one correct-*looking* command file, so the str
 alone cannot see the defect. **V3d** proves the behavioural half; this byte check proves the static
 half. Do not let a green V3b stand in for either.
 
-**V3d (the driver's bytes match the version being scored).** Two program versions whose
-`sarol-eval-item.md` emits a distinct marker, dispatched in one process. *Expected:* each verdict
-carries **its own** version's marker, and the cwd the program saw resolves under that version's
-snapshot. *Stop:* both verdicts carry the same marker — the release payload then attributes one
-program's behaviour to another, silently, which is the failure this plan's measurement rests on not
-having.
+**V3d (the program's bytes match the version being scored).** Two program versions whose frozen
+prompt emits a distinct marker, rendered in one process. *Expected:* each dispatch carries **its
+own** version's marker and neither carries the other's, **and** the cwd that dispatch gets — the
+program mount in the rendered prefix — resolves under that same version's snapshot. *Stop:* both
+carry the same marker, or both mount one tree — the release payload then attributes one program's
+behaviour to another, silently, which is the failure this plan's measurement rests on not having.
+
+⚠ **Re-aimed 2026-09-19 at the prompt, not the slash command, and at a rendered dispatch rather than
+a verdict.** Two things moved under this gate. OQ1 removed the driver session, so `sarol-eval-item.md`
+is no longer dispatched and a marker in it would reach no model — the bytes that actually differ per
+version are the **adjudicator prompt template**, and only the part inside the fence
+(`dispatch_prompt.prompt_body` sends that region and drops the commentary after it, so a marker on
+the tail proves nothing). And "each **verdict** carries its marker" cannot be asserted without paying
+for two model calls; the observable that is both free and load-bearing is the rendered prompt plus
+the mount the prefix gives it. Codex flagged the weaker first form (prompt bytes only): a render can
+read the right template and still mount the wrong tree, which would tell the program about one
+version while it reads another. Both halves are now asserted.
 
 **V3c (invocation shape).** Assert on the built argv and the bound env. ⚠ **"`$REPO` absent" cannot
 hold** — staging can resolve *under* `REPO_ROOT` (`adapter.py:559`; `.gitignore` carries
@@ -2556,8 +2634,11 @@ is telemetry, not a gate** — at a ~2% rate a small batch is clean by luck roug
 time, so a green would prove nothing about the handling path. The load-bearing criterion is that an
 **induced** no-task is detected and handled per OQ5; record the observed count beside it.
 *Expected:* an induced no-task detected and handled; zero stale-verdict reads; infrastructure failures and `n_invalid` counted **separately**; a
-non-zero metric despite any infra failure; per-claim cost within the V0c envelope; **in-container CLI
-version == host version**, recorded in the run manifest.
+non-zero metric despite any infra failure; per-claim cost within the V0c envelope; **the image
+contains the Claude Code its own tag claims**, with both that version and the host's recorded in the
+run manifest. ⚠ **Not "== host version"** — that is what this line said until 2026-09-19 and it is
+struck; see the V5 note above for why the host is the wrong reference and why clearing it by
+rebuilding was the harm itself.
 ⚠ **Record the metric, and do not read a drop as a regression.** Removing 61% eval contamination
 should push the held-out number **down** — a program that can no longer read the previous iteration's
 verdict for the same claim loses its self-consistency crutch. A lower number is the **expected

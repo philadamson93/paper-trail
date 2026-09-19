@@ -762,7 +762,24 @@ _RUNNER_SITE_FILES = (
 #: streams nothing, which controls the trace no longer being read off the host; the two-version
 #: Runner that proves the prefix is rendered per dispatch (V2d); the empty-batch refusal; and
 #: `canary.py`'s real Runner, which is the only gate that builds a grant on the canary's own path.
-_EXPECTED_RUNNER_SITES = 31
+#: ⚠ Three more arrived with Phase 2's version-addressed command discovery: the Runner handed an
+#: incomplete freeze, the one whose working checkout is empty while the version is complete, and the
+#: two-version render that proves the BYTES followed the mount (V3d builds one per version in a
+#: loop, which the AST census counts once).
+_EXPECTED_RUNNER_SITES = 34
+
+
+#: Where the frozen slash-command file lives, and the ONLY place it counts.
+#:
+#: 🚩 **This used to be a three-location search (`.claude/commands/`, `src/commands/`,
+#: `experiments/sarol-2024/commands/`) and Codex was right to call that a hole (2026-09-19).** The
+#: broad search made sense when the check asked "does some checkout have this file somewhere?". It
+#: does not survive version-addressing: the question is now "does THIS frozen version carry it?",
+#: and the manifest answers that at exactly one path (entry #10). A materialized tree missing
+#: `.claude/commands/` but carrying a stale copy under `src/commands/` would have passed a
+#: completeness check on a tree that is not in fact complete — and `materialize` only ever writes
+#: manifest paths, so the other two arms could not match anything legitimate anyway.
+COMMAND_REL_TEMPLATE = ".claude/commands/{name}.md"
 
 
 #: The claim every dispatch gate stages, and the corpus line that answers it.
@@ -1190,19 +1207,25 @@ class SarolRunner:
             stage, claim, scope=scope, materialized_path=materialized_path, run_id=run_id
         )
 
-    def command_path(self) -> pathlib.Path | None:
-        """Where the nested slash command is expected to live, if it exists at all."""
-        for rel in (
-            f".claude/commands/{self.command_name}.md",
-            f"src/commands/{self.command_name}.md",
-            f"experiments/sarol-2024/commands/{self.command_name}.md",
-        ):
-            candidate = self.working_checkout / rel
-            if candidate.exists():
-                return candidate
-        return None
+    def command_path(self, root: pathlib.Path | None = None) -> pathlib.Path | None:
+        """Where the nested slash command lives for one program version, if it is there at all.
 
-    def missing_command_error(self) -> str | None:
+        ``root`` is **the version being scored** — the materialized tree ``run()`` was handed.
+        Omitting it falls back to the working checkout, which is right for a bare structural
+        question ("does this repo ship the file at all?") and wrong for anything a run depends on.
+
+        ⚠ **Resolving this against a single fixed directory stopped being valid when the program
+        became version-addressed (2a).** The command file is manifest entry #10 and the optimizer
+        may edit it, so its bytes differ per version. A check against the working checkout answers
+        for whichever version the optimizer wrote last, not for the one about to be scored — and it
+        answers *positively* even when the tree being dispatched is missing the file entirely,
+        because the repo itself ships one. Both directions are wrong, and both are silent.
+        """
+        base = pathlib.Path(root) if root is not None else self.working_checkout
+        candidate = base / COMMAND_REL_TEMPLATE.format(name=self.command_name)
+        return candidate if candidate.exists() else None
+
+    def missing_command_error(self, root: pathlib.Path | None = None) -> str | None:
         """Fail loudly when the committed `/sarol-eval-item` file is missing.
 
         ⚠ **It is no longer what gets dispatched, and the name now overstates what this checks.**
@@ -1214,10 +1237,11 @@ class SarolRunner:
         """
         if not self.require_command:
             return None
-        if self.command_path() is None:
+        base = pathlib.Path(root) if root is not None else self.working_checkout
+        if self.command_path(base) is None:
             return (
-                f"nested command /{self.command_name} not found under .claude/commands/, "
-                f"src/commands/ or experiments/sarol-2024/commands/ in {self.working_checkout}"
+                f"nested command /{self.command_name} not found at "
+                f"{COMMAND_REL_TEMPLATE.format(name=self.command_name)} in {base}"
             )
         return None
 
@@ -1242,8 +1266,10 @@ class SarolRunner:
         if pin_error is not None:
             return artifacts("infra_error", code="PAPERCLIP_PIN_MISMATCH", message=pin_error)
 
-        # The command this Runner dispatches has to exist before we spend anything looking for it.
-        command_error = self.missing_command_error()
+        # The command this Runner dispatches has to exist before we spend anything looking for it,
+        # and "the command" means the one belonging to THIS version — the materialized tree that is
+        # about to be the container's cwd, not the working checkout the optimizer keeps editing.
+        command_error = self.missing_command_error(materialized_path)
         if command_error is not None:
             return artifacts("infra_error", code="NESTED_COMMAND_MISSING", message=command_error)
 
@@ -2698,10 +2724,11 @@ def _selftest() -> int:
             ]
 
         # And the converse, now that it is built: the repo ships /sarol-eval-item where a nested
-        # session can actually resolve it. `command_path()` also accepts src/commands/ and
-        # experiments/sarol-2024/commands/, but Claude Code only discovers .claude/commands/ from
-        # the session cwd -- so a copy in either of the other two would satisfy this preflight and
-        # still fail at dispatch. Pin the location that works.
+        # session can actually resolve it. ⚠ `command_path()` used to accept src/commands/ and
+        # experiments/sarol-2024/commands/ as well, so a copy in either would satisfy this
+        # preflight and still fail at dispatch; since 2026-09-19 it looks only at the one location
+        # the manifest freezes (`COMMAND_REL_TEMPLATE`). This still pins the location, and the
+        # negative control for the narrowing is in the V3b block below.
         shipped = SarolRunner(store, paperclip_version_probe=ok_pin, container=isolation_mod.fake_container()).command_path()
         checks += [
             ("the repo ships /sarol-eval-item", shipped is not None),
@@ -2709,6 +2736,184 @@ def _selftest() -> int:
              shipped is not None
              and shipped.parent == REPO_ROOT / ".claude" / "commands"),
         ]
+
+        # ---- V3b / V3d: what gets scored is the version that was handed in --------------------
+        # ⚠ **Every check above passes whether command discovery is version-addressed or fixed**,
+        # which is why these exist. The missing-command gate hands the Runner an empty working
+        # checkout *and* a nonexistent materialized path, so it goes red under both implementations
+        # and separates neither. Found by mutation, not by reading: reverting `command_path` to the
+        # working checkout left the suite fully green.
+        with tempfile.TemporaryDirectory() as _v3_tmp:
+            _v3_tmp = pathlib.Path(_v3_tmp)
+            _v3_out, _v3_batch = _staged_batch(_v3_tmp)
+            _v3_inputs = schemas.RunInputs(
+                input_ref=str(_v3_batch), batch_id="v3", split="train"
+            )
+            _v3_sent: list[str] = []
+
+            def _v3_spy(cmd, cwd, timeout):
+                _v3_sent.append(" ".join(cmd))
+                return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+
+            # (a) The version being scored is missing the command file; the working checkout
+            # (REPO_ROOT, the default) ships it. A fixed-checkout implementation answers for the
+            # repo, finds the file, and dispatches an incomplete freeze.
+            _v3_thin = _materialized_program(_v3_tmp, "iter9-thin")
+            _v3_thin_art = SarolRunner(
+                store,
+                invoke=_v3_spy,
+                paperclip_version_probe=ok_pin,
+                container=isolation_mod.fake_container(),
+            ).run(_v3_thin, _v3_inputs)
+
+            # (b) The converse. The version has the file, the working checkout does not. A fixed
+            # implementation refuses a freeze that is in fact complete.
+            _v3_full = _materialized_program(_v3_tmp, "iter9-full")
+            _v3_entry = next(
+                e for e in store.entries if e["path"] == ".claude/commands/sarol-eval-item.md"
+            )
+            _v3_frozen = subprocess.run(
+                [
+                    "git", "-C", str(REPO_ROOT), "show",
+                    f"{store.raw['source_refs'][_v3_entry['source']]['commit']}:{_v3_entry['path']}",
+                ],
+                capture_output=True,
+            )
+            _v3_cmd_file = _v3_full / _v3_entry["path"]
+            _v3_cmd_file.parent.mkdir(parents=True, exist_ok=True)
+            _v3_cmd_file.write_bytes(_v3_frozen.stdout)
+            with tempfile.TemporaryDirectory() as _v3_empty:
+                _v3_r = SarolRunner(
+                    store,
+                    working_checkout=pathlib.Path(_v3_empty),
+                    invoke=_v3_spy,
+                    paperclip_version_probe=ok_pin,
+                    container=isolation_mod.fake_container(),
+                )
+                _v3_version_ok = _v3_r.missing_command_error(_v3_full) is None
+                _v3_checkout_bad = _v3_r.missing_command_error() is not None
+                # V3b's "command_path() resolves inside it". Asserted on the RESOLVED path, not
+                # just on the absence of a problem: a future caller that drops the root argument
+                # would still satisfy the problem check via the working-checkout fallback.
+                _v3_resolved = _v3_r.command_path(_v3_full)
+                # The negative control for narrowing discovery to the manifest's one location: a
+                # tree carrying the file only where `materialize` would never put it is NOT a
+                # complete version, and used to pass.
+                _v3_wrong_place = _materialized_program(_v3_tmp, "iter9-wrong-place")
+                _v3_stale = _v3_wrong_place / "src" / "commands" / "sarol-eval-item.md"
+                _v3_stale.parent.mkdir(parents=True, exist_ok=True)
+                _v3_stale.write_bytes(_v3_frozen.stdout)
+                _v3_wrong_place_bad = _v3_r.missing_command_error(_v3_wrong_place) is not None
+
+            # (c) The bytes in the cwd are the bytes the manifest froze for this entry. An exact
+            # fileset is satisfied by a correct-LOOKING file, so the structural checks alone
+            # cannot see a substitution.
+            _v3_sha = hashlib.sha256(_v3_cmd_file.read_bytes()).hexdigest()
+            _v3_sha_bad = hashlib.sha256(_v3_cmd_file.read_bytes() + b"x").hexdigest()
+
+            # (d) Nothing ambient in the cwd or above it, up to the tree the container mounts.
+            # This is the channel that actually fired on 2026-09-09.
+            _v3_ambient = [
+                str(q)
+                for q in (_v3_full, *_v3_full.parents)
+                if (q / ".git").exists() or (q / "CLAUDE.md").exists()
+                if _v3_tmp == q or _v3_tmp in q.parents or q == _v3_full
+            ]
+
+            # (e) V3d, the behavioural half: two versions whose templates differ, rendered in ONE
+            # process. Mount-level checks say the paths differ; this says the BYTES followed.
+            _v3_claim = load_batch(_v3_batch)[0]
+            _v3_marks: dict[str, str] = {}
+            _v3_cwds: dict[str, list[str]] = {}
+            _v3_trees: dict[str, pathlib.Path] = {}
+            for _v3_name, _v3_mark in (("iter9-v0", "V3DMARKERALPHA"), ("iter9-v1", "V3DMARKERBETA")):
+                _v3_tree = _materialized_program(_v3_tmp, _v3_name)
+                _v3_trees[_v3_mark] = _v3_tree
+                _v3_tpl = _v3_tree / dispatch_prompt.TEMPLATE_REL
+                # ⚠ Inside the fence, not appended. `prompt_body` sends only the region between the
+                # markers and drops the commentary after it, so a marker on the tail proves nothing
+                # about what the adjudicator was given -- it is dropped exactly as designed.
+                _v3_tpl.write_text(
+                    _v3_tpl.read_text(encoding="utf-8").replace(
+                        dispatch_prompt.MARKER_END, f"\n{_v3_mark}\n" + dispatch_prompt.MARKER_END
+                    ),
+                    encoding="utf-8",
+                )
+                _v3_scope = isolation_mod.program_scope(
+                    profile="retrieval",
+                    program_dir=_v3_tree,
+                    staging_root=staging_root(_v3_claim),
+                    output_roots=[_v3_out],
+                )
+                _v3_runner = SarolRunner(
+                    store,
+                    require_command=False,
+                    profile="retrieval",
+                    container=isolation_mod.fake_container(),
+                )
+                try:
+                    _v3_marks[_v3_mark] = _v3_runner._inner_command(
+                        "adjudicator",
+                        _v3_claim,
+                        scope=_v3_scope,
+                        materialized_path=_v3_tree,
+                        run_id="v3d",
+                    )[-1]
+                    # V3d's second clause: "the cwd the program saw resolves under that version's
+                    # snapshot". The prompt bytes alone do not prove it -- a render could read the
+                    # right template and still mount the wrong tree, and the program would then be
+                    # reading one version while being told about another. Taken off the REAL
+                    # engine render, not a stub prefix.
+                    _v3_prefix = isolation_mod.dispatch_prefix(
+                        scope=_v3_scope,
+                        image=isolation_mod.FAKE_IMAGE,
+                        network_policy=isolation_mod.DENY_ALL_EGRESS,
+                    )
+                    _v3_cwds[_v3_mark] = [
+                        host
+                        for host, container, _mode in isolation_mod.rendered_mounts(_v3_prefix)
+                        if container == _v3_scope.workdir
+                    ]
+                except Exception:  # noqa: BLE001 -- a refusal must read as a red check
+                    _v3_marks[_v3_mark] = ""
+                    _v3_cwds[_v3_mark] = []
+
+            checks += [
+                ("a freeze missing the command file is refused even though the repo ships one",
+                 _v3_thin_art.status == "infra_error"
+                 and _v3_thin_art.error is not None
+                 and _v3_thin_art.error.code == "NESTED_COMMAND_MISSING"),
+                ("...without dispatching the incomplete version", not _v3_sent),
+                ("...and the refusal names the version it searched, not the working checkout",
+                 _v3_thin_art.error is not None
+                 and "iter9-thin" in _v3_thin_art.error.message_redacted),
+                ("a complete version passes even when the working checkout lacks the file",
+                 _v3_version_ok),
+                ("...and that pair is not vacuous: the same Runner still faults its own checkout",
+                 _v3_checkout_bad),
+                ("the command file in the cwd hashes to what the manifest froze for it",
+                 _v3_frozen.returncode == 0 and _v3_sha == _v3_entry["sha256"]),
+                ("...and the hash is not vacuous: one extra byte breaks it",
+                 _v3_sha_bad != _v3_entry["sha256"]),
+                ("no .git and no CLAUDE.md in the cwd or any ancestor inside the mounted tree",
+                 _v3_ambient == []),
+                ("two program versions dispatched in one process each carry their own bytes",
+                 "V3DMARKERALPHA" in _v3_marks.get("V3DMARKERALPHA", "")
+                 and "V3DMARKERBETA" in _v3_marks.get("V3DMARKERBETA", "")),
+                ("...and neither carries the other's, which a shared cwd would make impossible",
+                 "V3DMARKERBETA" not in _v3_marks.get("V3DMARKERALPHA", "")
+                 and "V3DMARKERALPHA" not in _v3_marks.get("V3DMARKERBETA", "")),
+                ("...and the cwd each dispatch gets resolves under its OWN version's snapshot",
+                 all(
+                     _v3_cwds.get(m) == [str(_v3_trees[m])]
+                     for m in ("V3DMARKERALPHA", "V3DMARKERBETA")
+                 )),
+                ("the command file is found at the manifest's path inside the version's tree",
+                 _v3_resolved is not None
+                 and _v3_resolved.parent == _v3_full / ".claude" / "commands"),
+                ("...and a copy anywhere else does not make an incomplete version look complete",
+                 _v3_wrong_place_bad),
+            ]
 
         # The hard per-call spend cap has to be in the command vector, not just in a docstring --
         # and the whole rendered dispatch is checked here, because containerizing is exactly the

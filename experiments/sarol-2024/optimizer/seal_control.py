@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 
@@ -555,14 +556,34 @@ def _selftest(*, with_docker: bool = True) -> int:
                      bool(report["readable_rows"])
                      and all(r["exit"] == 0 for r in report["readable_rows"])),
                 ]
-                # ---- V5: the instrument did not move (1g's second half) -------------------
-                # ⚠ The negative control here is a REAL image, not a fabricated one. The shared
-                # `agentic-label-opt-isolation:latest` genuinely ships an older Claude Code than
-                # this host, which is the exact drift this check exists to catch — so it is the
-                # honest way to watch the check fail.
+                # ---- V5: the image is the instrument it says it is ------------------------
+                # 🚩 **Reference changed 2026-09-19, on Phil's ruling.** This used to compare the
+                # image against THIS HOST, and went red the morning the Mac auto-updated Claude
+                # Code — with nothing about the experiment having changed. The host runs the
+                # optimizer session and produces no reported number; the image runs every scored
+                # dispatch. So the host was the wrong object, and "rebuild to match the host" —
+                # the obvious way to clear it — would have moved the instrument mid-experiment.
+                # The reference is now the image's own committed tag. See
+                # `isolation.mislabelled_image_problem`.
                 shipping = isolation_mod.image_digest_ref()
-                stale = "agentic-label-opt-isolation:latest"
-                host_version = isolation_mod.host_cli_version()
+                unversioned = "agentic-label-opt-isolation:latest"
+                claimed = isolation_mod.tag_claimed_version(isolation_mod.SHIPPING_IMAGE_TAG)
+
+                # A REAL mislabelled image, not a fabricated string: the shared image genuinely
+                # ships a different Claude Code, and this points a lying tag at it. A tag is a
+                # reference, so this copies nothing and `docker rmi` below drops only the name.
+                liar = "paper-trail-isolation-mislabelled-control:" + (claimed or "0.0.0")
+                tagged = subprocess.run(
+                    ["docker", "tag", unversioned, liar], capture_output=True, text=True
+                ).returncode == 0
+                try:
+                    liar_refused = (
+                        isolation_mod.mislabelled_image_problem(liar) if tagged else None
+                    )
+                finally:
+                    if tagged:
+                        subprocess.run(["docker", "rmi", liar], capture_output=True)
+
                 checks += [
                     (f"the program's image is built and addressable by digest ({shipping})",
                      bool(shipping) and "@sha256:" in (shipping or "")),
@@ -572,16 +593,27 @@ def _selftest(*, with_docker: bool = True) -> int:
                      and isolation_mod.container_problem(
                          isolation_mod.shipping_container(image=shipping)
                      ) is None),
-                    (f"the Claude Code inside it matches this host's ({host_version})",
-                     isolation_mod.cli_parity_problem(isolation_mod.SHIPPING_IMAGE_TAG) is None),
-                    ("...and that check is not vacuous: the older shared image really is a "
-                     "different instrument, and it is rejected",
-                     (lambda r: r is not None and "instrument moved" in r)(
-                         isolation_mod.cli_parity_problem(stale)
+                    (f"the image contains the Claude Code its own tag claims ({claimed})",
+                     isolation_mod.mislabelled_image_problem(
+                         isolation_mod.SHIPPING_IMAGE_TAG
+                     ) is None),
+                    ("...and that check is not vacuous: a real image under a tag claiming a "
+                     "version it does not contain is rejected as mislabelled",
+                     tagged and liar_refused is not None and "mislabelled" in liar_refused),
+                    ("...and an image whose tag claims no version at all is refused, because an "
+                     "instrument that makes no claim about itself cannot be checked",
+                     (lambda r: r is not None and "nothing to hold it to" in r)(
+                         isolation_mod.mislabelled_image_problem(unversioned)
                      )),
-                    ("...and an image that is not built at all is reported rather than passed",
-                     isolation_mod.cli_parity_problem("paper-trail-isolation:not-built")
-                     is not None),
+                    # ⚠ Asserts the REASON, not merely that something was returned. Written the
+                    # loose way ("is not None") this passed while the unbuilt branch was disabled,
+                    # because an unreadable version then falls through and is reported as a
+                    # mislabelling — a true-looking refusal for an untrue reason. Found by mutation.
+                    ("...and an image that is not built at all is reported as unbuilt, rather "
+                     "than misreported as a mislabelling",
+                     (lambda r: r is not None and "is the image built?" in r)(
+                         isolation_mod.mislabelled_image_problem("paper-trail-isolation:9.9.9")
+                     )),
                 ]
 
                 if problems:

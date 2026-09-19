@@ -70,6 +70,7 @@ import importlib
 import inspect
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import types
@@ -516,6 +517,11 @@ def inner_command(
         "default",
         "--allowedTools",
         ",".join(ALLOWED_TOOLS),
+        # No session written to disk, so nothing this dispatch does can be resumed into the next
+        # one. ⚠ Largely redundant with `--rm`, and kept anyway because the two cover different
+        # failures: `--rm` discards the container, this stops the write happening at all. It is
+        # honoured only with `--print`, which is two entries above.
+        "--no-session-persistence",
     ]
     for add_dir in add_dirs(scope):
         cmd += ["--add-dir", add_dir]
@@ -760,9 +766,12 @@ def image_digest_ref(tag: str = SHIPPING_IMAGE_TAG) -> str | None:
 def host_cli_version() -> str | None:
     """The Claude Code version on THIS machine, or None if it cannot be read.
 
-    One half of the parity check (V5). The other half is what is installed inside the image: a run
-    is only comparable to an earlier one if the instrument did not move, and containerizing swaps
-    the instrument by definition — the shared image shipped 59 patch releases behind this host.
+    ⚠ **Recorded, never gated on.** It used to be half of a host-vs-image equality check, which
+    Phil struck on 2026-09-19 because a background CLI update on the Mac turned it red without
+    anything about the experiment changing (see :func:`mislabelled_image_problem`). The host runs
+    the optimizer session and produces no reported number, so its version belongs in the run
+    manifest as provenance and nowhere else. Anything that makes a *pass/fail* decision from this
+    value is reintroducing the bug.
     """
     return _version_from(["claude", "--version"])
 
@@ -786,24 +795,61 @@ def _version_from(command: Sequence[str]) -> str | None:
     return first[0] if first else None
 
 
-def cli_parity_problem(image: str) -> str | None:
-    """Do the host and the image run the same Claude Code? Returns a problem, or ``None``.
+#: A tag that names the Claude Code it contains, e.g. ``paper-trail-isolation:2.1.277``.
+_TAGGED_VERSION = re.compile(r":(\d+\.\d+\.\d+)$")
 
-    ⚠ **This is a real difference, not a formality.** The shared image pins 2.1.218 while this host
-    runs 2.1.277. A baseline measured on one and iterations on the other is not a weaker comparison,
-    it is an invalid one — which is why the version is recorded in the run manifest beside ``model``
-    rather than left to whoever built the image.
+
+def tag_claimed_version(image: str) -> str | None:
+    """The Claude Code version an image's own tag claims, or ``None`` if it claims none."""
+    found = _TAGGED_VERSION.search(image)
+    return found.group(1) if found else None
+
+
+def mislabelled_image_problem(image: str) -> str | None:
+    """Does ``image`` contain the Claude Code its own tag claims? Returns a problem, or ``None``.
+
+    🚩 **This compared the image against THIS HOST until 2026-09-19, and the host was the wrong
+    object to compare it to.** Phil's ruling, on being shown the check going red overnight: *"our
+    code shouldn't break because of a mac autoupdate"*. He was right, and the reason is not only
+    ergonomic. Since containment, every scored dispatch runs **inside the image**; the host's CLI
+    runs the optimizer session, which produces no number anyone reports. So host-vs-image equality
+    (a) could not fail for a reason that affects a result, and (b) failed routinely for a reason
+    that affects nothing — a background Claude Code update. Worse, the obvious way to clear it was
+    to rebuild the image to match the new host, which **moves the instrument mid-experiment**: the
+    exact harm the check was written to prevent.
+
+    What must not move is the image, so the image is what this now checks, against a reference that
+    is already committed and cannot drift on its own — **its own tag**. ``SHIPPING_IMAGE_TAG`` names
+    a version; this asserts the image really contains it. That is portable (a VM gets the same
+    answer), stable (no host in it), and catches the failure that actually matters: a rebuild that
+    quietly changed the CLI while keeping the label.
+
+    ⚠ **Exact image identity is Phase 3's job, and this is not a substitute for it.** A version
+    string is coarser than a digest — two builds of 2.1.277 are different images with the same
+    label. The plan's V4 requires the configuration pin to move when the image **digest** moves at
+    an unchanged tag, which is the precise form. This is the cheap guard that runs today; it must
+    not be cited as pinning the image.
+
+    The host's version is still *recorded* — ``shipping_container.describe`` writes both into the
+    run manifest — because provenance is worth keeping even where a gate on it is not.
     """
-    host, inside = host_cli_version(), image_cli_version(image)
-    if host is None:
-        return "cannot read this host's Claude Code version, so parity cannot be established"
+    claimed = tag_claimed_version(image)
+    if claimed is None:
+        return (
+            f"{image!r} does not name a Claude Code version in its tag, so there is nothing to hold "
+            "it to. The shipping image is tagged with the version it contains on purpose: a label "
+            "like 'latest' makes no claim, and an instrument that makes no claim about itself "
+            "cannot be checked"
+        )
+    inside = image_cli_version(image)
     if inside is None:
         return f"cannot read the Claude Code version inside {image!r}; is the image built?"
-    if host != inside:
+    if inside != claimed:
         return (
-            f"the image runs Claude Code {inside} and this host runs {host}. The instrument moved "
-            "between them, so numbers from a contained run are not comparable to an uncontained "
-            f"baseline. Rebuild with --build-arg CLAUDE_CODE_VERSION={host}"
+            f"{image!r} is mislabelled: its tag claims Claude Code {claimed} and it actually runs "
+            f"{inside}. One of the two is wrong, and either way a run under it would record an "
+            "instrument it is not using. Rebuild with --build-arg CLAUDE_CODE_VERSION="
+            f"{claimed}, or retag the image to :{inside}"
         )
     return None
 
@@ -1362,6 +1408,31 @@ def _selftest() -> int:
                 and r["inner"][r["inner"].index("--permission-prompts") + 1] == "none"
                 for r in rows
             ),
+        ),
+        (
+            "no dispatch writes a resumable session to disk",
+            all(
+                "--no-session-persistence" in r["inner"] and "--print" in r["inner"]
+                for r in rows
+            ),
+        ),
+        (
+            "...and the flag is honoured, since it only applies with --print, which precedes it",
+            # ⚠ Both membership tests come FIRST and the `and` short-circuits. Written the obvious
+            # way -- two bare `.index()` calls -- dropping the flag raises ValueError and crashes
+            # the suite instead of turning this check red, and a crashed suite reports nothing.
+            # Caught by mutation, which is the only thing that finds this shape.
+            all(
+                "--print" in r["inner"]
+                and "--no-session-persistence" in r["inner"]
+                and r["inner"].index("--print") < r["inner"].index("--no-session-persistence")
+                for r in rows
+            ),
+        ),
+        (
+            "--exclude-dynamic-system-prompt-sections stays OFF, because it relocates rather than "
+            "removes and would read as a closed channel that is open",
+            all("--exclude-dynamic-system-prompt-sections" not in r["inner"] for r in rows),
         ),
         # -- evidence from the source has no mount here, and says so -------------------------------
         (
