@@ -1,4 +1,6 @@
 Reference: docs/claude_ops.md
+Program: agentic-label-optimization — stage 7 of 13
+Brief: <mount>/chaudhari_lab/phil/planning/programs/agentic-label-optimization.md
 
 # The isolation protocol — putting the agentic program inside the shared substrate
 
@@ -2767,11 +2769,11 @@ or a version/digest mismatch.
 
 ## Landing & cleanup
 
-**Branch.** ⚠ **Corrected 2026-09-17 — the work is on `sarol-optimizer-concurrent`, in the worktree
-`.claude/worktrees/merge-concurrent` (tip `6b61c2f`).** The branch named below was the plan's
-intention and was never cut; origin still sits at `7360f12`, so the first push needs
-**`--force-with-lease`** (the rebase diverged it) — **authorised by Phil 2026-09-17**. Historical
-intent follows.
+**Branch.** The work is on `sarol-optimizer-concurrent`, in the worktree
+`.claude/worktrees/merge-concurrent`. ✅ **Updated 2026-09-19: everything in this plan is built,
+committed and pushed**, and the branch is in sync with its remote — the force-push the earlier note
+warned about has long since happened, so no force is owed. The branch named below was the plan's
+intention and was never cut; historical intent follows.
 
 **Branch (as planned).** `feat/optimizer-isolation-protocol`, cut from Plan A's tip — **`f02d761`** as of
 2026-09-13, five commits past the `94a376f` this plan's citations were taken against (not
@@ -2786,8 +2788,9 @@ to a 57-line stub on Plan A's branch. That conflicts on rebase. Do **not** `git 
 `reset --hard`, or `stash` that file: this copy holds content that exists nowhere else, and the five
 untracked findings beside it have **no blob to restore**.
 
-**Landing gate.** ✅ **OQ1–OQ9 are all resolved** (2026-09-14), so what this gate now waits on is
-`/read-plan` sign-off on the resolved plan — plus the one detail OQ9 left open, the `program-v*` tag
+**Landing gate.** ✅ **All fourteen open questions are resolved**, and as of 2026-09-19 **every
+phase is built and verified** — so what this gate waits on is no longer code. It waits on Phil's
+read of the current plan (via its explainer, which is the only thing that records a review) — plus the one detail OQ9 left open, the `program-v*` tag
 namespace (recommendation: key on `combined_hash`), which is a decision to record, not a phase to
 design. Then: the five findings archived (a
 Phase 4 precondition and the only copy); Step 0's probes run and recorded; **V2a-seal green,
