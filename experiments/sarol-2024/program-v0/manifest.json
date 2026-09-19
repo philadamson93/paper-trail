@@ -114,7 +114,17 @@
   "runtime_pins": {
     "paperclip_cli": "paperclip, version 0.7.48",
     "why": "The extractor prompt loads the paperclip command reference at run time via `paperclip skill`; the in-repo SKILL.md is a 10-line stub. That reference is outside the frozen fileset, so without this pin two runs of one program version could diverge with no manifest diff.",
-    "pin_history": "0.5.11 -> 0.7.48 on 2026-09-08 (Phil): gxl.ai serves only the latest wheel and 0.5.11 is no longer downloadable; the retrieval profile does not invoke the paperclip CLI at runtime (BM25 corpus, adjudicator-only), so the pin is bumped to the installed version rather than blocking. Load-bearing only for the paperclip/agentic profiles."
+    "pin_history": "0.5.11 -> 0.7.48 on 2026-09-08 (Phil): gxl.ai serves only the latest wheel and 0.5.11 is no longer downloadable; the retrieval profile does not invoke the paperclip CLI at runtime (BM25 corpus, adjudicator-only), so the pin is bumped to the installed version rather than blocking. Load-bearing only for the paperclip/agentic profiles.",
+    "isolation_config": {
+      "host-allowlist": {
+        "hash": "2d8265aa2691e13f5c832ff6610a95621c0e81203096b69e46b07dfb9bea6958",
+        "why": "The boundary every scored dispatch runs behind. Covers the image by digest and the CLI inside it, the rendered mount set by role/target/mode, the network policy and egress allowlist, the session's add-dirs, permission mode, tool surface and full option-name set, the env allowlist by NAME (so a rotated token is not a configuration change), and the program's fileset and trace destination. Re-pin with `python3 optimizer/isolation.py --print-pin` ONLY after reading `--print-config` -- re-pinning a configuration nobody looked at turns this gate off."
+      },
+      "selftest-stand-in": {
+        "hash": "2f2f2e5577647d72d2e74e780072dd0a95fe2f6fa522ec28ee6b16931c856574",
+        "why": "The same schema under the selftests' stand-in renderer (OQ7: an injected fake, never a switch that disables the boundary). Committed so the suite exercises the real gate instead of a bypass of it, and so a change to what the gates run under is itself reviewed."
+      }
+    }
   },
   "deliberately_excluded": {
     "src/prompts/adjudicator-dispatch.md": "superseded by the Sarol variant for this experiment (OQ1)",
