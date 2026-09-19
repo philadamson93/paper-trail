@@ -66,8 +66,10 @@ import argparse
 import contextlib
 import dataclasses
 import functools
+import hashlib
 import importlib
 import inspect
+import json
 import os
 import pathlib
 import re
@@ -292,6 +294,15 @@ UNRESTRICTED_EGRESS = "open"
 #: The engine's real deny-all. What the negative control runs on, since the probe must not be able to
 #: reach anything at all.
 DENY_ALL_EGRESS = "none"
+
+#: What the shipping boundary IS, as a name a reviewer approves rather than an instance name a run
+#: mints. The allowlist stack's Docker network carries a per-run id, so the rendered `--network`
+#: value is useless to a pin; this is the stable statement of the same thing.
+HOST_ALLOWLIST_POLICY = "host-allowlist"
+
+#: The selftest stand-in's policy, named so a configuration hash computed under a selftest can never
+#: collide with one computed under the real boundary.
+STAND_IN_POLICY = "selftest-stand-in"
 
 
 # =================================================================================================
@@ -681,6 +692,12 @@ class ContainerConfig:
 
     image: str
     hosts: tuple[str, ...]
+    #: What KIND of network boundary this is, named rather than inferred. The configuration pin
+    #: (Phase 3) needs it, and the alternative -- reading `--network` off a rendered prefix -- pins
+    #: the wrong thing: the allowlist stack's network name carries a per-run id, so it would move
+    #: the hash every run, while the plain policies render a literal. A name here is stable and is
+    #: the thing a reviewer actually approves.
+    policy: str
     open_boundary: Any
     #: What instrument this boundary actually is, as a dict, for the run manifest. A zero-argument
     #: callable rather than a value because the shipping answer costs a container start and the
@@ -885,7 +902,11 @@ def shipping_container(
         }
 
     return ContainerConfig(
-        image=image, hosts=tuple(hosts), open_boundary=open_boundary, describe=describe
+        image=image,
+        hosts=tuple(hosts),
+        policy=HOST_ALLOWLIST_POLICY,
+        open_boundary=open_boundary,
+        describe=describe,
     )
 
 
@@ -933,6 +954,7 @@ def fake_container(
     return ContainerConfig(
         image=image,
         hosts=EGRESS_ALLOWED_HOSTS,
+        policy=STAND_IN_POLICY,
         open_boundary=open_boundary,
         # Marked as a stand-in rather than left empty, so a manifest written under a selftest can
         # never be mistaken for one written under a real boundary.
@@ -945,6 +967,216 @@ def fake_container(
         },
     )
 
+
+# =================================================================================================
+# The configuration pin (Phase 3) — what the program was run under, hashed and held to a committed
+# reference
+# =================================================================================================
+
+#: Where the per-claim adjudicator trace lands, relative to that claim's output directory. ONE
+#: definition: ``adapter`` writes to it and the configuration hash covers it, so the two cannot
+#: drift into disagreeing about where a published result's evidence lives.
+TRACE_DEST_SHAPE = "traces/{claim_id}-{stage}.jsonl"
+
+#: The committed manifest, repo-relative. Read through ``git show HEAD:<this>``, never off disk.
+MANIFEST_REL = "experiments/sarol-2024/program-v0/manifest.json"
+
+#: The key under ``runtime_pins`` holding the expected configuration hash.
+PIN_KEY = "isolation_config"
+
+#: Bumped whenever the *shape* below changes, so an old pin cannot silently satisfy a new schema.
+#: Without it, deleting a component from the payload would produce a different hash and read as
+#: "someone changed the configuration" rather than "the schema moved".
+CONFIG_SCHEMA_VERSION = 1
+
+
+def mount_shape(prefix: Sequence[str], scope) -> tuple[tuple[str, str, str], ...]:
+    """Every rendered mount as ``(role, target, mode)`` — the host source replaced by its role.
+
+    ⚠ **The plan asked for ``(source, target, mode)`` and that cannot be pinned.** Verified by
+    printing a real render (2026-09-19): the program source is the per-iteration materialized tree
+    (`.../tmpXXXX/iter3-v0`) and the staging source is the run's output root, so a hash over raw
+    sources moves **every iteration and every run** and no committed value could ever match it. The
+    plan's actual requirement — *"the mount set as rendered, so the pin is computed from the same
+    bytes V2a-seal probes rather than from the intent that produced them"* — is preserved: this
+    reads the rendered argv, not the grant. Only the one component that cannot be a constant is
+    replaced, by the thing the plan separately demands be present anyway (*"with each mount's
+    role"*).
+
+    Everything the pin is meant to catch survives: a changed target, a changed mode, a mount added
+    or removed, or a source that has moved to a different role. What is lost is only "this exact
+    temp directory", which was never reviewable.
+    """
+    roles = {str(pathlib.Path(scope.program).resolve()): "program"}
+    for host, _container in scope.writable:
+        roles[str(pathlib.Path(host).resolve())] = "staging"
+    for host, _container in scope.readable:
+        roles.setdefault(str(pathlib.Path(host).resolve()), "readable")
+    shaped = []
+    for source, target, mode in rendered_mounts(prefix):
+        # ⚠ Resolve both sides. On macOS a grant holding `/private/var/...` and an argv holding
+        # `/var/...` are the same directory spelled two ways, and an unresolved comparison would
+        # label a known mount "unknown" — the failure in [[resolved-vs-unresolved...]], again.
+        shaped.append(
+            (roles.get(str(pathlib.Path(source).resolve()), "UNKNOWN"), target, mode)
+        )
+    return tuple(sorted(shaped))
+
+
+def _flag_value(argv: Sequence[str], flag: str) -> str | None:
+    """The value after ``flag``, or ``None`` if the flag is absent or has nothing after it."""
+    argv = list(argv)
+    if flag not in argv:
+        return None
+    i = argv.index(flag)
+    return argv[i + 1] if i + 1 < len(argv) else None
+
+
+def _flag_values(argv: Sequence[str], flag: str) -> tuple[str, ...]:
+    """Every value following each occurrence of ``flag``, sorted."""
+    argv = list(argv)
+    return tuple(sorted(argv[i + 1] for i, a in enumerate(argv) if a == flag and i + 1 < len(argv)))
+
+
+def configuration(*, container, scope, prefix, inner_command, program_entries) -> dict:
+    """Everything about the boundary this run puts the program behind, as a plain dict.
+
+    Read from the **rendered** argv wherever the plan says "as rendered", and from the stated
+    configuration only where a render carries a per-run instance name instead of a reviewable value
+    (the network, see :data:`HOST_ALLOWLIST_POLICY`).
+
+    ⚠ **`prefix` may be rendered on the deny-all policy rather than the shipping allowlist**, and
+    that is sound for exactly one reason, which is asserted rather than assumed: the two renders
+    agree mount for mount (selftest *"...and the plain-policy render agrees with it mount for
+    mount"*). Nothing network-shaped is taken from `prefix`. This is what lets the pin be computed
+    at preflight without standing up a Squid sidecar to find out what we are about to run.
+
+    ⚠ **The env allowlist contributes NAMES only.** A rotated OAuth token must not read as a
+    configuration change, or the gate gets switched off the first time a credential is refreshed.
+    """
+    described = container.describe() or {}
+    return {
+        "schema_version": CONFIG_SCHEMA_VERSION,
+        "image": {
+            "ref": container.image,
+            "cli_version": described.get("cli_version"),
+            "user": _flag_value(prefix, "--user"),
+            "workdir": _flag_value(prefix, "-w"),
+            # Rendered, stable, and behaviour-affecting: a container that runs out of memory
+            # produces a failed dispatch, not a verdict. Beyond the plan's table, and recorded here
+            # rather than silently: they cost nothing to cover and a change to either is exactly the
+            # kind of thing that moves results without moving any file.
+            "cpus": _flag_value(prefix, "--cpus"),
+            "memory": _flag_value(prefix, "--memory"),
+        },
+        "boundary": {
+            "mounts": [list(m) for m in mount_shape(prefix, scope)],
+            "network_policy": container.policy,
+            "egress_hosts": sorted(container.hosts),
+        },
+        "session": {
+            "add_dirs": sorted(_flag_values(inner_command, "--add-dir")),
+            "env_allowlist": sorted(_flag_values(prefix, "--env")),
+            "permission_mode": _flag_value(inner_command, "--permission-mode"),
+            "permission_prompts": _flag_value(inner_command, "--permission-prompts"),
+            "allowed_tools": sorted(
+                (_flag_value(inner_command, "--allowedTools") or "").split(",")
+            ),
+            # Every option name on the inner argv, values excluded. This is what makes the pin
+            # notice a flag ARRIVING as well as one leaving -- including
+            # `--exclude-dynamic-system-prompt-sections`, which is deliberately absent and whose
+            # return would otherwise move nothing.
+            "option_names": sorted({a for a in inner_command if str(a).startswith("--")}),
+        },
+        "program": {
+            # Paths, not contents. Contents are `combined_hash`'s job and the optimizer edits them
+            # every iteration by design; the isolation pin must not move when the program is
+            # improved, only when the BOX around it changes. A file joining or leaving the program
+            # is a configuration change and does move it.
+            "fileset": sorted(program_entries),
+            "trace_destination": TRACE_DEST_SHAPE,
+        },
+    }
+
+
+def configuration_hash(config: dict) -> str:
+    """A stable sha256 over :func:`configuration`'s dict. Key order cannot move it."""
+    return hashlib.sha256(
+        json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def committed_configuration_pin(
+    policy: str, *, repo_root: pathlib.Path = REPO_ROOT, manifest_rel: str = MANIFEST_REL
+) -> str | None:
+    """The expected hash **for this boundary kind**, from committed bytes — ``git show HEAD:<manifest>``.
+
+    ⚠ **Keyed by policy, and that is not a convenience.** The selftests render a real grant through
+    a stand-in boundary (OQ7: an injected fake renderer, never a switch that turns the boundary
+    off), so their configuration legitimately hashes to something other than the shipping one. The
+    alternatives were both bad: give the Runner a way to skip the gate — an opt-out on the one check
+    that says a scored run used an approved boundary — or leave the suite permanently red. Keying by
+    policy instead means **both configurations are committed and reviewable**, the selftests
+    exercise the real gate rather than a bypass of it, and a boundary whose kind has no pin at all
+    is refused rather than defaulted.
+
+    ⚠ **Never the worktree copy, and this is a defect Plan A actually shipped.** Its Gate H compared
+    a sheet against a stub that was editable in the same tree, so one session rewriting both sides
+    passed the gate. A pin the same edit can move is not a pin. ``canary.py`` states the rule: *a
+    guard whose reference value is not under version control is not a guard.*
+
+    Returns ``None`` when the manifest is not committed, has no such key, or git cannot be run —
+    every one of which :func:`configuration_pin_problem` treats as a refusal, never as a pass.
+    """
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo_root), "show", f"HEAD:{manifest_rel}"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    try:
+        pins = (json.loads(done.stdout) or {}).get("runtime_pins") or {}
+    except json.JSONDecodeError:
+        return None
+    entry = (pins.get(PIN_KEY) or {}).get(policy)
+    if isinstance(entry, dict):
+        entry = entry.get("hash")
+    return entry if isinstance(entry, str) and entry else None
+
+
+def configuration_pin_problem(
+    config_hash: str, *, committed: str | None, policy: str = ""
+) -> str | None:
+    """Does the configuration about to run match the committed pin? A problem, or ``None``.
+
+    ⚠ **It compares the computed hash against the MANIFEST, never against what the release builder
+    would stamp.** The builder takes its pin from the same committed value at all five construction
+    sites, so "what the builder would stamp" versus "what we computed" compares a value to itself
+    and cannot fail — the plan names this tautology explicitly, and it is the same inertness that
+    left `optimizer_isolation_hash` as the literal `'sarol-2024'` on all ten payloads of the last
+    run.
+    """
+    if not committed:
+        return (
+            f"no configuration pin committed at runtime_pins.{PIN_KEY}.{policy} in "
+            f"HEAD:{MANIFEST_REL}. "
+            f"The configuration about to run hashes to {config_hash}. Commit that value as the pin "
+            "once it has been reviewed -- `python3 optimizer/isolation.py --print-pin` prints the "
+            "block to paste. Refusing rather than defaulting: a run with no pin is precisely the "
+            "state this gate exists to end"
+        )
+    if committed != config_hash:
+        return (
+            f"the isolation configuration does not match the committed pin. Expected {committed}, "
+            f"computed {config_hash}. Either the boundary changed and the pin is stale, or the pin "
+            "is right and something moved underneath this run -- inspect with `python3 "
+            "optimizer/isolation.py --print-config` before re-pinning, because re-pinning a "
+            "configuration nobody looked at turns this gate off"
+        )
+    return None
 
 # =================================================================================================
 # Step 0a — the free dry run. No container started, no model called, nothing spent.
@@ -1178,6 +1410,183 @@ def _raises(fn, *, want: str | None = None) -> bool:
     except Exception:
         return False
     return False
+
+
+def _committed_bytes_checks(repo: pathlib.Path) -> list:
+    """The pin comes from ``git show HEAD:``, so editing the worktree copy cannot move it.
+
+    ⚠ **This is not a hypothetical.** Plan A's Gate H compared a sheet against a stub that was
+    editable in the same tree, so a single session rewriting both sides passed the gate it was
+    supposed to fail. A reference the same edit can move is not a reference. Run against a real
+    throwaway git repo rather than a mock, because the property under test *is* git's.
+    """
+    import subprocess as sp
+
+    manifest = repo / MANIFEST_REL
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+
+    def write(value):
+        manifest.write_text(
+            json.dumps({"runtime_pins": {PIN_KEY: {"host-allowlist": {"hash": value}}}}),
+            encoding="utf-8",
+        )
+
+    def git(*args):
+        return sp.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+
+    write("COMMITTED")
+    ok = git("init", "-q").returncode == 0
+    git("config", "user.email", "gate@example.invalid")
+    git("config", "user.name", "gate")
+    git("add", "-A")
+    ok = ok and git("commit", "-q", "-m", "pin").returncode == 0
+    from_head = committed_configuration_pin("host-allowlist", repo_root=repo)
+
+    # Now the attack the gate must survive: edit the worktree copy and ask again.
+    write("WORKTREE-EDIT")
+    after_edit = committed_configuration_pin("host-allowlist", repo_root=repo)
+    unknown_policy = committed_configuration_pin("no-such-policy", repo_root=repo)
+    return [
+        ("the pin is read from committed bytes", ok and from_head == "COMMITTED"),
+        (
+            "...and an edit to the worktree copy does NOT move it, which is the defect Plan A's "
+            "Gate H shipped",
+            after_edit == "COMMITTED",
+        ),
+        (
+            "...and a boundary kind with no pin committed reads as absent, so it is refused rather "
+            "than falling back to another kind's",
+            unknown_policy is None,
+        ),
+    ]
+
+
+def _pin_checks() -> list:
+    """V4: one case per component the pin covers, each moving an input rather than the dict."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="pin-checks-") as tmp:
+        tmp = pathlib.Path(tmp)
+        program = tmp / "program"
+        program.mkdir()
+        staging = tmp / "run" / "train" / "staging"
+        staging.mkdir(parents=True)
+        scope = program_scope(
+            profile="retrieval",
+            program_dir=program,
+            staging_root=staging,
+            output_roots=[tmp / "run" / "train"],
+        )
+        base_container = fake_container()
+        base_prefix = dispatch_prefix(
+            scope=scope, image=base_container.image, network_policy=DENY_ALL_EGRESS
+        )
+        base_inner = inner_command(scope=scope, prompt="", model="m", max_budget_usd=1.0)
+        entries = ["a.md", "b.md"]
+
+        def h(*, container=None, prefix=None, inner=None, program_entries=None) -> str:
+            return configuration_hash(
+                configuration(
+                    container=container or base_container,
+                    scope=scope,
+                    prefix=prefix or base_prefix,
+                    inner_command=inner or base_inner,
+                    program_entries=program_entries or entries,
+                )
+            )
+
+        def swapped(argv, old, new):
+            return [new if a == old else a for a in argv]
+
+        base = h()
+        mounts = rendered_mounts(base_prefix)
+        program_mount = f"{mounts[0][0]}:{mounts[0][1]}:{mounts[0][2]}"
+        staging_mount = f"{mounts[1][0]}:{mounts[1][1]}:{mounts[1][2]}"
+
+        moved = {
+            "a different image digest at the same tag": h(
+                container=fake_container(image=FAKE_IMAGE.replace("0" * 64, "1" * 64))
+            ),
+            "a changed mount target": h(
+                prefix=swapped(base_prefix, program_mount,
+                               f"{mounts[0][0]}:/workspace/elsewhere:{mounts[0][2]}")
+            ),
+            "a changed mount mode": h(
+                prefix=swapped(base_prefix, program_mount, f"{mounts[0][0]}:{mounts[0][1]}:rw")
+            ),
+            "a changed mount role": h(
+                prefix=swapped(base_prefix, staging_mount,
+                               f"{tmp}/elsewhere:{mounts[1][1]}:{mounts[1][2]}")
+            ),
+            "a different network policy": h(container=shipping_container(image=FAKE_IMAGE)),
+            "a different egress allowlist": h(
+                container=shipping_container(image=FAKE_IMAGE, hosts=("example.invalid",))
+            ),
+            "a different container user": h(prefix=swapped(base_prefix, "1000:1000", "4242:4242")),
+            "a different workdir": h(
+                prefix=swapped(base_prefix, CONTAINER_PROGRAM, "/workspace/other")
+            ),
+            "a different memory limit": h(prefix=swapped(base_prefix, "4g", "16g")),
+            "a changed allowedTools set": h(
+                inner=swapped(base_inner, ",".join(ALLOWED_TOOLS), "Read,Write,Bash")
+            ),
+            "a changed permission mode": h(inner=swapped(base_inner, "default", "acceptEdits")),
+            "a flag arriving on the inner argv": h(
+                inner=list(base_inner) + ["--exclude-dynamic-system-prompt-sections"]
+            ),
+            "a changed program fileset": h(program_entries=["a.md", "b.md", "c.md"]),
+        }
+        # Names only: the env allowlist is rendered as `--env NAME`, so no value is ever in scope to
+        # move the hash. Proved by hashing a prefix whose token NAME is unchanged -- if any value
+        # leaked in, the two renders below would differ.
+        same_names = h(prefix=list(base_prefix))
+
+        unmoved = [label for label, got in moved.items() if got == base]
+        return [
+            (
+                "every component the pin covers moves the hash when it changes, one case each: "
+                + f"{len(moved)} checked",
+                not unmoved,
+            ),
+            (
+                "...naming any that did not move, because a silent component is the whole failure",
+                not unmoved,
+            ),
+            (
+                "...and all of them are distinct hashes, so two different configurations cannot "
+                "share a pin",
+                len(set(moved.values())) == len(moved),
+            ),
+            (
+                "the env allowlist contributes NAMES only, so rotating the token is not a "
+                "configuration change",
+                same_names == base
+                and all("CLAUDE_CODE_OAUTH_TOKEN=" not in str(a) for a in base_prefix),
+            ),
+            (
+                "a mount whose source belongs to no granted role is marked UNKNOWN rather than "
+                "quietly dropped",
+                any(
+                    m[0] == "UNKNOWN"
+                    for m in mount_shape(
+                        list(base_prefix) + ["-v", "/tmp/sneaked:/workspace/extra:ro"], scope
+                    )
+                ),
+            ),
+            (
+                "the literal 'sarol-2024' no longer satisfies the pin",
+                configuration_pin_problem(base, committed="sarol-2024") is not None,
+            ),
+            (
+                "...nor does an absent pin, which refuses rather than defaulting",
+                configuration_pin_problem(base, committed=None) is not None,
+            ),
+            (
+                "...while the matching pin passes",
+                configuration_pin_problem(base, committed=base) is None,
+            ),
+            *_committed_bytes_checks(tmp / "pinrepo"),
+        ]
 
 
 def _selftest() -> int:
@@ -1712,6 +2121,14 @@ def _selftest() -> int:
                 for g in grants
             ),
         ),
+        # -- V4: the configuration pin ------------------------------------------------------
+        #
+        # ⚠ Every case below changes an INPUT and asserts the hash moved -- never the config dict
+        # directly. Mutating the dict would only prove `configuration_hash` is a hash, which is not
+        # in doubt; what is in doubt is whether `configuration` actually READS each component. The
+        # first draft of this plan hashed only host-side properties, so a container swapped
+        # underneath it left the hash unmoved and the pin certified a configuration it never saw.
+        *_pin_checks(),
         (
             "...and that check is not vacuous: a mount of the gold root's parent is caught",
             _paths_overlap(stage_claim.GOLD_ROOT.parent.parent, stage_claim.GOLD_ROOT)
@@ -1730,6 +2147,67 @@ def _selftest() -> int:
     return 1 if failed else 0
 
 
+_PIN_WHY = {
+    HOST_ALLOWLIST_POLICY: (
+        "The boundary every scored dispatch runs behind. Covers the image by digest and the CLI "
+        "inside it, the rendered mount set by role/target/mode, the network policy and egress "
+        "allowlist, the session's add-dirs, permission mode, tool surface and full option-name set, "
+        "the env allowlist by NAME (so a rotated token is not a configuration change), and the "
+        "program's fileset and trace destination. Re-pin with `python3 optimizer/isolation.py "
+        "--print-pin` ONLY after reading `--print-config` -- re-pinning a configuration nobody "
+        "looked at turns this gate off."
+    ),
+    STAND_IN_POLICY: (
+        "The same schema under the selftests' stand-in renderer (OQ7: an injected fake, never a "
+        "switch that disables the boundary). Committed so the suite exercises the real gate instead "
+        "of a bypass of it, and so a change to what the gates run under is itself reviewed."
+    ),
+}
+
+
+def _configurations_by_policy() -> dict:
+    """One configuration per boundary kind, built on a throwaway grant.
+
+    The grant's paths are temporary and deliberately so: :func:`mount_shape` reduces every source to
+    its role, so the hash does not depend on where this happened to run. That is the property that
+    makes a committed pin possible at all.
+    """
+    import tempfile
+
+    out: dict = {}
+    with tempfile.TemporaryDirectory(prefix="isolation-pin-") as tmp:
+        tmp = pathlib.Path(tmp)
+        program = tmp / "program"
+        program.mkdir()
+        staging = tmp / "run" / "train" / "staging"
+        staging.mkdir(parents=True)
+        scope = program_scope(
+            profile="retrieval",
+            program_dir=program,
+            staging_root=staging,
+            output_roots=[tmp / "run" / "train"],
+        )
+        manifest = json.loads((REPO_ROOT / MANIFEST_REL).read_text(encoding="utf-8"))
+        entries = [e["path"] for e in manifest["entries"]]
+        shipping_ref = image_digest_ref() or SHIPPING_IMAGE_TAG
+        for container in (
+            shipping_container(image=shipping_ref),
+            fake_container(),
+        ):
+            out[container.policy] = configuration(
+                container=container,
+                scope=scope,
+                prefix=dispatch_prefix(
+                    scope=scope, image=container.image, network_policy=DENY_ALL_EGRESS
+                ),
+                inner_command=inner_command(
+                    scope=scope, prompt="", model="", max_budget_usd=0.0
+                ),
+                program_entries=entries,
+            )
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
@@ -1742,9 +2220,37 @@ def main() -> int:
         action="store_true",
         help="Print the rendered command for every dispatch, for reading by eye.",
     )
+    ap.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print the configuration the pin hashes, for BOTH boundary kinds, as JSON.",
+    )
+    ap.add_argument(
+        "--print-pin",
+        action="store_true",
+        help="Print the runtime_pins block to paste into the manifest. The documented re-pin path.",
+    )
     args = ap.parse_args()
     if args.selftest:
         return _selftest()
+    if args.print_config or args.print_pin:
+        configs = _configurations_by_policy()
+        if args.print_config:
+            print(json.dumps(configs, indent=2, sort_keys=True))
+            return 0
+        block = {
+            PIN_KEY: {
+                policy: {
+                    "hash": configuration_hash(cfg),
+                    "why": _PIN_WHY[policy],
+                }
+                for policy, cfg in sorted(configs.items())
+            }
+        }
+        print("# Paste under `runtime_pins` in " + MANIFEST_REL + ", then COMMIT it --")
+        print("# the gate reads `git show HEAD:<manifest>`, so an uncommitted edit changes nothing.")
+        print(json.dumps(block, indent=2, sort_keys=True))
+        return 0
     if args.print_matrix:
         rows, grants, refusals = _dry_run_matrix()
         for r in rows:

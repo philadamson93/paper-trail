@@ -766,7 +766,10 @@ _RUNNER_SITE_FILES = (
 #: incomplete freeze, the one whose working checkout is empty while the version is complete, and the
 #: two-version render that proves the BYTES followed the mount (V3d builds one per version in a
 #: loop, which the AST census counts once).
-_EXPECTED_RUNNER_SITES = 34
+#: ⚠ Two more arrived with Phase 3's configuration pin: the Runner on an unpinned boundary, which
+#: must be refused, and the one on the pinned boundary beside it, which must not — a refusal gate
+#: with no passing case beside it cannot tell "correctly refused" from "always refuses".
+_EXPECTED_RUNNER_SITES = 36
 
 
 #: Where the frozen slash-command file lives, and the ONLY place it counts.
@@ -1116,6 +1119,54 @@ class SarolRunner:
             return f"paperclip version mismatch: pinned {want!r}, installed {got!r}"
         return None
 
+    def isolation_configuration(self, scope) -> dict:
+        """What boundary this run puts the program behind, as the dict the pin hashes.
+
+        Rendered on the engine's **deny-all** policy rather than the shipping allowlist, on purpose:
+        standing up a Squid sidecar to find out what we are about to run would make a preflight gate
+        cost a container. Nothing network-shaped is read from that render — the policy comes from
+        the stated :attr:`isolation.ContainerConfig.policy` — and the two renders are asserted to
+        agree mount for mount by ``isolation.py``'s own selftest.
+
+        The inner argv is rendered with an **empty prompt**. The prompt is not part of the
+        configuration, and rendering a real one at preflight would need the evidence envelope, which
+        the producer has not written yet.
+        """
+        return isolation_mod.configuration(
+            container=self.container,
+            scope=scope,
+            prefix=isolation_mod.dispatch_prefix(
+                scope=scope,
+                image=self.container.image,
+                network_policy=isolation_mod.DENY_ALL_EGRESS,
+            ),
+            inner_command=isolation_mod.inner_command(
+                scope=scope,
+                prompt="",
+                model=self.model,
+                max_budget_usd=self.per_call_max_budget_usd,
+            ),
+            program_entries=[e["path"] for e in self.program_store.entries],
+        )
+
+    def isolation_pin_error(self, scope) -> str | None:
+        """Does the boundary about to run match the pin committed in the manifest? Error, or None.
+
+        ⚠ **Refuses before anything is spent**, beside the paperclip pin, and for the same reason:
+        a run that produces ten paid verdicts under a configuration nobody approved cannot be
+        un-run, and its numbers cannot honestly be published either.
+        """
+        try:
+            computed = isolation_mod.configuration_hash(self.isolation_configuration(scope))
+        except (ValueError, OSError) as exc:
+            return f"cannot compute the isolation configuration: {str(exc)[:200]}"
+        policy = self.container.policy
+        return isolation_mod.configuration_pin_problem(
+            computed,
+            committed=isolation_mod.committed_configuration_pin(policy),
+            policy=policy,
+        )
+
     # -- dispatch ----------------------------------------------------------------------------
 
     def _inner_command(
@@ -1373,6 +1424,17 @@ class SarolRunner:
                 "infra_error", code="PROGRAM_GRANT_REFUSED", message=str(exc)[:300]
             )
 
+        # The configuration this run is about to use, held to the one committed in the manifest --
+        # before any claim is dispatched. Checked on EVERY grant, not just the first: two staging
+        # roots render two mount sets, and pinning one of them while the other goes unchecked is the
+        # partial coverage this gate exists to remove.
+        for _root, _scope in sorted(grants.items()):
+            pin_problem = self.isolation_pin_error(_scope)
+            if pin_problem is not None:
+                return artifacts(
+                    "infra_error", code="ISOLATION_PIN_MISMATCH", message=pin_problem[:300]
+                )
+
         def process(claim: ClaimRecord) -> dict[str, Any]:
             record: dict[str, Any] = {
                 "claim_id": claim.claim_id,
@@ -1428,7 +1490,9 @@ class SarolRunner:
                 # -- a missing trace is worth less than a claim, and must never cost one.
                 trace_ref = None
                 if res.stream:
-                    dest = out_dir / "traces" / f"{claim.claim_id}-{stage}.jsonl"
+                    dest = out_dir / isolation_mod.TRACE_DEST_SHAPE.format(
+                        claim_id=claim.claim_id, stage=stage
+                    )
                     try:
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(res.stream, encoding="utf-8")
@@ -2082,8 +2146,30 @@ _VAL_BREAKDOWN_ALLOWED = (
 class SarolReleaseBuilder:
     """Builds the per-iteration release. Aggregates only, and for VAL, not even all of those."""
 
-    def __init__(self, *, optimizer_isolation_hash: str = "sarol-2024") -> None:
-        self.optimizer_isolation_hash = optimizer_isolation_hash
+    def __init__(self, *, policy: str) -> None:
+        """Stamps every payload with the configuration pin committed for ``policy``.
+
+        🚩 **This used to default to the literal `'sarol-2024'`, which is how the last run wrote the
+        same inert string onto all ten payloads.** A release that names its isolation configuration
+        with a constant names nothing. The value now comes from the manifest's committed
+        `runtime_pins`, for the boundary kind the run actually used.
+
+        ⚠ **It is NOT what the pin gate compares against, and that separation is the whole point.**
+        The gate (`SarolRunner.isolation_pin_error`) compares the **computed** configuration against
+        this same committed value, so by the time anything is stamped the two are known to agree.
+        Comparing the stamp to the computed hash instead would compare a value to itself -- the
+        tautology the plan calls out, which is the original inertness moved one layer up.
+        """
+        pin = isolation_mod.committed_configuration_pin(policy)
+        if not pin:
+            raise ValueError(
+                f"refusing to build releases with no committed isolation pin for {policy!r}: "
+                f"nothing at runtime_pins.{isolation_mod.PIN_KEY}.{policy} in "
+                f"HEAD:{isolation_mod.MANIFEST_REL}. Run `python3 optimizer/isolation.py "
+                "--print-pin` and commit the block"
+            )
+        self.policy = policy
+        self.optimizer_isolation_hash = pin
 
     def _reduce_for_val(self, score):
         """Strip a VAL ``ScoreResult`` down to the scalar plus completeness metadata."""
@@ -2227,6 +2313,34 @@ def _selftest() -> int:
 
     store = SarolProgramStore()
     checks: list[tuple[str, bool]] = []
+
+    # ⚠ **A guard clause, because the alternative is a CRASHED suite and a crashed suite reports
+    # nothing.** Dozens of gates below run a full `run()` and then index `artifact_refs[0]`. Once
+    # the configuration pin became a preflight refusal, any divergence between the stand-in boundary
+    # and its committed pin turns every one of those into an IndexError -- the suite dies before it
+    # prints a single line, so the one fact you needed ("the pin is stale") is the one thing you
+    # cannot see. Found by mutation: changing what the hash covers produced exactly that.
+    #
+    # Refusing here converts it into a named failure with the fix in it.
+    _pin_problem = isolation_mod.configuration_pin_problem(
+        isolation_mod.configuration_hash(
+            isolation_mod._configurations_by_policy()[isolation_mod.STAND_IN_POLICY]
+        ),
+        committed=isolation_mod.committed_configuration_pin(isolation_mod.STAND_IN_POLICY),
+        policy=isolation_mod.STAND_IN_POLICY,
+    )
+    if _pin_problem is not None:
+        print(
+            "  FAIL  the selftests' own boundary no longer matches its committed pin, so every "
+            "gate that runs a batch would refuse before dispatching and this suite would crash "
+            "rather than report"
+        )
+        print(f"  detail: {_pin_problem}")
+        print(
+            "  fix:    read `python3 optimizer/isolation.py --print-config`, and if the change is "
+            "intended, commit the block from `--print-pin`"
+        )
+        return 1
 
     # -- the per-call timeout must bound a REAL process tree, not just its root -------------------
     # `sh -c 'sleep 60 & sleep 60'` is the shape that matters: a backgrounded grandchild inherits
@@ -2625,7 +2739,7 @@ def _selftest() -> int:
             )
 
             # ReleaseBuilder discrimination -- the loop LoopStops if these come back crossed.
-            rb = SarolReleaseBuilder()
+            rb = SarolReleaseBuilder(policy=isolation_mod.STAND_IN_POLICY)
             corpus = schemas.MistakeCorpus(ref="", counts={})
             val_payload = rb.build_release(score, corpus, frontier={}, budget={})
             # Same scored batch, relabelled as the TRAIN call -- so the only difference between
@@ -2913,6 +3027,92 @@ def _selftest() -> int:
                  and _v3_resolved.parent == _v3_full / ".claude" / "commands"),
                 ("...and a copy anywhere else does not make an incomplete version look complete",
                  _v3_wrong_place_bad),
+            ]
+
+        # ---- V4: the configuration pin refuses before anything is spent ----------------------
+        with tempfile.TemporaryDirectory() as _v4_tmp:
+            _v4_tmp = pathlib.Path(_v4_tmp)
+            _v4_out, _v4_batch = _staged_batch(_v4_tmp)
+            _v4_mat = _materialized_program(_v4_tmp, "iter4-v0")
+            _v4_claim = load_batch(_v4_batch)[0]
+            _v4_inputs = schemas.RunInputs(
+                input_ref=str(_v4_batch), batch_id="v4", split="train"
+            )
+            _v4_sent: list[str] = []
+
+            def _v4_spy(cmd, cwd, timeout):
+                _v4_sent.append(" ".join(cmd))
+                return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+
+            # A boundary that is valid in every other way but is NOT the one pinned: same stand-in
+            # policy, different image. The computed hash therefore diverges from the committed pin.
+            _v4_wrong = SarolRunner(
+                store,
+                invoke=_v4_spy,
+                paperclip_version_probe=ok_pin,
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(
+                    image=isolation_mod.FAKE_IMAGE.replace("0" * 64, "1" * 64)
+                ),
+            )
+            _v4_art = _v4_wrong.run(_v4_mat, _v4_inputs)
+
+            # ...and the same Runner on the pinned boundary must NOT be refused, or the gate above
+            # would pass for any Runner at all.
+            _v4_right = SarolRunner(
+                store,
+                invoke=_v4_spy,
+                paperclip_version_probe=ok_pin,
+                require_command=False,
+                profile="retrieval",
+                container=isolation_mod.fake_container(),
+            )
+            _v4_scope = isolation_mod.program_scope(
+                profile="retrieval",
+                program_dir=_v4_mat,
+                staging_root=staging_root(_v4_claim),
+                output_roots=[_v4_out],
+            )
+            _v4_right_ok = _v4_right.isolation_pin_error(_v4_scope) is None
+
+            # The re-pin tool and the gate must compute the SAME configuration. If they drift, the
+            # value an operator pastes into the manifest is one no run will ever reproduce, and the
+            # gate becomes permanently red for a reason nobody can find.
+            _v4_tool = isolation_mod.configuration_hash(
+                isolation_mod._configurations_by_policy()[isolation_mod.STAND_IN_POLICY]
+            )
+            _v4_runner_side = isolation_mod.configuration_hash(
+                _v4_right.isolation_configuration(_v4_scope)
+            )
+
+            _v4_builder = SarolReleaseBuilder(policy=isolation_mod.STAND_IN_POLICY)
+            _v4_no_pin = _raises_valueerror(
+                lambda: SarolReleaseBuilder(policy="no-such-boundary")
+            )
+
+            checks += [
+                ("a boundary that is not the pinned one is refused",
+                 _v4_art.status == "infra_error"
+                 and _v4_art.error is not None
+                 and _v4_art.error.code == "ISOLATION_PIN_MISMATCH"),
+                ("...before a single claim is dispatched, since a paid run cannot be un-run",
+                 not _v4_sent),
+                ("...and the refusal names both hashes, so an operator can tell stale pin from "
+                 "moved configuration",
+                 _v4_art.error is not None
+                 and "Expected" in _v4_art.error.message_redacted
+                 and "computed" in _v4_art.error.message_redacted),
+                ("...while the pinned boundary is NOT refused, so the gate is not simply always on",
+                 _v4_right_ok),
+                ("the re-pin tool computes the same configuration the gate does",
+                 _v4_tool == _v4_runner_side),
+                ("the release stamp is the committed pin, not the old literal",
+                 _v4_builder.optimizer_isolation_hash != "sarol-2024"
+                 and _v4_builder.optimizer_isolation_hash
+                 == isolation_mod.committed_configuration_pin(isolation_mod.STAND_IN_POLICY)),
+                ("...and a builder for a boundary with no committed pin refuses to be built at all",
+                 _v4_no_pin),
             ]
 
         # The hard per-call spend cap has to be in the command vector, not just in a docstring --

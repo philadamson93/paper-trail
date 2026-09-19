@@ -1532,6 +1532,43 @@ V2a-seal probes rather than from the intent that produced them. ⚠ A version st
 an image rebuilt from the same Dockerfile with a newer base layer keeps the tag and changes the
 contents.
 
+✅ **Built 2026-09-19. Four deviations from the text above, each forced and each verified.**
+
+1. 🚩 **The mount triple is `(role, target, mode)`, not `(source, target, mode)` — as written this
+   phase could not work.** Printing a real render settled it: the program source is the
+   per-iteration materialized tree (`…/tmpXXXX/iter3-v0`) and the staging source is the run's output
+   root, so a hash over raw sources moves **every iteration and every run** and no committed value
+   could ever match. The section's own requirement is preserved — the triples are read off the
+   rendered argv, not the grant — and the one component that cannot be a constant is replaced by the
+   thing this table separately demands be present anyway. Everything the pin must catch still moves
+   it: a changed target, a changed mode, a mount added or removed, a source that has changed role.
+   What is lost is "this exact temp directory", which was never reviewable.
+2. **The pin is keyed by boundary kind, and both kinds are committed.** The selftests render real
+   grants through a stand-in renderer (OQ7), so their configuration legitimately hashes to something
+   else. One pin would have meant either an opt-out on the gate — on the one check that says a
+   scored run used an approved boundary — or a permanently red suite. Keying by policy means the
+   suite exercises the real gate instead of a bypass of it, and a boundary kind with **no** pin is
+   refused rather than falling back to another kind's.
+3. **`--cpus` and `--memory` are in the hash, beyond the table above.** They are rendered, stable,
+   and behaviour-affecting: a container that runs out of memory yields a failed dispatch, not a
+   verdict. Stated here rather than slipped in.
+4. **"The program fileset" is hashed as PATHS, not contents.** Contents are `combined_hash`'s job
+   and the optimizer rewrites them every iteration by design; an isolation pin that moved whenever
+   the program improved would be re-pinned blind every iteration, which is how a gate gets switched
+   off. A file joining or leaving the program *is* a configuration change and does move it.
+
+✅ **V4's behavioural re-freeze requirement was already met and is not rebuilt.**
+`freeze_program_v0.py --selftest` already round-trips a **copy** through `cmd_write` and asserts
+`runtime_pins` is byte-identical and non-empty afterwards, with a "the re-freeze DID rewrite what it
+owns" control so it cannot pass on a no-op. Re-run against the new key: 5/5.
+
+**Where it lives.** `isolation.configuration()` / `configuration_hash()` / `committed_configuration_pin()`
+/ `configuration_pin_problem()`; the refusal is `SarolRunner.isolation_pin_error`, called in `run()`
+on **every** grant before any dispatch (two staging roots render two mount sets; pinning one and not
+the other is the partial coverage this gate removes). The documented re-pin path is
+`python3 optimizer/isolation.py --print-pin`, and a gate asserts that tool computes the same
+configuration the gate does — otherwise an operator pastes a value no run reproduces.
+
 ### Phase 4 — reset the run-scoped state at run start
 
 ⚠ **Retitled and descoped 2026-09-14 by OQ9 (Phil).** This phase was *"one clone per run"*. It is now
