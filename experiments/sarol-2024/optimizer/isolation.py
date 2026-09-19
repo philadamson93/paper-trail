@@ -465,6 +465,34 @@ def unspecified_stage_problem(profile) -> str | None:
     return profiles_mod.unrunnable_reason(profile)
 
 
+def run_scope_problem() -> str | None:
+    """Would this checkout hand a "fresh" run the previous run's state? Delegates, by design.
+
+    Phase 4's reset. ``scripts/check_run_scope.py`` (Gate H) already owns the whole mechanism — the
+    archive, the reset from a **committed** stub anchor, the deliberate-continuation override, and
+    its own negative controls — and it covers all three items the phase names:
+    ``meta-learnings.md``, ``findings/iter-*.md`` and ``iter/``.
+
+    ⚠ **The plan said to put the assertion in this module. Writing one here would be a second
+    version of a live gate**, and the two would drift the first time the reset list changed — the
+    precise failure this module warns about two functions down for the stage gate. So this is a
+    wrapper, for the same stated reason: *"so a caller reaching for a gate finds the existing one
+    instead of writing a second."* The archiving half stays in the VM runner, which owns the run id.
+    """
+    import check_run_scope
+
+    problems = check_run_scope.inherited()
+    if not problems:
+        return None
+    return (
+        "this checkout would hand a fresh run state it did not earn: "
+        + "; ".join(problems)
+        + f". Archive it with `scripts/check_run_scope.py --archive <run-id>`, or set "
+        f"{check_run_scope.OVERRIDE}=1 for a deliberate continuation run -- whose numbers are then "
+        "not comparable to a fresh run's"
+    )
+
+
 def bypass_flag_problem(inner_command: list[str]) -> str | None:
     """Is the permission bypass still on this path? Returns a problem, or None.
 
@@ -1461,6 +1489,91 @@ def _committed_bytes_checks(repo: pathlib.Path) -> list:
     ]
 
 
+def _run_scope_checks() -> list:
+    """Phase 4: the reset gate is Gate H's, reached through this module, not a copy of it."""
+    import check_run_scope
+
+    real = check_run_scope.inherited
+    try:
+        # Delegation, proved by substitution: if this wrapper computed its own answer, a replaced
+        # `inherited` would not reach it. A structural check ("does the source mention
+        # check_run_scope") would pass on a copy that merely imported it.
+        check_run_scope.inherited = lambda: ["SENTINEL-ITEM"]
+        surfaced = run_scope_problem()
+        check_run_scope.inherited = lambda: []
+        clean = run_scope_problem()
+    finally:
+        check_run_scope.inherited = real
+    live = run_scope_problem()
+    return [
+        (
+            "the run-scope reset is Gate H's own predicate, reached through here rather than "
+            "reimplemented beside it",
+            surfaced is not None and "SENTINEL-ITEM" in surfaced,
+        ),
+        (
+            "...and it passes a clean checkout, so it is not simply always refusing",
+            clean is None,
+        ),
+        (
+            "...and it names the archive command and the continuation override, since an "
+            "unattended VM run has nobody to ask",
+            surfaced is not None
+            and "--archive" in surfaced
+            and check_run_scope.OVERRIDE in surfaced,
+        ),
+        (
+            "...and all three items it covers are the ones Phase 4 names: the lessons sheet, the "
+            "per-iteration findings and iter/",
+            {check_run_scope.SHEET.name, check_run_scope.FINDINGS.name,
+             check_run_scope.ITER.name} == {"meta-learnings.md", "findings", "iter"},
+        ),
+        (
+            "...and this checkout is in fact clean right now, so the gates below are not running "
+            "against inherited state",
+            live is None,
+        ),
+        *_runner_reset_checks(),
+    ]
+
+
+def _runner_reset_checks() -> list:
+    """The VM runner archives and THEN asserts, in that order.
+
+    ⚠ **A text check, and a weak kind of one — said plainly rather than dressed up.** The runner is
+    a shell script driving a whole GPU-less VM run; there is no way to execute it here, so this reads
+    the file. What it can still catch is the failure that actually happened in review: an archive
+    step added with no assertion after it, which is an inert mechanism that reports success whether
+    or not it moved anything. Ordering is checked, not just presence, because an assertion that runs
+    *before* the archive proves nothing either.
+    """
+    runner = _SCRIPTS / "vm" / "run_hillclimb_vm.sh"
+    text = runner.read_text(encoding="utf-8") if runner.exists() else ""
+    archive_at = text.find("check_run_scope.py\" --archive")
+    if archive_at < 0:
+        archive_at = text.find("--archive")
+    bare = [
+        i for i in range(len(text))
+        if text.startswith("check_run_scope.py", i)
+        and "--archive" not in text[i:i + 60]
+    ]
+    return [
+        (
+            "the VM runner archives the previous run's state before it dispatches anything",
+            archive_at >= 0,
+        ),
+        (
+            "...and asserts the tree is clean AFTER archiving, so a reset that moved nothing is "
+            "caught rather than reported as success",
+            bool(bare) and archive_at >= 0 and max(bare) > archive_at,
+        ),
+        (
+            "...and leaves the deliberate-continuation override able to skip the move",
+            "SAROL_ALLOW_INHERITED_LESSONS" in text,
+        ),
+    ]
+
+
 def _pin_checks() -> list:
     """V4: one case per component the pin covers, each moving an input rather than the dict."""
     import tempfile
@@ -1863,6 +1976,8 @@ def _selftest() -> int:
             "the unspecified-stage refusal is still profiles.unrunnable_reason, not a second gate",
             unspecified_stage_problem("agentic") == profiles_mod.unrunnable_reason("agentic"),
         ),
+        # -- Phase 4's reset, delegated rather than reimplemented ------------------------------
+        *_run_scope_checks(),
         (
             "the default profile is still refused at preflight, and names its missing stages",
             (lambda r: r is not None and "extractor" in r and "verifier" in r)(

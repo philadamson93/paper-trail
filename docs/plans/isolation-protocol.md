@@ -1633,6 +1633,35 @@ small enough to state in full:
 | What the optimizer's container mounts | the program subtree of the checkout, via rad-eval's temp writable staging + copy-back (1e) — **not** a clone, and never the scorer, gold, `iter/` or the manifest |
 | Resume after an interrupted run | ⚠ no longer a design question. A reset is idempotent against an already-clean tree, so a resumed run either finds the archive it made or makes one; there is no half-provisioned clone to reconcile |
 
+✅ **Built 2026-09-19. The mechanism already mostly existed, and was extended rather than rebuilt.**
+`scripts/check_run_scope.py` (Gate H) already archived `meta-learnings.md` and `findings/iter-*.md`,
+reset the sheet from a **committed** stub anchor, carried the continuation override, and had its own
+negative controls. Three gaps closed:
+
+1. **`iter/` was not covered.** It is now archived and asserted with the other two. This is the item
+   that mattered most in practice: `iter/<n>/` is keyed by iteration number, not by run, so run N+1's
+   iteration 1 overwrites run N's — and `iter/<n>/release_val.json` is exactly what the VM runner
+   reads back at the end, so two runs' results become indistinguishable on disk.
+2. **The runner refused instead of resetting.** It now runs `--archive <run-id>` first and asserts
+   afterwards. Nobody watches a VM run, so a gate whose only outcome is "stop and ask a human to run
+   the archive command" costs the whole run. Archiving is a **move**, never a delete, and
+   `SAROL_ALLOW_INHERITED_LESSONS=1` still skips it for a deliberate continuation.
+3. **The assertion is a wrapper, not a copy.** The plan said to put it in `optimizer/isolation.py`;
+   writing one there would have been a second version of a live gate, drifting the first time the
+   reset list changed. `isolation.run_scope_problem()` delegates to Gate H's own predicate — the same
+   idiom, and the same stated reason, as `unspecified_stage_problem` two functions above it. A gate
+   proves the delegation **by substitution** rather than by reading the source for an import.
+
+⚠ **The archive path stays `~/.paper-trail/runs/_archive/<timestamp>-<run id>/`, not the
+`runs/<run_id>/_archive/` the table above names.** The plan contradicts itself here — its own OQ8
+paragraph cites the existing path — and archives already exist there. Moving them would orphan the
+only copy of the earlier sheets, which is the thing this gate exists to prevent.
+
+⚠ **Still open, and NOT decided here: the `program-v*` tag namespace.** The table marks it *"decide
+before implementing"*, but it is independent of the reset — tags are repo-global either way, and
+nothing in the reset touches them. The recommendation stands (key version identity on the manifest's
+`combined_hash`, which is committed and is already what Phase 3's pin covers) and it needs Phil.
+
 ✅ **Phase 4 and Phase 1e are no longer coupled.** The clone version made them the same boundary at two
 scopes, so they had to land together. They do not: 1e's write boundary is the **mount set plus
 copy-back**, which this plan already states outright (*"a clone with no container around the optimizer

@@ -8,17 +8,25 @@ exist. Nothing in this repo ever archived or reset it -- it was reset once by ha
 `optimizer-instrument-repair.md`) while `profiles.py` reasons as though "reset between runs" were a
 guaranteed property. This gate makes the sheet's lifecycle real.
 
-⚠ **This is a stopgap, and the real fix is structural.** rad-eval scopes a run by cloning the repo
-per run-id (`src/optimizer_loop/run_artifacts.py::default_loop_clone`), so the working tree, `iter/`,
-the `program-v*` tag namespace and the optimizer's own docs all isolate for free. paper-trail already
-has the run-id -- results land in `~/.paper-trail/runs/<run-id>/` -- but the boundary stops there and
-releases, lessons, findings and tags all live in one shared checkout. Adopting the per-run clone
-retires this gate and most of the ledger-recut problem with it. Recorded as a contract owed to the
-isolation plan, which is already building per-run checkouts.
+🚩 **This used to call itself a stopgap awaiting a per-run git clone. OQ9 struck the clone (Phil,
+2026-09-14) and this IS the fix.** The reasoning, in one line: the defect is *sequential* residue
+between runs, a clone buys *concurrent-namespace* isolation paper-trail will never need, and the
+reset is the part that does the work. So this gate is not retired — it is the mechanism, and the VM
+runner now calls it twice per run: `--archive <run-id>` to move the state out, then bare to assert
+the tree is actually clean. A reset with no assertion after it is an inert mechanism.
+
+⚠ **One thing the clone would have given free is still open: the `program-v*` tag namespace.** Tags
+are repo-global whether or not there is a clone, so a ledger recut still rewrites shared identity.
+The plan's recommendation is to stop treating tags as version identity and key on the manifest's
+`combined_hash`, which is committed and is already what the configuration pin covers. Not decided
+here.
+
+⚠ **The reset list is derived from what the optimizer reads, not appended to when something is
+noticed.** Adding a fourth item later means the derivation was wrong, not that the list grew.
 
     check_run_scope.py                 assert this checkout is ready for a FRESH run
-    check_run_scope.py --archive <id>  file the current sheet + findings away, then reset
-    check_run_scope.py --selftest      negative controls
+    check_run_scope.py --archive <id>  file the sheet, findings and iter/ away, then reset
+    check_run_scope.py --selftest      negative controls, including "what if the archive is skipped"
 
 Override for a deliberate continuation run: `SAROL_ALLOW_INHERITED_LESSONS=1` (same convention as
 `SAROL_ALLOW_ENGINE_DIVERGENCE`). It is loud on purpose -- a continuation run's numbers are not
@@ -40,6 +48,14 @@ OPT = REPO / "experiments" / "sarol-2024" / "optimizer"
 SHEET = OPT / "meta-learnings.md"
 STUB = OPT / "meta-learnings.stub.md"
 FINDINGS = OPT / "findings"
+#: The optimizer's per-iteration releases. Run state living in the shared checkout: `iter/<n>/`
+#: is written by run N and read by nothing that should outlive it, and the VM runner's own closing
+#: line admits the boundary stops here -- *"Results under $RUNS; releases under $REPO_ROOT/iter/."*
+ITER = REPO / "iter"
+#: ⚠ **Kept at `runs/_archive/<ts>-<run_id>`, not the `runs/<run_id>/_archive/` the plan's Phase 4
+#: table names.** The plan contradicts itself -- its own OQ8 paragraph cites this path -- and
+#: archives already exist here. Moving them would orphan the only copy of the earlier sheets, which
+#: is the precise thing this script exists to prevent.
 ARCHIVE_ROOT = Path.home() / ".paper-trail" / "runs" / "_archive"
 OVERRIDE = "SAROL_ALLOW_INHERITED_LESSONS"
 
@@ -102,6 +118,14 @@ def inherited() -> list[str]:
             f"{_rel(FINDINGS)} still holds a previous run's per-iteration findings: "
             f"{', '.join(stale)}"
         )
+    releases = sorted(p.name for p in ITER.glob("*") if p.is_dir()) if ITER.exists() else []
+    if releases:
+        problems.append(
+            f"{_rel(ITER)} still holds a previous run's per-iteration releases: "
+            f"{', '.join(releases)}. They are keyed by iteration number, not by run, so run N+1's "
+            f"iteration 1 overwrites run N's -- and `iter/<n>/release_val.json` is what the runner "
+            "reads back at the end, so the two runs' results become indistinguishable on disk."
+        )
     return problems
 
 
@@ -116,6 +140,10 @@ def cmd_archive(run_id: str) -> int:
         for p in sorted(FINDINGS.glob("iter-*.md")):
             shutil.move(str(p), dest / p.name)
             moved.append(f"findings/{p.name}")
+    if ITER.exists():
+        for d in sorted(q for q in ITER.glob("*") if q.is_dir()):
+            shutil.move(str(d), dest / f"iter-{d.name}")
+            moved.append(f"iter/{d.name}")
     if STUB.exists():
         shutil.copyfile(STUB, SHEET)
     if not moved:
@@ -158,6 +186,7 @@ def main() -> int:
 def selftest() -> int:
     ok = True
     real_sheet, real_stub = SHEET, STUB
+    real_iter, real_archive, real_findings = ITER, ARCHIVE_ROOT, FINDINGS
     import tempfile
 
     with tempfile.TemporaryDirectory() as td:
@@ -168,6 +197,11 @@ def selftest() -> int:
 
         globals()["STUB"] = stub
         globals()["FINDINGS"] = tmp / "findings"
+        # ⚠ `ITER` and `ARCHIVE_ROOT` must be redirected too. Without this the `iter/` branch below
+        # points at the real checkout, which has no `iter/`, so every assertion about it passes
+        # because there is nothing there -- green by absence, on the one branch being added.
+        globals()["ITER"] = tmp / "iter"
+        globals()["ARCHIVE_ROOT"] = tmp / "_archive"
 
         sheet.write_text("# clean\n")
         globals()["SHEET"] = sheet
@@ -193,8 +227,48 @@ def selftest() -> int:
         print(f"  {'PASS' if not r else 'FAIL'}  ...but findings/README.md is standing doc, not run state")
         ok &= not r
 
+        # -- `iter/`, the third thing the reset owns (Phase 4) --------------------------------
+        (tmp / "iter" / "1").mkdir(parents=True)
+        (tmp / "iter" / "1" / "release_val.json").write_text("{}")
+        r = inherited()
+        print(f"  {'PASS' if r else 'FAIL'}  a previous run's iter/<n> releases are refused, since "
+              f"run N+1 writes the same iteration numbers over them")
+        ok &= bool(r)
+
+        # -- the archive actually clears all three, and a second run id sees a clean tree -----
+        sheet.write_text("# clean\n\n## Confirmed\n- run A learned X\n")
+        (tmp / "findings" / "iter-4.md").write_text("run A finding")
+        rc = cmd_archive("run-A")
+        after_first = inherited()
+        print(f"  {'PASS' if rc == 0 and not after_first else 'FAIL'}  archiving under one run id "
+              f"leaves the tree clean for the next")
+        ok &= rc == 0 and not after_first
+
+        archived = sorted(q.name for d in (tmp / "_archive").glob("*") for q in d.glob("*"))
+        print(f"  {'PASS' if set(archived) >= {'meta-learnings.md', 'iter-4.md', 'iter-1'} else 'FAIL'}"
+              f"  ...and all three kinds are IN the archive, not deleted: {archived}")
+        ok &= set(archived) >= {"meta-learnings.md", "iter-4.md", "iter-1"}
+
+        # A second consecutive run id, with nothing new: still clean, and idempotent.
+        rc2 = cmd_archive("run-B")
+        after_second = inherited()
+        print(f"  {'PASS' if rc2 == 0 and not after_second else 'FAIL'}  ...and a second consecutive "
+              f"run id finds it clean, so the reset is idempotent")
+        ok &= rc2 == 0 and not after_second
+
+        # The negative control the plan names: SKIP the archive and the assertion must FAIL.
+        # A reset with no control for "what if it did not run" is the inert-mechanism pattern.
+        sheet.write_text("# clean\n\n## Confirmed\n- run B learned Y\n")
+        (tmp / "iter" / "2").mkdir(parents=True)
+        skipped = inherited()
+        print(f"  {'PASS' if len(skipped) >= 2 else 'FAIL'}  skipping the archive is caught, naming "
+              f"every item that was not reset ({len(skipped)} of them)")
+        ok &= len(skipped) >= 2
+
     globals()["SHEET"], globals()["STUB"] = real_sheet, real_stub
-    print(f"\n{'4/4 passed' if ok else 'SELFTEST FAILED'}")
+    globals()["ITER"], globals()["ARCHIVE_ROOT"] = real_iter, real_archive
+    globals()["FINDINGS"] = real_findings
+    print(f"\n{'9/9 passed' if ok else 'SELFTEST FAILED'}")
     return 0 if ok else 1
 
 

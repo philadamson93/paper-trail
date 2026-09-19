@@ -89,13 +89,30 @@ fi
 # instruction restated verbatim stays actionable to a model skimming for what to do.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_prompt_hygiene.py" \
   || fail "GATE G FAILED: an agent-read prompt carries development history (what it used to say, or a dated edit). State the rule as it stands -- the history belongs in git and docs/."
-# Gate H: a fresh run starts from a fresh sheet. `meta-learnings.md` is injected into every
-# optimizer session, so a run that inherits the previous run's lessons opens with hypotheses it did
-# not earn -- measured against a program that may no longer exist. Nothing ever archived it; this is
-# the gate that makes its lifecycle real. The structural fix is the per-run loop clone rad-eval
-# already uses; until that lands, this is the barrier.
+# Phase 4, the run-start reset. `meta-learnings.md` is injected into every optimizer session, the
+# per-iteration findings are read the same way, and `iter/<n>/` is keyed by iteration number rather
+# than by run -- so run N+1 writes over run N's releases. A run that inherits any of the three opens
+# with hypotheses it did not earn, measured against a program that may no longer exist.
+#
+# ⚠ **This archives first and then asserts, rather than refusing and waiting for a human.** Nobody
+# is watching a VM run, so a gate whose only outcome is "stop and ask someone to run the archive
+# command" costs the whole run. Archiving is a MOVE, never a delete: everything lands under
+# ~/.paper-trail/runs/_archive/<timestamp>-<run id>/ and the assertion below then proves the tree is
+# actually clean. The reset is idempotent, so a resumed run either finds the archive it made or
+# makes one.
+#
+# The continuation escape hatch still wins: with SAROL_ALLOW_INHERITED_LESSONS=1 nothing is moved
+# and the gate passes carrying the state, loudly.
+if [ "${SAROL_ALLOW_INHERITED_LESSONS:-}" = "1" ]; then
+  say "  reset:   SKIPPED -- SAROL_ALLOW_INHERITED_LESSONS=1, this is a CONTINUATION run"
+else
+  "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" --archive "$RUN_ID" \
+    || fail "RESET FAILED: could not archive the previous run's lessons, findings or releases. Nothing has been dispatched."
+fi
+# ...and now assert it worked. A reset with no assertion after it is an inert mechanism -- this is
+# the half that fails if the archive silently moved nothing.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" \
-  || fail "GATE H FAILED: this checkout would hand the run a previous run's lessons or findings. Archive them first (check_run_scope.py --archive $RUN_ID), or set SAROL_ALLOW_INHERITED_LESSONS=1 if you genuinely mean this to be a continuation run -- whose numbers are then not comparable to a fresh run's."
+  || fail "GATE H FAILED AFTER THE RESET: this checkout still holds a previous run's lessons, findings or releases. The archive step above did not clear them -- do not treat this run's numbers as a fresh run's."
 echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
