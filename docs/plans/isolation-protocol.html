@@ -1,891 +1,498 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="plan-sha256" content="76e03742b19e8bbb8dbf99efda42fc72f29a9f1d95f88048872727b104830c84">
-<title>The isolation protocol — plan explainer</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="plan-sha256" content="e62ee931e5cd420f20e5fc2669a20c4a04ffdd38bbfc79966b5c478622d59e5a">
+<title>The isolation protocol - plan explainer</title>
+<style>
+:root{--bg:#fbfbfd;--fg:#1a1a1f;--mut:#5c5c6b;--card:#fff;--line:#e2e2ea;--acc:#c2185b;
+--ok:#2e7d32;--pend:#ef6c00;--blok:#757575;--code:#f4f4f8;--reced:0.42}
+@media (prefers-color-scheme:dark){:root{--bg:#131317;--fg:#e9e9ef;--mut:#a0a0b0;--card:#1c1c22;
+--line:#32323c;--acc:#ff7aa8;--ok:#7dd287;--pend:#ffb457;--blok:#9a9aa5;--code:#24242c;--reced:0.35}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15.5px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 120px}
+h1{font-size:27px;line-height:1.25;margin:0 0 6px}
+h2{font-size:20px;margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:20px 0 8px}
+p{margin:9px 0}
+code{background:var(--code);padding:1.5px 5px;border-radius:4px;font-size:0.9em;
+font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:16px 18px;margin:14px 0}
+.prog{border-left:4px solid var(--pend)}
+.mut{color:var(--mut)}
+.small{font-size:13.5px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--mut);margin-top:10px}
+.chip{display:inline-block;padding:1.5px 9px;border-radius:999px;font-size:11.5px;font-weight:660;
+letter-spacing:.3px;vertical-align:middle}
+.c-ship{background:rgba(46,125,50,.16);color:var(--ok)}
+.c-pend{background:rgba(239,108,0,.18);color:var(--pend)}
+.c-blok{background:rgba(120,120,120,.18);color:var(--blok)}
+.c-new{background:rgba(194,24,91,.16);color:var(--acc)}
+.c-chg{background:rgba(2,119,189,.18);color:#0277bd}
+@media (prefers-color-scheme:dark){.c-chg{color:#7fc7f5}}
+details{background:var(--card);border:1px solid var(--line);border-radius:11px;margin:10px 0;padding:0}
+details>summary{cursor:pointer;padding:13px 16px;font-weight:620;list-style:none;display:flex;
+align-items:center;gap:10px;flex-wrap:wrap}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"\25B8";color:var(--mut);transition:transform .15s}
+details[open]>summary::before{transform:rotate(90deg)}
+.dbody{padding:2px 18px 16px;border-top:1px solid var(--line)}
+details.recede{opacity:var(--reced)}
+details.recede:hover{opacity:1}
+body.only-changed details:not([data-changed]){display:none}
+body.only-changed .noflag{display:none}
+.note{background:rgba(2,119,189,.08);border-left:3px solid #0277bd;padding:8px 12px;margin:10px 0;
+border-radius:0 6px 6px 0;font-size:14px}
+.resp{background:rgba(194,24,91,.07);border-left:3px solid var(--acc);padding:9px 13px;margin:11px 0;
+border-radius:0 6px 6px 0;font-size:14px}
+.resp b.lbl{display:block;font-size:10.5px;letter-spacing:1.1px;text-transform:uppercase;
+color:var(--acc);margin-bottom:3px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:640}
+.diagwrap{position:relative;height:540px;border:1px solid var(--line);border-radius:11px;
+overflow:hidden;background:var(--card);margin:12px 0}
+.diagwrap.fs{position:fixed;inset:14px;height:auto;z-index:70}
+.diagbar{position:absolute;top:8px;right:10px;z-index:5;display:flex;gap:6px}
+.diagbar button{font-size:11.5px;padding:3px 9px;border-radius:6px;border:1px solid var(--line);
+background:var(--card);color:var(--fg);cursor:pointer}
+.hint{position:absolute;bottom:7px;left:11px;font-size:11px;color:var(--mut);z-index:5}
+pre.mermaid{margin:0;height:100%;display:flex;align-items:center;justify-content:center}
+textarea{width:100%;min-height:62px;margin-top:9px;padding:8px 10px;border:1px solid var(--line);
+border-radius:7px;background:var(--bg);color:var(--fg);font:14px/1.5 inherit;resize:vertical}
+select{padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.bar{position:sticky;top:0;z-index:40;background:var(--card);border:1px solid var(--line);
+border-radius:0 0 11px 11px;padding:9px 15px;display:flex;gap:13px;align-items:center;
+flex-wrap:wrap;font-size:13px;margin:0 0 6px}
+.bar button{font-size:12.5px;padding:4px 11px;border-radius:7px;border:1px solid var(--line);
+background:var(--bg);color:var(--fg);cursor:pointer}
+#copybtn{position:fixed;right:20px;bottom:20px;z-index:60;padding:11px 17px;border-radius:11px;
+border:none;background:var(--acc);color:#fff;font-size:14px;font-weight:640;cursor:pointer;
+box-shadow:0 5px 18px rgba(0,0,0,.24)}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#222;color:#fff;
+padding:9px 18px;border-radius:9px;font-size:13.5px;z-index:99;opacity:0;transition:opacity .2s}
+.toast.on{opacity:1}
+ul{margin:8px 0;padding-left:21px}li{margin:4px 0}
+.verify{background:rgba(46,125,50,.09);border-left:3px solid var(--ok);padding:8px 12px;
+border-radius:0 6px 6px 0;font-size:13.5px;margin-top:11px}
+</style>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-<style>
-:root{
-  --bg:#fbfbfd; --panel:#ffffff; --ink:#15181d; --muted:#5b6472; --line:#dfe3ea;
-  --accent:#0b6fb8; --accent-soft:#e8f2fb; --warn:#8a5200; --warn-soft:#fdf3e2;
-  --good:#1d6b45; --good-soft:#e7f5ed; --stop:#9b2233; --stop-soft:#fdeced;
-  --new:#7a2f8f; --new-soft:#f6ecfa;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#11141a; --panel:#181c24; --ink:#e7eaf0; --muted:#9aa5b5; --line:#2a313d;
-    --accent:#5ab0ea; --accent-soft:#132532; --warn:#e0b070; --warn-soft:#2a2113;
-    --good:#6fcf9b; --good-soft:#12271c; --stop:#f08a99; --stop-soft:#2b1418;
-    --new:#d59cea; --new-soft:#251a2b;
-  }
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:15px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 120px}
-h1{font-size:25px;line-height:1.25;margin:0 0 6px}
-h2{font-size:19px;margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
-h3{font-size:16px;margin:22px 0 8px}
-p{margin:9px 0}
-a{color:var(--accent)}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
-  background:var(--accent-soft);padding:1px 5px;border-radius:4px}
-pre code{display:block;padding:11px 13px;overflow-x:auto;line-height:1.5}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:11px;
-  padding:16px 18px;margin:14px 0}
-.prog{border-left:4px solid var(--accent)}
-.chg{border-left:4px solid var(--new);background:var(--new-soft)}
-.note{border-left:4px solid var(--warn);background:var(--warn-soft)}
-.ok{border-left:4px solid var(--good);background:var(--good-soft)}
-.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:9px 22px;
-  font-size:13px;color:var(--muted)}
-.meta b{color:var(--ink);font-weight:600}
-.chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.35px;
-  text-transform:uppercase;padding:2px 8px;border-radius:999px;vertical-align:middle}
-.c-new{background:var(--new-soft);color:var(--new);border:1px solid var(--new)}
-.c-chg{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn)}
-.c-ok{background:var(--good-soft);color:var(--good);border:1px solid var(--good)}
-.c-stop{background:var(--stop-soft);color:var(--stop);border:1px solid var(--stop)}
-.c-wait{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
-table{border-collapse:collapse;width:100%;font-size:13.5px;margin:12px 0}
-th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
-th{background:var(--accent-soft);font-weight:600}
-details{background:var(--panel);border:1px solid var(--line);border-radius:10px;
-  padding:11px 15px;margin:9px 0}
-details[data-changed]{border-color:var(--warn)}
-summary{cursor:pointer;font-weight:600;font-size:14.5px}
-summary::marker{color:var(--muted)}
-.recede{opacity:.62}
-.diagbox{position:relative;height:540px;overflow:hidden;background:var(--panel);
-  border:1px solid var(--line);border-radius:11px;margin:12px 0}
-.diagbox.full{position:fixed;inset:12px;height:auto;z-index:70}
-.diagctl{position:absolute;top:8px;right:10px;z-index:8;display:flex;gap:6px}
-.diagctl button{font-size:11.5px;padding:3px 9px;border:1px solid var(--line);
-  background:var(--bg);color:var(--ink);border-radius:6px;cursor:pointer}
-.hint{position:absolute;bottom:7px;left:11px;z-index:8;font-size:11px;color:var(--muted)}
-.whatchanged{font-size:13px;color:var(--warn);background:var(--warn-soft);
-  border-radius:7px;padding:7px 10px;margin:8px 0 12px}
-textarea{width:100%;min-height:62px;margin-top:9px;padding:8px 10px;border-radius:7px;
-  border:1px solid var(--line);background:var(--bg);color:var(--ink);
-  font:13px/1.5 inherit;resize:vertical}
-select{padding:4px 8px;border-radius:6px;border:1px solid var(--line);
-  background:var(--bg);color:var(--ink);font-size:13px}
-.bar{position:fixed;bottom:0;left:0;right:0;background:var(--panel);
-  border-top:1px solid var(--line);padding:9px 20px;display:flex;gap:12px;
-  align-items:center;justify-content:flex-end;z-index:60;font-size:13px}
-.bar button{font-size:13px;font-weight:600;padding:7px 15px;border-radius:8px;
-  border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
-.bar .ghost{background:transparent;color:var(--accent)}
-.oq{border-left:3px solid var(--good)}
-.plain{font-weight:600;color:var(--ink);margin:0 0 6px}
-.orig{font-size:13px;color:var(--muted)}
-.tag{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;
-  font-weight:700;margin-bottom:4px}
-ul,ol{margin:8px 0 8px 20px;padding:0}
-li{margin:4px 0}
-.small{font-size:12.5px;color:var(--muted)}
-</style>
-</head>
-<body>
-<div class="wrap">
-
-<!-- ============ PROGRAM PANEL ============ -->
-<div class="card prog">
-  <div class="tag">Program</div>
-  <p><b>This plan has no <code>Program:</code> header, and no brief exists for it.</b> That is a real
-  gap, not a formatting miss — every other live plan resolves to a brief that says why the wider
-  effort exists and which stage this is. Here is the placement, stated by hand so you are not reading
-  this plan cold:</p>
-  <ul>
-    <li><b>Why this effort exists.</b> Every number this experiment has produced came from a judging
-    session that ran with the whole checkout visible and permissions switched off. Sitting in that
-    checkout are the optimizer's notes on which claims it got wrong, its hypothesis log, and a file
-    that leads to the answer key. Across 561 traces nothing was actually read — but that is a
-    measurement, not a guarantee, and it is the only thing standing behind every result so far.</li>
-    <li><b>Where this plan sits.</b> It is the <b>consumer half</b> of a two-repo effort. The other
-    half — the general capability — is <code>agentic-label-opt</code>'s
-    <code>2026-09-16-contained-nested-sessions.md</code>, which <b>landed on 2026-09-17</b> at
-    <code>592862f</code>. That plan had to land first, and it did.</li>
-    <li><b>What this waits on.</b> Nothing upstream any more. Both of the blockers that held it —
-    passing the API credential without writing it into the command, and an egress shape that actually
-    seals — shipped with the engine. What it waits on now is <b>your read of this page</b>.</li>
-    <li><b>Settled, please don't re-open.</b> The container is the mechanism, not hooks (2026-09-11).
-    No per-run git clone; a reset at run start instead (2026-09-14). No driver session; a
-    deterministic Python dispatch (2026-09-14). A dispatch that returns no verdict fails and feeds
-    the optimizer rather than retrying (2026-09-14). Scope is the judging step alone, not all three
-    pipeline stages (2026-09-15). The per-stage mount split is dropped (2026-09-16), and the deferred
-    version of it — "each stage gets its own grant later" — is dropped too (2026-09-17): the program
-    is one entity for data visibility.</li>
-  </ul>
-</div>
-
-<h1>The isolation protocol — putting the thing being measured inside a box</h1>
-<div class="card">
-  <div class="meta">
-    <div><b>Status</b><br>Approved 2026-09-15 · <span class="chip c-chg">Reviewed: Stale</span></div>
-    <div><b>Repo / branch</b><br>paper-trail · <code>sarol-optimizer-concurrent</code></div>
-    <div><b>Worktree</b><br><code>.claude/worktrees/merge-concurrent</code> (tip <code>6b61c2f</code>)</div>
-    <div><b>Source plan</b><br><a href="isolation-protocol.md">isolation-protocol.md</a> · 2,711 lines</div>
-    <div><b>Plan SHA-256</b><br><code>76e03742b19e</code></div>
-    <div><b>Generated</b><br>2026-09-17 · engine at <code>592862f</code></div>
-  </div>
-</div>
-
-<!-- ============ TL;DR ============ -->
-<div class="card">
-  <div class="tag">In short</div>
-  <p>Today the session being judged can see the whole repository, including the answer key. This work
-  replaces that trust with a wall: the judging session runs inside a container that has been handed
-  only the few folders it needs, so the answers are unreachable because they were never mounted — and
-  a decoy planted in the answer folder proves it, because the session must <i>fail</i> to read it.
-  The point is that the optimizer is allowed to rewrite the instructions but cannot rewrite what was
-  mounted.</p>
-  <p><b>What changed since you last looked:</b> the general machinery moved out of this plan into the
-  shared engine and <b>landed there on 2026-09-17</b>. So this plan is now the smaller,
-  paper-trail-specific remainder: pin which version of the engine we run against, say which folders
-  and which secrets, and wire it into the run. Both of your corrections from 2026-09-16 turned out to
-  be free — the engine's design has no place to put the thing you overruled.</p>
-</div>
-
-<!-- ============ CHANGE SUMMARY ============ -->
-<div class="card chg" id="change-summary">
-  <div class="tag">Since your last review</div>
-  <p><b>Baseline:</b> the version behind the explainer you read on <b>2026-09-15</b>
-  (plan <code>a3e4921e27bf</code>). Two rounds of edits have landed on top of it, and both are
-  flagged inline below with <span class="chip c-new">new</span> and
-  <span class="chip c-chg">changed</span> chips. Sections with no chip are not being claimed
-  unchanged — they are simply untouched by these two rounds.</p>
-  <table>
-    <tr><th>Round</th><th>What moved</th><th>Why it matters to you</th></tr>
-    <tr>
-      <td><b>2026-09-16</b><br>your corrections</td>
-      <td>The egress shape was rewritten, and the per-stage mount split was dropped.</td>
-      <td>You asked what the "open" network setting was actually for. The answer was uncomfortable:
-      it seals nothing. The target is now a one-host allowlist.</td>
-    </tr>
-    <tr>
-      <td><b>2026-09-17</b><br>the engine landed</td>
-      <td>A new section at the top — <i>What the engine landed, and what this plan now deletes</i> —
-      plus corrections to the build list, the mount-set step, the file list, the landing section, and
-      one paragraph that had become flatly false.</td>
-      <td>Four things this plan said it would build are already built elsewhere. The remaining work
-      is smaller, and nothing is waiting on another repo any more.</td>
-    </tr>
-    <tr>
-      <td><b>2026-09-18</b><br>first step built</td>
-      <td>The engine version check was rewritten and the required version moved forward. A
-      thirteenth question opened and closed along the way.</td>
-      <td>Building it exposed a false claim in the plan: it said paper-trail pinned nothing. It did,
-      but the pin was 28 commits stale and would have accepted an engine missing everything this
-      work needs.</td>
-    </tr>
-  </table>
-</div>
-
-<!-- ============ REVIEW HISTORY ============ -->
-<h2>How this plan reached its current shape</h2>
-<table>
-  <tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>What it surfaced</th><th>Applied</th></tr>
-  <tr><td>1</td><td>Fresh Claude, first draft</td><td><span class="chip c-stop">Revise</span></td>
-    <td>Five critical. The draft specified paper-trail-local machinery for work the shared engine had
-    already built. <a href="reviews/isolation-protocol-feedback-claude.md">feedback</a></td><td>Yes</td></tr>
-  <tr><td>2</td><td>Codex, cross-model, on the rewrite</td><td><span class="chip c-stop">Blocked</span></td>
-    <td>Six critical, ~13 verification gaps. The credential lands in the command line and a log file;
-    the container prefix cannot be built once up front; the centrepiece seal could be defeated by a
-    broad mount. <a href="reviews/isolation-protocol-feedback.md">feedback</a></td><td>Yes</td></tr>
-  <tr><td>3</td><td>Phil, via explainer, 2026-09-14</td><td><span class="chip c-new">Pivot</span></td>
-    <td>Nine questions resolved, three of them <i>cutting</i> scope: no driver session, no per-run
-    clone, no tag-scoped settings file.</td><td>Yes</td></tr>
-  <tr><td>4</td><td>Four parallel agents against live code, 2026-09-14</td><td><span class="chip c-chg">~20 corrections</span></td>
-    <td>The architecture survived; the inventory of work did not. The refusal census is 22 sites of
-    which only 3 ship. One cited safety number is zero by construction.</td><td>Yes</td></tr>
-  <tr><td>5</td><td>Codex round 2</td><td><span class="chip c-chg">Revise</span></td>
-    <td>Three new questions, and it escalated the naming sweep ahead of implementation.
-    <a href="reviews/isolation-protocol-feedback-codex-round2.md">feedback</a></td><td>Yes</td></tr>
-  <tr><td>6</td><td>Phil, approval 2026-09-15</td><td><span class="chip c-ok">Approved</span></td>
-    <td>Approved at plan <code>942a5f0c9948</code>.</td><td>—</td></tr>
-  <tr><td>7</td><td>Phil, corrections 2026-09-16</td><td><span class="chip c-new">Pivot</span></td>
-    <td>Dropped the per-stage mount split; asked what "open" networking was for, which exposed that
-    it seals nothing.</td><td>Yes (now structural)</td></tr>
-  <tr><td>8</td><td>Engine landing 2026-09-17</td><td><span class="chip c-new">Supersession</span></td>
-    <td>The general machinery is built and merged upstream. This plan shrinks to the consumer
-    slice.</td><td>Yes, this round</td></tr>
-</table>
-
-<!-- ============ REPO MAP ============ -->
-<h2>Where the work lives now <span class="chip c-new">new</span></h2>
-<div class="whatchanged">This picture is the change. Everything in the green box was this plan's to
-build a week ago; it is built and merged now, so the only work left is the amber box.</div>
-<div class="diagbox" id="d1">
-  <div class="diagctl">
-    <button data-reset="d1">Reset</button><button data-full="d1">Fullscreen</button>
-  </div>
-  <pre class="mermaid">
-flowchart LR
-  subgraph eng["The shared engine, landed at 592862f"]
-    scope["SessionScope<br/>the grant: program, readable,<br/>writable, workdir, denied"]
-    pfx["build_contained_session_prefix<br/>validate, then render"]
-    dock["docker_prefix<br/>emits every docker flag"]
-    inh["inherit_env<br/>pass the token by NAME"]
-    net["HostAllowlistNetworkStack<br/>render_dispatch"]
-    nc["negative_control.py<br/>plant a decoy, probe it"]
+</head><body><div class="wrap">
+<div class="bar"><b>Since you last read this</b><span class="chip c-new">4 new</span><span class="chip c-chg">1 changed</span><button onclick="document.body.classList.toggle('only-changed')">Show changed only</button><button onclick="nav(-1)">Prev change</button><button onclick="nav(1)">Next change</button><span class="mut small">baseline: the version generated 2026-09-18</span></div>
+<div class="card prog"><h3 style="margin-top:0">Where this plan sits</h3><p><b>This plan has no program header and no brief.</b> Every other plan resolves to a named program and a stage within it; this one does not, so there is nothing to show you here about why the wider effort exists or what else is waiting on it. That is a real gap, flagged rather than papered over with blank space.</p><p class="small mut">What can be said from the plan itself: it is one slice of the SAROL evaluation work, it serves the baseline recut that a sibling plan (Plan A) is owed, and it depends on machinery that landed in the shared engine on 2026-09-17.</p></div>
+<h1>The isolation protocol</h1>
+<p class="mut">Putting the agentic program inside the shared substrate.</p>
+<div class="card"><div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center"><span class="chip c-ship">Status: Approved</span><span class="chip c-pend">Reviewed: Stale</span><span class="chip c-ship">All five phases built</span></div><div class="meta"><span>Branch <code>sarol-optimizer-concurrent</code></span><span>Worktree <code>.claude/worktrees/merge-concurrent</code></span><span>Tip <code>1172d65</code></span><span>Source <a href="isolation-protocol.md">isolation-protocol.md</a></span><span>plan-sha <code>e62ee931e5cd</code></span><span>generated 2026-09-19 10:58</span></div><p class="small mut" style="margin-top:11px">&ldquo;Reviewed: Stale&rdquo; is the honest state: you approved this on 2026-09-15, and it has been substantively revised four times since. Nothing here is waiting on code.</p></div>
+<h2>What this is for</h2>
+<div class="card"><p>Every number this experiment has produced so far came from a judging session that could read the entire repository &mdash; including the optimizer's own notes on where it had gone wrong, and a file carrying the answer key. Across 561 of those sessions nothing was actually read. But thirteen of them lost track of their task and fell back on looking around the working directory, and two listed the optimizer's own findings as things they might work on. The only thing standing between &ldquo;listed&rdquo; and &ldquo;read&rdquo; was that no human was there to say yes.</p><p>This plan makes the boundary a fact about the filesystem instead of a sentence in a prompt, and then proves it the way its absence should have been caught: plant a marker file where the answer key lives and show the program cannot open it.</p><p class="small mut">Worth being clear about what it does not buy. It does not make the existing numbers wrong, and it does not by itself produce a clean baseline &mdash; the recut that a sibling plan is owed still has to be run, and it had to wait for this because 61% of one iteration's judging sessions read a stale verdict for the same claim.</p></div>
+<h2>How it reached this shape</h2>
+<table><thead><tr><th>Pass</th><th>Reviewer</th><th>Verdict</th><th>What it surfaced</th><th>Applied</th></tr></thead><tbody>
+<tr><td>1</td><td>Claude subagent</td><td><span class="chip c-chg">Revise</span></td><td>Scope and mount-set shape</td><td>Yes</td></tr>
+<tr><td>2</td><td>Codex</td><td><span class="chip c-chg">Revise</span></td><td>Two-source reconstruction contract, exit validation, enforceable pin</td><td>Yes</td></tr>
+<tr><td>3</td><td>Phil</td><td><span class="chip c-pend">Pivot</span></td><td>No per-run clone; eliminate the driver session; retire the settings file</td><td>Yes</td></tr>
+<tr><td>4</td><td>Phil</td><td><span class="chip c-ship">Approved</span></td><td>Approved 2026-09-15 at plan-sha 942a5f0c9948</td><td>Yes, then demoted</td></tr>
+<tr><td>5</td><td>Codex</td><td><span class="chip c-chg">Revise</span></td><td>Phase 2: command discovery too broad; both new gates weaker than the plan asked</td><td>Yes, 2026-09-19</td></tr>
+</tbody></table>
+<p class="small mut">Three of the fourteen open questions cut scope rather than adding it: the driver session was eliminated, the per-run git clone became a reset, and the tag-scoped settings file was retired.</p>
+<h2>The two things that must not see each other</h2>
+<div class="card"><p>Two different actors, and the plan is about both. Calling one of them &ldquo;the judge&rdquo; was the original confusion &mdash; judging is one <em>part</em> of the program, not the whole of it.</p><table><thead><tr><th></th><th>The program</th><th>The optimizer</th></tr></thead><tbody><tr><td>What it is</td><td>the labelling pipeline &mdash; one session per claim</td><td>the agent that rewrites the program between iterations</td></tr><tr><td>How often it runs</td><td>561 times per iteration</td><td>once per iteration, about five a run</td></tr><tr><td>Must never read</td><td>the gold labels, the benchmark tree, the optimizer's own notes</td><td>the held-out set claim by claim &mdash; it gets one number, never which ones it got wrong</td></tr><tr><td>Boxed in today?</td><td><span class="chip c-ship">yes, this plan</span></td><td><span class="chip c-ship">yes, already</span> and it works</td></tr></tbody></table><p class="small mut">The second boundary is the model for the first. It is the one read check in the system that already works, and the new one was built beside it reusing the same idiom rather than inventing a second style.</p><textarea class="section-feedback" data-id="principals" placeholder="Notes"></textarea></div>
+<h2>What was touched</h2>
+<div class="card"><table><thead><tr><th>File</th><th>What changed</th></tr></thead><tbody><tr><td><code>optimizer/isolation.py</code></td><td>this repo's boundary: the grant, the container line, the egress allowlist, the configuration hash and its committed pin, and the run-start assertion</td></tr><tr><td><code>optimizer/adapter.py</code></td><td>the thing that dispatches: refuses without a boundary, resolves the frozen command against the version being scored, refuses an unpinned configuration before spending, stamps the release with the committed pin</td></tr><tr><td><code>optimizer/dispatcher.py</code></td><td>builds the boundary and passes it down</td></tr><tr><td><code>optimizer/seal_control.py</code></td><td>the sentinel proof, against a live daemon</td></tr><tr><td><code>optimizer/dispatch_prompt.py</code></td><td>renders the prompt that used to be a slash command</td></tr><tr><td><code>scripts/check_run_scope.py</code></td><td>archives and asserts the run-start reset, now including the per-iteration releases</td></tr><tr><td><code>scripts/vm/run_hillclimb_vm.sh</code></td><td>resets before it dispatches, rather than stopping to ask</td></tr><tr><td><code>program-v0/manifest.json</code></td><td>one new key holding the configuration pin. The program version and its own hash are untouched</td></tr></tbody></table><textarea class="section-feedback" data-id="files" placeholder="Notes"></textarea></div>
+<h2>Where this sits in the two repos</h2>
+<div class="diagwrap" id="d1"><div class="diagbar"><button onclick="rst('d1')">Reset</button><button onclick="fsx('d1')">Fullscreen</button></div><pre class="mermaid">flowchart LR
+  subgraph eng["Shared engine, agentic-label-opt"]
+    scope["isolation.session_scope<br/>the grant, and what refuses a bad one"]
+    dock["isolation.docker_prefix<br/>renders the container line"]
+    net["isolation.network_allowlist<br/>one permitted destination"]
   end
-  subgraph pt["paper trail, the work that is left"]
-    pin["pyproject.toml<br/>NEW: pin the engine at 592862f"]
-    iso["optimizer/isolation.py<br/>shrinks to mount CONTENTS"]
-    adp["optimizer/adapter.py<br/>wire it into SarolRunner.process"]
-    disp["optimizer/dispatch_prompt.py<br/>NEW: deterministic dispatch"]
-    vm["run_hillclimb_vm.sh<br/>reset state at run start"]
+  subgraph pt["paper-trail, the consumer"]
+    iso["optimizer/isolation.py<br/>this repo's boundary"]
+    adp["optimizer/adapter.py<br/>the thing that dispatches and refuses"]
+    disp["optimizer/dispatcher.py"]
+    seal["optimizer/seal_control.py<br/>the sentinel proof"]
+    crs["scripts/check_run_scope.py<br/>the run-start reset"]
+    vmr["scripts/vm/run_hillclimb_vm.sh"]
   end
-  subgraph unre["Must stay unreachable, and be proven so"]
-    gold["the answer key<br/>paper trail gold"]
-    bench["the held out set<br/>paper trail benchmarks"]
-    notes["the optimizer's own notes<br/>iter, findings, meta learnings"]
+  subgraph frozen["What is pinned"]
+    man["program-v0/manifest.json<br/>the frozen program, plus runtime_pins"]
+    img["paper-trail-isolation image<br/>pinned by digest"]
   end
-  scope --> pfx
-  pfx --> dock
-  inh --> dock
-  net --> dock
-  pin -->|"decides which engine bytes run"| scope
-  iso -->|"fills in which folders"| scope
-  adp -->|"asks for one container per dispatch"| net
-  disp -->|"hands the judge its question"| adp
-  dock -->|"starts the judging session"| box["The judging session<br/>sees ONLY what was granted"]
-  vm --> box
-  nc -->|"must FAIL to read"| gold
-  nc -->|"must FAIL to read"| bench
-  nc -->|"must FAIL to read"| notes
-  box -.->|"no mount exists"| gold
-  box -.->|"no mount exists"| bench
-  box -.->|"no mount exists"| notes
+  subgraph prod["What a run produces"]
+    verd["per-claim verdicts and traces"]
+    rel["iter/n/release_val.json"]
+  end
+  subgraph untouched["Out of scope here"]
+    gold["the gold labels"]
+    bench["the benchmark tree"]
+  end
+  scope --> iso
+  dock --> iso
+  net --> iso
+  iso --> adp
+  iso --> seal
+  iso --> crs
+  adp --> disp
+  disp --> verd
+  disp --> rel
+  man --> adp
+  img --> iso
+  vmr --> crs
+  vmr --> disp
+  iso -.->|never mounted, proved by sentinel| gold
+  iso -.->|never mounted, proved by sentinel| bench
   subgraph legend["Color legend"]
-    l1["Built and merged upstream (green)"]
-    l2["Work left in paper trail (amber)"]
-    l3["Must remain out of reach (grey)"]
+    l1["Built by this plan (rose)"]
+    l2["Pinned reference (cyan)"]
+    l3["Comes from the shared engine (blue)"]
+    l4["Produced by a run (green)"]
+    l5["Deliberately unreachable (grey)"]
   end
-  classDef done fill:#dcf2e6,stroke:#1d6b45,stroke-width:1.5px,color:#0c2d1c
-  classDef todo fill:#fdeccd,stroke:#8a5200,stroke-width:2.5px,color:#3a2200
-  classDef off fill:#e8eaee,stroke:#8d95a3,stroke-dasharray:4 3,color:#3b4149
-  classDef live fill:#d9ecfa,stroke:#0b6fb8,stroke-width:2px,color:#0a2e49
-  class scope,pfx,dock,inh,net,nc,l1 done
-  class pin,iso,adp,disp,vm,l2 todo
-  class gold,bench,notes,l3 off
-  class box live
-  </pre>
-  <div class="hint">scroll to zoom · drag to pan</div>
-</div>
-
-<!-- ============ BLAST RADIUS ============ -->
-<h2>How a grant becomes a wall <span class="chip c-chg">changed</span></h2>
-<div class="whatchanged">Rewritten this round. The boxes that used to be ours — a mount vocabulary, a
-host-path check, a per-dispatch factory — are the engine's now, so the only thing paper-trail writes
-is the left-hand column.</div>
-<div class="diagbox" id="d2">
-  <div class="diagctl">
-    <button data-reset="d2">Reset</button><button data-full="d2">Fullscreen</button>
-  </div>
-  <pre class="mermaid">
-flowchart LR
-  subgraph fills["What paper trail fills in"]
-    f1["program: the frozen<br/>program snapshot"]
-    f2["readable: the spec root"]
-    f3["writable: this claim's<br/>staging ROOT, plus a trace dir"]
-    f4["workdir: the snapshot"]
-    f5["denied: gold, benchmarks,<br/>iter, findings, meta learnings"]
-    f6["secrets: one token name"]
-    f7["network: one allowed host"]
+  classDef mine fill:#ffe0ea,stroke:#c2185b,stroke-width:3px,color:#3a0018
+  classDef pin fill:#d7f6ff,stroke:#0277bd,stroke-width:2px,color:#00303f
+  classDef ext fill:#e3ecff,stroke:#3f51b5,stroke-width:1px,color:#111a3a
+  classDef made fill:#defbe6,stroke:#2e7d32,stroke-width:2px,color:#0b2e13
+  classDef gone fill:#ececec,stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 3,color:#444
+  class iso,adp,seal,crs,vmr,disp mine
+  class man,img,l2 pin
+  class scope,dock,net,l3 ext
+  class verd,rel,l4 made
+  class gold,bench,l5 gone
+  class l1 mine
+</pre><div class="hint">scroll to zoom &bull; drag to pan</div></div>
+<h2>What it configures, what it refuses, and how we know</h2>
+<div class="diagwrap" id="d2"><div class="diagbar"><button onclick="rst('d2')">Reset</button><button onclick="fsx('d2')">Fullscreen</button></div><pre class="mermaid">flowchart LR
+  subgraph knobs["What a run is configured with"]
+    k1["the container image, by digest"]
+    k2["the grant: one program tree, one staging root"]
+    k3["the egress allowlist, one host"]
+    k4["the tool surface: Read and Write only"]
+    k5["the committed configuration pin"]
   end
-  subgraph gate["The engine checks it BEFORE anything starts"]
-    v1["scope_problem<br/>refuses a grant that<br/>collides with reserved paths"]
-    v2["refuses an empty denied list<br/>a grant with no proof"]
-    v3["refuses a token passed<br/>as name equals value"]
+  subgraph gates["What refuses before any money is spent"]
+    g1["no container stated, no Runner"]
+    g2["a grant that can reach a denied path"]
+    g3["a frozen version missing its command file"]
+    g4["a boundary the manifest has not pinned"]
+    g5["a checkout holding the last run's state"]
   end
-  subgraph out["What actually runs"]
-    argv["one docker command<br/>per dispatch"]
-    sess["the judging session<br/>inside the container"]
+  subgraph runtime["What a dispatch actually is"]
+    r1["a fresh container per claim"]
+    r2["cwd is the read-only snapshot of this version"]
+    r3["the prompt arrives on the command line"]
+    r4["no session written to disk"]
   end
-  subgraph proof["How we know it held"]
-    p1["the decoy in the answer folder<br/>must be UNREADABLE"]
-    p2["a control that must FAIL<br/>so a pass means something"]
-    p3["the rendered shape recorded<br/>into runtime pins"]
+  subgraph proof["How we know it holds"]
+    p1["sentinels planted in a throwaway copy<br/>of every denied path"]
+    p2["the same probe reads them all<br/>once the boundary is removed"]
+    p3["the probed command line is the one<br/>production renders"]
   end
-  f1 --> v1
-  f2 --> v1
-  f3 --> v1
-  f4 --> v1
-  f5 --> v2
-  f6 --> v3
-  f7 --> argv
-  v1 --> argv
-  v2 --> argv
-  v3 --> argv
-  argv --> sess
-  sess --> p1
+  k1 --> g4
+  k2 --> g2
+  k5 --> g4
+  k2 --> r1
+  k2 --> r2
+  k3 --> r1
+  k4 --> r3
+  g1 --> r1
+  g2 --> r1
+  g3 --> r2
+  g4 --> r1
+  g5 --> r1
+  r1 --> p1
   p1 --> p2
-  argv --> p3
-  sess -.->|"Phase 2, later"| lay["narrower layers<br/>inside the box"]
-  subgraph legend["Color legend"]
-    g1["paper trail writes this (amber)"]
-    g2["the engine already does this (green)"]
-    g3["the evidence it worked (blue)"]
-    g4["deferred to Phase 2 (grey)"]
+  r1 --> p3
+  subgraph deferred["Deferred, not built"]
+    d1["real packaging, pyproject and lockfile"]
+    d2["the program tag namespace decision"]
   end
-  classDef todo fill:#fdeccd,stroke:#8a5200,stroke-width:2.5px,color:#3a2200
-  classDef done fill:#dcf2e6,stroke:#1d6b45,stroke-width:1.5px,color:#0c2d1c
-  classDef live fill:#d9ecfa,stroke:#0b6fb8,stroke-width:2px,color:#0a2e49
-  classDef off fill:#e8eaee,stroke:#8d95a3,stroke-dasharray:4 3,color:#3b4149
-  class f1,f2,f3,f4,f5,f6,f7,g1 todo
-  class v1,v2,v3,argv,sess,g2 done
-  class p1,p2,p3,g3 live
-  class lay,g4 off
-  </pre>
-  <div class="hint">scroll to zoom · drag to pan</div>
-</div>
-
-<!-- ============ ORDER OF OPERATIONS ============ -->
-<h2>What happens in what order <span class="chip c-chg">changed</span></h2>
-<div class="whatchanged">Two steps that read BLOCKED last time now read ready: the credential form and
-the egress shape both shipped with the engine.</div>
-<div class="diagbox" id="d3">
-  <div class="diagctl">
-    <button data-reset="d3">Reset</button><button data-full="d3">Fullscreen</button>
-  </div>
-  <pre class="mermaid">
-flowchart TD
-  s0a["Step 0a, the free dry run<br/>46 of 46 PASS, no container, no model, no spend ✅"]
-  s0b["Step 0b, two real probes, about 1 dollar ⏳"]
-  p0["Phase 0, the integrity floor<br/>fix what makes numbers meaningless ⏳"]
-  a["1a, pin the engine at 592862f<br/>creates our first packaging file ⏳"]
-  b["1b, fill ONE grant for the judging session ⏳"]
-  c["1c, one container per dispatch ⏳"]
-  d["1d, keep the session's trace ⏳"]
-  e["1e, the optimizer's own container ⏳"]
-  f["1f, one place that refuses an unboxed run<br/>22 sites, only 3 ship ⏳"]
-  g["1g, plant the decoy and prove it is unreadable ⏳"]
-  p2["Phase 2, narrower layers inside the box ⏳"]
-  p3["Phase 3, record the exact shape that ran ⏳"]
-  p4["Phase 4, reset run scoped state at run start ⏳"]
-  push["Push the branch<br/>needs force with lease, authorised 2026-09-17 🛑"]
-  recut["Plan A recuts its baseline<br/>on the FIXED instrument ⏳"]
-  s0a --> a
-  a -->|"nothing else imports until this lands"| b
-  s0b -.->|"or skip straight to wiring"| c
-  p0 -->|"must land first or no number means anything"| b
-  b --> c
-  c --> d
-  c --> f
-  b --> g
-  d --> e
-  f --> g
-  g -->|"a land with this red is not a land"| p2
-  p2 --> p3
-  p3 --> p4
-  p4 --> push
-  push --> recut
-  subgraph legend["Color legend"]
-    m1["done and green (green)"]
-    m2["ready to build (amber)"]
-    m3["waiting on a human (rose)"]
+  subgraph legend2["Color legend"]
+    m1["Configuration (cyan)"]
+    m2["A refusal (rose)"]
+    m3["Runtime shape (green)"]
+    m4["Evidence (amber)"]
+    m5["Deferred (grey)"]
   end
-  classDef done fill:#dcf2e6,stroke:#1d6b45,stroke-width:1.5px,color:#0c2d1c
-  classDef todo fill:#fdeccd,stroke:#8a5200,stroke-width:2px,color:#3a2200
-  classDef human fill:#fbdde2,stroke:#9b2233,stroke-width:2.5px,color:#3d0d14
-  class s0a,m1 done
-  class s0b,p0,a,b,c,d,e,f,g,p2,p3,p4,recut,m2 todo
-  class push,m3 human
-  </pre>
-  <div class="hint">scroll to zoom · drag to pan</div>
-</div>
-
-<!-- ============ THE GRANT CONTRACT ============ -->
-<h2>The contract, in one table <span class="chip c-new">new</span></h2>
-<p>This is the whole interface between the two repos. The engine owns the left column; paper-trail
-owns the right.</p>
-<table>
-  <tr><th>Grant field</th><th>What the engine does with it</th><th>What paper-trail puts there</th></tr>
-  <tr><td><code>program</code></td><td>Mounts it read-only and makes it the working directory</td>
-    <td>The frozen program snapshot, addressed by version</td></tr>
-  <tr><td><code>readable</code></td><td>Mounts each pair read-only</td>
-    <td>The materialised spec root</td></tr>
-  <tr><td><code>writable</code></td><td>Mounts each pair writable</td>
-    <td>The claim staging <b>root</b> — not one claim — and a trace directory</td></tr>
-  <tr><td><code>workdir</code></td><td>Sets the container's working directory, and refuses a bad one</td>
-    <td>The snapshot path</td></tr>
-  <tr><td><code>denied</code></td><td><b>Renders nothing.</b> It exists to be probed — and a grant
-    with an empty <code>denied</code> is refused outright, because it is a grant with no proof</td>
-    <td>The answer key, the held-out set, <code>iter/</code>, the optimizer's findings and
-    notes</td></tr>
-</table>
-<div class="card note">
-  <p><b>Why <code>denied</code> is the load-bearing field, and the one we would be tempted to leave
-  empty.</b> Mounts only ever grant. A folder that was not mounted is already unreachable, so writing
-  it into a deny list changes nothing about what runs. Its entire job is proof: every entry gets a
-  decoy planted in it, and the check is that the session <i>fails</i> to read the decoy. The engine
-  refuses an empty list rather than letting a proof-free grant through.</p>
-</div>
-<pre><code>SessionScope(
-    program  = version_snapshot_dir(version),      # read-only, and the cwd
-    readable = ((spec_root, "/workspace/spec"),),
-    writable = ((staging_root, "/workspace/staging"),
-                (trace_dir,    "/workspace/trace")),
-    workdir  = "/workspace/snapshot",
-    denied   = (gold_dir, benchmarks_dir, iter_dir, findings_dir, meta_learnings),
-)</code></pre>
-
-<!-- ============ STEPS ============ -->
-<h2>The steps</h2>
-
-<details data-section="engine-landed" data-changed open>
-<summary>Read first — what the engine landed, and what this plan deletes <span class="chip c-new">new</span></summary>
-<div class="whatchanged">Entirely new this round. It is the only section that describes the current
-division of work, and four of this plan's twelve build items are answered by it.</div>
-<p>The engine's plan is <b>Completed</b>, merged at <code>592862f</code>, with <b>367 tests passing
-and none skipped</b> — every live container probe actually ran — and <b>34 of 34</b> deliberately
-broken variants caught. Four things this plan specified are now upstream:</p>
-<ul>
-  <li><b>Our mount vocabulary</b> becomes the engine's <code>SessionScope</code>. It renders no
-  Docker flags of its own, which is what stops it being a second, competing way to say the same
-  thing.</li>
-  <li><b>Our host-path check</b> becomes <code>host_path_leak</code> — and it is strictly better,
-  because it takes the grant and can therefore tell a leaked path from one we granted on purpose.</li>
-  <li><b>Our per-dispatch container factory</b> becomes <code>render_dispatch</code>: one standing
-  network, a fresh container each time, each grant's command provably distinct from the next.</li>
-  <li><b>The generic half of the decoy test</b> becomes <code>negative_control.py</code>.</li>
-</ul>
-<p><b>Why it moved.</b> Your words, 2026-09-15: <i>most of this should go in agentic-label-opt, not
-build to lift later.</i> There is a longer version of this story in the engine plan — a ruling you
-made on 2026-07-20 said build it as a general capability, the ruling got written down in a third
-repo and never reached the engine, and this plan then spent two months building it consumer-side
-under a "change nothing upstream" goal.</p>
-<textarea class="section-feedback" data-id="engine-landed" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="cleared" data-changed>
-<summary>Two things that were blocking are now cleared <span class="chip c-new">new</span></summary>
-<div class="whatchanged">New. Last time both of these were open, and one of them meant Phase 1
-literally could not run.</div>
-<ol>
-  <li><b>Passing the API credential.</b> The renderer could only write a secret into the command
-  itself, and the wrapper records the full command to a file — so the honest position was that the
-  rendered command carried <b>no authentication at all</b> and nothing could run. The engine now
-  passes a credential <b>by name</b>, and refuses a name-equals-value string rather than quietly
-  letting it through. <span class="chip c-chg">Still true</span> the token is visible <i>inside</i>
-  the session; hiding it from there needs a broker and is out of scope.</li>
-  <li><b>The egress shape.</b> You asked what the "open" setting was for. It seals nothing — the
-  engine files it under unrestricted policies, and it was built for a different consumer. The
-  alternative, a one-host allowlist, had a shape problem: it fixed its command up front but only
-  stood the network up on entry, so one network could serve exactly one container. A loop that
-  dispatches per claim cannot use that. Those two moments are now separate, so the one-host
-  allowlist is reachable.</li>
-</ol>
-<textarea class="section-feedback" data-id="cleared" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="corrections" data-changed>
-<summary>Your two corrections came out free <span class="chip c-new">new</span></summary>
-<div class="whatchanged">New, and the most useful thing on this page. Both corrections were booked
-as code we still owed; adopting the engine's design applies them by itself. ⚠ Updated 2026-09-17
-after Phil struck this page's first reading of the per-stage question — see the callout below.</div>
-<p>A rule the code could drift away from has become a shape the code cannot express, which is the
-better outcome:</p>
-<ul>
-  <li><b>The per-stage split is gone, entirely.</b> Stages are a pipeline convenience; the boundary
-  that matters is that the program cannot reach the answers. The engine's grant has <b>no stage
-  dimension at all</b>, so adopting it drops the split rather than us remembering to.</li>
-  <li><b>The grant covers a worker's whole life, and N is a parameter.</b> Mount the staging
-  <i>root</i>, not one claim, and check uniqueness <i>per grant</i> rather than per claim.</li>
-</ul>
-<div class="card note">
-  <p><b>Your ruling of 2026-09-17, which corrected this page's first draft.</b> An earlier version
-  of this card said the extraction step would get "its own grant" once it is dispatched for real.
-  That is the same per-stage boundary, just postponed — and you struck it:</p>
-  <p style="margin-left:14px;border-left:3px solid var(--warn);padding-left:12px"><i>We've decided
-  several times now that the entire program is one entity in terms of data visibility. While there
-  are "stages" nominally, nothing experimentally warrants or benefits from splitting in this way. In
-  fact the optimizer may freely choose to edit the topology of a program making such divides a
-  nuisance and unnecessary.</i></p>
-  <p>So: <b>one grant for the program</b>, whatever stages it runs. A wider program means a wider
-  single grant, never a grant per stage.</p>
-</div>
-<div class="card ok">
-  <p><b>It also settles a contradiction the plan was already carrying.</b> The plan conceded that
-  keeping the paper away from the judging step is about <i>measurement integrity</i>, not leakage —
-  and its own rule sends that class to Plan A and its gate, not here. Then it kept the per-stage
-  split anyway. What actually holds the evidence condition steady is the release pinning the profile
-  and the retrieval depth, which the plan says itself. The mount set was never the mechanism.</p>
-</div>
-<div class="card note">
-  <p><b>And one that is invisible today.</b> At one question per worker, the right rule and the wrong
-  rule look identical — so a wrong check here passes now and starts mis-attributing results the
-  moment we ask a worker more than one question.</p>
-</div>
-<textarea class="section-feedback" data-id="corrections" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="step-1a" data-changed>
-<summary>1a — pin which version of the engine we run against <span class="chip c-ok">built 2026-09-18</span></summary>
-<div class="whatchanged">Now names the actual target, <code>592862f</code>, and records that the pin
-will genuinely work — which was worth checking, because the reverse would have sunk the item.</div>
-<div class="card note">
-  <p><b>This page said something untrue here, and building it is what caught it.</b> The plan
-  claimed paper-trail pinned nothing. It did — the VM runner has checked the engine version since
-  2026-09-09, with a real incident behind it. What was wrong was subtler and worse: that check had
-  gone <b>28 commits stale</b>, and because it asks "is the required version somewhere in this
-  checkout's history" rather than "is it this exact one", an engine missing <i>everything</i> this
-  work needs sailed straight through. It also only covered the VM path — the other three ways into
-  the engine had no check at all.</p>
-</div>
-<p><b>What was built (2026-09-18).</b> One module now holds the required version, the check, and the
-override; the required version moved forward to the one carrying this work; the three duplicated
-copies of "where the engine lives" all defer to it; both import paths refuse an engine that does not
-qualify; and the runner's 37 lines of inline checking became a call to that module, so the version
-exists in exactly one place instead of two that can drift.</p>
-<p><b>Proved it fails, not just that it passes.</b> Ten checks against a real engine checkout parked
-before the required version, a missing folder, a folder that is not a repository, an unrelated
-repository, and the documented override — plus the engine we actually use, so the test can tell the
-two apart. Afterwards: 493 checks still green across eight modules.</p>
-<p><b>The fix.</b> Copy what rad-eval already does: pin a git revision in a packaging file. Target is
-<b><code>592862f</code></b>. This creates paper-trail's first <code>pyproject.toml</code>, so it is
-more work than adding a line to an existing file.</p>
-<div class="card note">
-  <p><b>What it still does not catch, said plainly so it is not over-trusted.</b> Uncommitted edits
-  in the engine folder are invisible to a history check — they are reported in the run log but not
-  refused, because refusing them would make engine development impossible. And a branch taken from
-  the required version that later broke something still passes the history test; the capability
-  check and the existing selftests are the backstop there.</p>
-</div>
-<p><b>Deferred:</b> proper dependency packaging — a lockfile covering every dependency, not just the
-engine. Worth doing, but it is its own piece of work and the boundary should not wait on it.</p>
-<textarea class="section-feedback" data-id="step-1a" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="step-1b" data-changed>
-<summary>1b — fill one grant for the judging session <span class="chip c-chg">changed</span></summary>
-<div class="whatchanged">Rewritten. It used to build a per-stage mount set with its own vocabulary;
-it now fills one of the engine's grants.</div>
-<p>Grant: the claim staging <b>root</b> writable, the spec root read-only, the version-addressed
-snapshot read-only and as the working directory, a trace directory writable. Everything else —
-<code>iter/</code>, the optimizer's findings, its notes, the answer key, the held-out set — goes in
-the denied list: unreachable because unmounted, <i>and</i> probed by the decoy test.</p>
-<textarea class="section-feedback" data-id="step-1b" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="step-1c-g">
-<summary>1c–1g — the container, the trace, the refusal, the decoy</summary>
-<ul>
-  <li><b>1c, one container per dispatch.</b> The prefix cannot be built once at start-up: the
-  snapshot changes per program version, staging and trace per claim. Comes from
-  <code>render_dispatch</code>.</li>
-  <li><b>1d, keep the trace.</b> Containerising throws away the judge's session transcript, because
-  the code that finds transcripts looks in the host's home directory and goes blind inside a
-  container. Write the streamed session JSON beside the verdict.</li>
-  <li><b>1e, the optimizer's own container.</b> Modelled on rad-eval's, which has been run for real.
-  The scorer, the answer key, <code>iter/</code> and the manifest are absent from its mount set, so
-  "the optimizer cannot edit the scorer" holds by construction rather than by instruction.</li>
-  <li><b>1f, one place that refuses an unboxed run.</b> The census is <b>22 construction
-  sites</b> — of which only <b>3 actually ship</b>; the other 19 are tests. It must cover three ways
-  in, including one that skips the usual door. Tests opt out by injecting a fake container prefix,
-  never a boolean.</li>
-  <li><b>1g, the decoy.</b> Decoys planted in the answer key, the held-out tree, <code>iter/</code>
-  and the optimizer's findings. The session must fail to read each — and the test has a control of
-  its own that must fail, so that a pass means something.</li>
-</ul>
-<textarea class="section-feedback" data-id="step-1c-g" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="phases-2-4">
-<summary>Phases 2–4 — layers inside the box, record the shape, reset at run start</summary>
-<ul>
-  <li><b>Phase 2.</b> Narrower layers behind the wall, including staging the held-out set per
-  iteration so the live verdict file is provably absent before a dispatch.</li>
-  <li><b>Phase 3.</b> Record the exact rendered shape — image digest, every mount with its role,
-  network policy, allowed hosts, session flags — into the manifest, read from the committed version
-  rather than the working copy.</li>
-  <li><b>Phase 4.</b> Archive the optimizer's notes and findings at run start and assert they are
-  gone. Not a fresh clone per run; you ruled that out.</li>
-</ul>
-<textarea class="section-feedback" data-id="phases-2-4" placeholder="Comments on this section..."></textarea>
-</details>
-
-<details data-section="landing" data-changed>
-<summary>Landing — and the one thing that needs you <span class="chip c-chg">changed</span></summary>
-<div class="whatchanged">Corrected. The branch this describes was never cut; the work is on
-<code>sarol-optimizer-concurrent</code> in a worktree. The upstream prerequisite is now marked
-cleared rather than pending.</div>
-<p>Lands into <code>sarol-optimizer-concurrent</code>, not <code>main</code>. The gate: the decoy
-test green <i>including its own control</i>, the 22-site census green, the trace still captured, and
-the run reproducible. A land with the decoy test red is not a land.</p>
-<div class="card note">
-  <p><b>Needs you:</b> the first push needs <code>--force-with-lease</code>, because the earlier
-  rebase diverged from what is on the remote. You authorised this on 2026-09-17; it is recorded here
-  so nobody has to re-ask.</p>
-</div>
-<div class="card note">
-  <p><b>Do not run a bulk revert or discard in this checkout.</b> One file here holds 225 lines that
-  exist nowhere else, and five untracked findings beside it have no saved copy to restore.</p>
-</div>
-<textarea class="section-feedback" data-id="landing" placeholder="Comments on this section..."></textarea>
-</details>
-
-<!-- ============ GOTCHAS ============ -->
-<h2>Gotchas</h2>
-
-<details data-section="g-denied">
-<summary>A safety number in the record is zero for a boring reason</summary>
-<p>The armed run from 2026-08-05 reports zero denials. That is zero <i>by construction</i> —
-container mode has no hooks to do any denying. It must never be cited as evidence the boundary
-works.</p>
-<textarea class="section-feedback" data-id="g-denied" placeholder="Comments..."></textarea>
-</details>
-
-<details data-section="g-reserved">
-<summary>Four container paths are reserved, even when nothing is mounted there</summary>
-<p>The engine reserves a handful of paths under its workspace and refuses any mount that collides
-with, nests under, <i>or sits above</i> one — and it reserves them even when it mounts nothing there,
-which is our case. The plan originally named one of those paths for the snapshot, so as written it
-could not have run. The free dry run caught it on its first execution, which is the cheapest bug
-this plan has found.</p>
-<textarea class="section-feedback" data-id="g-reserved" placeholder="Comments..."></textarea>
-</details>
-
-<details data-section="g-provenance">
-<summary>This plan once cited a file 23 times that was not on the machine</summary>
-<p>The findings document behind this plan lives in a folder that is deliberately kept out of git, so
-it never travelled — and for most of this plan's life it was not on the authoring machine at all,
-while the plan cited it 23 times and keyed seven steps to its item numbers. Every one of those
-citations was unverifiable. The fix was not a better citation: the nine-item list those steps derive
-from is now reproduced in the plan itself.</p>
-<textarea class="section-feedback" data-id="g-provenance" placeholder="Comments..."></textarea>
-</details>
-
-<details data-section="g-naming">
-<summary>The word "judge" was swept out of this plan on purpose</summary>
-<p>108 of 142 uses were rewritten — to <i>the program</i> where the text meant the container, the
-mount set or the read boundary, and to <i>the adjudicator</i> where it meant the step doing the
-judging. The 34 that remain are deliberate; don't "finish" them. It was not cosmetic: "the judge's
-mount set" reads as one mount set, where "the program's" raises the question of which step — the
-difference between a correct boundary and a gap.</p>
-<textarea class="section-feedback" data-id="g-naming" placeholder="Comments..."></textarea>
-</details>
-
-<details data-section="g-product">
-<summary>The product is not half-built, whatever the harness says</summary>
-<p>paper-trail the product runs all three pipeline stages end to end and has for months. What is
-narrow is the <i>measurement harness</i>, which dispatches the judging step alone so the measurement
-isolates it. Two flags in the code describe the harness, never the product. This was mis-stated
-twice, so it is worth keeping straight.</p>
-<textarea class="section-feedback" data-id="g-product" placeholder="Comments..."></textarea>
-</details>
-
-<details data-section="g-unverified" data-changed>
-<summary>Two claims the engine plan flags as NOT verified <span class="chip c-new">new</span></summary>
-<div class="whatchanged">Carried over from the engine's own confidence table, because one of them
-originated as a paper-trail citation that resolves to nothing.</div>
-<ul>
-  <li><b>Docker refusing a writable mount nested inside a read-only one.</b> This plan cited
-  rad-eval's deviation note for it; the citation resolves to nothing. The engine settled it against a
-  real daemon before landing.</li>
-  <li><b>Whether the network sidecar costs once per run or once per dispatch.</b> Inferred, not
-  measured — and the whole recommendation to move off the unrestricted setting rests on it.</li>
-</ul>
-<textarea class="section-feedback" data-id="g-unverified" placeholder="Comments..."></textarea>
-</details>
-
-<!-- ============ OPEN QUESTIONS ============ -->
+  classDef cfg fill:#d7f6ff,stroke:#0277bd,stroke-width:2px,color:#00303f
+  classDef ref fill:#ffe0ea,stroke:#c2185b,stroke-width:3px,color:#3a0018
+  classDef run fill:#defbe6,stroke:#2e7d32,stroke-width:2px,color:#0b2e13
+  classDef evi fill:#fff2d6,stroke:#ef6c00,stroke-width:2px,color:#3d2200
+  classDef def2 fill:#ececec,stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 3,color:#444
+  class k1,k2,k3,k4,k5,m1 cfg
+  class g1,g2,g3,g4,g5,m2 ref
+  class r1,r2,r3,r4,m3 run
+  class p1,p2,p3,m4 evi
+  class d1,d2,m5 def2
+</pre><div class="hint">scroll to zoom &bull; drag to pan</div></div>
+<h2>Order of work</h2>
+<div class="diagwrap" id="d3"><div class="diagbar"><button onclick="rst('d3')">Reset</button><button onclick="fsx('d3')">Fullscreen</button></div><pre class="mermaid">flowchart TD
+  ph0["Phase 0 SHIPPED<br/>the integrity floor"]
+  ph1["Phase 1 SHIPPED<br/>the container boundary itself"]
+  ph1g["Step 1g SHIPPED<br/>the seal proved with sentinels"]
+  ph2["Phase 2 SHIPPED<br/>narrow what the program sees inside"]
+  ph3["Phase 3 SHIPPED<br/>pin the configuration"]
+  ph4["Phase 4 SHIPPED<br/>reset run state at run start"]
+  rev["PENDING<br/>Phil re-reads the plan"]
+  tag["PENDING<br/>the program tag namespace call"]
+  land["BLOCKED<br/>land the branch"]
+  recut["BLOCKED<br/>the baseline recut Plan A is owed"]
+  ph0 --> ph1
+  ph1 --> ph1g
+  ph1g --> ph2
+  ph2 --> ph3
+  ph3 --> ph4
+  ph4 --> rev
+  ph4 --> tag
+  rev --> land
+  tag --> land
+  land --> recut
+  ph2 -.->|containment is a prerequisite, not a side effect| recut
+  subgraph legend3["Color legend"]
+    s1["Shipped and verified (green)"]
+    s2["Waiting on Phil (amber)"]
+    s3["Blocked on the two above (grey)"]
+  end
+  classDef ship fill:#defbe6,stroke:#2e7d32,stroke-width:2px,color:#0b2e13
+  classDef pend fill:#fff2d6,stroke:#ef6c00,stroke-width:3px,color:#3d2200
+  classDef blok fill:#ececec,stroke:#9e9e9e,stroke-width:1px,stroke-dasharray:4 3,color:#444
+  class ph0,ph1,ph1g,ph2,ph3,ph4,s1 ship
+  class rev,tag,s2 pend
+  class land,recut,s3 blok
+</pre><div class="hint">scroll to zoom &bull; drag to pan</div></div>
+<h2>What a run is held to</h2>
+<div class="card"><table><thead><tr><th>Held to</th><th>Value</th><th>What moves if it changes</th></tr></thead><tbody><tr><td>The container image</td><td>named by digest, never by tag</td><td>The configuration pin. A rebuild is a different instrument.</td></tr><tr><td>What the program can reach</td><td>its own frozen snapshot, read-only, plus one staging directory it writes into</td><td>Anything else is unreachable by absence, and proved so.</td></tr><tr><td>Where it can reach on the network</td><td>one host, named explicitly</td><td>Designed for one host; not yet observed for one host under a real run.</td></tr><tr><td>What tools it has</td><td>read and write files. Nothing else.</td><td>No shell, no web, no sub-agents &mdash; so there is no per-call decision left for a hook to make.</td></tr><tr><td>Its credential</td><td>passed by name, never by value</td><td>Rotating it deliberately does <em>not</em> count as a configuration change, or the gate would be switched off the first time a token was refreshed.</td></tr><tr><td>The configuration as a whole</td><td>hashed and committed in the manifest</td><td>A run refuses before spending if the two disagree.</td></tr></tbody></table></div>
+<h2>The phases</h2>
+<details data-section="phase-0" class="recede noflag">
+<summary>Phase 0 — the integrity floor <span class="chip c-ship">SHIPPED</span></summary><div class="dbody">
+<ul><li>Freeze the program so a run can say which bytes it scored. <code>program-v0/manifest.json</code> lists ten files, each hashed, reproducible from two source commits.</li><li>The engine dependency is pinned to a commit (<code>optimizer/engine_pin.py</code>), so the shared substrate cannot move underneath a run.</li></ul>
+<div class="verify"><b>How we know it worked:</b> <code>freeze_program_v0.py --verify --tree program-v0</code> reproduces the hash 10/10; the materialization smoke rebuilds the tree byte-for-byte.</div>
+<textarea class="section-feedback" data-id="phase-0" placeholder="Notes on this phase"></textarea>
+</div></details>
+<details data-section="phase-1" data-changed="1" open>
+<summary>Phase 1 — the container boundary itself <span class="chip c-ship">SHIPPED</span><span class="chip c-chg">changed</span></summary><div class="dbody">
+<div class="note"><b>What changed:</b> The image-version check no longer compares against your laptop, on your ruling. The paragraph above it is superseded on that one point.</div>
+<ul><li>Every dispatch runs in a fresh container with exactly two directories mounted: the read-only snapshot of the program version being scored, and the staging root it writes evidence into.</li><li>One permitted network destination, named out loud rather than left implicit.</li><li>The credential is passed <em>by name</em>, so its value never appears in a command line or a run record.</li><li>A Runner that does not state its boundary cannot be built at all — there is no value meaning &ldquo;no container&rdquo;, because a baseline measured outside the box and iterations measured inside it are not a weaker comparison, they are an invalid one.</li></ul>
+<div class="verify"><b>How we know it worked:</b> 74 checks on the boundary's shape, including that granting the repo root is refused outright and that no part of the gold tree is mounted, descendants included.</div>
+<textarea class="section-feedback" data-id="phase-1" placeholder="Notes on this phase"></textarea>
+</div></details>
+<details data-section="phase-1g" class="recede noflag">
+<summary>Step 1g — the seal, proved rather than assumed <span class="chip c-ship">SHIPPED</span></summary><div class="dbody">
+<ul><li>Sentinels are planted in a <em>throwaway copy</em> of every path the program must not read — the gold labels, the benchmark tree, the optimizer's own scores, and the answer key one hop below the release envelope. Never the real tree.</li><li>A live container cannot read one of them. The same probe paths read every one the moment the boundary comes off — so the result is not &ldquo;a container that mounted nothing&rdquo;.</li><li>The probed command line is asserted to be the one production renders, which is the difference between proving the fixture and proving the system.</li></ul>
+<div class="verify"><b>How we know it worked:</b> 31 checks against a live Docker daemon, in about two seconds.</div>
+<textarea class="section-feedback" data-id="phase-1g" placeholder="Notes on this phase"></textarea>
+</div></details>
+<details data-section="phase-2" data-changed="1" open>
+<summary>Phase 2 — narrow what the program sees inside the box <span class="chip c-ship">SHIPPED</span><span class="chip c-new">new</span></summary><div class="dbody">
+<div class="note"><b>What changed:</b> The whole re-scope note: which parts of this phase Phase 1 had already made true, and the two assumptions in it that turned out wrong.</div>
+<ul><li><strong>Most of this was already true.</strong> The container's working directory already <em>is</em> the read-only snapshot of the version being scored, and the engine already refuses a grant that can reach the gold tree. Verified against the code and against a live container rather than rebuilt.</li><li><strong>Genuinely owed and now built:</strong> a run refuses a program version whose frozen command file is missing, even though the repo itself ships one — it used to look in the repo and dispatch an incomplete freeze.</li><li>Command discovery is narrowed to the one location the manifest freezes. The old three-location search let a tree with a stale copy elsewhere pass as complete.</li><li>No dispatch writes a resumable session to disk.</li><li><strong>One flag was rejected.</strong> <code>--exclude-dynamic-system-prompt-sections</code> <em>moves</em> the machine details into the first user message rather than removing them — a caching speed-up, not a containment control. Adopting it would have looked like a closed channel that was still open. A check now keeps it off.</li></ul>
+<div class="verify"><b>How we know it worked:</b> Probed in a live container: no <code>.git</code>, no <code>CLAUDE.md</code> in the working directory or any ancestor, none anywhere on the image, and no stored memory at all. Four gates, and eight deliberate breakages all caught.</div>
+<textarea class="section-feedback" data-id="phase-2" placeholder="Notes on this phase"></textarea>
+</div></details>
+<details data-section="phase-3" data-changed="1" open>
+<summary>Phase 3 — pin the configuration <span class="chip c-ship">SHIPPED</span><span class="chip c-new">new</span></summary><div class="dbody">
+<div class="note"><b>What changed:</b> Built. Four deviations recorded, the biggest being that the plan's mount triple could not be pinned as written.</div>
+<ul><li>A run now refuses to spend unless the boundary it is about to use matches a hash committed in the manifest — checked on every grant, before a single claim is dispatched.</li><li>The hash covers the image by digest, the mounts by role, target and mode, the network policy and egress list, the tool surface and every option name, and the program's file list. The credential contributes its <em>name</em> only, so rotating a token is not a configuration change.</li><li>The pin is read from <em>committed</em> bytes. A plan-A gate once compared a sheet against a stub editable in the same tree, so one session rewriting both passed; a reference the same edit can move is not a reference.</li><li>The release stamp that read <code>'sarol-2024'</code> on all ten payloads of the last run is gone. It carries the committed pin instead.</li></ul>
+<div class="verify"><b>How we know it worked:</b> Thirteen components each moved the hash when changed, one case per component; the worktree-edit attack is a live negative control against a throwaway git repo; twelve deliberate breakages all caught.</div>
+<textarea class="section-feedback" data-id="phase-3" placeholder="Notes on this phase"></textarea>
+</div></details>
+<details data-section="phase-4" data-changed="1" open>
+<summary>Phase 4 — reset the run state at run start <span class="chip c-ship">SHIPPED</span><span class="chip c-new">new</span></summary><div class="dbody">
+<div class="note"><b>What changed:</b> Built. The existing run-scope gate was extended rather than duplicated, and <code>iter/</code> added to what it resets.</div>
+<ul><li>Before anything is dispatched, the previous run's lessons sheet, per-iteration findings and releases are moved into a dated archive, and the tree is then asserted clean.</li><li><code>iter/</code> was the gap that mattered: releases are keyed by iteration number, not by run, so run two's iteration one silently overwrites run one's — and that file is exactly what the runner reads back at the end.</li><li>The runner archives and then asserts, rather than stopping to ask a human who is not there. Archiving is a move, never a delete, and the continuation override still skips it.</li><li>The assertion delegates to the existing gate rather than being a second copy of it, and a check proves the delegation by substitution.</li></ul>
+<div class="verify"><b>How we know it worked:</b> Nine checks including an archive round-trip, idempotence across two consecutive run ids, and the control the plan names: skip the archive and the assertion must fail. Seven deliberate breakages all caught.</div>
+<textarea class="section-feedback" data-id="phase-4" placeholder="Notes on this phase"></textarea>
+</div></details>
+<h2>Things that bit us</h2>
+<details data-section="g-instrument" data-changed="1" open>
+<summary>Do not fix a version mismatch by rebuilding the image to match your laptop<span class="chip c-new">new</span></summary><div class="dbody">
+<div class="note"><b>What changed:</b> New gotcha, from the check going red overnight when the Mac auto-updated.</div>
+<p>The check that the boxed program runs the same Claude Code as the Mac went red overnight when the Mac auto-updated. The laptop is the wrong reference: everything scored runs inside the image, and the laptop's CLI produces no reported number. Worse, the obvious repair — rebuild the image to match — swaps the instrument mid-experiment, which is what the check existed to prevent. It now asks whether the image contains the version its own label claims.</p>
+<textarea class="section-feedback" data-id="g-instrument" placeholder="Notes"></textarea>
+</div></details>
+<details data-section="g-crash" class="recede noflag">
+<summary>A crashed check suite is not a red check</summary><div class="dbody">
+<p>Twice this week a deliberate break crashed the suite instead of turning a named check red, and a crashed suite prints nothing — so the one fact you needed is the one you cannot see. Both are fixed: the membership tests come first and short-circuit, and the suite refuses up front with an actionable message when its own boundary has drifted from its pin.</p>
+<textarea class="section-feedback" data-id="g-crash" placeholder="Notes"></textarea>
+</div></details>
+<details data-section="g-vacuous" class="recede noflag">
+<summary>A check that cannot fail proves nothing</summary><div class="dbody">
+<p>One gate asserted only that <em>something</em> was reported, and passed for the wrong reason when the branch it was meant to cover was disabled. It asserts the reason now. Only mutation testing finds this shape — reading does not.</p>
+<textarea class="section-feedback" data-id="g-vacuous" placeholder="Notes"></textarea>
+</div></details>
+<details data-section="g-denied" class="recede noflag">
+<summary>Granting a subdirectory of a denied tree is the design, not a leak</summary><div class="dbody">
+<p>The staging root the container writes to sits <em>inside</em> the optimizer's output root, which is denied. That is deliberate: the container sees the staged evidence and not the scores beside it. Gold and the benchmark tree carry a stricter rule with no such exception, and the two rules are asserted separately.</p>
+<textarea class="section-feedback" data-id="g-denied" placeholder="Notes"></textarea>
+</div></details>
+<details data-section="g-shared" class="recede noflag">
+<summary>This repo and the shared engine both have a module called isolation</summary><div class="dbody">
+<p>Any process needing both must save and restore the loaded modules, not just the search path. Restoring only the path leaves the engine bound under that name for the rest of the process. It cost a real bug, caught in review before it reached the dispatch.</p>
+<textarea class="section-feedback" data-id="g-shared" placeholder="Notes"></textarea>
+</div></details>
+<details data-section="g-armed" class="recede noflag">
+<summary>The 2026-08-05 armed run's safety number is zero by construction</summary><div class="dbody">
+<p>Container mode has no hooks, so nothing could have been denied. Never cite it as evidence the boundary held.</p>
+<textarea class="section-feedback" data-id="g-armed" placeholder="Notes"></textarea>
+</div></details>
+<h2>How the gap happened</h2>
+<div class="card"><p>Worth reading once, because the shape repeats. The requirement was not missing &mdash; it was written down in three separate documents, one of which says in so many words that a violation invalidates the verdict. None of it shipped. In the dispatching code, every one of the five controls that document specifies was simply absent.</p><p>It was traded away for something that worked. A step needed the session to find a settings file, so the reasoning was &ldquo;keep a real checkout&rdquo; &mdash; and &ldquo;a real checkout&rdquo; was quietly read as &ldquo;the whole repository&rdquo; in the very first commit, with no line in any plan recording the trade. A later document then claimed a <em>stronger</em> guarantee than its peers, on the grounds that there was nothing in the repo to deny access to. That was true of the gold labels and false of the file the loop writes back into the repo every iteration &mdash; which carries per-claim answers.</p><p class="small mut">The lesson the plan draws, and the reason the verification here is what it is: a rule that lives only in prose is not enforced, and a guarantee nobody tried to break is not evidence.</p><textarea class="section-feedback" data-id="why" placeholder="Notes"></textarea></div>
 <h2>Open questions</h2>
-<div class="card ok">
-  <p><b>All thirteen are closed.</b> Twelve were closed before this round; the engine landing
-  answered questions rather than raising them. A thirteenth opened and closed on 2026-09-18, when
-  building the first step showed the plan had asserted something untrue about the code. The list is
-  kept because several were resolved <i>against</i> this plan's own recommendation, and the
-  reasoning is what a fresh session needs.</p>
-</div>
+<p class="mut small">All fourteen are resolved. Kept so a later reader can see which calls are already made, and by whom.</p>
 <div id="oqs"></div>
-
-<!-- ============ FOOTER ============ -->
-<div class="card">
-  <div class="tag">Anything else</div>
-  <textarea class="section-feedback" data-id="overall" placeholder="Overall comments on the plan..."></textarea>
-</div>
-
-</div><!-- /wrap -->
-
-<div class="bar">
-  <span class="small" id="pending">no notes yet</span>
-  <button class="ghost" id="clearbtn">Clear my notes</button>
-  <button id="copybtn">Copy all feedback as Claude prompt</button>
+<h2>What is actually left</h2>
+<div class="card"><p>Nothing in this plan is waiting on code. Three things are waiting on you:</p><ul><li><b>Your re-read.</b> The row says Stale because the plan was revised four times after you approved it. This page is the version to read.</li><li><b>The program tag namespace.</b> Version identity is currently a git tag, which is repo-global, so re-cutting the ledger rewrites shared identity. The recommendation is to stop using tags for this and key on the manifest's content hash, which is committed and is already what the configuration pin covers. It did not block anything, so I left it.</li><li><b>Landing the branch.</b> Waits on the two above.</li></ul><p class="small mut">One piece of housekeeping I did not do: the plan's own landing section is out of date &mdash; it still names an older tip and says a force-push is needed. It is not; the branch is in sync with its remote.</p><textarea class="section-feedback" data-id="whats-left" placeholder="Notes on what is left"></textarea></div>
+<h2>Anything else</h2>
+<div class="card"><textarea class="section-feedback" data-id="overall" placeholder="Overall thoughts, anything the sections above did not cover" style="min-height:110px"></textarea></div>
+<button id="copybtn" onclick="copyAll()">Copy feedback</button>
+<div class="toast" id="toast"></div>
 </div>
 
 <script>
-const PLAN_PATH = "docs/plans/isolation-protocol.md";
-const PLAN_BRANCH = "sarol-optimizer-concurrent";
-const PLAN_SHA = "76e03742b19e8bbb8dbf99efda42fc72f29a9f1d95f88048872727b104830c84";
-const STEM = "isolation-protocol";
+const OQS=[{n:1,s:'Resolved',q:'Should a driver session dispatch the adjudicator, or should the adjudicator be the session?',a:"Phil chose to eliminate the driver, against this plan's recommendation. One container, one session, one boundary — and the prompt now arrives on the command line rather than through a slash command."},{n:2,s:'Resolved',q:'Where do per-iteration outputs live?',a:'Per-iteration folders, keyed by the version being scored.'},{n:3,s:'Resolved',q:'Is the container the mechanism, or one option among several?',a:'The container is the mechanism.'},{n:4,s:'Resolved',q:'Does run state belong on the shared bucket?',a:'It is a modularity question, and most of it belongs in the shared engine rather than here.'},{n:5,s:'Resolved',q:'When a dispatch produces no task, retry or let it fail?',a:'Let it fail and feed that back to the optimizer, which determines and fixes it. A retry would have hidden the signal.'},{n:6,s:'Resolved',q:'Author a settings file scoped to the program tag?',a:'Retired. The flags on the command line carry those controls directly, where the configuration pin can cover them, and a settings file would sit inside the tree the optimizer edits.'},{n:7,s:'Resolved',q:'How do the test sites opt out of the boundary?',a:'They do not. They inject a fake renderer instead, so no production-reachable branch can switch the boundary off.'},{n:8,s:'Resolved',q:'Local disk, or the shared mount, for run state?',a:"Local git and local disk. This project is non-PHI, so plain git is a fine home and the mount's slow small-file reads are avoided."},{n:9,s:'Resolved',q:'One git clone per run, or a reset?',a:'A reset. The defect is residue between consecutive runs; a clone buys isolation between concurrent runs that this project will never need.'},{n:10,s:'Resolved',q:'Does this box the whole product, or one dispatch?',a:'One: the adjudicator dispatch the eval harness launches. The product runs all three stages and has for months.'},{n:11,s:'Resolved',q:'How much rigor does the trace question deserve?',a:'Demoted — the adapter already holds the streamed session record, so no mount is owed.'},{n:12,s:'Resolved',q:'What identifies a program version?',a:"The manifest's content hash, which is committed. Phil: &ldquo;your call&rdquo;."},{n:13,s:'Resolved',q:'Fix the engine pin now, or do real packaging first?',a:'Fix the pin now, packaging later. Built the same day.'},{n:14,s:'Resolved',q:'Does anything here re-version the program?',a:"No. The configuration pin lives under <code>runtime_pins</code>, and the program's own hash covers its file list only — verified behaviourally by round-tripping a copy through the freeze script."}];
+const PLAN_SHA = "e62ee931e5cd420f20e5fc2669a20c4a04ffdd38bbfc79966b5c478622d59e5a";
+const PLAN_PATH = "experiments/... docs/plans/isolation-protocol.md";
+const BRANCH = "sarol-optimizer-concurrent";
 
-const OQS = [
- [1,"Should a separate driver session hand the judge its question, or should plain Python do it?",
-    "Resolved 2026-09-14, against this plan's recommendation: eliminate the driver session. Deterministic Python reads the frozen prompt, fills the slots, refuses on an unresolved one, and invokes the judge directly. No sub-agent."],
- [2,"Should the held-out set be staged fresh each iteration, or mounted once?",
-    "Resolved 2026-09-14, against this plan's recommendation: per-iteration folders. Needs one backward-compatible type widening upstream, mirroring the signature five lines above it."],
- [3,"Is the container the mechanism, or should permission hooks do this?",
-    "Resolved 2026-09-11: the container is the mechanism. Hooks are a later layer, not the boundary."],
- [4,"Who owns this work, paper-trail or the shared engine?",
-    "Resolved 2026-09-14: it is a modularity question, and much of it belongs in the engine because a second consumer needs it too. This is the ruling the 2026-09-17 landing acted on."],
- [5,"If a dispatch comes back with no verdict, retry or fail?",
-    "Resolved 2026-09-14: allow it to fail, and let the optimizer see it and fix it. Counted separately, never scored as program quality, never summed into the mistake corpus."],
- [6,"Keep the tag-scoped settings file?",
-    "Resolved 2026-09-14: retire it. Hooks are not retired, only that file."],
- [7,"How do offline tests opt out of the container?",
-    "Resolved 2026-09-14: by injecting a fake container prefix, never a boolean. So the baseline recut runs on the shipping path and the numbers stay comparable."],
- [8,"Local disk and local git, or the shared bucket?",
-    "Resolved 2026-09-14: local, both. Bucket mode is a capability the other consumer turns on and we leave off."],
- [9,"A fresh git clone per run?",
-    "Resolved 2026-09-14: no. Archive the run-scoped state at run start and assert it is gone."],
- [10,"Build mount sets for all three pipeline stages, or just the one being measured?",
-    "Resolved 2026-09-15: just the one dispatched today. The refusal this question asked for already exists, so the question dissolved rather than being decided."],
- [11,"Does the hardcoded engine path survive the pin?",
-    "Resolved 2026-09-15: demoted to development-only. This is what stops the pin being a decorative file while runs keep binding to whatever is in the folder."],
- [12,"What identifies a program version?",
-    "Resolved 2026-09-15: key it on the manifest's combined hash."],
- [13,"The engine version check paper-trail already had was stale and only covered one way in. Patch it, or build proper dependency packaging?",
-    "Resolved 2026-09-18 (Phil): patch it now, packaging later — and it was built the same day. The check moved into one module that every entry point uses, the required version was moved forward to the one carrying this work, and the three duplicated copies of the engine's location now all defer to it. Proper packaging (a lockfile covering every dependency) is deferred to its own piece of work."]
-];
-
-const OQNOTE = {
-  4: "Acted on 2026-09-17: this is the question whose answer moved the machinery upstream.",
-  11: "Now load-bearing for step 1a — the pin target is 592862f.",
-  13: "Raised AND answered AND built on 2026-09-18. This one exists because the plan asserted paper-trail pinned nothing; it did."
-};
-
-const box = document.getElementById('oqs');
-OQS.forEach(([n, plain, orig]) => {
-  const d = document.createElement('details');
-  d.className = 'oq';
-  d.dataset.section = 'oq-' + n;
-  d.id = 'oq-' + n;
-  d.innerHTML =
-    '<summary>OQ' + n + ' <span class="chip c-ok">Resolved</span></summary>' +
-    '<p class="plain">' + plain + '</p>' +
-    '<p class="orig">' + orig + '</p>' +
-    (OQNOTE[n] ? '<div class="whatchanged">' + OQNOTE[n] + '</div>' : '') +
-    '<label class="small">Status <select data-id="oqstat-' + n + '">' +
-    '<option>Resolved</option><option>Re-open</option><option>Deferred</option></select></label>' +
-    '<textarea class="section-feedback" data-id="oq-' + n + '" placeholder="Notes on OQ' + n + '..."></textarea>';
-  box.appendChild(d);
-});
-
-/* ---- localStorage persistence, wiped when the plan SHA changes ---- */
-const SKEY = 'ep::' + STEM + '::sha';
-if (localStorage.getItem(SKEY) !== PLAN_SHA) {
-  Object.keys(localStorage).filter(k => k.startsWith('ep::' + STEM + '::f::'))
-    .forEach(k => localStorage.removeItem(k));
-  localStorage.setItem(SKEY, PLAN_SHA);
-}
-function fkey(id){ return 'ep::' + STEM + '::f::' + id; }
-function wire(el){
-  const id = el.dataset.id;
-  const saved = localStorage.getItem(fkey(id));
-  if (saved !== null) el.value = saved;
-  el.addEventListener('input', () => { localStorage.setItem(fkey(id), el.value); count(); });
-  el.addEventListener('change', () => { localStorage.setItem(fkey(id), el.value); count(); });
-}
-document.querySelectorAll('textarea.section-feedback, select[data-id]').forEach(wire);
-
-function notes(){
-  const out = [];
-  document.querySelectorAll('textarea.section-feedback').forEach(t => {
-    if (t.value.trim()) out.push([t.dataset.id, t.value.trim()]);
+// ---- open questions -------------------------------------------------------
+(function(){
+  const host = document.getElementById('oqs');
+  OQS.forEach(function(o){
+    const d = document.createElement('details');
+    d.setAttribute('data-section', 'oq-' + o.n);
+    d.id = 'oq-' + o.n;
+    d.className = 'recede noflag';
+    d.innerHTML =
+      '<summary>OQ' + o.n + ' &mdash; ' + o.q +
+      ' <span class="chip c-ship">' + o.s + '</span></summary>' +
+      '<div class="dbody">' +
+      '<div class="resp"><b class="lbl">How it was settled</b>' + o.a + '</div>' +
+      '<label class="small mut">Status </label>' +
+      '<select data-oq="' + o.n + '">' +
+      ['Resolved','Pending','Deferred'].map(function(s){
+        return '<option' + (s===o.s?' selected':'') + '>' + s + '</option>';}).join('') +
+      '</select>' +
+      '<textarea class="section-feedback" data-id="oq-' + o.n + '" placeholder="Reopen or comment"></textarea>' +
+      '</div>';
+    host.appendChild(d);
   });
-  document.querySelectorAll('select[data-id]').forEach(s => {
-    if (s.value !== 'Resolved') out.push([s.dataset.id, 'STATUS: ' + s.value]);
+  restore();
+})();
+
+// ---- persistence ----------------------------------------------------------
+const KEY = 'explainer::isolation-protocol';
+function save(){
+  const blob = {sha: PLAN_SHA, t:{}, o:{}};
+  document.querySelectorAll('textarea.section-feedback').forEach(function(t){
+    if (t.value.trim()) blob.t[t.dataset.id] = t.value;
   });
-  return out;
+  document.querySelectorAll('select[data-oq]').forEach(function(s){
+    blob.o[s.dataset.oq] = s.value;
+  });
+  localStorage.setItem(KEY, JSON.stringify(blob));
+  badge();
 }
-function count(){
-  const n = notes().length;
-  document.getElementById('pending').textContent =
-    n === 0 ? 'no notes yet' : n + (n === 1 ? ' note' : ' notes') + ' ready to copy';
-  document.getElementById('copybtn').textContent =
-    n === 0 ? 'Copy all feedback as Claude prompt' : 'Copy feedback (' + n + ' pending)';
+function restore(){
+  let blob;
+  try { blob = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e){ blob = {}; }
+  if (blob.sha && blob.sha !== PLAN_SHA) { localStorage.removeItem(KEY); blob = {}; }
+  Object.keys(blob.t || {}).forEach(function(id){
+    const el = document.querySelector('textarea[data-id="' + id + '"]');
+    if (el) el.value = blob.t[id];
+  });
+  Object.keys(blob.o || {}).forEach(function(n){
+    const el = document.querySelector('select[data-oq="' + n + '"]');
+    if (el) el.value = blob.o[n];
+  });
+  badge();
 }
-count();
-
-document.getElementById('copybtn').addEventListener('click', async () => {
-  const n = notes();
-  let md = '# Resume: apply explain-plan feedback\n' +
-    'Plan: ' + PLAN_PATH + ' · branch: ' + PLAN_BRANCH +
-    ' · plan-sha: ' + PLAN_SHA.slice(0,12) + '\n' +
-    '→ If you are picking this up in a fresh session, read the plan doc above (plus the docs and ' +
-    'memory it points to) first. Then apply the feedback below.\n\n' +
-    '# Feedback on the isolation protocol\n\n';
-  if (n.length === 0) md += '(no section notes were entered)\n';
-  n.forEach(([id, v]) => { md += '## ' + id + '\n' + v + '\n\n'; });
-  try {
-    await navigator.clipboard.writeText(md);
-    document.getElementById('pending').textContent = 'copied to clipboard';
-  } catch (e) {
-    const w = window.open('', '_blank');
-    w.document.write('<pre>' + md.replace(/[<>&]/g, c =>
-      ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) + '</pre>');
-  }
+function badge(){
+  let n = 0;
+  document.querySelectorAll('textarea.section-feedback').forEach(function(t){
+    if (t.value.trim()) n++;
+  });
+  document.getElementById('copybtn').textContent = n ? ('Copy feedback (' + n + ')') : 'Copy feedback';
+}
+document.addEventListener('input', function(e){
+  if (e.target.matches('textarea.section-feedback, select[data-oq]')) save();
 });
 
-document.getElementById('clearbtn').addEventListener('click', () => {
-  if (!confirm('Clear all your notes on this page?')) return;
-  Object.keys(localStorage).filter(k => k.startsWith('ep::' + STEM + '::f::'))
-    .forEach(k => localStorage.removeItem(k));
-  document.querySelectorAll('textarea.section-feedback').forEach(t => t.value = '');
-  document.querySelectorAll('select[data-id]').forEach(s => s.value = 'Resolved');
-  count();
-});
+// ---- copy -----------------------------------------------------------------
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  setTimeout(function(){ t.classList.remove('on'); }, 2600);
+}
+function copyAll(){
+  const lines = [
+    '# Resume: apply explain-plan feedback',
+    'Plan: docs/plans/isolation-protocol.md \u00b7 branch: ' + BRANCH + ' \u00b7 plan-sha: ' + PLAN_SHA.slice(0,12),
+    '\u2192 If you are picking this up in a fresh session, read the plan doc above first, then apply the feedback below.',
+    '',
+    '# Feedback on the isolation protocol',
+    ''
+  ];
+  let any = false;
+  document.querySelectorAll('details[data-section]').forEach(function(d){
+    const id = d.getAttribute('data-section');
+    const ta = d.querySelector('textarea.section-feedback');
+    const sel = d.querySelector('select[data-oq]');
+    const txt = ta && ta.value.trim();
+    const changed = sel && sel.value !== 'Resolved';
+    if (!txt && !changed) return;
+    any = true;
+    lines.push('## ' + id);
+    if (sel) lines.push('Status: ' + sel.value);
+    if (txt) lines.push(txt);
+    lines.push('');
+  });
+  ['whats-left','overall'].forEach(function(id){
+    const el = document.querySelector('textarea[data-id="' + id + '"]');
+    if (el && el.value.trim()) {
+      any = true;
+      lines.push('## ' + id, el.value.trim(), '');
+    }
+  });
+  if (!any) { toast('Nothing written down yet'); return; }
+  navigator.clipboard.writeText(lines.join('\n')).then(
+    function(){ toast('Copied. Paste it to Claude.'); },
+    function(){ toast('Copy failed - select and copy by hand'); }
+  );
+}
 
-/* ---- changed sections: auto-open, recede the rest ---- */
-document.querySelectorAll('details').forEach(d => {
-  if (d.hasAttribute('data-changed')) d.setAttribute('open','');
-  else d.classList.add('recede');
-});
+// ---- change navigation ----------------------------------------------------
+let ci = -1;
+function nav(dir){
+  const all = Array.from(document.querySelectorAll('[data-changed]'));
+  if (!all.length) return;
+  ci = (ci + dir + all.length) % all.length;
+  all[ci].open = true;
+  all[ci].scrollIntoView({behavior:'smooth', block:'center'});
+}
 
-/* ---- mermaid + pan/zoom ---- */
-const prefersDark = typeof window.matchMedia === 'function'
-  && window.matchMedia('(prefers-color-scheme: dark)').matches;
+// ---- mermaid + pan/zoom ---------------------------------------------------
+const PZ = {};
 mermaid.initialize({ startOnLoad:false, securityLevel:'loose',
-  theme: prefersDark ? 'dark' : 'default',
+  theme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'default',
   flowchart:{ useMaxWidth:false } });
-
-const insts = {};
-mermaid.run({ querySelector:'pre.mermaid' }).then(() => {
-  document.querySelectorAll('.diagbox').forEach(bx => {
-    const svg = bx.querySelector('svg');
+mermaid.run({ querySelector:'pre.mermaid' }).then(function(){
+  document.querySelectorAll('.diagwrap').forEach(function(w){
+    const svg = w.querySelector('svg');
     if (!svg) return;
     svg.removeAttribute('style');
-    svg.style.width = '100%';
-    svg.style.height = '100%';
-    insts[bx.id] = svgPanZoom(svg,
-      { zoomEnabled:true, controlIconsEnabled:false, fit:true, center:true,
-        minZoom:0.3, maxZoom:8 });
+    svg.style.width = '100%'; svg.style.height = '100%';
+    PZ[w.id] = svgPanZoom(svg, {zoomEnabled:true, controlIconsEnabled:false, fit:true,
+      center:true, minZoom:0.3, maxZoom:8});
+  });
+}).catch(function(e){ console.error('mermaid', e); });
+function rst(id){ const p = PZ[id]; if (p){ p.resize(); p.fit(); p.center(); } }
+function fsx(id){
+  document.getElementById(id).classList.toggle('fs');
+  setTimeout(function(){ rst(id); }, 90);
+}
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') document.querySelectorAll('.diagwrap.fs').forEach(function(w){
+    w.classList.remove('fs'); setTimeout(function(){ rst(w.id); }, 90);
   });
 });
-document.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', () => {
-  const i = insts[b.dataset.reset]; if (i) { i.resize(); i.fit(); i.center(); }
-}));
-document.querySelectorAll('[data-full]').forEach(b => b.addEventListener('click', () => {
-  const bx = document.getElementById(b.dataset.full);
-  bx.classList.toggle('full');
-  setTimeout(() => { const i = insts[bx.id]; if (i) { i.resize(); i.fit(); i.center(); } }, 60);
-}));
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
-  document.querySelectorAll('.diagbox.full').forEach(bx => {
-    bx.classList.remove('full');
-    setTimeout(() => { const i = insts[bx.id]; if (i) { i.resize(); i.fit(); i.center(); } }, 60);
-  });
-});
-window.addEventListener('resize', () => {
-  Object.values(insts).forEach(i => { i.resize(); i.fit(); i.center(); });
-});
+window.addEventListener('resize', function(){ Object.keys(PZ).forEach(rst); });
 </script>
-</body>
-</html>
+</body></html>
