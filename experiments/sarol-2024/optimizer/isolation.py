@@ -70,6 +70,7 @@ import importlib
 import inspect
 import os
 import pathlib
+import subprocess
 import sys
 import types
 from typing import Any, Sequence
@@ -123,6 +124,48 @@ def _import_engine() -> types.SimpleNamespace:
     # ⚠ Capability-probed, not just pin-checked: this module needs SessionScope, inherit_env and
     # render_dispatch specifically, and ancestry alone would not notice a later commit that removed
     # one.
+    with engine_importable():
+        scope_mod = importlib.import_module("isolation.session_scope")
+        allowlist_mod = importlib.import_module("isolation.network_allowlist")
+        docker_mod = importlib.import_module("isolation.docker_prefix")
+        # The seal control's generic half (1g). Imported HERE rather than in `seal_control.py`
+        # because the name-collision dance is the thing not to have two copies of.
+        control_mod = importlib.import_module("isolation.negative_control")
+        return types.SimpleNamespace(
+            SessionScope=scope_mod.SessionScope,
+            scope_problem=scope_mod.scope_problem,
+            scope_render_params=scope_mod.scope_render_params,
+            host_path_leak=scope_mod.host_path_leak,
+            build_contained_session_prefix=scope_mod.build_contained_session_prefix,
+            HostAllowlistNetworkStack=allowlist_mod.HostAllowlistNetworkStack,
+            default_workdir=docker_mod._DEFAULT_WORKDIR,
+            reserved_mount_points=docker_mod._RESERVED_CONTAINER_MOUNT_POINTS,
+            build_contained_scenario=control_mod.build_contained_scenario,
+            run_contained_probe=control_mod.run_contained_probe,
+            mount_set_problem=control_mod.mount_set_problem,
+            probe_path_for=control_mod.probe_path_for,
+            docker_available=control_mod.docker_available,
+            default_image_tag=control_mod.IMAGE_TAG,
+        )
+
+
+@contextlib.contextmanager
+def engine_importable():
+    """Hold the engine's ``isolation`` package importable for the duration of a block.
+
+    ⚠ **Several engine entry points defer their own relative imports to CALL time**, and that makes
+    this a context manager rather than a one-shot. ``negative_control.build_contained_scenario``
+    runs ``from .session_scope import ...`` *inside* the function; by then :func:`_import_engine`
+    has already put ``sys.modules["isolation"]`` back to THIS module, so the engine's own package
+    name resolves to a plain module and it dies with "isolation is not a package". Any call into a
+    function like that has to happen in here.
+
+    ⚠ The shipping dispatch path does **not** need this — ``build_contained_session_prefix`` and
+    ``HostAllowlistNetworkStack.render_dispatch`` import at module level, so they work once bound.
+    The two that defer are ``negative_control`` (the seal control) and the ``vertex-only`` / ``open``
+    branches of ``docker_prefix``, which this consumer does not take. Checked 2026-09-18; re-check
+    if a dispatch ever starts failing with that message.
+    """
     path = engine_pin.require_engine(probe_capabilities=True)
     saved_path = list(sys.path)
     # ⚠ **The modules are saved too, and leaving this out was a real bug (found by review,
@@ -142,21 +185,9 @@ def _import_engine() -> types.SimpleNamespace:
         sys.path.insert(0, str(path))
         for name in list(saved_modules):
             del sys.modules[name]
-        scope_mod = importlib.import_module("isolation.session_scope")
-        allowlist_mod = importlib.import_module("isolation.network_allowlist")
-        docker_mod = importlib.import_module("isolation.docker_prefix")
-        return types.SimpleNamespace(
-            SessionScope=scope_mod.SessionScope,
-            scope_problem=scope_mod.scope_problem,
-            scope_render_params=scope_mod.scope_render_params,
-            host_path_leak=scope_mod.host_path_leak,
-            build_contained_session_prefix=scope_mod.build_contained_session_prefix,
-            HostAllowlistNetworkStack=allowlist_mod.HostAllowlistNetworkStack,
-            default_workdir=docker_mod._DEFAULT_WORKDIR,
-            reserved_mount_points=docker_mod._RESERVED_CONTAINER_MOUNT_POINTS,
-        )
+        yield path
     finally:
-        # The engine classes stay alive through the namespace returned above, so dropping its
+        # The engine classes stay alive through the namespace the caller keeps, so dropping its
         # modules from the table costs nothing and leaves the name free for its real owner.
         sys.path[:] = saved_path
         for name in [k for k in sys.modules if k == "isolation" or k.startswith("isolation.")]:
@@ -604,15 +635,20 @@ def dispatch_prefix(
     """
     engine = _import_engine()
     build = render or engine.build_contained_session_prefix
-    return build(
-        scope=scope,
-        network_policy=network_policy,
-        image_tag=image,
-        adc_path=None,
-        edit_agent_mounts=None,
-        inherit_env=ENV_ALLOWLIST,
-        container_user=container_user,
-    )
+    # ⚠ Inside the engine-import context because the ``"open"`` and ``"vertex-only"`` branches of
+    # `build_docker_cmd_prefix` defer their own relative imports to call time. Outside it, those two
+    # policies fail with "isolation is not a package" -- a confusing error for a correct call. The
+    # allowlist path this consumer ships on does not go through here; see `engine_importable`.
+    with engine_importable():
+        return build(
+            scope=scope,
+            network_policy=network_policy,
+            image_tag=image,
+            adc_path=None,
+            edit_agent_mounts=None,
+            inherit_env=ENV_ALLOWLIST,
+            container_user=container_user,
+        )
 
 
 # =================================================================================================
@@ -640,6 +676,15 @@ class ContainerConfig:
     image: str
     hosts: tuple[str, ...]
     open_boundary: Any
+    #: What instrument this boundary actually is, as a dict, for the run manifest. A zero-argument
+    #: callable rather than a value because the shipping answer costs a container start and the
+    #: selftests must not pay it — the same injection shape as ``open_boundary``.
+    #:
+    #: ⚠ **No default, deliberately.** Giving it ``None`` would make the field syntactically
+    #: optional while the contract says it is required, and the two factories below both supply
+    #: one — so the only thing a default could do is let a future construction site omit it and
+    #: reach the runtime refusal instead of a TypeError here.
+    describe: Any
 
 
 def container_problem(config) -> str | None:
@@ -657,7 +702,7 @@ def container_problem(config) -> str | None:
             "isolation.shipping_container(image=...) for anything that produces or guards a "
             "number, or isolation.fake_container() in a selftest"
         )
-    for field in ("image", "hosts", "open_boundary"):
+    for field in ("image", "hosts", "open_boundary", "describe"):
         if not hasattr(config, field):
             return f"the container configuration has no {field!r}; expected an isolation.ContainerConfig"
     if "@sha256:" not in str(config.image):
@@ -673,6 +718,93 @@ def container_problem(config) -> str | None:
         )
     if not callable(config.open_boundary):
         return "the container configuration's open_boundary is not callable"
+    if not callable(config.describe):
+        return (
+            "the container configuration cannot describe itself, so a run under it would report "
+            "numbers without naming the instrument that produced them"
+        )
+    return None
+
+
+#: The image this program dispatches into, built from the shared Dockerfile with the CLI version
+#: this host runs. ⚠ **A build argument, not a change to the shared default** — moving
+#: `CLAUDE_CODE_VERSION` in `isolation/Dockerfile` would move the image for rad-eval, crc and MedVAL
+#: too, and none of them asked for it. Rebuild with::
+#:
+#:     docker build --build-arg CLAUDE_CODE_VERSION=$(claude --version | cut -d' ' -f1) \
+#:       -t paper-trail-isolation:<version> -f <engine>/isolation/Dockerfile <engine>/isolation
+SHIPPING_IMAGE_TAG = "paper-trail-isolation:2.1.277"
+
+
+def image_digest_ref(tag: str = SHIPPING_IMAGE_TAG) -> str | None:
+    """``<repo>@sha256:...`` for a locally built image, or ``None`` if it is not built.
+
+    ⚠ **A locally built image has a digest and Docker will run it by one** — verified 2026-09-18,
+    and worth stating because the obvious reading is that digests require a registry push. That
+    reading would have made :func:`container_problem`'s digest rule unsatisfiable without standing
+    up a registry, which is a piece of infrastructure this program does not otherwise need.
+    """
+    try:
+        done = subprocess.run(
+            ["docker", "inspect", "--format", "{{.Id}}", tag],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    digest = (done.stdout or "").strip()
+    if done.returncode != 0 or not digest.startswith("sha256:"):
+        return None
+    return f"{tag.split(':')[0]}@{digest}"
+
+
+def host_cli_version() -> str | None:
+    """The Claude Code version on THIS machine, or None if it cannot be read.
+
+    One half of the parity check (V5). The other half is what is installed inside the image: a run
+    is only comparable to an earlier one if the instrument did not move, and containerizing swaps
+    the instrument by definition — the shared image shipped 59 patch releases behind this host.
+    """
+    return _version_from(["claude", "--version"])
+
+
+def image_cli_version(image: str) -> str | None:
+    """The Claude Code version installed INSIDE ``image``, or None. Starts one short container."""
+    return _version_from(
+        ["docker", "run", "--rm", "--entrypoint", "sh", image, "-c", "claude --version"]
+    )
+
+
+def _version_from(command: Sequence[str]) -> str | None:
+    """First whitespace-delimited token of ``command``'s output, or None if it did not run."""
+    try:
+        done = subprocess.run(list(command), capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    first = (done.stdout or "").strip().split()
+    return first[0] if first else None
+
+
+def cli_parity_problem(image: str) -> str | None:
+    """Do the host and the image run the same Claude Code? Returns a problem, or ``None``.
+
+    ⚠ **This is a real difference, not a formality.** The shared image pins 2.1.218 while this host
+    runs 2.1.277. A baseline measured on one and iterations on the other is not a weaker comparison,
+    it is an invalid one — which is why the version is recorded in the run manifest beside ``model``
+    rather than left to whoever built the image.
+    """
+    host, inside = host_cli_version(), image_cli_version(image)
+    if host is None:
+        return "cannot read this host's Claude Code version, so parity cannot be established"
+    if inside is None:
+        return f"cannot read the Claude Code version inside {image!r}; is the image built?"
+    if host != inside:
+        return (
+            f"the image runs Claude Code {inside} and this host runs {host}. The instrument moved "
+            "between them, so numbers from a contained run are not comparable to an uncontained "
+            f"baseline. Rebuild with --build-arg CLAUDE_CODE_VERSION={host}"
+        )
     return None
 
 
@@ -696,7 +828,19 @@ def shipping_container(
 
         return entered()
 
-    return ContainerConfig(image=image, hosts=tuple(hosts), open_boundary=open_boundary)
+    def describe() -> dict:
+        # Probed, not stated. A version someone typed beside the image is a claim; this is the
+        # instrument answering for itself. Costs one short container per run, not per claim.
+        return {
+            "image": image,
+            "cli_version": image_cli_version(image),
+            "host_cli_version": host_cli_version(),
+            "egress_hosts": list(hosts),
+        }
+
+    return ContainerConfig(
+        image=image, hosts=tuple(hosts), open_boundary=open_boundary, describe=describe
+    )
 
 
 #: A digest-shaped stand-in, so a selftest asserts the shape production must use.
@@ -741,7 +885,18 @@ def fake_container(
         return entered()
 
     return ContainerConfig(
-        image=image, hosts=EGRESS_ALLOWED_HOSTS, open_boundary=open_boundary
+        image=image,
+        hosts=EGRESS_ALLOWED_HOSTS,
+        open_boundary=open_boundary,
+        # Marked as a stand-in rather than left empty, so a manifest written under a selftest can
+        # never be mistaken for one written under a real boundary.
+        describe=lambda: {
+            "image": image,
+            "cli_version": None,
+            "host_cli_version": None,
+            "egress_hosts": list(EGRESS_ALLOWED_HOSTS),
+            "stand_in": "fake_container: no container was started and no version was probed",
+        },
     )
 
 
@@ -951,6 +1106,21 @@ def _fake_render_calls(scope) -> list:
     with fake_container(calls=seen).open_boundary(scope) as render:
         render(scope)
     return seen
+
+
+def _renders(fn) -> bool:
+    """Did ``fn`` return a rendered docker argv rather than raising?
+
+    ⚠ Reported rather than allowed to propagate. The failure this guards against is an exception
+    (the engine's call-time relative imports resolving to the wrong ``isolation``), and an
+    exception escaping the check list crashes the whole dry run — which prints nothing at all and
+    so cannot be told apart from the gate passing.
+    """
+    try:
+        argv = fn()
+    except Exception:  # noqa: BLE001
+        return False
+    return isinstance(argv, list) and bool(argv) and "docker" in argv[0]
 
 
 def _raises(fn, *, want: str | None = None) -> bool:
@@ -1323,6 +1493,36 @@ def _selftest() -> int:
             "...while both the shipping and the selftest configurations are accepted",
             container_problem(shipping_container(image=FAKE_IMAGE)) is None
             and container_problem(fake_container()) is None,
+        ),
+        (
+            "the unrestricted and deny-all policies render at all, which they did not while the "
+            "engine's call-time imports ran outside the engine context",
+            _renders(
+                lambda: dispatch_prefix(
+                    scope=grants[0]["scope"], image=_DRY_IMAGE,
+                    network_policy=UNRESTRICTED_EGRESS
+                )
+            ),
+        ),
+        (
+            "a boundary that cannot say what instrument it is gets refused, because a number "
+            "without its instrument is not reportable",
+            (lambda r: r is not None and "instrument" in r)(
+                container_problem(
+                    dataclasses.replace(shipping_container(image=FAKE_IMAGE), describe=None)
+                )
+            ),
+        ),
+        (
+            "...and the selftest stand-in says so in what it reports, so a manifest written "
+            "under it cannot be mistaken for one written under a real boundary",
+            "stand_in" in fake_container().describe(),
+        ),
+        (
+            "...while the shipping description names the image, the CLI inside it and the host's, "
+            "which is what makes the parity check possible at all",
+            set(shipping_container(image=FAKE_IMAGE).describe())
+            >= {"image", "cli_version", "host_cli_version", "egress_hosts"},
         ),
         (
             "the configuration carries no way to switch the boundary off",

@@ -1491,6 +1491,17 @@ class SarolRunner:
 
             manifest_path = out_dir / "run_manifest.json"
 
+            # Once per batch, before the first manifest write. The shipping boundary answers this
+            # by starting one short container; the selftests' stand-in answers from a literal. A
+            # failure here is recorded, never silently dropped: a manifest that cannot name its
+            # instrument is worth less than one that says why it cannot.
+            try:
+                container_described = self.container.describe()
+            except Exception as exc:  # noqa: BLE001 -- an unnameable instrument must not cost a run
+                container_described = {
+                    "error": f"could not describe the container: {str(exc)[:200]}"
+                }
+
             def write_manifest(records: "list[dict[str, Any]]", *, complete: bool) -> None:
                 """Write the run manifest. Called after EVERY claim, not only at the end.
 
@@ -1542,6 +1553,13 @@ class SarolRunner:
                             ),
                             "profile_stages": list(self.profile.stages),
                             "retrieval_k": self.profile.retrieval_k,
+                            # The instrument the program ran ON, by the same rule as `model` and
+                            # `retrieval_k`: containerizing SWAPS the instrument, so a number is
+                            # only comparable to an earlier one if the image and the Claude Code
+                            # inside it are recorded beside it. Probed from the boundary itself
+                            # rather than stated, and computed once per batch -- a selftest's
+                            # stand-in says so in the record instead of leaving it blank.
+                            "container": container_described,
                             # The Scorer's coverage assertion compares against what was actually ASKED
                             # of the Runner, not against however many records came back.
                             "requested_count": len(claims),
@@ -3239,6 +3257,15 @@ def _selftest() -> int:
                  retr_manifest["retrieval_k"] == 20),
                 ("...and the stages it actually ran",
                  retr_manifest["profile_stages"] == ["adjudicator"]),
+                # Containerizing swaps the instrument, so the image and the Claude Code inside it
+                # belong beside `model` -- a macro-F1 is only comparable to an earlier one if both
+                # were measured on the same thing.
+                ("the run manifest records the container the program ran in",
+                 isinstance(retr_manifest.get("container"), dict)
+                 and "image" in retr_manifest["container"]),
+                ("...and a run under the selftest stand-in says so, so its manifest cannot be "
+                 "mistaken for one produced under a real boundary",
+                 "stand_in" in retr_manifest["container"]),
             ]
 
             # A batch naming no claims has nothing to grant a container for and nothing to score.
