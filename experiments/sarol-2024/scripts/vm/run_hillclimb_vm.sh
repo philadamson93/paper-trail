@@ -14,6 +14,10 @@ set -euo pipefail
 RUN_ID="${1:-hillclimb-$(date +%F)}"
 MAX_WORKERS="${2:-4}"
 ITERATIONS="${3:-5}"
+# One profile for the whole script. The paperclip-pin preflight, the canary staging and the run
+# itself all read this, so they cannot disagree about what is being run -- `retrieval` is the only
+# runnable rung today (`profiles.IMPLEMENTED_STAGES`).
+PROFILE="${PROFILE:-retrieval}"
 
 # Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
 # resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
@@ -117,16 +121,95 @@ echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
+# ...and now actually COMPARE it to the pin, which is what the Runner asserts. Checking only that
+# the binary exists is a check that looks like it covers the pin and does not: on 2026-09-19 a box
+# with 0.5.11 against a 0.7.48 pin sailed through this preflight, reached the first dispatch, and
+# got `infra_error`/PAPERCLIP_PIN_MISMATCH there. The loop then handed the optimizer a payload
+# saying nothing was scored, the optimizer correctly changed nothing, and the run stopped -- about
+# $2 and a session to learn what this line answers for free. The error code never surfaced in the
+# log either, so diagnosing it meant reading the source.
+#
+# Reuses the adapter's OWN probe and normalizer rather than re-implementing the comparison, so the
+# preflight and the runtime gate cannot drift into disagreeing about what matches.
+PIN_REPORT="$(cd "$OPT" && PYTHONPATH="$AGENTIC_LABEL_OPT" PROFILE="$PROFILE" "$PY" -c '
+import json, os, pathlib, sys, adapter, profiles
+if not profiles.get(os.environ["PROFILE"]).requires_paperclip_cli:
+    print("not asserted -- this profile does not invoke the CLI")
+    sys.exit(0)
+pinned = json.loads(pathlib.Path("../program-v0/manifest.json").read_text())["runtime_pins"].get("paperclip_cli")
+if not pinned:
+    print("no pin recorded")
+    sys.exit(0)
+want, got = adapter._normalize_version(pinned), adapter._normalize_version(adapter.installed_paperclip_version())
+if want != got:
+    print(f"pinned {want!r}, installed {got!r}")
+    sys.exit(1)
+print("matches the manifest")
+' 2>&1)" || fail "GATE: paperclip does not match the manifest pin -- $PIN_REPORT. The Runner refuses at the first dispatch with PAPERCLIP_PIN_MISMATCH, so this stops here rather than after a paid optimizer session. Install the pinned version, or re-pin deliberately (that changes combined_hash and the program identity)."
+echo "  paperclip pin: $PIN_REPORT"
+
+# Load the container credential from a file, so a run does not need a secret typed on its command
+# line (where it lands in shell history and in `ps`). The file lives under ~/.paper-trail/ -- beside
+# the gold and the runs, deliberately OUTSIDE any checkout, so no gitignore rule stands between it
+# and a commit. Override with PAPER_TRAIL_CREDENTIALS.
+#
+# Format is one `NAME=value` per line. Only names in `isolation.ENV_ALLOWLIST` are read, and the
+# file is never sourced -- sourcing would execute whatever is in it, and this is a secrets file, not
+# a script. An already-set variable in the environment wins, so a one-off override still works.
+#
+# Mint the token with `claude setup-token` (subscription-backed OAuth, one year; NOT an API key --
+# `ANTHROPIC_API_KEY` would outrank it and bill per token, which is why it is not in the allowlist).
+CRED_FILE="${PAPER_TRAIL_CREDENTIALS:-$HOME/.paper-trail/credentials.env}"
+if [ -f "$CRED_FILE" ]; then
+  # Fail closed on a loose mode: a long-lived credential readable by group or other is a finding,
+  # and silently loading it anyway would be this script asserting a safety property it does not have.
+  CRED_PERM="$(stat -f '%OLp' "$CRED_FILE" 2>/dev/null || stat -c '%a' "$CRED_FILE" 2>/dev/null || echo unknown)"
+  case "$CRED_PERM" in
+    600|400) : ;;
+    *) fail "$CRED_FILE is mode $CRED_PERM -- a long-lived token must not be readable by group or other. Fix it:  chmod 600 $CRED_FILE" ;;
+  esac
+  for CRED_NAME in $(cd "$OPT" && PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import isolation; print(" ".join(isolation.ENV_ALLOWLIST))'); do
+    CRED_LINE="$(grep -m1 "^${CRED_NAME}=" "$CRED_FILE" 2>/dev/null || true)"
+    if [ -n "$CRED_LINE" ] && [ -z "$(eval "printf '%s' \"\${${CRED_NAME}:-}\"")" ]; then
+      export "$CRED_NAME=${CRED_LINE#*=}"
+    fi
+  done
+  # Names only, never values.
+  echo "  credentials: loaded $CRED_FILE (mode $CRED_PERM)"
+fi
+
+# The CONTAINER's credential, which is a different thing from the host `claude` being logged in.
+# Every scored dispatch runs `claude` inside the container, and the container is handed exactly the
+# variables in `isolation.ENV_ALLOWLIST` BY NAME (`docker run --env VAR`, no value) -- so an unset
+# name silently passes nothing and the contained CLI starts unauthenticated. It then exits
+# immediately at zero cost, which reads as a canary miss, which returns `infra_error`, which scores
+# nothing. On 2026-09-19 that consumed two runs before anyone looked: the preflight above says
+# "claude auth: OK" about the HOST and had nothing to say about the container.
+#
+# Read from the allowlist rather than hardcoding the name, so adding a credential to the boundary
+# cannot leave this check behind asserting the old set.
+CRED_REPORT="$(cd "$OPT" && PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c '
+import os, sys, isolation
+missing = [v for v in isolation.ENV_ALLOWLIST if not os.environ.get(v)]
+if missing:
+    print(", ".join(missing))
+    sys.exit(1)
+print("all set: " + ", ".join(isolation.ENV_ALLOWLIST))
+' 2>&1)" || fail "GATE: the container credential is not set on this host -- $CRED_REPORT. The contained CLI would start unauthenticated and every dispatch would fail at zero cost. Mint one with 'claude setup-token' and pass it on the same line as this script."
+echo "  container cred: $CRED_REPORT"
 
 command -v claude >/dev/null || fail "the 'claude' CLI is not installed -- the judge is a nested 'claude -p' session per claim"
 echo "  claude:  $(claude --version 2>&1 | head -1)"
 
 # Auth is the failure that costs the most: it surfaces only on the first paid dispatch, after
 # staging has run. Force it now, cheaply, with a prompt whose answer we do not care about.
-if command -v timeout >/dev/null; then AUTH_TIMEOUT=(timeout 120); else AUTH_TIMEOUT=(); fi
+# macOS ships bash 3.2, where expanding an EMPTY array under `set -u` is an "unbound variable"
+# error, not an empty expansion. Keeping the command inside the array keeps it non-empty on every
+# box, so a host without GNU `timeout` no longer dies here and gets misreported as unauthenticated.
+if command -v timeout >/dev/null; then AUTH_PROBE=(timeout 120 claude); else AUTH_PROBE=(claude); fi
 # Budget cap only bounds this probe's cost; keep it comfortably above one trivial prompt on the
 # default model (a $0.05 cap false-fails an authed CLI — the prompt alone exceeds it).
-if ! printf 'say OK' | "${AUTH_TIMEOUT[@]}" claude -p --max-budget-usd 1.00 >/dev/null 2>&1; then
+if ! printf 'say OK' | "${AUTH_PROBE[@]}" -p --max-budget-usd 1.00 >/dev/null 2>&1; then
   fail "the 'claude' CLI is installed but not authenticated (or has no budget). Run 'claude' once interactively on this box first."
 fi
 echo "  claude auth: OK"
@@ -168,18 +251,35 @@ cd "$REPO_ROOT/experiments/sarol-2024"
   || fail "program-v0 does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
 echo "  program-v0 verifies against its tag"
 
+# ---------------------------------------------------------------- container image
+# Every scored dispatch runs in a container and there is no uncontained mode, so the dispatcher
+# refuses without `--image` given BY DIGEST. This runner predated that refusal and never passed one,
+# which made it unable to start a run at all once the isolation work landed -- it got all the way to
+# the dispatch and stopped there, after the free gates but before spending anything.
+#
+# The digest is resolved from the tag the code itself ships (`isolation.SHIPPING_IMAGE_TAG`) rather
+# than written out here, so the runner cannot drift from the image the pin is keyed on. A locally
+# built image has a digest and Docker will run it by one -- no registry is needed.
+say "Container image"
+cd "$OPT"
+IMAGE_REF="$(PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import isolation, sys; r = isolation.image_digest_ref(); sys.exit(1) if not r else print(r)' 2>/dev/null)" \
+  || fail "the isolation image is not built on this box. Build it, then re-run:  docker build -t \$(PYTHONPATH=\"\$AGENTIC_LABEL_OPT\" \"\$PY\" -c 'import isolation; print(isolation.SHIPPING_IMAGE_TAG)') -f \"\$AGENTIC_LABEL_OPT/isolation/Dockerfile\" \"\$AGENTIC_LABEL_OPT/isolation\""
+case "$IMAGE_REF" in *@sha256:*) : ;; *) fail "resolved image ref is not a digest: $IMAGE_REF";; esac
+echo "  image:   $IMAGE_REF"
+
 # ---------------------------------------------------------------- canary staging
 # The canary's runtime staging tree is git-ignored, so it is ABSENT on a fresh clone -- and the
 # Runner refuses to dispatch a canary whose staged files are gone. Rebuild it deterministically
 # (offline, free: corpus source_mode, no LLM) from the seeded pinned claim, idempotently.
 say "Canary staging (offline, free)"
 cd "$OPT"
-PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" - <<'PYCAN' || fail "could not rebuild/verify the canary staging tree -- see the reason it printed"
+PYTHONPATH="$AGENTIC_LABEL_OPT" PROFILE="$PROFILE" "$PY" - <<'PYCAN' || fail "could not rebuild/verify the canary staging tree -- see the reason it printed"
+import os
 import sys
 import canary
 import stage_claim
 
-PROFILE = "retrieval"
+PROFILE = os.environ.get("PROFILE", "retrieval")
 spec = canary.load(PROFILE)
 if spec is None:
     print(f"  no pinned canary for {PROFILE!r} -- expected canary/canary-{PROFILE}.json in the checkout")
@@ -220,7 +320,8 @@ cd "$OPT"
 # terms of what is missing, not a bare non-zero from the pipeline.
 set +e
 "$PY" -u dispatcher.py --run \
-  --profile retrieval \
+  --image "$IMAGE_REF" \
+  --profile "$PROFILE" \
   --iterations "$ITERATIONS" \
   --train-n-schedule 50,50,50,50,50 \
   --draw-mode cumulative \
