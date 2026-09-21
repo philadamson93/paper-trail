@@ -769,7 +769,11 @@ _RUNNER_SITE_FILES = (
 #: ⚠ Two more arrived with Phase 3's configuration pin: the Runner on an unpinned boundary, which
 #: must be refused, and the one on the pinned boundary beside it, which must not — a refusal gate
 #: with no passing case beside it cannot tell "correctly refused" from "always refuses".
-_EXPECTED_RUNNER_SITES = 36
+#: ⚠ One more on 2026-09-19, when the paperclip pin became profile-scoped: a `retrieval` Runner with
+#: a deliberately wrong version, proving the gate stays SILENT for a profile that never invokes the
+#: CLI. Its four siblings moved to `profile="paperclip"` rather than multiplying — same sites, and
+#: without this one "scoped" and "switched off" would look identical from the suite.
+_EXPECTED_RUNNER_SITES = 37
 
 
 #: Where the frozen slash-command file lives, and the ONLY place it counts.
@@ -1107,7 +1111,21 @@ class SarolRunner:
         skill``, and that reference lives outside the frozen fileset — so without this check two
         runs of one program version could diverge with no manifest diff. Returns an error string on
         mismatch, else None.
+
+        ⚠ **Scoped to profiles that actually run the CLI** (2026-09-19, Phil's call). It used to
+        assert unconditionally, and that stopped a `retrieval` run — one adjudicator session per
+        claim, a prompt that never mentions paperclip — because this box carried 0.5.11 against a
+        0.7.48 pin. The run reached the first dispatch, returned ``infra_error``, handed the
+        optimizer a payload saying nothing was scored, and the loop stopped without committing.
+        A pin on a tool the run never invokes cannot make two runs of one version diverge, so
+        asserting it there buys no reproducibility and costs a paid session.
+
+        The scoping is a **profile-declared fact, not an inference**: ``requires_paperclip_cli`` has
+        no default, so a new profile that forgets to answer fails to construct rather than quietly
+        skipping this check. Where it is True the gate is exactly as strict as before.
         """
+        if not self.profile.requires_paperclip_cli:
+            return None
         pinned = self.program_store.runtime_pins.get("paperclip_cli")
         if not pinned:
             return None
@@ -2002,11 +2020,33 @@ class SarolScorer:
         if artifacts.status != "ok" or not artifacts.artifact_refs:
             # A failed batch is not a zero -- it is not a result. Reporting 0.0 would let a
             # degraded run masquerade as a bad-but-real score and pollute the frontier.
+            #
+            # ⚠ **Carry the error CODE, not just the status** (2026-09-19). This used to report
+            # `run status='infra_error'` and nothing else, while this path distinguishes at least
+            # eight codes (PAPERCLIP_PIN_MISMATCH, NESTED_COMMAND_MISSING, BATCH_UNREADABLE,
+            # DUPLICATE_CLAIM_IDS, the canary miss, the budget refusal, ...). A run that dies here
+            # writes no run manifest and no traces, so the release payload is the ONLY thing the
+            # optimizer -- or a person -- gets to see. Twice in one afternoon a run stopped and
+            # diagnosing it meant reading the source to enumerate what could have returned that
+            # status. The optimizer session reached the same conclusion unprompted and wrote it
+            # into the sheet: "a failed run is currently undiagnosable from the optimizer's side."
+            #
+            # `status` stays first in the string so anything already matching on it keeps working.
+            err = getattr(artifacts, "error", None)
+            reason = f"run status={artifacts.status!r}"
+            if err is not None and getattr(err, "code", None):
+                reason += f" code={err.code!r}"
+                if getattr(err, "message", None):
+                    reason += f" message={str(err.message)[:300]!r}"
+            elif artifacts.status == "ok":
+                # Status says fine but nothing came back: distinct from a failure, and previously
+                # indistinguishable from one because both printed the status alone.
+                reason += " (no artifact_refs -- the batch produced no run manifest)"
             return result(
                 0.0,
                 {
                     "scored": False,
-                    "reason": f"run status={artifacts.status!r}",
+                    "reason": reason,
                     "n_total": 0,
                     "n_invalid": 0,
                 },
@@ -2442,16 +2482,36 @@ def _selftest() -> int:
     # -- paperclip pin negative control ------------------------------------------------------
     # Probe the manifest's OWN pin for the match cases so a future pin bump (e.g. 0.5.11 -> 0.7.48)
     # doesn't turn these into spurious failures; the mismatch case uses a version the pin can never be.
+    # ⚠ These run under the **paperclip** profile, because that is the only one whose prompts invoke
+    # the CLI and therefore the only one the pin gates (2026-09-19). Under `retrieval` the gate is
+    # deliberately silent, which is a behaviour worth its own check rather than an absence -- the
+    # "not asserted" case is asserted below, so scoping the gate can never quietly become disabling
+    # it.
+    # ⚠ Spelled out rather than collapsed into a shared kwargs dict: `_runner_construction_sites()`
+    # reads the SOURCE for `container=` at each site, so a `**kwargs` shorthand would hide three
+    # sites from the census that exists to make every new one get read.
     _pin = store.runtime_pins["paperclip_cli"]
-    pinned_ok = SarolRunner(store, paperclip_version_probe=lambda: _pin, container=isolation_mod.fake_container())
-    pinned_bad = SarolRunner(store, paperclip_version_probe=lambda: "paperclip, version 0.0.0", container=isolation_mod.fake_container())
-    pinned_absent = SarolRunner(store, paperclip_version_probe=lambda: None, container=isolation_mod.fake_container())
+    pinned_ok = SarolRunner(store, profile="paperclip", paperclip_version_probe=lambda: _pin,
+                            container=isolation_mod.fake_container())
+    pinned_bad = SarolRunner(store, profile="paperclip", paperclip_version_probe=lambda: "paperclip, version 0.0.0",
+                             container=isolation_mod.fake_container())
+    pinned_absent = SarolRunner(store, profile="paperclip", paperclip_version_probe=lambda: None,
+                                container=isolation_mod.fake_container())
     checks += [
         ("the pinned paperclip version passes preflight", pinned_ok.paperclip_pin_error() is None),
         ("a wrong version is caught", pinned_bad.paperclip_pin_error() is not None),
         ("a missing CLI is caught", pinned_absent.paperclip_pin_error() is not None),
+        # The scoping itself, both directions. Without these two, "the gate is scoped" and "the gate
+        # is off" look identical from the suite.
+        ("a profile that never runs the CLI does not assert the pin",
+         SarolRunner(store, profile="retrieval", paperclip_version_probe=lambda: "paperclip, version 0.0.0",
+                     container=isolation_mod.fake_container()).paperclip_pin_error() is None),
+        ("...and that profile really does declare it has no CLI dependency",
+         profiles_mod.get("retrieval").requires_paperclip_cli is False
+         and profiles_mod.get("paperclip").requires_paperclip_cli is True),
         ("a cosmetic banner change is not a spurious mismatch",
-         SarolRunner(store, paperclip_version_probe=lambda: _normalize_version(_pin), container=isolation_mod.fake_container()).paperclip_pin_error() is None),
+         SarolRunner(store, profile="paperclip", paperclip_version_probe=lambda: _normalize_version(_pin),
+                     container=isolation_mod.fake_container()).paperclip_pin_error() is None),
     ]
 
     # -- version normalisation ---------------------------------------------------------------
@@ -2799,8 +2859,11 @@ def _selftest() -> int:
             dispatched.append(" ".join(cmd))
             return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
 
+        # Under the paperclip profile: the one the pin gates. See the scoping note at the pin
+        # negative control above.
         bad_runner = SarolRunner(
-            store, invoke=spy, paperclip_version_probe=lambda: "paperclip, version 0.0.1", container=isolation_mod.fake_container()
+            store, profile="paperclip", invoke=spy,
+            paperclip_version_probe=lambda: "paperclip, version 0.0.1", container=isolation_mod.fake_container()
         )
         art = bad_runner.run(
             pathlib.Path("/nonexistent"),

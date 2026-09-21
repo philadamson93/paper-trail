@@ -96,6 +96,20 @@ class Profile:
     #: What the envelope declares as provenance. `sarol_corpus` is legal only under the Sarol
     #: rubric variant (Open Questions §13, resolved 2026-09-02 — variant-gated in `validate_sarol`).
     source_mode: str
+    #: Does this profile's dispatched prompt set actually invoke the `paperclip` CLI at run time?
+    #: Gates the `paperclip_cli` pin in `runtime_pins`, which is only load-bearing where the answer
+    #: is True — exactly what `PAPERCLIP`'s own docstring below has always said.
+    #:
+    #: ⚠ **Deliberately has no default.** Every profile must answer it, and a new profile that
+    #: forgets fails to construct rather than silently opting out of the pin check. The gate used to
+    #: be asserted unconditionally, which on 2026-09-19 stopped a `retrieval` run — a profile whose
+    #: only prompt never mentions paperclip — because this box carried 0.5.11 against a 0.7.48 pin.
+    #: The run reached the first dispatch, returned `infra_error`, handed the optimizer an empty
+    #: result, and stopped, at the cost of a paid session. Read off the prompts, not assumed:
+    #: `adjudicator-dispatch-sarol.md` never mentions paperclip; `extractor-dispatch-pdf.md` reads
+    #: with `rg`/`pdftotext` and names the CLI only to point at its counterpart; only
+    #: `extractor-dispatch-paperclip.md` (and the verifier's paperclip branch) run it.
+    requires_paperclip_cli: bool
 
     @property
     def sessions_per_claim(self) -> int:
@@ -119,6 +133,7 @@ RETRIEVAL = Profile(
     selector="bm25-top20",
     retrieval_k=20,
     source_mode="sarol_corpus",
+    requires_paperclip_cli=False,  # one stage, the adjudicator; its prompt never mentions paperclip
 )
 
 #: **Phase 2.** The pipeline as landed: the extractor searches and decomposes, the verifier
@@ -133,6 +148,7 @@ AGENTIC = Profile(
     selector=None,
     retrieval_k=None,
     source_mode="pdf",
+    requires_paperclip_cli=False,  # reads staged PDFs with rg/pdftotext, not the CLI
 )
 
 #: **Backlog** (C6.10). Same edit scope as `agentic`; the extractor queries the paper
@@ -148,6 +164,7 @@ PAPERCLIP = Profile(
     selector=None,
     retrieval_k=None,
     source_mode="paperclip",
+    requires_paperclip_cli=True,  # the extractor learns the CLI surface by running `paperclip skill`
 )
 
 PROFILES: dict[str, Profile] = {p.name: p for p in (RETRIEVAL, AGENTIC, PAPERCLIP)}
