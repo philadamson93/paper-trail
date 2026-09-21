@@ -30,16 +30,26 @@ noise-floor question Finding 6 raises for the frontier itself. Neither is decide
 pins a single observation and says so loudly rather than implying a guarantee it cannot make.
 See `--pin --repeat N`, which is the cheap half of that and is available now.
 
+⚠ **The stale-answer preflight below is NOT this canary, and deliberately so.** It lives beside
+it because both are pre-spend checks, but it is a separate standalone gate: the round-trip canary
+runs *before any scored claim* on purpose -- an instrument that has moved is not a run, and it has
+to stop before the batch is paid for. Moving it last would catch a stale answer and give up that
+guarantee, which trades one protection for another rather than adding one. The stale-answer check
+can be proved with a filesystem fixture instead of a live model call, so it costs nothing and
+needs no position in the dispatch order at all.
+
 Usage:
     canary.py --pin --profile retrieval        # measure and write the pin (COSTS ~1 session)
     canary.py --pin --profile retrieval --repeat 3   # ...and require it to be stable first
     canary.py --show                           # print the current pin
+    canary.py --stale-answer-check             # offline: prove answers are cleared between passes
     canary.py --selftest                       # offline gates
 """
 
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import pathlib
 import shutil
@@ -54,6 +64,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import adapter  # noqa: E402
+import check_run_scope  # noqa: E402
 import isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
@@ -620,6 +631,23 @@ def _selftest() -> int:
     except Exception:
         checks.append(("--repeat 0 is refused rather than pinning nothing", False))
 
+    # The stale-answer preflight is a gate in its own right (`--stale-answer-check`, wired into
+    # the VM runner's free pre-spend block). Run it here too so a suite-only check cannot pass
+    # while the gate the runner actually calls is broken. Its own lines are captured so this
+    # suite still reports one line per check.
+    import contextlib
+    import io
+
+    _buf = io.StringIO()
+    with contextlib.redirect_stdout(_buf):
+        _preflight_rc = stale_answer_preflight()
+    checks.append(
+        ("the stale-answer preflight passes, including its skip-the-clear negative control",
+         _preflight_rc == 0)
+    )
+    if _preflight_rc != 0:
+        print(_buf.getvalue())
+
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
@@ -637,9 +665,96 @@ def _raises(fn, exc) -> bool:
     return False
 
 
+def stale_answer_preflight() -> int:
+    """Prove, on THIS box and before anything is spent, that a grader's answer cannot carry from
+    one pass into the next.
+
+    Free and offline: what failed on `hillclimb-2026-09-20c` is a filesystem behaviour -- a save
+    into a slot that is already occupied -- so a filesystem fixture proves it. A second
+    canary-shaped Runner call would cost a real session every iteration to test the same thing.
+
+    Three gates, and the middle one is the one that matters:
+
+    1. A populated answer slot is emptied before dispatch, and the old answer is in the archive.
+    2. **Negative control** -- skip the clear and the freshness rule must flag the row. A guard
+       that has never been watched failing is not a guard, and "the clear silently moved nothing"
+       looks exactly like "the tree was already clean" from the outside.
+    3. The round-trip canary still runs before the first scored claim. The whole point of putting
+       this check here rather than at the end of the batch was to add a protection without moving
+       that one, so the suite has to say that is still true.
+    """
+    import tempfile
+
+    ok = True
+    with tempfile.TemporaryDirectory() as td:
+        tmp = pathlib.Path(td)
+        real_root = check_run_scope.ARCHIVE_ROOT
+        check_run_scope.ARCHIVE_ROOT = tmp / "_archive"
+        try:
+            staging = tmp / "staging" / "X1"
+            slot = staging / "ledger" / "claims"
+            slot.mkdir(parents=True, exist_ok=True)
+            answer = slot / "X1.json"
+            answer.write_text(json.dumps({"claim_id": "X1", "run_id": "the-previous-pass"}),
+                              encoding="utf-8")
+
+            # -- 1. cleared, and kept -----------------------------------------------------------
+            swept = check_run_scope.archive_and_clear_answers(
+                [staging], run_id="preflight", iter_name="iter1-current", split="train"
+            )
+            archived = sorted((tmp / "_archive").rglob("answers/*.json"))
+            cleared = not answer.exists() and not swept["remaining"]
+            kept = len(archived) == 1 and json.loads(
+                archived[0].read_text(encoding="utf-8")
+            )["run_id"] == "the-previous-pass"
+            print(f"  {'PASS' if cleared else 'FAIL'}  a populated answer slot is emptied before "
+                  f"the pass dispatches")
+            print(f"  {'PASS' if kept else 'FAIL'}  ...and the old answer is in the archive, "
+                  f"moved rather than deleted")
+            ok &= cleared and kept
+
+            # -- 2. the negative control --------------------------------------------------------
+            # What the run looked like BEFORE the fix: the slot is never cleared, the grader's
+            # save is refused, and the file still carries the previous pass's id at scoring time.
+            unswept = tmp / "staging" / "X2"
+            (unswept / "ledger" / "claims").mkdir(parents=True, exist_ok=True)
+            (unswept / "ledger" / "claims" / "X2.json").write_text(
+                json.dumps({"claim_id": "X2", "run_id": "the-previous-pass"}), encoding="utf-8"
+            )
+            old_behaviour = [{"claim_id": "X2", "answer_run_id": "the-previous-pass"}]
+            new_behaviour = [{"claim_id": "X1", "answer_run_id": "this-pass"}]
+            red = bool(adapter.stale_answer_rows(old_behaviour, "this-pass"))
+            green = not adapter.stale_answer_rows(new_behaviour, "this-pass")
+            print(f"  {'PASS' if red else 'FAIL'}  ...and with the clear SKIPPED, the freshness "
+                  f"rule goes red on the answer left behind")
+            print(f"  {'PASS' if green else 'FAIL'}  ...while an answer from this pass is "
+                  f"accepted, so the rule is not simply always-on")
+            ok &= red and green
+
+            # -- 3. the round-trip canary has not moved -----------------------------------------
+            src = inspect.getsource(adapter.SarolRunner.run)
+            i_clear = src.find("archive_and_clear_answers")
+            i_canary = src.find("canary_record = process(self.canary.claim)")
+            i_pool = src.find("ThreadPoolExecutor")
+            i_batch_gate = src.find("stale = stale_answer_rows(results")
+            order = -1 not in (i_clear, i_canary, i_pool, i_batch_gate) and (
+                i_clear < i_canary < i_pool < i_batch_gate
+            )
+            print(f"  {'PASS' if order else 'FAIL'}  the round-trip canary still runs before the "
+                  f"first scored claim, with the clear ahead of it and the batch check behind")
+            ok &= order
+        finally:
+            check_run_scope.ARCHIVE_ROOT = real_root
+
+    print(f"\n{'stale-answer preflight OK' if ok else 'STALE-ANSWER PREFLIGHT FAILED'}")
+    return 0 if ok else 1
+
+
 def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--stale-answer-check", action="store_true",
+                    help="offline proof that a grader's answer cannot carry into the next pass")
     ap.add_argument("--show", action="store_true", help="print the current pin for --profile")
     ap.add_argument("--pin", action="store_true",
                     help="MEASURE and write the pin. Dispatches real sessions and costs money.")
@@ -662,6 +777,8 @@ def main(argv: "list[str] | None" = None) -> int:
                          "reveals nothing a held-out one would not.")
     args = ap.parse_args(argv)
 
+    if args.stale_answer_check:
+        return stale_answer_preflight()
     if args.selftest:
         return _selftest()
     if args.show:

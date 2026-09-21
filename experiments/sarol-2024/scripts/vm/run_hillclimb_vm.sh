@@ -117,7 +117,15 @@ fi
 # the half that fails if the archive silently moved nothing.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" \
   || fail "GATE H FAILED AFTER THE RESET: this checkout still holds a previous run's lessons, findings or releases. The archive step above did not clear them -- do not treat this run's numbers as a fresh run's."
-echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK"
+# The per-ITERATION half of the reset, proved before anything is spent. Gate H above clears what
+# must not cross a RUN; this one proves the machinery that clears what must not cross an
+# ITERATION -- the graders' answers, which are written by the grader and so were invisible to the
+# old derivation. It is a filesystem fixture, not a dispatch: what failed on hillclimb-2026-09-20c
+# was a save into an already-occupied slot, and that costs nothing to demonstrate. It carries its
+# own negative control, so a clear that silently stopped working cannot pass it.
+"$PY" "$OPT/canary.py" --stale-answer-check \
+  || fail "STALE-ANSWER PREFLIGHT FAILED: the graders' answers are not being cleared between passes, so this run would score the PREVIOUS version's verdicts as the new one's. Nothing has been dispatched."
+echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK, stale-answer OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
