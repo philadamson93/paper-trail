@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import inspect
 import json
 import os
 import pathlib
@@ -518,6 +519,10 @@ def build_components(
     #: see its constructor for why the default is 1 and why raising it does not move the
     #: instrument.
     max_workers: int = 1,
+    #: The optimizer run these components belong to. Threaded through to the Runner so one run's
+    #: answers archive under ONE folder: the per-call `batch_id` this module builds is
+    #: deliberately different for TRAIN and VAL, so it cannot serve as the run's identity.
+    run_id: str | None = None,
     #: The container boundary every dispatch renders onto. Threaded, not defaulted: this function
     #: is one of three routes to a Runner and the refusal lives in the constructor, which is the
     #: only place all three pass through. Building a second gate here would miss the other two.
@@ -568,6 +573,7 @@ def build_components(
             output_roots=roots,
             max_workers=max_workers,
             container=container,
+            archive_run_id=run_id,
             **({"model": model} if model else {}),
         ),
         store,
@@ -759,6 +765,7 @@ def run_optimization(
         train_output_root=train_output_root,
         val_output_root=val_output_root,
         val_n=val_n,
+        run_id=run_id,
         **component_kwargs,
     )
 
@@ -1411,6 +1418,22 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ("...and that model reaches the CANARY check too, so a run cannot be judged by one model "
          "against a pin measured with another",
          _model_reaches_canary),
+
+        # The same flag-plumbing hazard, on the value that decides WHERE a run's answers are
+        # archived. The per-call `batch_id` this module builds is deliberately different for TRAIN
+        # (`{run_id}-train-i{n}`) and VAL (`{run_id}-val`), so the Runner cannot recover the run's
+        # identity from it -- a Runner that silently fell back to the batch id would scatter one
+        # run's answers across sibling archive roots and still look completely healthy. That is
+        # exactly what shipped until the Codex audit caught it on 2026-09-21, so the wiring is
+        # asserted rather than assumed.
+        ("the run id reaches the constructed Runner, so one run's answers archive in one place",
+         build_components(
+             max_budget_usd=1e9, train_n=1, require_command=False, run_id="hillclimb-Z",
+             container=isolation_mod.fake_container())["runner"].inner.archive_run_id
+         == "hillclimb-Z"),
+        ("...and `run_optimization` is the caller that passes it, not something a future entry "
+         "point has to remember",
+         "run_id=run_id," in inspect.getsource(run_optimization)),
 
         # --max-workers is the same flag-plumbing hazard a third time, so it is gated at BOTH
         # seams: the kwarg into the Runner, and argv into the run. Concurrency that silently

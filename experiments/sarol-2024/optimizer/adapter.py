@@ -91,6 +91,7 @@ if str(_SCRIPTS) not in sys.path:
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+import check_run_scope  # noqa: E402
 import dispatch_prompt  # noqa: E402
 import engine_pin  # noqa: E402
 import evidence_producers  # noqa: E402
@@ -718,6 +719,35 @@ def load_batch(input_ref: str | pathlib.Path) -> list[ClaimRecord]:
     return [ClaimRecord.from_dict(c) for c in obj["claims"]]
 
 
+def stale_answer_rows(
+    records: "Iterable[dict[str, Any]]", batch_id: str
+) -> "list[dict[str, Any]]":
+    """The records whose answer on disk belongs to a DIFFERENT pass.
+
+    The rule is ``verdict["run_id"] == inputs.batch_id``, and it is the half of the stale-answer
+    fix that survives the prevention list being wrong again: it does not need to know WHICH
+    artifact carried over, only that a row is not from this pass.
+
+    ⚠ **`validate_sarol` checks that `run_id` is PRESENT, never that it MATCHES** (it is in
+    ``REQUIRED_TOP_LEVEL``), so a verdict left behind by the previous pass validates perfectly
+    cleanly today. That is exactly what happened on `hillclimb-2026-09-20c`: nine in ten graders
+    could not save over the existing file, the old answers were scored, and every row of that pass
+    read as valid.
+
+    A row with NO readable ``run_id`` is not flagged here, and that is deliberate rather than an
+    oversight. Presence is already the validator's job: a claim whose verdict is missing or
+    unparseable fails validation, is recorded ``invalid_output`` and is scored as a miss against a
+    sentinel. Escalating that to a batch-level refusal would turn the irreducible ~2% judge
+    failure rate into an instrument that can never produce a number -- the precise trade the
+    ``invalid_output`` / ``program_error`` split was created to avoid. Contamination is the case
+    where a run_id is present and is somebody else's.
+    """
+    return [
+        r for r in records
+        if r.get("answer_run_id") is not None and r["answer_run_id"] != batch_id
+    ]
+
+
 def batch_totals(records: "Iterable[dict[str, Any]]") -> "tuple[int, float]":
     """``(sub_invocation_count, cost_usd)`` summed from the records themselves.
 
@@ -773,7 +803,7 @@ _RUNNER_SITE_FILES = (
 #: a deliberately wrong version, proving the gate stays SILENT for a profile that never invokes the
 #: CLI. Its four siblings moved to `profile="paperclip"` rather than multiplying — same sites, and
 #: without this one "scoped" and "switched off" would look identical from the suite.
-_EXPECTED_RUNNER_SITES = 37
+_EXPECTED_RUNNER_SITES = 42
 
 
 #: Where the frozen slash-command file lives, and the ONLY place it counts.
@@ -1048,6 +1078,19 @@ class SarolRunner:
         output_roots: "dict[str, pathlib.Path] | None" = None,
         max_workers: int = 1,
         container: "isolation_mod.ContainerConfig | None" = None,
+        #: The OPTIMIZER RUN this Runner belongs to, which is NOT ``inputs.batch_id``.
+        #:
+        #: ⚠ **They look interchangeable and are not.** Production builds a different batch id for
+        #: every call -- `{run_id}-train-i{n}` (`sampling.py:653`), `{run_id}-train`
+        #: (`dispatcher.py:904`) and `{run_id}-val` (`sampling.py:603`) -- so keying the archive on
+        #: the batch id scatters ONE run's answers across sibling `_archive/*-…-train-i1` and
+        #: `_archive/*-…-val` roots, when the whole point of the layout is that one folder holds
+        #: everything a run produced. Caught by the Codex implementation audit, 2026-09-21.
+        #:
+        #: Falls back to the batch id when unset, which is right for the paths that have no run
+        #: around them at all: a canary pin, a smoke, a hand-driven dispatch. `build_components`
+        #: threads the real one, and a gate below asserts that it does.
+        archive_run_id: str | None = None,
     ) -> None:
         # ⚠ **The 1f refusal locus, and it is here rather than in `build_components` for a
         # measured reason.** There are THREE ways to reach a Runner: through `build_components`,
@@ -1101,6 +1144,7 @@ class SarolRunner:
         # consumers plus N node processes. Ramp it on a real run and watch for rate-limit errors
         # rather than inheriting an unverified default here.
         self.max_workers = max(1, int(max_workers))
+        self.archive_run_id = archive_run_id
 
     # -- preflight ---------------------------------------------------------------------------
 
@@ -1453,6 +1497,47 @@ class SarolRunner:
                     "infra_error", code="ISOLATION_PIN_MISMATCH", message=pin_problem[:300]
                 )
 
+        # Archive then clear this pass's answer slots, BEFORE anything is dispatched and after
+        # every free refusal above has had its chance -- a pin mismatch should still stop the run
+        # without moving a single file.
+        #
+        # This is prevention; `stale_answer_rows` below is detection. Both are needed: the reason
+        # the answers were missed in the first place is that the reset list was derived from what
+        # the OPTIMIZER reads, and a wrong derivation can recur. The clear stops the common case;
+        # the assertion catches whatever the next wrong derivation misses.
+        #
+        # The canary's staging dir is swept with the batch's. It is a `ClaimRecord` staged like any
+        # other -- the grants above already union it in for the same reason -- and its answer
+        # carried over exactly the same way: the one on disk when this was written was still
+        # stamped `hillclimb-2026-09-20b-val`, two runs stale.
+        try:
+            swept = check_run_scope.archive_and_clear_answers(
+                [
+                    c.staging_dir
+                    for c in ([self.canary.claim] if self.canary is not None else []) + claims
+                ],
+                # The RUN, not the batch. See the constructor: one run's three calls carry
+                # three different batch ids, and filing them under those would defeat the layout.
+                run_id=self.archive_run_id or inputs.batch_id,
+                iter_name=call_ns,
+                split=inputs.split,
+            )
+        except OSError as exc:
+            return artifacts(
+                "infra_error", code="ANSWER_RESET_FAILED", message=str(exc)[:300]
+            )
+        if swept["remaining"]:
+            # A clear that silently moved nothing is indistinguishable from a clean tree, which is
+            # how this class of defect hides. Refuse rather than dispatch into a populated slot.
+            return artifacts(
+                "infra_error",
+                code="ANSWER_RESET_FAILED",
+                message=(
+                    f"{len(swept['remaining'])} answer file(s) survived the pre-dispatch clear, "
+                    f"first: {swept['remaining'][0]}"
+                ),
+            )
+
         def process(claim: ClaimRecord) -> dict[str, Any]:
             record: dict[str, Any] = {
                 "claim_id": claim.claim_id,
@@ -1549,6 +1634,16 @@ class SarolRunner:
                 # echoes, and a dropped echo used to fail the claim (2026-09-07).
                 harness_selector=self.profile.selector,
             )
+            # Which pass the answer on disk actually belongs to. Read here, where the file has
+            # just been validated, and carried into the run manifest so a contaminated batch is
+            # diagnosable after the fact rather than only refusable in the moment.
+            try:
+                record["answer_run_id"] = json.loads(
+                    verdict_path.read_text(encoding="utf-8")
+                ).get("run_id")
+            except (OSError, ValueError, AttributeError):
+                record["answer_run_id"] = None
+
             record["validation"] = validation.as_dict()
             if not validation.ok:
                 # `invalid_output`, NOT `program_error`. The distinction is the whole point: the
@@ -1592,6 +1687,25 @@ class SarolRunner:
                             f"{self.canary.expected_verdict!r}, observed {observed!r} "
                             f"(status={canary_record['status']}) -- the scorer or pipeline moved; "
                             "numbers from this run are not comparable to earlier ones"
+                        ),
+                        n=batch_totals([canary_record])[0],
+                        cost=batch_totals([canary_record])[1],
+                    )
+                # ...and only then, whether the canary's own answer is this pass's. Checked AFTER
+                # the verdict contract above so the canary keeps its position and its meaning, and
+                # here rather than at the end because this is the cheapest place to find out: one
+                # dispatch spent instead of the whole batch. A stale canary answer would otherwise
+                # sail through the check above -- it carries the pinned verdict, which is what
+                # matching means.
+                if stale_answer_rows([canary_record], inputs.batch_id):
+                    return artifacts(
+                        "infra_error",
+                        code="STALE_ANSWER",
+                        message=(
+                            f"canary {self.canary.claim.claim_id} answered under run "
+                            f"{canary_record.get('answer_run_id')!r}, not {inputs.batch_id!r} -- "
+                            "its answer survived from an earlier pass, so the graders' answers "
+                            "are not being cleared and nothing here is this pass's"
                         ),
                         n=batch_totals([canary_record])[0],
                         cost=batch_totals([canary_record])[1],
@@ -1772,6 +1886,39 @@ class SarolRunner:
 
         results: list[dict[str, Any]] = [indexed[i] for i in sorted(indexed)]
         write_manifest(results, complete=True)
+
+        # Every scored row must belong to THIS pass. The manifest is written first, deliberately:
+        # a contaminated batch is still the best evidence of what went wrong, and refusing without
+        # leaving it on disk would make the next occurrence as hard to diagnose as this one was.
+        #
+        # Batch-level, not per-claim: a contaminated batch is not a worse number, it is not a
+        # number. Returning `infra_error` is what makes `SarolScorer` decline it -- the same path a
+        # failed batch already takes, reported as `scored: False` with the code in the reason
+        # rather than as a 0.0 that could reach the frontier.
+        stale = stale_answer_rows(results, inputs.batch_id)
+        if stale:
+            return artifacts(
+                "infra_error",
+                code="STALE_ANSWER",
+                message=(
+                    f"{len(stale)} of {len(results)} answers belong to a different pass "
+                    f"(e.g. {stale[0]['claim_id']} under "
+                    f"{stale[0].get('answer_run_id')!r}, expected {inputs.batch_id!r}); "
+                    "the previous pass's verdicts would have been scored as this one's"
+                ),
+                refs=(
+                    schemas.ArtifactRef(
+                        path=str(manifest_path),
+                        sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                    ),
+                ),
+                n=batch_totals(
+                    ([canary_record] if canary_record is not None else []) + results
+                )[0],
+                cost=batch_totals(
+                    ([canary_record] if canary_record is not None else []) + results
+                )[1],
+            )
 
         timed_out = any(r["status"] == "timeout" for r in results)
         errored = any(r["status"] == "program_error" for r in results)
@@ -2353,6 +2500,13 @@ def _selftest() -> int:
 
     store = SarolProgramStore()
     checks: list[tuple[str, bool]] = []
+
+    # Every `run()` below now sweeps answers into the archive before dispatching. Point that at a
+    # temp dir for the duration: a suite that writes into `~/.paper-trail/runs/_archive` would
+    # litter the real record of real runs with fixtures named `b1`.
+    _archive_box = tempfile.TemporaryDirectory()
+    _real_archive_root = check_run_scope.ARCHIVE_ROOT
+    check_run_scope.ARCHIVE_ROOT = pathlib.Path(_archive_box.name) / "_archive"
 
     # ⚠ **A guard clause, because the alternative is a CRASHED suite and a crashed suite reports
     # nothing.** Dozens of gates below run a full `run()` and then index `artifact_refs[0]`. Once
@@ -4217,6 +4371,267 @@ def _selftest() -> int:
         ("...and the real invoker fills it from what it captured rather than dropping it",
          "stream=" in inspect.getsource(headless_claude_invoke)),
     ]
+
+
+    # =============================================================================================
+    # Stale answers: the graders' verdicts must not carry from one pass into the next.
+    #
+    # On `hillclimb-2026-09-20c` they did. The answer path was never cleared, so on iteration 2
+    # nine in ten graders hit an existing file, their save was auto-denied headless, and the
+    # PREVIOUS version's verdicts were scored as the new one's -- while every row validated and
+    # the run reported `ok`. Reproduced before any of this was written: one dispatch against a
+    # populated slot, three denials in the trace, and the file on disk still stamped with a run
+    # from the day before.
+    # =============================================================================================
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_p = pathlib.Path(tmp)
+        mat = _materialized_program(tmp_p)
+
+        def _answer_writer(run_id_for, claims_root):
+            """An invoker standing in for a grader that saves an answer stamped ``run_id_for``.
+
+            ``run_id_for`` is a callable of the claim id, so one invoker can write a stale answer
+            for one claim and a current one for its neighbour -- which is the injected-stale-row
+            case the plan asks for, not a batch that is uniformly wrong.
+            """
+            def _invoke(cmd, cwd, t):
+                claim_id = _claim_dispatched(cmd)
+                slot = pathlib.Path(claims_root) / claim_id / "ledger" / "claims"
+                slot.mkdir(parents=True, exist_ok=True)
+                (slot / f"{claim_id}.json").write_text(
+                    json.dumps({"claim_id": claim_id, "run_id": run_id_for(claim_id)}),
+                    encoding="utf-8",
+                )
+                return InvocationResult(exit_code=0, cost_usd=0.0, duration_seconds=0.1)
+            return _invoke
+
+        out_root, batch = _staged_batch(tmp_p, claim_ids=("C1", "C2"))
+        stale_staging = out_root / "staging"
+
+        # -- one planted stale row in an otherwise clean batch ----------------------------------
+        stale_runner = SarolRunner(
+            store,
+            invoke=_answer_writer(
+                lambda cid: "iter1-batch" if cid == "C2" else "iter2-batch", stale_staging
+            ),
+            output_root=tmp_p / "out-stale",
+            paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+            require_command=False,
+            profile="retrieval",
+            container=isolation_mod.fake_container(),
+        )
+        stale_res = stale_runner.run(
+            mat, schemas.RunInputs(input_ref=str(batch), batch_id="iter2-batch", split="train")
+        )
+        stale_scored = SarolScorer(
+            gold_resolver=lambda _p: {"pred_label": "ACCURATE", "gold_label": "ACCURATE"},
+            mistakes_root=tmp_p / "m1",
+        ).score(stale_res, "train", {"_iter": 2})
+
+        checks += [
+            ("one answer left over from a previous pass refuses the whole batch",
+             stale_res.status == "infra_error"),
+            ("...named as a stale answer, not as some generic failure",
+             stale_res.error is not None and stale_res.error.code == "STALE_ANSWER"),
+            ("...saying which claim and which run it actually came from",
+             stale_res.error is not None and "C2" in stale_res.error.message_redacted
+             and "iter1-batch" in stale_res.error.message_redacted),
+            ("...and the scorer declines it rather than reporting a number",
+             stale_scored.breakdown["scored"] is False),
+            ("...carrying the code, so the optimizer can tell WHY nothing was scored",
+             "STALE_ANSWER" in stale_scored.breakdown.get("reason", "")),
+            # The manifest is still written. A contaminated batch is the best evidence of what
+            # went wrong, and refusing without leaving it behind makes the next one as hard to
+            # diagnose as this one was.
+            ("...while the run manifest is still on disk, naming the run each answer belongs to",
+             bool(stale_res.artifact_refs)
+             and {
+                 c["claim_id"]: c.get("answer_run_id")
+                 for c in json.loads(
+                     pathlib.Path(stale_res.artifact_refs[0].path).read_text(encoding="utf-8")
+                 )["claims"]
+             } == {"C1": "iter2-batch", "C2": "iter1-batch"}),
+        ]
+
+        # -- the same batch, with nothing stale in it, must SCORE --------------------------------
+        # A refusal gate with no passing case beside it cannot tell "correctly refused" from
+        # "always refuses" -- and "always refuses" is the mutation this whole change could
+        # plausibly introduce.
+        out_root2, batch2 = _staged_batch(tmp_p, claim_ids=("C1", "C2"), split="val")
+        clean_runner = SarolRunner(
+            store,
+            invoke=_answer_writer(lambda _cid: "iter2-batch", out_root2 / "staging"),
+            output_root=tmp_p / "out-clean",
+            paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+            require_command=False,
+            profile="retrieval",
+            container=isolation_mod.fake_container(),
+        )
+        clean_res = clean_runner.run(
+            mat, schemas.RunInputs(input_ref=str(batch2), batch_id="iter2-batch", split="val")
+        )
+        clean_scored = SarolScorer(
+            gold_resolver=lambda _p: {"pred_label": "ACCURATE", "gold_label": "ACCURATE"},
+            mistakes_root=tmp_p / "m2",
+        ).score(clean_res, "val", {"_iter": 2})
+        checks += [
+            ("...but a batch whose answers all belong to this pass is NOT refused",
+             clean_res.status == "ok"),
+            ("...and scores normally, so the gate is not simply always-on",
+             clean_scored.breakdown["scored"] is True),
+        ]
+
+        # -- the clear runs BEFORE dispatch: slot empty, archive holds the old answer -------------
+        # Two different bugs -- an archive that moved nothing, and a clear that deleted without
+        # archiving -- and checking only one of them hides the other.
+        archive_box = pathlib.Path(tmp) / "arch"
+        _saved_root = check_run_scope.ARCHIVE_ROOT
+        check_run_scope.ARCHIVE_ROOT = archive_box
+        out_root3, batch3 = _staged_batch(tmp_p, claim_ids=("C1",), split="train", name="b3.json")
+        planted = out_root3 / "staging" / "C1" / "ledger" / "claims" / "C1.json"
+        planted.parent.mkdir(parents=True, exist_ok=True)
+        planted.write_text(json.dumps({"claim_id": "C1", "run_id": "the-previous-pass"}),
+                           encoding="utf-8")
+        silent_runner = SarolRunner(
+            store,
+            invoke=lambda cmd, cwd, t: InvocationResult(
+                exit_code=0, cost_usd=0.0, duration_seconds=0.1
+            ),
+            output_root=tmp_p / "out-sweep",
+            paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+            require_command=False,
+            profile="retrieval",
+            container=isolation_mod.fake_container(),
+        )
+        sweep_res = silent_runner.run(
+            _materialized_program(tmp_p, name="iter3-current"),
+            schemas.RunInputs(input_ref=str(batch3), batch_id="iter3-batch", split="train"),
+        )
+        archived_now = sorted(archive_box.rglob("answers/*.json"))
+        checks += [
+            ("the pre-dispatch clear empties the live answer slot", not planted.exists()),
+            ("...and the old answer is IN the archive, moved rather than deleted",
+             len(archived_now) == 1
+             and json.loads(archived_now[0].read_text())["run_id"] == "the-previous-pass"),
+            ("...under this run's folder, iteration and split",
+             len(archived_now) == 1
+             and archived_now[0].parent.parent.name == "train"
+             and archived_now[0].parent.parent.parent.name == "iter-3"
+             and archived_now[0].parent.parent.parent.parent.name.endswith("iter3-batch")),
+            # The grader wrote nothing here, so nothing is left to be stale: a cleared slot is an
+            # invalid_output, which is scored as a miss, NOT a batch-level refusal. Confirms the
+            # staleness gate did not swallow the ordinary judge-failure path.
+            ("...and an empty slot is an ordinary invalid answer, not a staleness refusal",
+             sweep_res.status == "ok"),
+        ]
+
+        # -- one iteration's three gradings, with the batch ids PRODUCTION actually builds --------
+        # ⚠ **The batch ids here are the point of this gate.** An earlier version of this check
+        # drove all three calls with one synthetic `batch_id`, which made it a check that could not
+        # fail: production builds a DIFFERENT batch id per call -- `{run_id}-train-i{n}`
+        # (sampling.py:653) and `{run_id}-val` (sampling.py:603) -- so an archive keyed on the batch
+        # id scatters one run across sibling roots while a same-id test reports green. Found by the
+        # Codex implementation audit, 2026-09-21; the fix is `archive_run_id`, and this is the
+        # assertion that holds it.
+        #
+        # Two things are asserted together: ONE archive root for the run, and three distinct
+        # `<split>/answers/` folders inside it. Without the second, the post-commit probe overwrites
+        # validation inside the archive -- the same defect one directory up.
+        def _three_gradings(runner, tag):
+            for call_ns, split_name, batch_id in (
+                ("iter4-current", "train", f"{tag}-train-i4"),
+                ("iter4-current", "val", f"{tag}-val"),
+                ("iter4-v9", "val", f"{tag}-val"),
+            ):
+                o, b = _staged_batch(
+                    tmp_p, claim_ids=("C1",), split=f"{tag}-{split_name}-{call_ns}",
+                    name=f"b-{tag}-{split_name}-{call_ns}.json",
+                )
+                pl = o / "staging" / "C1" / "ledger" / "claims" / "C1.json"
+                pl.parent.mkdir(parents=True, exist_ok=True)
+                pl.write_text(json.dumps({"claim_id": "C1", "run_id": "earlier"}),
+                              encoding="utf-8")
+                runner.run(
+                    _materialized_program(tmp_p, name=call_ns),
+                    schemas.RunInputs(input_ref=str(b), batch_id=batch_id, split=split_name),
+                )
+
+        run_scoped = SarolRunner(
+            store,
+            invoke=lambda cmd, cwd, t: InvocationResult(
+                exit_code=0, cost_usd=0.0, duration_seconds=0.1
+            ),
+            output_root=tmp_p / "out-run-scoped",
+            paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+            require_command=False,
+            profile="retrieval",
+            container=isolation_mod.fake_container(),
+            archive_run_id="hillclimb-K",
+        )
+        _three_gradings(run_scoped, "hillclimb-K")
+        roots_k = sorted(q.name for q in archive_box.glob("*hillclimb-K*") if q.is_dir())
+        seen_k = (
+            sorted(q.name for q in (archive_box / roots_k[0] / "iter-4").glob("*"))
+            if len(roots_k) == 1 else []
+        )
+        checks += [
+            ("one optimizer run archives into ONE folder even though its three calls carry three "
+             "different production batch ids",
+             len(roots_k) == 1),
+            ("...with the three gradings in three distinct folders inside it, so the post-commit "
+             "probe cannot overwrite validation",
+             seen_k == ["train", "val", "val-v9"]),
+        ]
+
+        # Negative control for the parameter itself: WITHOUT the run identity, the same three
+        # production-shaped calls scatter across sibling roots. This is the drift that shipped
+        # before the audit caught it, so the suite has to be able to see it.
+        _three_gradings(silent_runner, "hillclimb-N")
+        roots_n = sorted(q.name for q in archive_box.glob("*hillclimb-N*") if q.is_dir())
+        checks += [
+            ("...and a Runner with no run identity scatters those same calls across sibling "
+             "roots, which is what the parameter exists to prevent",
+             len(roots_n) > 1),
+        ]
+
+        # -- an answer with no readable run_id is NOT a staleness refusal --------------------------
+        # The deliberate reading of the plan's `verdict["run_id"] == inputs.batch_id`: contamination
+        # is a run_id that is present and someone else's. A missing or unparseable one is the
+        # existing invalid-output path, scored as a miss -- escalating it would turn the irreducible
+        # ~2% judge failure rate into an instrument that can never produce a number.
+        out_root5, batch5 = _staged_batch(
+            tmp_p, claim_ids=("C1",), split="noid", name="b5.json"
+        )
+        noid_runner = SarolRunner(
+            store,
+            invoke=_answer_writer(lambda _c: None, out_root5 / "staging"),
+            output_root=tmp_p / "out-noid",
+            paperclip_version_probe=lambda: store.runtime_pins["paperclip_cli"],
+            require_command=False,
+            profile="retrieval",
+            container=isolation_mod.fake_container(),
+            archive_run_id="hillclimb-Q",
+        )
+        noid_res = noid_runner.run(
+            _materialized_program(tmp_p, name="iter5-current"),
+            schemas.RunInputs(input_ref=str(batch5), batch_id="hillclimb-Q-train-i5",
+                              split="test"),
+        )
+        noid_manifest = json.loads(
+            pathlib.Path(noid_res.artifact_refs[0].path).read_text(encoding="utf-8")
+        ) if noid_res.artifact_refs else {"claims": []}
+        checks += [
+            ("an answer carrying NO run_id is an ordinary invalid answer, not a batch-level "
+             "staleness refusal -- the ~2% judge failure rate must not zero the instrument",
+             noid_res.status == "ok"),
+            ("...and it is still recorded as invalid, so it is scored as a miss rather than "
+             "passing by absence",
+             all(c["status"] == "invalid_output" for c in noid_manifest["claims"])),
+        ]
+        check_run_scope.ARCHIVE_ROOT = _saved_root
+
+    check_run_scope.ARCHIVE_ROOT = _real_archive_root
+    _archive_box.cleanup()
 
     failed_n = 0
     for name, ok in checks:
