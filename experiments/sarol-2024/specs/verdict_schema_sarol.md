@@ -34,7 +34,8 @@ mark it as house text so a future reader can always tell the scheme from our rea
 
 *House routing notes (ours, not the paper's, carried over from `program-v0`):* CONTRADICT requires a
 verbatim source excerpt that opposes the claim — a source that is merely *silent* is not a
-contradiction. MISQUOTE is numerical only; non-numerical strength drift goes to OVERSIMPLIFY.
+contradiction. MISQUOTE is numerical only — a non-numerical difference is simply not MISQUOTE, and
+where it goes is decided by the ordered test below, not here.
 INDIRECT vs INDIRECT_NOT_REVIEW turns on whether the reference article is itself a review.
 
 ## Choosing one label when several definitions fit — house text
@@ -47,31 +48,108 @@ reach for.
 
 The worst-wins ladder below does not settle this. It reduces *several sub-claims* to one paper-level
 label; it does not choose one sub-claim's label, and on a single-sub-claim citation it is the
-identity function. Use this order instead, per sub-claim, and stop at the first test that passes.
+identity function. Use this order instead, per sub-claim.
 
-1. **IRRELEVANT** — no passage you were given addresses the subject the citation is attached to. The
-   test is the specific entity and relationship the citing clause asserts, not the broad field: a
-   paper about job strain and *coronary heart disease* is IRRELEVANT to a clause about job strain and
-   *stroke*, though both are cardiovascular. Shared vocabulary is not relevance.
+**Two things to fix before you start, because this is where the order goes wrong in practice.**
+
+**First, fix what you are judging.** Verify the proposition the citation marker is attached to, and
+only that. A citing sentence's background framing — what the literature generally holds, how many
+studies exist, what a field mostly focuses on, how broad a problem is, how many of a review's own
+included studies did something — is **not charged to this source**, and its scope words are not this
+source's scope. Quote the clause you are judging before you test anything against it.
+
+**Second, this is first-match-wins, and it binds in both directions.** Walk the tests in order from
+1. Answer each one explicitly yes or no. **Stop at the first yes and emit that label** — do not keep
+going to see whether a later test also passes, and do not skip ahead to a test that looks like the
+answer. A later test passing as well is expected and means nothing; that is what "residual" means.
+
+To make the stop auditable, **begin each sub-claim's `nuance` with `gate N:`** — the number of the
+test that fired — followed by your one-sentence reason. A verdict whose `nuance` does not name the
+gate that produced it was not chosen by this order.
+
+1. **IRRELEVANT** — no passage you were given addresses the subject the citation is attached to.
+
+   **The bound test: the clause has a subject and a predicate, and the passages must reach both.**
+   Write down the clause's subject (what it is about) and its predicate (the outcome, property or
+   relationship it asserts of that subject). Then ask of the predicate specifically: does *any*
+   passage report on it at all? A passage that shares the subject and is silent on the predicate does
+   not clear this gate. A paper about job strain and *coronary heart disease* is IRRELEVANT to a clause
+   about job strain and *stroke*, though both are cardiovascular; a paper about mitochondrial
+   *metabolism* in cancer is IRRELEVANT to a clause about mitochondrial *structural integrity* under
+   chemotherapy. Matching the broad field, the disease area, or the subject alone is **not** clearing
+   this gate — that is the specific mistake this test exists to catch. Shared vocabulary is not
+   relevance.
 2. **ETIQUETTE** — you cannot tell which part of the citing sentence this source is being cited for.
-   The commonest form: the visible sentence ends inside an unfinished citation cluster — a trailing
-   `;` or `,` after an author-year fragment — so the sibling citations, and the clauses they carry,
-   are invisible to you. Prefer ETIQUETTE over charging the whole sentence to this source.
+
+   **Run this test against the raw `claim_text` you were handed, character for character** — not
+   against your own restatement of the sub-claim. Restating the proposition strips the citation
+   punctuation, and the punctuation *is* the evidence for this gate.
+
+   **It fires on exactly one thing: a citation cluster you cannot see the end of.** The visible
+   sentence stops inside the cluster — a trailing `;` or `,` after an author-year fragment, or an
+   `[OTHER_CIT]` placeholder — so an unknown number of sibling citations, and the clauses they carry,
+   are invisible to you. You cannot attribute any part of the sentence to this source rather than to a
+   sibling you cannot read. That is ETIQUETTE.
+
+   **It does not fire on an ordinary visible co-citation.** Two or more sources cited together, cluster
+   visibly closed, backing one shared proposition, is not ambiguous — it is normal joint citation.
+   Narrow this source's burden per the multi-citation section and carry on down the ladder. "Several
+   sources are cited here" is not by itself unclear citation style.
+
+   **Ask the attributability question here, not later.** "Which portion of this sentence is this
+   source answerable for?" is gate 2's question. If your answer is "no portion can be separated out",
+   that answer *is* ETIQUETTE and you stop here. Finding it further down the ladder and writing it as
+   a caveat underneath some other verdict is the same mistake made late.
 3. **CONTRADICT** — a passage you were given states the opposite of the citing clause. It must
    oppose, not merely differ: a source that assigns the claimed property to a *different* agent, or
    reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
    true. Silence never contradicts.
 4. **MISQUOTE** — a number or percentage in the citing sentence differs from the number in a passage.
    Once you have identified a numeric mismatch, the label is MISQUOTE; do not re-describe a numeric
-   mismatch as a scope or emphasis problem and route it to OVERSIMPLIFY.
+   mismatch as a scope or emphasis problem and route it to OVERSIMPLIFY. **This gate does not ask
+   *why* the figures differ.** Rounding, a different cut of the data, a figure the citing authors
+   re-estimated, a disagreement about the right number rather than a copying slip — all of them are
+   MISQUOTE. "At least 50%" against a source's "at least 41%" is MISQUOTE, not a support gap.
 5. **INDIRECT / INDIRECT_NOT_REVIEW** — the passage that supports the clause carries its own citation
    marker for the fact — `(12)`, `5-8`, `(Ota et al., 2009)` — so this source is relaying the fact
    rather than reporting it. INDIRECT if the cited paper is itself a review, INDIRECT_NOT_REVIEW
-   otherwise.
-6. **OVERSIMPLIFY** — a passage supports the clause but the citing sentence states it more broadly
-   than the passage does: a qualifier dropped ("a range of age-related processes" → "age-related
-   processes"), a population widened, a hedge removed, an enumeration extended by an item the source
-   does not list. Source-narrower-than-claim is overgeneralisation, not a support gap.
+   otherwise. **Two bounds.** The marked passage must be the one carrying the clause's own entities,
+   not merely one whose phrasing resembles the citing sentence — check the entities before the marker.
+   And if another passage reports the same fact as this paper's own result ("here we show", "we
+   demonstrate", a Results line), the paper *is* the source and this gate does not fire.
+6. **OVERSIMPLIFY** — a passage supports the clause, but the citing sentence asserts the finding
+   over a **larger set of things** than the passage does. The set is of real-world referents —
+   populations, conditions, diseases, analytes, timepoints, list items — not of words.
+
+   **The bound test, and it is the whole gate: name the excluded member.** Write down (a) the scope
+   expression quoted from the passage, (b) the scope expression quoted from the citing sentence, and
+   (c) **one specific thing the citing sentence's scope covers and the passage's scope excludes.** All
+   three, in `paper_value`, `claim_value` and `nuance`. **If you cannot name (c), this gate does not
+   fire — go to test 7.** Worked: source lists four symptoms, citing sentence adds "fevers" → (c) is
+   *fevers*. Source says "a range of age-related processes", citing sentence says "age-related
+   processes" → (c) is *an age-related process outside the range the source lists*. Source reports one
+   enzyme in two cancers, citing sentence says "protease activity and patient outcomes" → (c) is
+   *a protease other than that enzyme*.
+
+   **Four things that are not this gate, because none of them widens a set.** Do not fire OVERSIMPLIFY
+   on any of them.
+   - **Confidence.** The citing sentence is more assertive than the passage — the passage says "may",
+     "might", "will need to be confirmed", "consistent with", and the citing sentence simply states the
+     finding. That is not a widened set. A confident summary of a hedged finding is **ACCURATE**. This
+     is the same rule as the banned bar below: a hedged source supports a citing clause.
+   - **Wording and specificity.** The citing sentence describes the same referents in different words,
+     or with more or less mechanistic detail, or omits adjectives that do not change which referents
+     are meant. If (c) would be a thing that does not exist or that the sentence is not talking about,
+     you have found a wording delta, not a widening. **ACCURATE.**
+   - **Direction.** The citing sentence is *narrower* than the passage — it reports one of the source's
+     two mechanisms, or drops an intermediate step, or names a subtype where the source named the
+     class. Gate 6 fires only on claim-broader-than-passage. Claim-narrower is not this gate.
+   - **A clause the citation is not attached to.** Scope words in the sentence's background framing are
+     not this source's scope. See the preamble above.
+
+   *House note on calibration:* on this benchmark OVERSIMPLIFY is a **rare** label — roughly one
+   citation in sixteen. A lexical difference between the citing sentence and a passage is the ordinary
+   case, not the gate; almost every correctly-ACCURATE citation has one.
 7. **NOT_SUBSTANTIATE** — none of the above fires, and a passage that *does* address the clause stops
    short of it. What "stops short" requires is the next section.
 8. **ACCURATE** — none of the above fires. A passage is consistent with the clause, or the passages
@@ -94,9 +172,9 @@ The test that separates a real shortfall from retrieval silence, and it is check
 passages in front of you:
 
 - **A passage addresses the clause and stops short of it** — it reports the same relationship more
-  weakly, for a different population, or only as a recommendation rather than a finding. That is a
-  real shortfall: NOT_SUBSTANTIATE, or OVERSIMPLIFY where the shortfall is that the source is
-  narrower than the claim.
+  weakly, for a different population, only as a recommendation rather than a finding, or for a whole
+  class where the clause asserts it of one member. That is a real shortfall: **NOT_SUBSTANTIATE**.
+  (Not OVERSIMPLIFY. Gate 6 is decided by its own named test and nothing here routes into it.)
 - **No passage addresses the clause, but the passages are plainly about the clause's own entities and
   relationship** — the paper studies this and your window did not return the sentence. That is
   retrieval silence: **ACCURATE**. Do not require the citing sentence's wording to appear in the
@@ -107,12 +185,13 @@ passages in front of you:
 Three bars you may not apply, because none of them is in the scheme: that the source must use the
 citing sentence's exact causal framing; that the source must display a particular method (a
 multivariate model, a meta-analysis, a quantitative result) before a claim counts as supported; and
-that a hedged source sentence cannot support a citing clause. A hedged source supports a hedged
-claim.
+that a hedged source sentence cannot support a citing clause. A hedged source supports a citing
+clause, hedged or not — and stating a hedged finding confidently is not a defect under any label.
 
-A citing sentence's background framing — what the literature generally holds, how many studies exist,
-what a field mostly focuses on, how many of a review's own included studies did something — is not
-charged to this source. Verify the proposition the citation marker is attached to.
+Two of these have a habit of surviving as a *different label* once you have been told not to score
+them as a support gap. Naming a support gap "an overgeneralisation" does not make it one, and the
+window is still a sliver whichever label you are reaching for. If your reason for a non-ACCURATE
+verdict is that you could not find something, the answer is ACCURATE — not a differently-named miss.
 
 ## Rollup (per citation instance = per (claim, cited_paper) pair) — house text
 
@@ -132,9 +211,9 @@ The dispatch supplies `multi_cit_context`: `"single"` when the evaluated citatio
 
 When `multi_cit_context == "grouped"`, verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
 
-When the grouping is ambiguous enough that no part of the sentence can be attributed to this source in particular, prefer ETIQUETTE.
+⚠ A sentence can carry sibling citations while `multi_cit_context` is `"single"`. An `[OTHER_CIT]` placeholder in the claim text says so. Narrow this source's burden the same way when you see one.
 
-⚠ A sentence can carry sibling citations while `multi_cit_context` is `"single"`. Two signals in the claim text say so: an `[OTHER_CIT]` placeholder, and a visible sentence that ends inside an unfinished citation list. Narrow this source's burden the same way when you see either.
+**This section applies only to clusters you can see the end of.** A sentence that breaks off inside an unfinished citation list is gate 2's case, not this one, and gate 2 has already decided it: you cannot narrow a burden against siblings you cannot read. Burden-narrowing is what you do once the cluster is visible and the shared proposition is identifiable.
 
 ## 3-way collapse
 
