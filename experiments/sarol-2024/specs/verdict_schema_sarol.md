@@ -67,6 +67,21 @@ To make the stop auditable, **begin each sub-claim's `nuance` with `gate N:`** �
 test that fired — followed by your one-sentence reason. A verdict whose `nuance` does not name the
 gate that produced it was not chosen by this order.
 
+**Third, a gate is answered by its finding, not by your assertion. — house text** Naming a gate and
+writing "not applicable" is not answering it. Gates 1 and 6 each require you to write down a specific
+thing before "no" is available to you, and the commonest way this order fails is that the write-down
+is skipped, the gate is waved through, and then the test it asked for gets performed further down —
+inside gate 7's reason — where it no longer selects a label. Two fixed forms, which cost you a phrase
+each:
+
+- **Gate 1's "no" needs a line number.** Write `gate 1: subject=<...>, predicate=<...>, predicate
+  reported at L<nn> -> no`. The locator must be a passage you actually hold. If no passage in your
+  window reports on the predicate, you cannot write a line number, and the answer is **yes**.
+- **Gate 6's "no" needs a failed search.** You may only write `gate 6: no excluded member` after
+  trying to name one. If the excluded member appears anywhere in what you finally write — in
+  `nuance`, in `paper_value`, in `claim_value` — then gate 6 answered **yes**, and the fact that you
+  wrote it under a later heading does not move it there.
+
 1. **IRRELEVANT** — no passage you were given addresses the subject the citation is attached to.
 
    **The bound test: the clause has a subject and a predicate, and the passages must reach both.**
@@ -85,11 +100,23 @@ gate that produced it was not chosen by this order.
    against your own restatement of the sub-claim. Restating the proposition strips the citation
    punctuation, and the punctuation *is* the evidence for this gate.
 
-   **It fires on exactly one thing: a citation cluster you cannot see the end of.** The visible
-   sentence stops inside the cluster — a trailing `;` or `,` after an author-year fragment, or an
-   `[OTHER_CIT]` placeholder — so an unknown number of sibling citations, and the clauses they carry,
-   are invisible to you. You cannot attribute any part of the sentence to this source rather than to a
-   sibling you cannot read. That is ETIQUETTE.
+   **Write the last dozen characters of `claim_text` down before you answer.** `gate 2: ends
+   "<...>"`. That is the whole evidence for this gate and you cannot weigh it from memory or from a
+   paraphrase.
+
+   **It fires on one thing: a sibling citation you can see the beginning of and not the end of.** The
+   visible sentence stops *part-way through a cluster* — a trailing `;` or `,` sitting inside the
+   citation, a dangling author-year fragment such as `(Smith et al., [CIT];`, or an `[OTHER_CIT]`
+   placeholder. An unknown number of siblings, and the clauses they carry, are invisible to you, so no
+   part of the sentence can be attributed to this source rather than to one you cannot read. That is
+   ETIQUETTE.
+
+   ⚠ **A sentence that merely stops at the marker is not that. — house text** This corpus renders
+   citing sentences clipped at the citation, so a text ending `([CIT]` or `[[CIT]` — marker last, no
+   separator after it, no partial sibling showing — is a rendering artifact of the benchmark and tells
+   you nothing about the citation style. It is not evidence of a hidden sibling list and it does not
+   fire this gate. What fires the gate is a separator or an author fragment showing the list *carries
+   on* past the text you were handed.
 
    **It does not fire on an ordinary visible co-citation.** Two or more sources cited together, cluster
    visibly closed, backing one shared proposition, is not ambiguous — it is normal joint citation.
@@ -117,6 +144,14 @@ gate that produced it was not chosen by this order.
    not merely one whose phrasing resembles the citing sentence — check the entities before the marker.
    And if another passage reports the same fact as this paper's own result ("here we show", "we
    demonstrate", a Results line), the paper *is* the source and this gate does not fire.
+
+   **A third bound, and it is the one that decides most cases: the marked passage must be the *only*
+   passage in your window carrying the clause's entities. — house text** Papers relay prior literature
+   with markers throughout their introductions, and a review's every sentence ends in one; finding a
+   marker on a sentence that resembles the clause is therefore the ordinary case, not the gate. Count
+   first. If any other passage you hold carries the clause's own entities without a marker, this
+   source is not merely relaying — go to test 6. Gate 5 is for the claim whose *sole* support in the
+   window is a sentence crediting someone else.
 6. **OVERSIMPLIFY** — a passage supports the clause, but the citing sentence asserts the finding
    over a **larger set of things** than the passage does. The set is of real-world referents —
    populations, conditions, diseases, analytes, timepoints, list items — not of words.
@@ -152,9 +187,31 @@ gate that produced it was not chosen by this order.
    case, not the gate; almost every correctly-ACCURATE citation has one.
 7. **NOT_SUBSTANTIATE** — none of the above fires, and a passage that *does* address the clause stops
    short of it. What "stops short" requires is the next section.
+
+   **Read back your reason before you emit this label, because it names the gate that really fired.**
+   NOT_SUBSTANTIATE's reason has exactly one admissible shape: *a passage reaches this clause's own
+   subject and predicate, and falls short of the strength, population, stage or specificity the clause
+   asserts.* If what you have written is one of the four below instead, an earlier gate answered yes
+   and you go back and emit its label:
+   - it names a particular thing the citing sentence covers and the passage does not → **gate 6,
+     OVERSIMPLIFY.** Move your two scope expressions into `paper_value` and `claim_value`.
+   - no passage reports on the clause's predicate at all → **gate 1, IRRELEVANT.**
+   - a number or percentage differs → **gate 4, MISQUOTE.**
+   - the passage states the opposite, or assigns the claimed property to a *different* agent by
+     explicit contrast while the clause assigns it to this one → **gate 3, CONTRADICT.**
+
+   And one shape that is genuinely this gate, because it is the one most often mistaken for gate 1: a
+   passage that reports the clause's own relationship but at a **different stage, population, setting
+   or timepoint** has reached the predicate. That is a shortfall, not irrelevance. NOT_SUBSTANTIATE.
 8. **ACCURATE** — none of the above fires. A passage is consistent with the clause, or the passages
    are plainly about the clause's own entities and relationship and the window simply did not return
    the supporting sentence (next section).
+
+   **You may not reach this gate by skipping the ones before it,** and the retrieval-silence branch is
+   not available to you if you answered gate 1 "no" by citing a passage that reaches the clause. That
+   citation was your finding that a passage *does* address the clause, so the live question is whether
+   it stops short — gate 7 — not whether the window was silent. Silence and a passage you have already
+   pointed at are not both true.
 
 ## What you were given is a subset of the paper — house text
 
@@ -220,15 +277,3 @@ When `multi_cit_context == "grouped"`, verify only the portion of the claim attr
 Moved to the enum contract (`verdict_enum_sarol.md`) — it is what the published metric is
 computed over, so it is fixed rather than tunable. Do not restate it here; a second copy is a
 second thing to drift.
-
-## What this rubric does *not* have (vs paper-trail native) — house text
-
-Intentionally dropped for this experiment — the adapter does not emit:
-
-- CONFIRMED_WITH_MINOR / OVERSTATED_MILD / OVERGENERAL — no analog in Sarol taxonomy
-- PARTIALLY_SUPPORTED — Sarol rolls partial into NOT_SUBSTANTIATE
-- MISATTRIBUTED — Sarol's MISQUOTE is narrower (numerical only); generic misattribution collapses into NOT_SUBSTANTIATE or INDIRECT
-- CITED_OUT_OF_CONTEXT — closest in Sarol is ETIQUETTE; experiment-level label, use ETIQUETTE
-- AMBIGUOUS — not in Sarol; if the adjudicator truly cannot pick, prefer ETIQUETTE with a nuance note
-
-Workflow-state flags (PENDING, NEEDS_PDF, STALE) are orthogonal to the rubric and remain paper-trail native.

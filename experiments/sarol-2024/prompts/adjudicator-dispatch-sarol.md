@@ -52,8 +52,8 @@ defect to report.
 *House routing notes (ours, not the paper's):* MISQUOTE is numerical only — a non-numerical
 difference is simply not MISQUOTE, and where it goes is decided by the rubric's ordered test, not
 here. In particular a *strength* or *confidence* difference — the source hedges, the citing sentence
-does not — is **not** OVERSIMPLIFY; see the rubric's gate 6. For INDIRECT, use the extractor's
-`indirect_attribution_check`; if the cited paper is itself a review, prefer INDIRECT, otherwise
+does not — is **not** OVERSIMPLIFY; see the rubric's gate 6. For INDIRECT, the rubric's gate 5 is the
+whole test; if the cited paper is itself a review, prefer INDIRECT, otherwise
 INDIRECT_NOT_REVIEW. CONTRADICT requires a verbatim source excerpt that opposes the claim — a source
 that is merely *silent* is not a contradiction.
 
@@ -103,7 +103,7 @@ Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json`
 - `overall_verdict` value comes from the Sarol 9-class enum
 - `stage` = `"adjudication"`
 - All other fields (`source_mode`, `handle`, `paperclip_handle`, `ingest_mode`, evidence, attestation, co_cite_context, timing) are preserved from the extractor's JSON. **`source_mode` is a required *top-level* field** — copy it from the evidence file's top level verbatim. Its presence inside `evidence[*]` entries does not satisfy the requirement, and omitting it fails the exit validator (`SOURCE_MODE_MISSING`)
-- **Emit valid JSON.** Carried-forward evidence snippets are verbatim source text and routinely contain double quotes, backslashes and newlines. An unescaped quote inside a snippet makes the whole file unparseable and the claim scores as a miss whatever your verdict was — this is a real and recurring loss, most often on snippets quoting a Boolean search string or a term in scare quotes, where one snippet can carry a dozen of them. **So do not carry double quotes through at all:** before writing a snippet into the JSON, replace every `"` in it with `'`, and escape backslashes and newlines (`\\`, `\n`). A snippet is provenance, not a transcript — changing its quote characters costs nothing and losing the file costs the claim. You may also shorten a long snippet to the span that actually matters
+- **Emit valid JSON.** Carried-forward evidence snippets are verbatim source text and routinely contain double quotes, backslashes and newlines. An unescaped quote inside a snippet makes the whole file unparseable and the claim scores as a miss whatever your verdict was — this is a real and recurring loss, most often on snippets quoting a Boolean search string or a term in scare quotes, where one snippet can carry a dozen of them. **So do not carry double quotes through at all:** before writing a snippet into the JSON, replace every `"` in it with `'`, and escape backslashes and newlines (`\\`, `\n`). ⚠ **A single quote is an ordinary character in JSON and takes no escape. Never write `\'`.** That sequence is not a valid JSON escape and it destroys the whole file, so having substituted `'` for `"` you must then leave every `'` alone — including apostrophes that were already in the text, as in `the paper's`. The only backslash sequences allowed anywhere in the file are `\\`, `\n`, `\t`, `\"` and `\uXXXX`; if you are about to emit a backslash that is not one of those, delete it. A snippet is provenance, not a transcript — changing its quote characters costs nothing and losing the file costs the claim. You may also shorten a long snippet to the span that actually matters
 - **Every sub-claim must include an `evidence` array.** Carry forward the evidence passages provided in the evidence file. If no passage was provided for a sub-claim (e.g. keyword retrieval returned nothing), still emit `"evidence": []` — never omit the field, or the exit validator rejects the whole file (`MISSING_FIELD:sub_claims[*].evidence`) and the claim scores as a miss regardless of your verdict.
 
 Add a top-level field:
