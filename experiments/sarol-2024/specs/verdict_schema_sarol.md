@@ -63,37 +63,70 @@ source's scope. Quote the clause you are judging before you test anything agains
 going to see whether a later test also passes, and do not skip ahead to a test that looks like the
 answer. A later test passing as well is expected and means nothing; that is what "residual" means.
 
+*House note on base rates, from this benchmark's own class distribution — house text:* roughly
+**three citations in five are ACCURATE**. ETIQUETTE is about one in eight, NOT_SUBSTANTIATE one in
+eleven, IRRELEVANT one in eighteen, and CONTRADICT, OVERSIMPLIFY, MISQUOTE and the two INDIRECT
+classes are each under one in thirty. A gate that fires more often than its label occurs is
+miscalibrated however good its individual reasons looked, and gates 3, 5 and 6 are the ones with the
+least room.
+
 To make the stop auditable, **begin each sub-claim's `nuance` with `gate N:`** — the number of the
 test that fired — followed by your one-sentence reason. A verdict whose `nuance` does not name the
 gate that produced it was not chosen by this order.
 
-**Third, a gate is answered by its finding, not by your assertion. — house text** Naming a gate and
-writing "not applicable" is not answering it. Gates 1 and 6 each require you to write down a specific
-thing before "no" is available to you, and the commonest way this order fails is that the write-down
-is skipped, the gate is waved through, and then the test it asked for gets performed further down —
-inside gate 7's reason — where it no longer selects a label. Two fixed forms, which cost you a phrase
-each:
+**Third, a gate fires on a finding you can quote, and silence is not a finding. — house text** Your
+passages are a keyword-selected sliver of the article (the subset section below has the numbers), so
+*my passages do not mention X* is a fact about the window and never about the paper. Gates 1, 6 and 7
+each name a label on the strength of a positive finding, so each one has a write-down you must be able
+to produce **in order to fire it**. Produce it and the gate fires; fail to produce it and the gate
+answers **no** and you walk on. The write-down licenses the label, not the refusal.
 
-- **Gate 1's "no" needs a line number.** Write `gate 1: subject=<...>, predicate=<...>, predicate
-  reported at L<nn> -> no`. The locator must be a passage you actually hold. If no passage in your
-  window reports on the predicate, you cannot write a line number, and the answer is **yes**.
-- **Gate 6's "no" needs a failed search.** You may only write `gate 6: no excluded member` after
-  trying to name one. If the excluded member appears anywhere in what you finally write — in
-  `nuance`, in `paper_value`, in `claim_value` — then gate 6 answered **yes**, and the fact that you
-  wrote it under a later heading does not move it there.
+- **Gate 1** needs a predicate axis written down and no passage found on it — see test 1.
+- **Gate 6** needs a named excluded member the passage's own scope rules out — see (c) in test 6.
+- **Gate 7** needs a quoted passage sentence that asserts something weaker — see test 7.
+
+A gate disposed of in prose — "not applicable", "relevant to the paper", "no scope difference" — has
+not been answered in either direction, and prose can never fire one.
+
+**Fourth, three rules from further down this file decide more claims than any gate does, so apply
+them inside every gate rather than after the walk. — house text**
+
+- **The clause is what the marker is attached to** — not the sentence around it. Background framing
+  (what the literature holds, what a field focuses on, how many of a citing review's own included
+  studies did something) is not charged to this source, and its scope words are not this source's
+  scope. Quote the clause before any gate.
+- **You may not fail a clause element-by-element.** Splitting the clause into assertions and charging
+  the source for the ones your window does not match is the single commonest way this program
+  produces a wrong label.
+- **Three bars are not in the scheme and may not be applied under any gate:** that the source must use
+  the citing sentence's causal framing; that it must show a particular method before a claim counts as
+  supported; and that a hedged source sentence cannot support a citing clause.
 
 1. **IRRELEVANT** — no passage you were given addresses the subject the citation is attached to.
 
-   **The bound test: the clause has a subject and a predicate, and the passages must reach both.**
-   Write down the clause's subject (what it is about) and its predicate (the outcome, property or
-   relationship it asserts of that subject). Then ask of the predicate specifically: does *any*
-   passage report on it at all? A passage that shares the subject and is silent on the predicate does
-   not clear this gate. A paper about job strain and *coronary heart disease* is IRRELEVANT to a clause
-   about job strain and *stroke*, though both are cardiovascular; a paper about mitochondrial
-   *metabolism* in cancer is IRRELEVANT to a clause about mitochondrial *structural integrity* under
-   chemotherapy. Matching the broad field, the disease area, or the subject alone is **not** clearing
-   this gate — that is the specific mistake this test exists to catch. Shared vocabulary is not
-   relevance.
+   **The bound test, and it is one question: does any passage assert something on the clause's
+   *predicate axis*? — house text** The axis is the kind of thing the clause asserts of its subject —
+   a status, a risk of one named outcome, one named property, one named relationship. Write
+   `gate 1: clause asserts <axis> of <subject>; my passages assert <axis> of <subject>`. **Fire this
+   gate only when no passage asserts anything on that axis.** Then go on to the two readings of
+   "yes" below and pick the right one.
+
+   **Same axis, different value, is not this gate — it is gate 7.** A passage that reports the
+   clause's own relationship at a **different stage, population, setting or timepoint** is on the
+   axis and falls short of it: a paper reporting a vaccine in clinical trials where the clause says
+   approved for emergency use, or linkage failing at an earlier stage of care than the clause names,
+   is NOT_SUBSTANTIATE. Do not read the setting into the predicate; the setting belongs to the
+   subject. — house text
+
+   **Silence is not this gate either.** `predicate reported at L=none` is a fact about your window,
+   not a finding about the paper, and on its own it cannot fire this gate. — house text
+
+   **A different axis does fire it, even when the subject matches.** A paper about job strain and
+   *coronary heart disease* is IRRELEVANT to a clause about job strain and *stroke*, though both are
+   cardiovascular; a paper about mitochondrial *metabolism* in cancer is IRRELEVANT to a clause about
+   mitochondrial *structural integrity* under chemotherapy. Matching the broad field, the disease
+   area, or the subject alone is **not** clearing this gate — that is the specific mistake this test
+   exists to catch. Shared vocabulary is not relevance.
 2. **ETIQUETTE** — you cannot tell which part of the citing sentence this source is being cited for.
 
    **Run this test against the raw `claim_text` you were handed, character for character** — not
@@ -127,7 +160,9 @@ each:
    source answerable for?" is gate 2's question. If your answer is "no portion can be separated out",
    that answer *is* ETIQUETTE and you stop here. Finding it further down the ladder and writing it as
    a caveat underneath some other verdict is the same mistake made late.
-3. **CONTRADICT** — a passage you were given states the opposite of the citing clause. It must
+3. **CONTRADICT** — a passage you were given states the opposite of the citing clause. **Quote it.**
+   The requirement is that you produce the excerpt verbatim, *not* that the excerpt contain a denial:
+   a source need never write "X does not happen" for this gate to fire. — house text It must
    oppose, not merely differ: a source that assigns the claimed property to a *different* agent, or
    reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
    true. Silence never contradicts.
@@ -151,7 +186,9 @@ each:
    marker on a sentence that resembles the clause is therefore the ordinary case, not the gate. Count
    first. If any other passage you hold carries the clause's own entities without a marker, this
    source is not merely relaying — go to test 6. Gate 5 is for the claim whose *sole* support in the
-   window is a sentence crediting someone else.
+   window is a sentence crediting someone else. **Name the unmarked passages you checked and the
+   entities each carries, and read each passage's own markers off that passage** — a marker list
+   belonging to a neighbouring line is not evidence about this one.
 6. **OVERSIMPLIFY** — a passage supports the clause, but the citing sentence asserts the finding
    over a **larger set of things** than the passage does. The set is of real-world referents —
    populations, conditions, diseases, analytes, timepoints, list items — not of words.
@@ -166,52 +203,75 @@ each:
    enzyme in two cancers, citing sentence says "protease activity and patient outcomes" → (c) is
    *a protease other than that enzyme*.
 
+   **If you have already named a candidate (c) anywhere — in an earlier gate's reason, in `nuance`,
+   in `paper_value`, in `claim_value` — then this gate answered yes**, and writing it under a later
+   heading does not move it there. — house text
+
+   **What may count as (c), and this is where the gate goes wrong. — house text** (c) must be a
+   referent the passage's **own scope expression rules out**: a fifth item against a list of four, a
+   disease outside the class the passage names, a condition its wording bounds out. Write the
+   passage's scope expression down first — if the passage states no scope, there is nothing for the
+   sentence to exceed. **If the only thing you can say about (c) is that it is not mentioned, not
+   found in the evidence, or not covered by your passages, you have named window silence rather than
+   an excluded member, and this gate does not fire** — go to test 7.
+
    **Four things that are not this gate, because none of them widens a set.** Do not fire OVERSIMPLIFY
    on any of them.
    - **Confidence.** The citing sentence is more assertive than the passage — the passage says "may",
      "might", "will need to be confirmed", "consistent with", and the citing sentence simply states the
      finding. That is not a widened set. A confident summary of a hedged finding is **ACCURATE**. This
      is the same rule as the banned bar below: a hedged source supports a citing clause.
-   - **Wording and specificity.** The citing sentence describes the same referents in different words,
-     or with more or less mechanistic detail, or omits adjectives that do not change which referents
-     are meant. If (c) would be a thing that does not exist or that the sentence is not talking about,
-     you have found a wording delta, not a widening. **ACCURATE.**
+   - **Wording and mechanistic detail.** The citing sentence describes the same referents in different
+     words, or with more or less mechanism spelled out, or omits adjectives that do not change which
+     referents are meant. If (c) would be a thing that does not exist or that the sentence is not
+     talking about, you have found a wording delta, not a widening. **ACCURATE.**
+     ⚠ **This exclusion does not cover a dropped scope quantifier. — house text** Where the passage
+     bounded its own claim — "a range of", "some", "in two cancers", "four of the studies" — and the
+     citing sentence drops that bound, the set is genuinely wider and gate 6 fires. The three worked
+     examples above outrank this exclusion wherever both seem to apply; check them first.
    - **Direction.** The citing sentence is *narrower* than the passage — it reports one of the source's
      two mechanisms, or drops an intermediate step, or names a subtype where the source named the
      class. Gate 6 fires only on claim-broader-than-passage. Claim-narrower is not this gate.
    - **A clause the citation is not attached to.** Scope words in the sentence's background framing are
      not this source's scope. See the preamble above.
 
-   *House note on calibration:* on this benchmark OVERSIMPLIFY is a **rare** label — roughly one
-   citation in sixteen. A lexical difference between the citing sentence and a passage is the ordinary
-   case, not the gate; almost every correctly-ACCURATE citation has one.
+   *House note on calibration:* a lexical difference between the citing sentence and a passage is the
+   ordinary case, not this gate; almost every correctly-ACCURATE citation has one.
 7. **NOT_SUBSTANTIATE** — none of the above fires, and a passage that *does* address the clause stops
    short of it. What "stops short" requires is the next section.
 
    **Read back your reason before you emit this label, because it names the gate that really fired.**
-   NOT_SUBSTANTIATE's reason has exactly one admissible shape: *a passage reaches this clause's own
-   subject and predicate, and falls short of the strength, population, stage or specificity the clause
-   asserts.* If what you have written is one of the four below instead, an earlier gate answered yes
-   and you go back and emit its label:
-   - it names a particular thing the citing sentence covers and the passage does not → **gate 6,
-     OVERSIMPLIFY.** Move your two scope expressions into `paper_value` and `claim_value`.
-   - no passage reports on the clause's predicate at all → **gate 1, IRRELEVANT.**
-   - a number or percentage differs → **gate 4, MISQUOTE.**
-   - the passage states the opposite, or assigns the claimed property to a *different* agent by
-     explicit contrast while the clause assigns it to this one → **gate 3, CONTRADICT.**
+   NOT_SUBSTANTIATE's reason has exactly one admissible shape: *a passage asserts something of its
+   own about this clause's predicate, and what it asserts falls short of the clause.* Write it as
+   `gate 7: passage says '<quote>', clause says '<quote>', shortfall = <axis>`, and the axis must be
+   one of exactly four: **strength** (the passage recommends where the clause reports a finding),
+   **population**, **stage or setting**, or **class-vs-member** (the passage reports it of a whole
+   class where the clause asserts it of one member — interferons I and III against IFN-α). — house text
 
-   And one shape that is genuinely this gate, because it is the one most often mistaken for gate 1: a
-   passage that reports the clause's own relationship but at a **different stage, population, setting
-   or timepoint** has reached the predicate. That is a shortfall, not irrelevance. NOT_SUBSTANTIATE.
+   **If you cannot quote a passage sentence that asserts something about the clause's predicate, this
+   gate does not fire — go to test 8.** "The passage does not mention the mechanism / the number / the
+   qualifier" is silence over a sliver, not a shortfall; a shortfall needs a passage saying something
+   *weaker*, and a passage saying nothing is not saying something weaker. A passage that names a
+   measurement without reporting its result is such a silence. Neither is a delta of **mechanistic
+   detail or wording** — the same relationship in more or fewer words, with more or less mechanism
+   spelled out, is the ordinary case and is ACCURATE. — house text
+
+   If what you have written is one of the three below instead, an earlier gate answered yes and you
+   go back and emit its label:
+   - it names a particular thing the citing sentence covers and the passage's own scope rules out
+     → **gate 6, OVERSIMPLIFY.** Move your two scope expressions into `paper_value` and `claim_value`.
+   - your passages are about a different subject **and** a different predicate → **gate 1,
+     IRRELEVANT.** Silence on the predicate alone does not qualify.
+   - a number or percentage in the citing sentence differs from a number in a passage → **gate 4,
+     MISQUOTE.**
+
 8. **ACCURATE** — none of the above fires. A passage is consistent with the clause, or the passages
    are plainly about the clause's own entities and relationship and the window simply did not return
    the supporting sentence (next section).
 
-   **You may not reach this gate by skipping the ones before it,** and the retrieval-silence branch is
-   not available to you if you answered gate 1 "no" by citing a passage that reaches the clause. That
-   citation was your finding that a passage *does* address the clause, so the live question is whether
-   it stops short — gate 7 — not whether the window was silent. Silence and a passage you have already
-   pointed at are not both true.
+   **You may not reach this gate by skipping the ones before it** — each of 1 to 7 has to be answered.
+   But reaching it because none of them produced its write-down is not skipping: on this benchmark it
+   is the commonest correct outcome.
 
 ## What you were given is a subset of the paper — house text
 
