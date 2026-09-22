@@ -37,6 +37,83 @@ verbatim source excerpt that opposes the claim — a source that is merely *sile
 contradiction. MISQUOTE is numerical only; non-numerical strength drift goes to OVERSIMPLIFY.
 INDIRECT vs INDIRECT_NOT_REVIEW turns on whether the reference article is itself a review.
 
+## Choosing one label when several definitions fit — house text
+
+Several definitions above can be true of the same sub-claim at once. NOT_SUBSTANTIATE's "fails to
+substantiate all statements" is *also* true whenever the citing sentence contradicts the source,
+misquotes a number, overgeneralises a finding, attributes onward, is unclear about what it cites, or
+names a subject the paper never studies. It is therefore the **residual** label, not the first one to
+reach for.
+
+The worst-wins ladder below does not settle this. It reduces *several sub-claims* to one paper-level
+label; it does not choose one sub-claim's label, and on a single-sub-claim citation it is the
+identity function. Use this order instead, per sub-claim, and stop at the first test that passes.
+
+1. **IRRELEVANT** — no passage you were given addresses the subject the citation is attached to. The
+   test is the specific entity and relationship the citing clause asserts, not the broad field: a
+   paper about job strain and *coronary heart disease* is IRRELEVANT to a clause about job strain and
+   *stroke*, though both are cardiovascular. Shared vocabulary is not relevance.
+2. **ETIQUETTE** — you cannot tell which part of the citing sentence this source is being cited for.
+   The commonest form: the visible sentence ends inside an unfinished citation cluster — a trailing
+   `;` or `,` after an author-year fragment — so the sibling citations, and the clauses they carry,
+   are invisible to you. Prefer ETIQUETTE over charging the whole sentence to this source.
+3. **CONTRADICT** — a passage you were given states the opposite of the citing clause. It must
+   oppose, not merely differ: a source that assigns the claimed property to a *different* agent, or
+   reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
+   true. Silence never contradicts.
+4. **MISQUOTE** — a number or percentage in the citing sentence differs from the number in a passage.
+   Once you have identified a numeric mismatch, the label is MISQUOTE; do not re-describe a numeric
+   mismatch as a scope or emphasis problem and route it to OVERSIMPLIFY.
+5. **INDIRECT / INDIRECT_NOT_REVIEW** — the passage that supports the clause carries its own citation
+   marker for the fact — `(12)`, `5-8`, `(Ota et al., 2009)` — so this source is relaying the fact
+   rather than reporting it. INDIRECT if the cited paper is itself a review, INDIRECT_NOT_REVIEW
+   otherwise.
+6. **OVERSIMPLIFY** — a passage supports the clause but the citing sentence states it more broadly
+   than the passage does: a qualifier dropped ("a range of age-related processes" → "age-related
+   processes"), a population widened, a hedge removed, an enumeration extended by an item the source
+   does not list. Source-narrower-than-claim is overgeneralisation, not a support gap.
+7. **NOT_SUBSTANTIATE** — none of the above fires, and a passage that *does* address the clause stops
+   short of it. What "stops short" requires is the next section.
+8. **ACCURATE** — none of the above fires. A passage is consistent with the clause, or the passages
+   are plainly about the clause's own entities and relationship and the window simply did not return
+   the supporting sentence (next section).
+
+## What you were given is a subset of the paper — house text
+
+Under the retrieval profile the evidence envelope was built mechanically. Three fields in it say how
+much of the paper you actually hold: `attestation.selector` (the search that chose your passages),
+`attestation.retrieval_k` (how many you were handed) and `attestation.n_passages_available` (how many
+the cited paper has). **Read all three before you decide.** On this benchmark the second is typically
+under a tenth of the third — you are looking at a keyword-selected sliver, not at the article.
+
+So: **a clause you cannot find in your passages has not been shown to be absent from the paper.**
+Argument from silence over a sliver is not a support gap, and it is the largest single source of
+wrong verdicts this program makes.
+
+The test that separates a real shortfall from retrieval silence, and it is checkable against the
+passages in front of you:
+
+- **A passage addresses the clause and stops short of it** — it reports the same relationship more
+  weakly, for a different population, or only as a recommendation rather than a finding. That is a
+  real shortfall: NOT_SUBSTANTIATE, or OVERSIMPLIFY where the shortfall is that the source is
+  narrower than the claim.
+- **No passage addresses the clause, but the passages are plainly about the clause's own entities and
+  relationship** — the paper studies this and your window did not return the sentence. That is
+  retrieval silence: **ACCURATE**. Do not require the citing sentence's wording to appear in the
+  window, and do not enumerate the sentence's elements and fail it on the first one you cannot match.
+- **No passage addresses the clause and the passages are about something else** — IRRELEVANT, per
+  test 1 above.
+
+Three bars you may not apply, because none of them is in the scheme: that the source must use the
+citing sentence's exact causal framing; that the source must display a particular method (a
+multivariate model, a meta-analysis, a quantitative result) before a claim counts as supported; and
+that a hedged source sentence cannot support a citing clause. A hedged source supports a hedged
+claim.
+
+A citing sentence's background framing — what the literature generally holds, how many studies exist,
+what a field mostly focuses on, how many of a review's own included studies did something — is not
+charged to this source. Verify the proposition the citation marker is attached to.
+
 ## Rollup (per citation instance = per (claim, cited_paper) pair) — house text
 
 When the citing claim is decomposed into multiple sub-claims, reduce to one paper-level label by **worst-wins** strictness order:
@@ -51,9 +128,13 @@ Exception: a single-sub-claim citation gets that sub-claim's label directly (pre
 
 ## Multi-citation handling (critical — 51% of Sarol data) — house text
 
-When the citing sentence contains `<|multi_cit|>` — i.e., the evaluated citation is part of a `[1,2,3]`-style cluster — the adjudicator must verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
+The dispatch supplies `multi_cit_context`: `"single"` when the evaluated citation stands alone at this position, `"grouped"` when it is one of a `[1,2,3]`-style cluster. **That field is the trigger.** There is no marker in the claim text to look for.
 
-When a citation is grouped ambiguously such that no sub-claim can clearly be attributed to a single source, prefer ETIQUETTE.
+When `multi_cit_context == "grouped"`, verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
+
+When the grouping is ambiguous enough that no part of the sentence can be attributed to this source in particular, prefer ETIQUETTE.
+
+⚠ A sentence can carry sibling citations while `multi_cit_context` is `"single"`. Two signals in the claim text say so: an `[OTHER_CIT]` placeholder, and a visible sentence that ends inside an unfinished citation list. Narrow this source's burden the same way when you see either.
 
 ## 3-way collapse
 

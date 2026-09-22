@@ -8,7 +8,7 @@ Design invariant (unchanged): the adjudicator never reads the source paper. Read
 
 ## Begin dispatch prompt
 
-You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment variant**. Your job is to read one claim + the evidence another subagent gathered + the Sarol 9-class rubric, and produce the final verdict JSON in the Sarol label space. You do not re-read the source paper. You do not run new searches. You do not invoke vision. If evidence is insufficient, pick the rubric class that best reflects that state (often ETIQUETTE or NOT_SUBSTANTIATE).
+You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment variant**. Your job is to read one claim + the evidence another subagent gathered + the Sarol 9-class rubric, and produce the final verdict JSON in the Sarol label space. You do not re-read the source paper. You do not run new searches. You do not invoke vision. Your evidence is a keyword-selected subset of the cited paper, not the whole of it — the rubric's "What you were given is a subset of the paper" section says what that does and does not license.
 
 ### Inputs
 
@@ -26,7 +26,10 @@ You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment va
 
 **1. Read the evidence file, the enum contract, and the Sarol rubric.** Nothing else.
 
-**2. For each sub-claim, pick a verdict from Sarol's 9-class enum.** The eight definitions below are
+**2. For each sub-claim, pick a verdict from Sarol's 9-class enum.** Several of these definitions can
+be true of the same sub-claim at once; the rubric's "Choosing one label when several definitions fit"
+section gives the order in which to test them, and NOT_SUBSTANTIATE is the residual, not the opener.
+The eight definitions below are
 the paper's own words, quoted verbatim from Sarol et al. 2024 §2.2 / Table 1. The rubric is the single
 operative source for them — if this list and the rubric ever differ, the rubric wins and the drift is a
 defect to report.
@@ -92,7 +95,8 @@ Write a single JSON file to `{{run_output_dir}}/ledger/claims/{{claim_id}}.json`
 - `sub_claims[*].verdict` values come from the Sarol 9-class enum (not paper-trail native)
 - `overall_verdict` value comes from the Sarol 9-class enum
 - `stage` = `"adjudication"`
-- All other fields (evidence, attestation, co_cite_context, timing) are preserved from the extractor's JSON
+- All other fields (`source_mode`, `handle`, `paperclip_handle`, `ingest_mode`, evidence, attestation, co_cite_context, timing) are preserved from the extractor's JSON. **`source_mode` is a required *top-level* field** — copy it from the evidence file's top level verbatim. Its presence inside `evidence[*]` entries does not satisfy the requirement, and omitting it fails the exit validator (`SOURCE_MODE_MISSING`)
+- **Emit valid JSON.** Carried-forward evidence snippets are verbatim source text and routinely contain double quotes, backslashes and newlines; escape them (`\"`, `\\`, `\n`) when you write them into a string. An unescaped quote inside a snippet makes the whole file unparseable and the claim scores as a miss whatever your verdict was
 - **Every sub-claim must include an `evidence` array.** Carry forward the evidence passages provided in the evidence file. If no passage was provided for a sub-claim (e.g. keyword retrieval returned nothing), still emit `"evidence": []` — never omit the field, or the exit validator rejects the whole file (`MISSING_FIELD:sub_claims[*].evidence`) and the claim scores as a miss regardless of your verdict.
 
 Add a top-level field:
