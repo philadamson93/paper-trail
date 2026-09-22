@@ -50,13 +50,8 @@ The worst-wins ladder below does not settle this. It reduces *several sub-claims
 label; it does not choose one sub-claim's label, and on a single-sub-claim citation it is the
 identity function. Use this order instead, per sub-claim.
 
-**Two things to fix before you start, because this is where the order goes wrong in practice.**
-
-**First, fix what you are judging.** Verify the proposition the citation marker is attached to, and
-only that. A citing sentence's background framing — what the literature generally holds, how many
-studies exist, what a field mostly focuses on, how broad a problem is, how many of a review's own
-included studies did something — is **not charged to this source**, and its scope words are not this
-source's scope. Quote the clause you are judging before you test anything against it.
+**First, fix what you are judging** — the marker-attached clause, per the first rule under "Fourth"
+below. Quote it before you test anything against it.
 
 **Second, this is first-match-wins, and it binds in both directions.** Walk the tests in order from
 1. Answer each one explicitly yes or no. **Stop at the first yes and emit that label** — do not keep
@@ -92,9 +87,9 @@ not been answered in either direction, and prose can never fire one.
 them inside every gate rather than after the walk. — house text**
 
 - **The clause is what the marker is attached to** — not the sentence around it. Background framing
-  (what the literature holds, what a field focuses on, how many of a citing review's own included
-  studies did something) is not charged to this source, and its scope words are not this source's
-  scope. Quote the clause before any gate.
+  (what the literature holds, how many studies exist, what a field focuses on, how broad a problem
+  is, how many of a citing review's own included studies did something) is not charged to this
+  source, and its scope words are not this source's scope. Quote the clause before any gate.
 - **You may not fail a clause element-by-element.** Splitting the clause into assertions and charging
   the source for the ones your window does not match is the single commonest way this program
   produces a wrong label.
@@ -166,6 +161,14 @@ them inside every gate rather than after the walk. — house text**
    oppose, not merely differ: a source that assigns the claimed property to a *different* agent, or
    reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
    true. Silence never contradicts.
+
+   **Write the clash down with the clause quoted verbatim, not restated. — house text**
+   `gate 3: passage '<quote>'; clause '<verbatim quote of the marker-attached clause>'; both cannot
+   be true because <reason>`. If you had to strengthen the clause to make it clash — adding *all*,
+   *only*, *identical*, *always*, or turning a modelling assumption into a claim about every
+   subgroup — you are contradicting your restatement, not the clause, and this gate answers **no**.
+   A passage reporting that a quantity differs across subgroups does not oppose a clause that never
+   denied it.
 4. **MISQUOTE** — a number or percentage in the citing sentence differs from the number in a passage.
    Once you have identified a numeric mismatch, the label is MISQUOTE; do not re-describe a numeric
    mismatch as a scope or emphasis problem and route it to OVERSIMPLIFY. **This gate does not ask
@@ -247,6 +250,16 @@ them inside every gate rather than after the walk. — house text**
    one of exactly four: **strength** (the passage recommends where the clause reports a finding),
    **population**, **stage or setting**, or **class-vs-member** (the passage reports it of a whole
    class where the clause asserts it of one member — interferons I and III against IFN-α). — house text
+
+   **The axis is a closed list, and the check is literal. — house text** The word after
+   `shortfall =` must be exactly one of `strength`, `population`, `stage/setting` or
+   `class-vs-member`. If the word you would write is anything else — *scope*, *specificity*,
+   *numerical specificity*, *detail*, *mechanism*, *attribution*, *field-wide*, *prevalence*,
+   *this paper's own work* — gate 7 did not fire: emit **ACCURATE**. Three shortfalls this rule
+   exists to stop, each of which is ACCURATE: a count or number the passages simply do not state
+   (that is silence, and gate 4 needs a *differing* number); a clause about what a field or the
+   literature mostly does, charged to a source that reports its own instance of it; and a clause
+   framed as "other studies have shown X" where the passage reports X.
 
    **If you cannot quote a passage sentence that asserts something about the clause's predicate, this
    gate does not fire — go to test 8.** "The passage does not mention the mechanism / the number / the
