@@ -18,6 +18,10 @@ ITERATIONS="${3:-5}"
 # itself all read this, so they cannot disagree about what is being run -- `retrieval` is the only
 # runnable rung today (`profiles.IMPLEMENTED_STAGES`).
 PROFILE="${PROFILE:-retrieval}"
+# Which program version the working tree already holds. `program-v0` is right for a baseline run.
+# Set it to continue hill-climbing from a version an earlier run committed -- the tree-vs-tag guard
+# compares against this, so leaving it at the default on a continued run refuses before any spend.
+CURRENT_TAG="${CURRENT_TAG:-program-v0}"
 
 # Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
 # resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
@@ -258,6 +262,7 @@ cd "$REPO_ROOT/experiments/sarol-2024"
 "$PY" scripts/freeze_program_v0.py --verify --tree program-v0 >/dev/null 2>&1 \
   || fail "program-v0 does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
 echo "  program-v0 verifies against its tag"
+[ "$CURRENT_TAG" = "program-v0" ] || echo "  continuing from $CURRENT_TAG (the tree is NOT the baseline, and that is deliberate)"
 
 # ---------------------------------------------------------------- container image
 # Every scored dispatch runs in a container and there is no uncontained mode, so the dispatcher
@@ -321,7 +326,7 @@ print(f"  canary {unit.claim_id} ({spec.claim.citekey}) staged: {n} files under 
 PYCAN
 
 # ---------------------------------------------------------------- run
-say "Run: $RUN_ID (workers=$MAX_WORKERS, iterations=$ITERATIONS)"
+say "Run: $RUN_ID (workers=$MAX_WORKERS, iterations=$ITERATIONS, from=$CURRENT_TAG)"
 mkdir -p "$RUNS"
 cd "$OPT"
 # errexit off across the run itself: we want the post-run assertions to report the failure in
@@ -330,6 +335,7 @@ set +e
 "$PY" -u dispatcher.py --run \
   --image "$IMAGE_REF" \
   --profile "$PROFILE" \
+  --current-tag "$CURRENT_TAG" \
   --iterations "$ITERATIONS" \
   --train-n-schedule 50,50,50,50,50 \
   --draw-mode cumulative \
