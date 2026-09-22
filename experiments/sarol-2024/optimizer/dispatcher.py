@@ -1426,6 +1426,18 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # run's answers across sibling archive roots and still look completely healthy. That is
         # exactly what shipped until the Codex audit caught it on 2026-09-21, so the wiring is
         # asserted rather than assumed.
+        # `--resume` was unreachable from the CLI until 2026-09-22: the S26 guard compares the tree
+        # against the manifest's frozen version, and after ANY run the tree carries a later one, so
+        # every resume died on the guard whose own error text says to "pass a `current_tag`" -- a
+        # flag that did not exist. Both halves are gated: the flag parses, and it actually reaches
+        # `run_optimization`, because a flag that parses and is dropped looks identical from outside.
+        ("--current-tag parses and defaults to the baseline, so a plain run is unchanged",
+         _parser().parse_args(["--run"]).current_tag == "program-v0"),
+        ("...and names a later version when given one, which is what makes --resume reachable",
+         _parser().parse_args(["--run", "--current-tag", "program-v7"]).current_tag == "program-v7"),
+        ("...and `main` passes it through rather than dropping it on the floor",
+         "current_tag=args.current_tag," in inspect.getsource(main)),
+
         ("the run id reaches the constructed Runner, so one run's answers archive in one place",
          build_components(
              max_budget_usd=1e9, train_n=1, require_command=False, run_id="hillclimb-Z",
@@ -1985,7 +1997,13 @@ def _run_summary_json(run, budget, *, stopped: bool) -> dict:
     }
 
 
-def main(argv: "list[str] | None" = None) -> int:
+def _parser() -> "argparse.ArgumentParser":
+    """The CLI, built separately from `main` so the selftests can gate flags by PARSING them.
+
+    A flag asserted by grepping this file's source passes just as happily when `main` never reads
+    it -- which is exactly how `--resume` stayed unreachable: the option existed, the guard it had
+    to satisfy did not take it, and nothing compared the two.
+    """
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--preflight", action="store_true", help="print the per-landmark cost table")
@@ -2100,6 +2118,17 @@ def main(argv: "list[str] | None" = None) -> int:
              "original run and its --resume continuation.",
     )
     ap.add_argument(
+        "--current-tag",
+        default="program-v0",
+        help="the program version the working tree already holds. Defaults to `program-v0`, which "
+             "is right for a baseline run. ⚠ **Required to RESUME**: after any run the tree carries "
+             "the last version the optimizer committed, and the S26 tree-vs-tag guard compares "
+             "against the manifest's frozen version -- so without this, `--resume` is refused by "
+             "the very guard whose error message tells you to pass it, and the feature is "
+             "unreachable from the command line (found 2026-09-22 trying to resume a run that had "
+             "stopped on a usage limit).",
+    )
+    ap.add_argument(
         "--resume",
         action="store_true",
         help="continue an interrupted run from its last cleanly-committed program-v<k>: "
@@ -2107,7 +2136,11 @@ def main(argv: "list[str] | None" = None) -> int:
              "chain and resume at iteration k+1. STOPs if the profile / rubric differ from the "
              "recorded run (a curve must not mix two systems).",
     )
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    args = _parser().parse_args(argv)
 
     if args.selftest:
         return _selftest()
@@ -2185,6 +2218,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 # `build_components`, which hands it to the Runner.
                 run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
                 resume=args.resume,
+                current_tag=args.current_tag,
                 # Rides `**component_kwargs` into `build_components`, which hands it to the
                 # Runner, whose constructor refuses without it. Same lesson as --profile and
                 # --model: a flag that reaches the estimate and not the run is worse than no flag.
