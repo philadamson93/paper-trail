@@ -6,8 +6,8 @@
   "handle": "pdfs/park2018/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/park2018.pdf#page=1",
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/park2018.pdf#page=2"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/park2018.pdf#page=1",
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/park2018.pdf#page=2"
   ],
   "claim_text": "Primary HP13C applications include cancer and heart disease27,28,29,30,31,32,33 .",
   "manuscript_section": "Introduction \u00a71.3",

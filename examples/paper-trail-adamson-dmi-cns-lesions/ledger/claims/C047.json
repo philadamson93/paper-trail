@@ -6,7 +6,7 @@
   "handle": "pdfs/defeyter2018/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
   ],
   "claim_text": "The 2 H MRI of the metabolic products of deuterated glucose, known as deuterium metabolic imaging (DMI), is the most recently proposed in vivo glucose metabolic imaging method37.",
   "manuscript_section": "1.2 / 1.3 (Introduction, Deuterium Metabolic Imaging framing)",

@@ -6,7 +6,7 @@
   "handle": "pdfs/huang2023/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/huang2023.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/huang2023.pdf"
   ],
   "claim_text": "In the absence of a large domain-specific dataset, self-supervised learning (SSL) on an unlabeled but in-domain dataset has repeatedly outperformed ImageNet pretraining on a wide range of downstream medical imaging tasks.",
   "manuscript_section": "Introduction (motivating domain-specific feature representations for DFD IQ assessment; offset ~8974 in paper.txt, refs 38,39)",

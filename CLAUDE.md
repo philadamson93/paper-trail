@@ -1,91 +1,122 @@
 # paper-trail — orientation for Claude Code sessions
 
-Fresh-agent crib sheet. Read before making structural or doc changes.
+Fresh-agent crib sheet. Read before making structural changes.
 
 ## What paper-trail is
 
-A citation-integrity agent that audits the references in a manuscript. Ships as the `/paper-trail` slash command (plus sister commands `/ground-claim`, `/fetch-paper`, `/verify-bib`). The shipped product is the agent + its prompts + its orchestration — **not** any given Claude Code session.
+A citation-integrity agent that audits the references in a manuscript. Ships as the `/paper-trail` slash command (plus sister commands `/ground-claim`, `/fetch-paper`, `/verify-bib`, `/init-writing-tools`, `/paper-trail-init`). The shipped product is the agent + its prompts + its orchestration — not any given Claude Code session.
+
+Two workflow modes:
+
+- **Reader mode** — audit someone else's paper end-to-end from a single PDF. Self-contained: writes to a `paper-trail-<pdf-stem>/` output directory. Used for peer review, literature vetting.
+- **Author mode** — audit your own in-progress manuscript (a `.tex` file + `.bib` + source PDFs). Writes to the project's `claims_ledger.md`.
+
+Both modes share the per-claim two-pass workflow (extractor → adjudicator) plus a Phase-3.5 attestation verifier.
 
 ## Where things live
 
+`src/` is the canonical ship surface; `.claude/<dir>/` entries are subdirectory symlinks into `src/<dir>/` kept only because Claude Code's discovery rules require those paths (intentional `.claude/` reference — publication target). Never edit through `.claude/`; if a symlink breaks, regenerate it from `src/`.
+
+- `src/commands/<name>.md` — slash command prompts (the orchestrator IS the agent driven by these prompts; there is no separate Python orchestrator). Six existing: `paper-trail.md` (entry point), `ground-claim.md` (per-claim workflow), `fetch-paper.md`, `verify-bib.md`, `init-writing-tools.md`, `paper-trail-init.md`. Plus `sarol-eval-item.md`, the Sarol experiment's grader driver: an experiment instrument, not a user-facing command (see the Sarol section below).
+- `src/prompts/<role>-dispatch.md` — literal prompts the orchestrator passes to subagents. Three roles: `extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md`.
+- `src/specs/<topic>.md` — interface specifications. `verdict_schema.md` is the per-claim verdict JSON schema (source of truth — `ledger.md` is rendered from these). `ingest.md` is the source-handle layout produced by `src/scripts/ingest_pdf.py`. `control_flow.md` maps the orchestrator → dispatch → subagent → exit-validation graph. `verifier_results.md` owns the Phase 3.5 result/`verdict_impact` contract; `trace_log.md` owns the observability record schema.
+- `src/scripts/<name>.py` — supporting Python: `validate_claims.py`, `render_html_demo.py`, `ingest_pdf.py`.
+- `src/skills/<name>.md` or `src/skills/<name>/SKILL.md` — project-owned skills. Currently `doc-split-check.md`, `plan-check.md` (a thin extension of the user-level `~/.claude/commands/plan-check.md`, adding paper-trail-specific gap patterns), and the directory-shaped `paperclip/`. The `.gitignore` carveout pattern (`src/skills/*` + `!` re-includes) is what makes these committable while machine-local skills stay ignored.
+- `src/templates/claims_ledger.md` — the canonical author-mode ledger schema. Reused verbatim by reader mode.
+- `examples/` — canonical runs. `paper-trail-adamson-2025/` is the M1 reference run (per memory `project_m1_complete.md`); start review-agents at its README.md. `paper-trail-adamson-dmi-cns-lesions/` and `DFD_authormode/` are additional fixtures.
 - `docs/plans/` — stable reference plans. Long-lived; edit in place when decisions change. One file per major topic.
-- `docs/journal/YYYY-MM-DD-<topic>.md` — per-day-per-topic decision log with attribution. Append-only in practice; captures *who* raised *what* and *why*. Filename prefix is ISO date + short topic slug so files grep chronologically and by topic. No subfolders.
-- `experiments/sarol-2024/` — the Sarol benchmark experiment subtree. Runbook, prompts, specs, scripts.
-- `experiments/sarol-2024/eval-harness/` — (planned, not yet created) frozen eval arm, isolated from revision commits by a pre-commit hook. Open decision Q9 in `experiment-sarol-archive-and-eval-framework.md`.
-- `experiments/sarol-2024/archive/paper-trail-v<N>/` — (planned) per-version eval output; the archived *model* itself is the git tag.
-- `.claude/prompts/`, `.claude/specs/` — production paper-trail prompts and rubric. **Not experiment-variant.** Sarol variants live under `experiments/sarol-2024/prompts/` and `experiments/sarol-2024/specs/`. Don't cross-contaminate.
+- `docs/NEXT.md` — pointer-style implementation queue for plans in `docs/plans/`. Updated during `/wrapup`. Recommended sequence + status table; substance lives in the linked plan docs.
+- `docs/journal/YYYY-MM-DD-<topic>.md` — per-day-per-topic decision log with attribution. Append-only in practice; captures *who* raised *what* and *why*. No subfolders.
+- `docs/claude_ops.md` — operational standards referenced by existing plan docs.
+- `docs/trust-model.md`, `docs/internals.md`, `docs/prerequisites.md` — architecture and setup references.
+- `docs/SHIP_SURFACE.md` — repo-browser-facing "this is what ships" orientation pointing at `src/`.
+
+## Codebase pointers for fresh agents implementing features
+
+When picking up a feature plan doc and starting implementation, the relevant files to read first are usually:
+
+- **Control-flow map:** `src/specs/control_flow.md` — which phase dispatches which prompt, which subagent emits which schema fields, which validation gates each artifact. Read this before tracing the orchestrator by hand.
+- **Orchestrator (slash-command prompt):** `src/commands/paper-trail.md` — phases 0-5. Phase 3.1 is "Claim extraction"; Phase 3 is the per-claim two-pass workflow that dispatches subagents.
+- **Per-claim workflow:** `src/commands/ground-claim.md` — explains the multi-cite handling ("LaTeX `\cite{a,b,c}` produces one ledger entry per citekey"), the `co_cite_context.sibling_citekeys` population, and the Pass 1 / Pass 2 / Pass 3 (verifier) handoffs.
+- **Verdict schema:** `src/specs/verdict_schema.md` — the source-of-truth contract for what each subagent emits. Includes verdict enum, `co_cite_context` envelope, `attestation` envelope, rollup rules.
+- **Subagent dispatch prompts:** `src/prompts/extractor-dispatch.md`, `adjudicator-dispatch.md`, `verifier-dispatch.md` — the literal prompts subagents receive, with `{{slot}}` placeholders.
+- **Ledger template:** `src/templates/claims_ledger.md` — author-mode ledger frontmatter and body schema.
+- **Canonical fixture (reader mode):** `examples/paper-trail-adamson-2025/data/claims/` — 87 baseline claim JSONs (83 with multi-cite siblings) for regression checks. Note the `data/claims/` path uses the legacy layout; the modern layout is `ledger/claims/`. Both are produced by paper-trail and `render_html_demo.py` auto-detects either path. New code that loads claim JSONs should follow the same auto-detect pattern.
+- **Canonical fixture (author mode):** `examples/DFD_authormode/ledger/claims/` — modern-layout author-mode example with `claims_ledger.md` frontmatter, `pdfs/`, and `ledger/`. Use this when smoke-testing author-mode behavior.
 
 ## Documentation conventions
 
-**Plain language.** Avoid acronyms unless expanded on first use, and prefer descriptive words over jargon. Historical example: an earlier draft of the archive-framework doc used "SUT" (system under test) throughout; Human objected twice. Retired.
+**Plain language.** Avoid acronyms unless expanded on first use, and prefer descriptive words over jargon. Per memory `feedback_plain_language.md`.
 
-**Attribution in decision rationale.** When a plan doc or journal entry records a decision whose rationale is interesting to retrospect on, mark inline with **Human:** and **Agent:** prefixes. Even when one party was wrong and pushed back by the other, preserve that — we're writing for the paper's human-value-in-agentic-collaboration discussion.
+**Attribution in decision rationale.** When a plan doc or journal entry records a decision whose rationale is interesting to retrospect on, mark inline with **Human:** and **Agent:** prefixes. Even when one party was wrong and pushed back by the other, preserve that — we're writing for the paper's human-value-in-agentic-collaboration discussion. Per memory `feedback_decision_doc_attribution.md`.
 
-**Modularity over monolith.** One topic per file. Long monolithic docs are hard to navigate later; small per-topic files are grep-friendly. If a doc gets past ~400 lines of prose, split it.
+**Modularity over monolith.** One topic per file. Long monolithic docs are hard to navigate later. The `doc-split-check` project-owned skill enforces this (~400-line trigger).
 
-**When to write a journal entry.** At the end of any substantive discussion that produced decisions or open questions. Especially for experiment-planning / paper-framing discussions where the who-said-what is the actual artifact.
+**Plan-doc readiness.** After writing a plan doc, the `plan-check` skill (user-level at `~/.claude/commands/plan-check.md`, with a thin paper-trail-specific extension at `src/skills/plan-check.md`) verifies the doc carries enough self-contained information for a fresh-agent in a future session to implement from it without the conversation context. The principle: every piece of context the current session accumulated must either be **pointed at** (name the docs / files / memories the fresh agent should read first) or **stated directly** (when the context is load-bearing and brittle to indirection).
+
+**When to write a journal entry.** At the end of any substantive discussion that produced decisions or open questions. Especially for design / scope discussions where the who-said-what is the actual artifact.
 
 ## Working pace
 
-**One thing at a time, conceptually.** When a session surfaces multiple threads — a primary task plus optional secondaries, or a main question plus incidental findings — complete the primary cleanly before opening the secondary, even if they're independently safe and the secondary is tempting. "One thing" is a conceptual scope, not literally one tool call: running multiple parallel subagents to execute one lit-review pass counts as one thing; adding a spike + a save-state + a CLAUDE.md edit + a memory write-out for one user request is still one thing. What to avoid is pursuing an independent second thread "because we can" — that muddies the primary's checkpoint with state from both and makes the next Human review harder.
-
-Human raised 2026-04-21. Applies to this project and generally.
-
-## Hygiene rules (Sarol experiment, and general pattern for any labeled-benchmark experiment)
-
-See `docs/plans/experiment-sarol-optimization-loop-hygiene.md` for the formal treatment. Short version:
-
-- **Rule 1 — Subagent sandboxing.** Subagents (extractor, adjudicator, verifier) cannot physically reach gold labels or raw benchmark data. Structural defenses: gold + benchmark outside the repo tree (`$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR`); opaque `ref_<6hex>` citekeys; filesystem-restriction paragraph on every dispatch; scrubbed `staging_info.json`.
-- **Rule 2 — Main-session test blindness.** The main planning session (this one) is policy-gated to never see test labels. The test split of any benchmark used for reporting is physically moved out of its expected directory during iteration and only unsealed for a single final evaluation. Current seal: `$HOME/.paper-trail-sealed/sarol-2024-test/` (Sarol 2026-04-21).
-- **The `program-v0` git tag is what runs — not your checkout.** The engine materializes the program from `rev_parse("program-v0")`, so editing a prompt or spec file changes **nothing a run sees** until the tag moves. Move it with `scripts/freeze_program_v0.py --retag` (it verifies the target first and refuses an unfaithful or dirty tree), then **push the tag** — the VM fetches it, so a local-only move fixes nothing there. ⚠ `--verify` on its own checks the manifest against its *source refs* and **passes on a stale tag**; `--verify --tree program-v0` is the check that catches one, and `scripts/vm/run_hillclimb_vm.sh` blocks the run on it. This drifted for nine days in September 2026, straight across the paper-verbatim reset, before a gate caught it.
-- **Time-evolution memory framing.** My memory improving over sessions is part of the optimization process. The constraint is that retrospective eval of `paper-trail-v<N>` at time=T must be memory-blind regardless of my memory at time=T — implemented by encoding all orchestrator-runtime decisions in static eval-arm Python (no runtime judgment during evals).
+**One thing at a time, conceptually.** When a session surfaces multiple threads — a primary task plus optional secondaries, or a main question plus incidental findings — complete the primary cleanly before opening the secondary, even if they're independently safe and the secondary is tempting. "One thing" is a conceptual scope, not literally one tool call. Per memory `feedback_one_thing_at_a_time.md`.
 
 ## Commit style
 
-Short, single-sentence commit messages. No AI attribution trailers. See memory `feedback_commit_style.md`.
+Short single-line thematic commit messages. No AI attribution trailers. Per memory `feedback_commit_style.md`.
 
 ## Where the user's global memory lives
 
-`/Users/pmayankees/.claude/projects/-Users-pmayankees-Documents-Misc-Projects-paper-trail/memory/`. Indexed by `MEMORY.md`. Out-of-repo; will not be seen by subagents. Do not rely on memory content to make a prompt file "work" — prompts must be self-contained.
+`/Users/philadamson/.claude/projects/-Users-philadamson-Documents-Misc-Projects-paper-trail/memory/`. Indexed by `MEMORY.md`. Out-of-repo; will not be seen by subagents. Do not rely on memory content to make a prompt file "work" — prompts must be self-contained.
 
 ## Reading path for a fresh agent picking up this work
 
 Always read in this order:
 
-1. **`docs/plans/NEXT.md`** — the living "where we are, what's next" doc. Read this first. Everything below is background context that NEXT.md will point you to as needed.
-2. This file (CLAUDE.md) — repo orientation and conventions.
-3. **`docs/plans/agentic-pipeline-optimization-framework.md`** — **authoritative framework plan** (as of 2026-04-21). Tiered leakage discipline, optimizer/dispatcher/subagent architecture, structural defenses. The paper's primary contribution; paper-trail + Sarol is the case study, not the contribution.
-4. `docs/plans/experiment-sarol-archive-and-eval-framework.md` — Sarol-specific archive + invariants + Q9c memory-blind mechanism. Companion to the framework doc.
-5. `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — Rule 1 (subagent sandboxing, stays authoritative); Rule 2 (main-session test blindness, **superseded for agent-only mode** by the framework doc's Tier 3 sealing — see the cross-reference at the bottom of the hygiene doc).
-6. `docs/plans/experiment-sarol-eval-arm-isolation.md` — Rule 3 (eval-time IN/OUT isolation; iteration-tier wrapper-script invocation + landmark-tier Docker). **Split from optimization-loop-hygiene 2026-04-23** — companion to #5.
-7. `docs/plans/experiment-april-20-findings.md` — the N=5 Sarol smoketest findings; the INDIRECT-detection failure mode.
-8. `docs/plans/paper-writeup-items.md` — paper-framing, named contributions, 9-paper lit review + borrow catalog.
-9. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
-10. (If needed) `docs/plans/experiment-sarol-benchmark.md` — the original strategy doc; `docs/plans/experiment-sarol-runbook.md` — the pipeline execution runbook; `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase map of what Sarol variants do and don't test.
+1. This file (CLAUDE.md) — repo orientation and conventions.
+2. **`docs/plans/` for the feature you're picking up** — `feature-multi-cite-joint-verdict.md`, `feature-neighbor-claim-attribution.md`, or `feature-issue-command.md`. Each is self-contained with codebase pointers.
+3. **`docs/plans/paper-trail-product-backlog.md`** — broader product backlog context if the feature touches shipping concerns.
+4. **`src/commands/paper-trail.md` and `src/commands/ground-claim.md`** — the two orchestrator prompts. The feature you're implementing almost certainly modifies one or both.
+5. **`src/specs/verdict_schema.md`** — schema source of truth. Most features touch the schema.
+6. Newest entries in `docs/journal/` — what was discussed and decided last working session, with inline **Human:** / **Agent:** attribution.
 
-## Doc landscape (current, 2026-04-21; one entry added 2026-07-20 below)
+## Doc landscape (current)
 
 **Stable authoritative references (edit in place):**
-- `docs/plans/papertrail-optimizer-requirements.md` — **active; Parts A, B and C implemented 2026-09-02** on branch `sarol-optimizer-impl`. paper-trail as consumer #3 of the shared cross-repo `agentic-label-opt` optimization engine. `Status: Draft`, **`Reviewed: Stale`** (approved 2026-09-02 via the `/explain-plan` visual path against HTML companion `18aac02ae8b2`, then edited past that baseline the same day to add C6.2's required `schema_version`; regenerate the `.html` before any visual review). Passed one `/review-plan` (Codex) round + an `/explain-plan` HTML companion (`papertrail-optimizer-requirements.html`, not committed, deliberately stale). The implementation passed a `/review-implementation` (Codex) audit that returned **Blocked** with 5 Critical findings, all since fixed. Feedback trail: `docs/plans/reviews/papertrail-optimizer-requirements-feedback.md` (plan) and `…-implementation-feedback.md` (code). Code lives in `experiments/sarol-2024/optimizer/`; every offline gate is green and the paid gates are not run. `/sarol-eval-item` is **written** (`.claude/commands/sarol-eval-item.md`, adjudicator stage only — the Phase 1 path) and the **Part C6 profile retrofit has landed**, so Phase 1 runs offline end-to-end (producer → envelope → judge → exit validation → scorer → release). Only the paid gates remain. ⚠ Only the `retrieval` profile is runnable: `agentic`/`paperclip` are priced and selectable but refused at the run entrypoint until `/sarol-eval-item` implements the extractor and verifier stages (`profiles.IMPLEMENTED_STAGES`). A second `/review-implementation` (Codex) audit of the C6 work returned **Revise**, 3 Criticals, all fixed — see `…-implementation-feedback-c6.md`.
-- `docs/plans/NEXT.md` — status + next steps
-- **`docs/plans/agentic-pipeline-optimization-framework.md` — framework plan (authoritative post-2026-04-21 reframe): tiered leakage discipline + optimizer/dispatcher/subagent architecture**
-- `docs/plans/experiment-sarol-benchmark.md` — strategy (Sarol-specific)
-- `docs/plans/experiment-sarol-runbook.md` — execution (Sarol-specific)
-- `docs/plans/experiment-sarol-faithfulness.md` — phase-by-phase variant coverage (source of truth for "what Sarol tests")
-- `docs/plans/experiment-sarol-optimization-loop-hygiene.md` — hygiene rules; Rule 1 authoritative; Rule 2 superseded for agent-only mode (see framework doc §6)
-- `docs/plans/experiment-sarol-eval-arm-isolation.md` — Rule 3 (eval-time IN/OUT isolation); canonical iteration-tier + landmark-tier invocation shapes; "alternatives evaluated" catalog. Split from optimization-loop-hygiene 2026-04-23.
-- `docs/plans/experiment-sarol-optimization-escalation.md` — escalation ladder if manual stalls
-- `docs/plans/experiment-sarol-archive-and-eval-framework.md` — archive + eval framework (Sarol-specific companion to the framework doc)
-- `docs/plans/experiment-sarol-methods-research.md` — method menu for future sweeps
-- `docs/plans/paper-writeup-items.md` — paper-framing running notes + 9-paper borrow catalog
-- `docs/plans/paper-trail-product-backlog.md` — product backlog for shipping paper-trail-the-tool alongside the paper / blog post (off critical path during experiment + writeup phase; created 2026-04-23)
 
-**Historical / milestone docs (read for provenance, don't edit):**
-- `docs/plans/experiment-sarol-leakage-hardening.md` — original leakage analysis (superseded by optimization-loop-hygiene)
-- `docs/plans/experiment-sarol-hardening-implementation.md` — status doc on hardening defenses that landed
-- `docs/plans/experiment-sarol-smoketest-handoff.md` — the original N=5 smoketest handoff prompt
-- `docs/plans/experiment-april-20-findings.md` — the N=5 findings themselves (milestone, not updated)
-- `docs/plans/tier-0-resolution-2026-04-22.md` — Tier 0 gates resolution narrative (2026-04-22 / 2026-04-23 empirical canaries + critic audit + benchmark-integrity lit-review + creative-defenses brainstorm). Milestone, not updated.
+- `docs/plans/feature-paperclip-first-architecture.md` — paperclip-first read-path with PDF fallback (post-2026-05-01 arxiv-fulltext re-probe; supersedes the April PDF-centric default)
+- `docs/plans/repo-organization.md` — agent-instruction-forward repo with top-level `src/` mirroring `.claude/` via subdirectory symlinks, callgraph spec at `src/specs/control_flow.md`, light brevity audit
+- `docs/plans/run-isolation-framework.md` — isolated `/paper-trail` run framework under `dev/isolation/` (Docker + GROBID sidecar, host paperclip-credential mount, regression-investigation report rather than pass/fail test)
+- `docs/plans/feature-multi-cite-joint-verdict.md` — joint-verdict pass for multi-citation sentences (per-ref + joint, both reported)
+- `docs/plans/feature-neighbor-claim-attribution.md` — ±1-sentence bidirectional neighbor inference, skip-when-neighbor-cited
+- `docs/plans/feature-issue-command.md` — `/issue` slash command for bug reports + verdict disputes
+- `docs/plans/paper-trail-product-backlog.md` — product backlog; v1-launch features, distribution items, repo-structure decision
+- `docs/plans/add-paper-trail-orchestrator.md` — original `/paper-trail` orchestrator scoping
+- `docs/plans/author-mode-parity.md` — author-mode parity with reader mode
+- `docs/plans/blindspot-mitigations.md` — v1 rigor-gap mitigations
 
 **Journal (append-only, daily-per-topic):**
+
 - `docs/journal/YYYY-MM-DD-<topic>.md` — decision logs with inline **Human:** / **Agent:** attribution
+
+## Branch model
+
+- **`main`** — paper-trail-the-tool. Plan docs land here as forward-looking to-do items; code changes go on feature branches off main.
+- **`feature/<scope>`** — feature-implementation branches off main. Currently `feature/multi-cite-and-neighbor-claims` (Features 1+2 share a branch since both touch the orchestrator and adjudicator), and `feature/paperclip-primary-workflow` (paperclip-first architecture; the architectural-shift branch supersedes the April PDF-centric default).
+- **The Sarol optimization experiment** (`experiments/sarol-2024/`) landed on `main` on 2026-09-30 from `sarol-optimizer-concurrent`. It is research, not paper-trail-the-tool; see the section below before touching it.
+
+## The Sarol optimization experiment (`experiments/sarol-2024/`)
+
+An agent optimizes paper-trail's prompts against the Sarol 2024 citation-integrity benchmark, through
+the shared `agentic-label-opt` engine. Its plans live in the shared planning folder
+(`planning/paper-trail/`), not in git. `docs/plans` is a local symlink to that folder, created per checkout by the research-skills repo's `scripts/plans_doctor.sh --apply paper-trail`; it is not tracked.
+
+- **Subagents can't reach gold labels or raw benchmark data.** Gold and benchmark data live outside the
+  repo (`$PAPER_TRAIL_GOLD_DIR`, `$PAPER_TRAIL_BENCHMARKS_DIR`), and the graders run in a sealed container
+  that does not mount them.
+- **The `program-v*` git tag is what runs, not your checkout.** The engine materializes the program from
+  the tag, so editing a prompt or spec changes nothing a run sees until a new tag is cut. Use
+  `scripts/freeze_program_v0.py --retag`, then push the tag. `--verify` alone passes on a stale tag;
+  `--verify --tree <tag>` catches one.
+- **Tests are per-module `--selftest` entry points, not pytest.** Run them as
+  `AGENTIC_LABEL_OPT=<engine checkout> uv run python experiments/sarol-2024/optimizer/<module>.py --selftest`.
+

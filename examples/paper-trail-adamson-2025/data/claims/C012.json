@@ -6,7 +6,7 @@
   "handle": "pdfs/wang2003/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/wang2003.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/wang2003.pdf"
   ],
   "claim_text": "Multiscale SSIM (MSSSIM^11) computes SSIM at various resolution levels across the image, while feature similarity index measure (FSIM^12) compares features such as texture, edges, and gradients extracted with hand-crafted filters.",
   "manuscript_section": "Introduction",

@@ -6,7 +6,7 @@
   "handle": "pdfs/simonyan2014/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/simonyan2014.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/simonyan2014.pdf"
   ],
   "claim_text": "LPIPS uses an L2-norm for G, VGG-16^46 trained on ImageNet for \u03c6_D, and additionally learns a linear combination of DFDs extracted from five different convolutional layers l based on perceptual judgment scores.",
   "manuscript_section": "Methods (LPIPS description)",

@@ -6,7 +6,7 @@
   "handle": "pdfs/le2010/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/le2010.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/le2010.pdf"
   ],
   "claim_text": "From a therapeutic perspective, multiple studies indicate that this Warburg phenotype is critical to the cancer process, thus providing the basis for developing novel therapies in which altering the fluxes through these metabolic pathways is the goal5,6,7,8,9,10,11,12 .",
   "manuscript_section": "1.1 Metabolic Reprogramming",

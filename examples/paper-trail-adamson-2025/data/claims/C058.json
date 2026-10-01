@@ -6,7 +6,7 @@
   "handle": "pdfs/ding2020/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/ding2020.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/ding2020.pdf"
   ],
   "claim_text": "We used two DFDs based on natural images, LPIPS and the Deep Image Structure and Texture Similarity index (DISTS),^28 which have been used as benchmark IQ metrics in large-scale computer vision IQ metric studies.",
   "manuscript_section": "Methods",

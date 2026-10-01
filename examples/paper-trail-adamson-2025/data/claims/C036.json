@@ -6,7 +6,7 @@
   "handle": "pdfs/deng2009/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/deng2009.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/deng2009.pdf"
   ],
   "claim_text": "We gather insights from the transfer learning literature for medical imaging, where the transfer of weights from ImageNet^35 pre-trained architectures often fails due to distributional shifts and the difference in features between natural images and downstream medical imaging datasets.",
   "manuscript_section": "Introduction",

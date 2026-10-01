@@ -4,7 +4,7 @@ Every `/paper-trail` run produces a bundle of machine- and human-readable artifa
 
 ## Files
 
-- **`ledger/claims/<id>.json`** — one verdict file per claim. This is the source of truth: claim text, sub-claim breakdown, verdicts, evidence quotes, attestation log, remediation. Schema: [`.claude/specs/verdict_schema.md`](../.claude/specs/verdict_schema.md).
+- **`ledger/claims/<id>.json`** — one verdict file per claim. This is the source of truth: claim text, sub-claim breakdown, verdicts, evidence quotes, attestation log, remediation. Schema: [`src/specs/verdict_schema.md`](../src/specs/verdict_schema.md).
 - **`ledger.md`** — human-readable view rendered from the JSONs. Hand-edits are overwritten on re-render; annotate the JSON's `nuance` or `history[]` fields instead.
 - **`demo.html`** — PDF.js viewer with the paper on the left and a filterable claim ledger on the right. Click a claim to jump to its spot in the PDF; click a citation marker in the PDF to highlight matching claims. The PDF is inlined by default so the file opens from `file://` with no setup; pass `--external-pdf` to the renderer for a lightweight HTML that fetches the PDF alongside.
 - **`pdfs/<citekey>.pdf`** + **`pdfs/<citekey>/`** — fetched source PDFs and their GROBID ingest handles (per-section text, figures, meta).
@@ -14,7 +14,7 @@ Every `/paper-trail` run produces a bundle of machine- and human-readable artifa
 
 ## Verdicts
 
-Every sub-claim gets exactly one verdict. A claim's overall verdict rolls up from its sub-claims. Full rubric: [`.claude/specs/verdict_schema.md`](../.claude/specs/verdict_schema.md).
+Every sub-claim gets exactly one verdict. A claim's overall verdict rolls up from its sub-claims. Full rubric: [`src/specs/verdict_schema.md`](../src/specs/verdict_schema.md).
 
 | Verdict | Meaning |
 |---|---|

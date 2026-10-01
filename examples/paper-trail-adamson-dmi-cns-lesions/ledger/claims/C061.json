@@ -6,7 +6,7 @@
   "handle": "pdfs/defeyter2018/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/defeyter2018.pdf"
   ],
   "claim_text": "Clinical subjects were scanned on a GE Signa 3T PET/MR scanner using a modified gradient filter (described in Section 2.1) and 2 H volume RF coil (coil A in Section 2.2) approximately 45 minutes following the oral ingestion of 60 g of deuterated glucose ([6,6'-2 H2]Glc) as in37 using the pulse sequence described in Section 2.3 and the Imaging Protocol described below.",
   "manuscript_section": "2.6 Methods (Clinical Subjects)",

@@ -6,7 +6,7 @@
   "handle": "pdfs/zhao2022/",
   "ingest_mode": "pdftotext_fallback",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/zhao2022.pdf"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/paper-trail-adamson-2025-reground/pdfs/zhao2022.pdf"
   ],
   "claim_text": "Many works assess MR reconstructions based on task-specific metrics for segmentation, classification, and detection, 24\u201326 which brings the IQ assessment closer to the true clinical utility.",
   "manuscript_section": "Introduction",

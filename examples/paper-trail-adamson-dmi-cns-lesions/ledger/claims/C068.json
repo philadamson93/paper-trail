@@ -6,8 +6,8 @@
   "handle": "pdfs/marques2019/",
   "ingest_mode": "grobid",
   "source_ref_urls": [
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/marques2019.pdf#page=3",
-    "file:///Users/pmayankees/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/marques2019.pdf#page=7"
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/marques2019.pdf#page=3",
+    "file:///Users/philadamson/Documents/Misc/Projects/paper-trail/examples/paper-trail-adamson-dmi-cns-lesions/pdfs/marques2019.pdf#page=7"
   ],
   "claim_text": "While useful for decreasing imaging times via parallel imaging techniques, at lower frequencies, coil and front-end electronics noise increasingly dominate over that from the body, resulting in poor phasedarray SNR performance for low-field (\u2264 1T) scanners52,53,54 .",
   "manuscript_section": "Discussion \u00a74",
