@@ -69,8 +69,7 @@ Eight are the paper's, quoted verbatim. The ninth is ours.
 
 - **INDIRECT_NOT_REVIEW** — the same indirect-attribution pattern as INDIRECT, where the reference
   article is not a review article. *(house definition — not in Table 1.)* The class is nonetheless
-  real in the released gold data: 25 occurrences in `claims-train.jsonl`, 9 in `claims-test.jsonl`,
-  0 in dev. The data uses a finer vocabulary than Table 1's eight-row presentation, so our enum is
+  real in the released gold data: 25 occurrences in `claims-train.jsonl`, 0 in dev. The data uses a finer vocabulary than Table 1's eight-row presentation, so our enum is
   right to carry it.
 
 - **ETIQUETTE** — "This category, unique to our work, indicates that the citation style is ambiguous and it is
