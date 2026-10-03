@@ -37,8 +37,10 @@ one and a non-empty findings note is filed as ``findings/iter-<n>.md``.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
+import subprocess
 import pathlib
 import shutil
 from typing import Any, Sequence
@@ -49,7 +51,8 @@ import stage_claim
 
 iso.engine_on_path()
 
-from engine.schemas import ProgramManifest  # noqa: E402
+from engine.materialize import materialize  # noqa: E402
+from engine.schemas import ManifestEntry, ProgramManifest  # noqa: E402
 from isolation import contained_agent as ca  # noqa: E402
 from isolation import sealed_session as ss  # noqa: E402
 from isolation.session_scope import Forbidden  # noqa: E402
@@ -97,6 +100,29 @@ def program_manifest(store: "adapter.SarolProgramStore") -> ProgramManifest:
     a profile actually uses is guidance in the optimizer's docs, not a gate, as before.
     """
     return store.manifest()
+
+
+#: Where a program file lived in versions before program-v11 (PT-L moved the driver out of `.claude/`).
+LEGACY_PROGRAM_PATHS: tuple[str, ...] = (".claude/commands/sarol-eval-item.md",)
+
+
+def earlier_version_view(store: "adapter.SarolProgramStore"):
+    """The manifest the optimizer uses to show it EARLIER program versions (``/workspace/ro/versions``).
+
+    Before each session the engine materializes every ``program-v*`` tag it has no tree for, and by
+    default it does so with today's manifest. Tags before program-v11 keep the driver at its old path,
+    so today's manifest matches nothing there and the session never starts (found by PT-A's live
+    optimizer check, 2026-10-02). This view marks every entry optional and adds the old paths, so each
+    version shows the files it actually had. It is read-only: copy-back still checks the strict
+    manifest (:func:`program_manifest`), and the loop materializes the current version with that too.
+    """
+    base = store.manifest()
+    entries = tuple(
+        dataclasses.replace(e, optional=True, contract_file=False) if e.freeze_policy == "committed" else e
+        for e in base.entries
+    ) + tuple(ManifestEntry(path=p, freeze_policy="committed", optional=True) for p in LEGACY_PROGRAM_PATHS)
+    view = ProgramManifest(entries=entries, combined_hash=base.combined_hash)
+    return lambda _sha: view
 
 
 def forbidden_list(
@@ -348,6 +374,7 @@ class SarolOptimizer:
             system_prompt=self.agent_instructions(),
             prompt_builder=prompt_builder,
             manifest=program_manifest(self.store),
+            manifest_for_version=earlier_version_view(self.store),
             repo_root=self.repo_root,
             materialize_root=self.materialize_root,
             forbidden=self.forbidden,
@@ -615,6 +642,49 @@ def _selftest() -> int:
          not {str(CONTEXT_DIR), str(FINDINGS_DIR), str(NOTEBOOK)} & paths),
         ("every entry names a representative", all(f.representatives for f in fl)),
     ]
+    # Earlier versions materialize through the view; the strict manifest fails on a pre-v11 tag
+    # (the negative control: without the view the optimizer never starts).
+    store = adapter.SarolProgramStore()
+    tags = subprocess.run(["git", "-C", str(store.repo_root), "tag", "--list", "program-v*", "--merged", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.split()
+    if not tags:
+        checks.append(("(no program tags in this checkout: the earlier-version view is not exercised)", True))
+    else:
+        view = earlier_version_view(store)("unused")
+        bad, legacy_seen = [], False
+        with tempfile.TemporaryDirectory(dir=pathlib.Path.home() / ".cache") as vd:
+            for tag in tags:
+                sha = subprocess.run(["git", "-C", str(store.repo_root), "rev-list", "-n", "1", tag],
+                                     capture_output=True, text=True, check=True).stdout.strip()
+                dest = pathlib.Path(vd) / tag
+                try:
+                    materialize(view, sha, repo_root=store.repo_root, dest=dest)
+                except Exception as exc:  # noqa: BLE001
+                    bad.append(f"{tag}: {exc}")
+                    continue
+                files = [q for q in dest.rglob("*") if q.is_file()]
+                if not files:
+                    bad.append(f"{tag}: no files")
+                legacy_seen |= (dest / LEGACY_PROGRAM_PATHS[0]).is_file()
+            for q in pathlib.Path(vd).rglob("*"):
+                q.chmod(0o700 if q.is_dir() else 0o600)
+            pathlib.Path(vd).chmod(0o700)
+            strict_failed = False
+            if "program-v10" in tags:
+                sha10 = subprocess.run(["git", "-C", str(store.repo_root), "rev-list", "-n", "1", "program-v10"],
+                                       capture_output=True, text=True, check=True).stdout.strip()
+                try:
+                    materialize(store.manifest(), sha10, repo_root=store.repo_root, dest=pathlib.Path(vd) / "strict-v10")
+                except RuntimeError:
+                    strict_failed = True
+                for q in pathlib.Path(vd).rglob("*"):
+                    q.chmod(0o700 if q.is_dir() else 0o600)
+        checks.append((f"every program tag ({len(tags)}) materializes through the earlier-version view: {bad[:2]}", not bad))
+        checks.append(("...and a pre-v11 version shows the driver at its old path", legacy_seen or "program-v10" not in tags))
+        checks.append(("...while the strict manifest fails on program-v10 (the negative control)",
+                       strict_failed or "program-v10" not in tags))
+        checks.append(("...and the view keeps no contract file and marks every committed entry optional",
+                       all(e.optional and not e.contract_file for e in view.entries if e.freeze_policy == "committed")))
     failed = [n for n, ok in checks if not ok]
     for n, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {n}")
