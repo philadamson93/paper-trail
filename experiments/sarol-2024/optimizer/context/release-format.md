@@ -1,7 +1,7 @@
 # Release format — what you are handed each iteration
 
 Two files land per iteration, written by the engine before your session starts:
-`iter/<n>/release_train.json` and `iter/<n>/release_val.json`, where `<n>` is the iteration number
+`/workspace/ro/in/feedback/iter/<n>/release_train.json` and `/workspace/ro/in/feedback/iter/<n>/release_val.json`, where `<n>` is the iteration number
 your turn prompt gives you. **Every path in this document is relative to your working directory,
 which is the repository root.** They are deliberately not the same
 shape, and the difference is the whole leakage design.
@@ -16,7 +16,7 @@ shape, and the difference is the whole leakage design.
   "produced_at_utc": "2026-09-01T18:04:11+00:00",
   "optimizer_isolation_hash": "sarol-2024",
   "corpus": {
-    "ref": "<path to mistakes/<batch_id>.json -- the per-claim corpus itself>",
+    "ref": "<path to /workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json -- the per-claim corpus itself>",
     "counts": { "invalid_label": 0 },
     "profile": "retrieval",
     "retrieval_k": 20,
@@ -78,14 +78,14 @@ the batch was small, not that the program got worse. That fixed denominator is w
 is a descriptive breakdown and not a frontier; the frontier is **accuracy**, and `macro_f1_3way`
 exists for comparability with the published baselines. The full calibration table — every axis, one
 pool, one do-nothing program — is in
-`experiments/sarol-2024/optimizer/context/task-and-scoring.md`; do not carry a second copy of those
+`/workspace/ro/in/context/task-and-scoring.md`; do not carry a second copy of those
 numbers in your head from here.
 
-`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` is how that corpus gets read —
+`/workspace/ro/in/context/failure-mode-discovery.md` is how that corpus gets read —
 the draw discipline, the blame record, and what to hand a subagent. This section is the shape; that
 document is the procedure.
 
-**`corpus.ref` points at the per-claim mistake corpus itself** — `mistakes/<batch_id>.json` under
+**`corpus.ref` points at the per-claim mistake corpus itself** — `/workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json` under
 the run's TRAIN output root. Not at the run manifest: the manifest carries dispatch bookkeeping
 (exit codes, costs, timings, the canary record) and **no gold and no structured reasoning**, so
 following it told you nothing about *why* you were wrong. Read the corpus; it is the point.
@@ -172,7 +172,7 @@ listed. That is a deliberate boundary: your job is to fix mistakes without break
 works, and `n_correct` is how you notice if you did.
 
 ⚠ **What is NOT here, and why.** There is no verifier bounce history: under the `retrieval` profile
-no verifier runs at all (see `experiments/sarol-2024/optimizer/context/playbook.md`). `evidence_snippets` under that profile are the BM25
+no verifier runs at all (see `/workspace/ro/in/context/playbook.md`). `evidence_snippets` under that profile are the BM25
 top-*k* passages, not an extractor's chosen quotes. And TRAIN is Tier 1 — gold labels are open to
 you here, deliberately, because that is the mechanism by which you learn. Raw benchmark provenance
 (row ids, paper buckets, which split a claim came from) is withheld even so; you have no use for it.
@@ -239,7 +239,7 @@ The distinction matters more than it would if the loop could recover. A failed b
 real 0.0 would poison the frontier — and **the loop is forward-only, so nothing would undo it.**
 There is no step-back and no automatic revert; version *n+1* is built on version *n* whatever
 version *n* scored (see the standing decisions in
-`experiments/sarol-2024/optimizer/context/playbook.md`). A placeholder 0.0 mistaken for a result is
+`/workspace/ro/in/context/playbook.md`). A placeholder 0.0 mistaken for a result is
 therefore not a bad iteration you recover from next time, it is a wrong baseline you keep building
 on.
 
@@ -258,7 +258,7 @@ There is **no `followups` key and nothing scores your predictions back to you.**
 so do not wait for one.
 
 What you do instead, and where: **write the prediction into
-`experiments/sarol-2024/optimizer/findings/iter-<n>.md`** when you make the edit — which verdict
+`/workspace/rw/out/findings.md`** when you make the edit — which verdict
 classes should move, in which direction, per edit. **Then, as the FIRST thing you do next
 iteration, open `iter-<n-1>.md` and check it** against `per_class_f1_9way` in the new TRAIN release.
 (`per_class_f1` has only the three collapsed buckets and cannot answer a nine-class prediction.)
@@ -274,21 +274,20 @@ reported "no release files were written" and every one of them was **wrong**: th
 disk the whole time, and the sessions had looked in the wrong place. Reaching this section on a false
 absence costs an entire iteration, so the check comes before the recipe.
 
-**Where the releases actually are:** `iter/<n>/release_{train,val}.json`, relative to **the loop
+**Where the releases actually are:** `/workspace/ro/in/feedback/iter/<n>/release_{train,val}.json`, relative to **the loop
 clone — your own working directory, the repository root you are editing in.** The engine writes both
 before your session starts (`engine/loop.py`, immediately after it builds the payloads), and the
 dispatcher passes the `loop_ops` handle that enables the write on every real run, with a
 negative-controlled regression test guarding that seam.
 
-**Where they are not:** the persisted run tree under `~/.paper-trail/runs/<run-id>/`. That tree keeps
-`run_summary.json`, `train/`, `val/`, `mistakes/` and the materialized program snapshots — it does
-**not** retain the per-iteration release payloads. Not finding them there is expected and is **not**
-evidence of absence. That is precisely the wrong root the five iterations searched.
+**Where they are:** only in your feedback folder, `/workspace/ro/in/feedback/iter/<n>/`, copied there
+before your session starts. Nothing else in your container holds them: the run's own folders are not
+mounted.
 
 So before you conclude the release is missing, run the check from your working directory:
 
 ```
-ls iter/<n>/release_train.json iter/<n>/release_val.json
+ls /workspace/ro/in/feedback/iter/<n>/release_train.json /workspace/ro/in/feedback/iter/<n>/release_val.json
 ```
 
 If that resolves, the release exists — read it and carry on; nothing below applies. **Only if that
@@ -297,16 +296,17 @@ check fails** does the recipe below apply:
 1. **Do not treat it as a zero, a regression, or a signal about the program.** A release that was
    never written says nothing about how the program scored. It is the same class of event as
    `scored: false`.
-2. **Look for the run manifest instead.** The dispatcher writes one per Runner call under the run's
-   TRAIN output root; it carries `claims[]` with per-claim `status`, `staging_dir`, `stages` and the
-   canary record. That tells you whether the batch ran at all, and where it stopped if not.
-3. **Look for the mistake corpus directly**, at `mistakes/<batch_id>.json` under the same root. It
+2. **Look for the run manifest instead.** For TRAIN it is copied beside the release as
+   `/workspace/ro/in/feedback/iter/<n>/run_manifest.json`, with `claims[]` carrying per-claim `status`,
+   `stages` and the canary record. That tells you whether the batch ran at all, and where it stopped if
+   not. If it is absent too, the batch produced nothing to copy; say so in your findings.
+3. **Look for the mistake corpus directly**, at `/workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json` under the same root. It
    is written by the scorer, independently of the release, so it frequently exists when the release
    does not — and it is the file you actually wanted.
 4. **If neither exists, the batch did not run.** Report that and stop. Do not edit prompts in
    response to an infrastructure failure; you would be optimizing against noise, and the loop is
    forward-only, so the edit stays.
-5. **Say so in `experiments/sarol-2024/optimizer/meta-learnings.md`.** An iteration that produced no
+5. **Say so in `/workspace/rw/out/meta-learnings.md`.** An iteration that produced no
    number is a fact the next iteration needs, and it is invisible in the frontier.
 
 **Release files are written, and a regression test holds that.** Do not carry forward any inherited

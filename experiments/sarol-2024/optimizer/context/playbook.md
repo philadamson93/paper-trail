@@ -3,15 +3,15 @@
 Reference doc for the optimizer agent. This file carries the **engine's** view of an iteration and
 the standing decisions behind it. The other context docs carry the rest:
 
-- `experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` — how you find failure modes,
+- `/workspace/ro/in/context/failure-mode-discovery.md` — how you find failure modes,
   and what you point subagents at.
-- `experiments/sarol-2024/optimizer/context/task-and-scoring.md` — what counts as better.
-- `experiments/sarol-2024/optimizer/context/release-format.md` — what you are handed each iteration.
-- `experiments/sarol-2024/optimizer/context/edit-surface.md` — what you may change, and what holds it.
+- `/workspace/ro/in/context/task-and-scoring.md` — what counts as better.
+- `/workspace/ro/in/context/release-format.md` — what you are handed each iteration.
+- `/workspace/ro/in/context/edit-surface.md` — what you may change, and what holds it.
 
 **Every path in this document is relative to your working directory, which is the repository root.**
 
-Where this file and `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md` cover the
+Where this file and your standing instructions (the start of your prompt) cover the
 same ground, the standing instructions are authoritative and this file points rather than restates.
 
 The decisions below were settled in April 2026 and are not open. They are stated here so you do not
@@ -26,7 +26,7 @@ them; **you are its step 3**, and your own six steps all happen inside it. (Neit
 1. **Score the current version.** The dispatcher runs the frozen program over the TRAIN batch and
    over VAL, and scores both.
 2. **Build the release.** TRAIN gives you full per-example traces plus aggregates; VAL gives you a
-   scalar and its breakdown, nothing else. See `experiments/sarol-2024/optimizer/context/release-format.md`.
+   scalar and its breakdown, nothing else. See `/workspace/ro/in/context/release-format.md`.
 3. **You work the iteration.** Check the last prediction, establish the numbers, draw and fan out,
    cluster, edit, predict — the six steps in your standing instructions. One pass, then you exit.
 4. **The harness commits and tags** the result as a new version. You never commit.
@@ -34,11 +34,11 @@ them; **you are its step 3**, and your own six steps all happen inside it. (Neit
    iteration begins.
 
 Note what step 4 means for step 3: the harness freezes only what the manifest lists. See
-`experiments/sarol-2024/optimizer/context/edit-surface.md` before you create or edit a file outside it.
+`/workspace/ro/in/context/edit-surface.md` before you create or edit a file outside it.
 
 ## What you may and may not touch
 
-Moved to `experiments/sarol-2024/optimizer/context/edit-surface.md`, which is now the single place
+Moved to `/workspace/ro/in/context/edit-surface.md`, which is now the single place
 that answers it — the editable set,
 the frozen contract files, the permanently-locked scorer and held-out gold, the profile that decides
 which stages run, and the per-claim budget that follows from it.
@@ -63,7 +63,7 @@ its clarifications layer are the whole surface.
   neither protects the edit nor triggers a revert. And **an edit you doubt is a liability you are
   handing forward**, not a bet the harness will settle. If you think an edit was wrong, the way to
   undo it is to edit it back yourself, next iteration, having written down in
-  `experiments/sarol-2024/optimizer/meta-learnings.md` that you intend to.
+  `/workspace/rw/out/meta-learnings.md` that you intend to.
 - **The dispatcher is a Python script, not an agent.** All orchestrator-runtime decisions —
   verifier sampling, retry, bounce, schema validation — are static code, not runtime judgement. This
   is what makes a retrospective re-run of version N reproducible, and it is the same property that
@@ -97,10 +97,10 @@ The VAL draw is seeded once and stays the same across iterations, so the VAL cur
 programs.
 
 ⚠ **TRAIN has been identical too.**
-Measured over the 2026-09-09 run's `train/draw_history.json`: all five iterations drew the **same 50
+Measured over the 2026-09-09 run's `/workspace/ro/in/feedback/draw_history.json`: all five iterations drew the **same 50
 claims**, pairwise Jaccard **1.000** on every pair. The draw is keyed on the iteration number, so a
 *different* roster is possible in principle, but do not assume it happened — **read
-`train/draw_history.json` for this run and check.**
+`/workspace/ro/in/feedback/draw_history.json` for this run and check.**
 
 The consequences flip with the fact, so hold the right ones:
 
@@ -122,7 +122,7 @@ retrospective evaluation of version N has to be blind to everything learned afte
 carry you forward, and they are not interchangeable.
 
 **Which record takes what is defined in one place: the *"The three record surfaces, and what goes in which"*
-section of `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`.** That is the file
+section of your standing instructions (the start of your prompt).** That is the file
 injected into every iteration, so it is the copy you are guaranteed to have read. Do not look for a
 second answer here, and do not add one: parallel copies of a rule drift apart, and then the judge
 is reading two of them.

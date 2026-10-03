@@ -45,17 +45,17 @@ nine-label vocabulary. Up to three prompt-driven stages — **extractor** → **
 
 ## Read before your first edit
 
-- `experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` — how to run Phases 1
+- `/workspace/ro/in/context/failure-mode-discovery.md` — how to run Phases 1
   and 2 below: choosing the draw, sizing the fan-out, and clustering what comes back. Start here.
-- `experiments/sarol-2024/optimizer/context/task-and-scoring.md` — the metric, the gold
+- `/workspace/ro/in/context/task-and-scoring.md` — the metric, the gold
   distribution, and the failure modes already observed.
-- `experiments/sarol-2024/optimizer/context/release-format.md` — what the release does and does not
+- `/workspace/ro/in/context/release-format.md` — what the release does and does not
   contain, and where the per-claim mistake corpus lives.
-- `experiments/sarol-2024/optimizer/context/edit-surface.md` — what you may change, what is locked,
+- `/workspace/ro/in/context/edit-surface.md` — what you may change, what is locked,
   and how the lock is enforced.
-- `experiments/sarol-2024/optimizer/context/playbook.md` — the iteration procedure and the standing
+- `/workspace/ro/in/context/playbook.md` — the iteration procedure and the standing
   decisions you do not need to relitigate.
-- `experiments/sarol-2024/optimizer/meta-learnings.md` — what previous iterations established about
+- `/workspace/rw/out/meta-learnings.md` — what previous iterations established about
   optimizing *this task*. Read it before you plan; append to it when you finish.
 
 ## The objective
@@ -93,7 +93,7 @@ collapse into ACCURATE / NOT_ACCURATE / IRRELEVANT, so it forgives every confusi
 NOT_ACCURATE — the gap between it and `primary_metric` is exactly the mass of those confusions,
 which makes it a useful readout of how much of your error is fine-grained. `macro_f1_3way` is the
 axis the published baselines use (MultiVerS 0.52, GPT-4 4-shot 0.45), reported for comparability.
-Neither is the objective. `experiments/sarol-2024/optimizer/context/task-and-scoring.md` carries
+Neither is the objective. `/workspace/ro/in/context/task-and-scoring.md` carries
 the full calibration table.
 
 ## The output vocabulary — fixed, exactly nine
@@ -118,7 +118,7 @@ judge reads. If the two ever differ, that is a defect to report, not a change to
 `experiments/sarol-2024/specs/verdict_schema_sarol.md` holds how to *apply* them — boundaries, worked
 examples, tie-breaks, decomposition, multi-citation handling — and sharpening it is much of the point
 of this loop. What you may not do there is reword one of the eight paper definitions. See
-`experiments/sarol-2024/optimizer/context/edit-surface.md`.
+`/workspace/ro/in/context/edit-surface.md`.
 
 An out-of-enum label is not a crash: it is charged as a miss against whatever the gold class was
 and counted under `invalid_label`. It will not break the run, it will just cost you.
@@ -127,7 +127,7 @@ and counted under `invalid_label`. It will not break the run, it will just cost 
 
 **"Phase" means a rung of the evidence ladder, and nothing else** — Phase 1 is the `retrieval`
 profile, Phase 2 is `agentic`. Your own iteration has **steps**, numbered below. The engine's loop
-has its own five steps (see `experiments/sarol-2024/optimizer/context/playbook.md`), always named as
+has its own five steps (see `/workspace/ro/in/context/playbook.md`), always named as
 the engine's. The `phase` key inside a release payload holds `train` or `val`; that is an engine
 schema name for the split, not a rung.
 
@@ -140,7 +140,7 @@ distribution, then fix what carries mass.
 
 ### Step 1 — check last iteration's prediction
 
-**Open `experiments/sarol-2024/optimizer/findings/iter-<n-1>.md` before anything else**, where `<n>`
+**Open `/workspace/ro/in/findings/iter-<n-1>.md` before anything else**, where `<n>`
 is the iteration number in your turn prompt. It contains the previous iteration's edits and, per
 edit, which verdict classes it predicted would move and in which direction. Check each against
 `per_class_f1_9way` in the release you have just been handed. (`per_class_f1` carries only the three
@@ -151,7 +151,7 @@ and is not a cop-out — use it when the class had too little support to say (ch
 when the move was inside the instrument's own scatter. ⚠ Do **not** reach for it on the assumption
 that the class "was not drawn": TRAIN has in practice been the *same* 50 claims every iteration
 (pairwise Jaccard 1.000 across the 2026-09-09 run), so absence is usually a real absence. Read
-`train/draw_history.json` rather than assuming either way.
+`/workspace/ro/in/feedback/draw_history.json` rather than assuming either way.
 
 This is the step that makes the loop a loop. Skip it and you are running the first iteration again
 with more history. On iteration 1 there is no predecessor: say so and go to step 2.
@@ -182,7 +182,7 @@ there is no required number, and it earns its keep as the batch grows (at n=10 y
 corpus yourself; at n=200 you cannot).
 
 Hand every subagent exactly three things: **its claim ids**, the path
-`experiments/sarol-2024/optimizer/context/subagent-blame-brief.md`, and **this run's profile**
+`/workspace/ro/in/context/subagent-blame-brief.md`, and **this run's profile**
 (`corpus.profile` in your release). The brief is written for it alone and carries the corpus fields,
 the per-claim procedure, the blame categories and the record to return. **Do not pass it your plan,
 your hypotheses, or the run's history.** It cannot use them, and paying for it to read them buys you
@@ -192,7 +192,7 @@ Give each subagent a **disjoint** slice: two subagents blaming the same claim pr
 not a corroboration, and step 4's counts are only meaningful if each claim is blamed once.
 
 How you choose the slices, and what you do with the records, is
-`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` — yours, not theirs.
+`/workspace/ro/in/context/failure-mode-discovery.md` — yours, not theirs.
 
 ### Step 4 — cluster into modes
 
@@ -202,7 +202,7 @@ as absence" is a mode; "the adjudicator is imprecise" is not.
 
 Report each mode with its mass, and say what you are treating it as. One instance is an anecdote;
 four or more is established; the band in between takes judgement.
-`experiments/sarol-2024/optimizer/context/failure-mode-discovery.md` has the table and the
+`/workspace/ro/in/context/failure-mode-discovery.md` has the table and the
 tie-breakers.
 
 **Before you attribute a failure to the judge not following the program, open the trace.** Every
@@ -217,7 +217,7 @@ you get right, "skipped" is not your explanation for the ones you get wrong.
 single trace; when the traces were finally read they showed **92% ordered-gate compliance**, and four
 iterations' worth of hardening had gone into rules that were already being followed. `trace_ref` may
 legitimately be null, and the mistake corpus lists **only errors** — for a correct-answer trace, read
-the per-iteration `run_manifest.json`, which carries the verdict for every claim in the batch, not
+the TRAIN pass's `/workspace/ro/in/feedback/iter/<n>/run_manifest.json`, which carries the verdict for every claim in the batch, not
 just the misses. If neither is available for a claim, say the trace was unavailable; do not silently
 fall back to assuming a skip.
 
@@ -262,16 +262,16 @@ into a terminal stop. The run ends there. That is the intended behaviour, not a 
 ⚠ **The loop is forward-only.** Nothing reverts a regressing edit; version *n+1* is built on version
 *n* whatever it scored, and declaring a step-back does nothing. An edit you doubt is a liability you
 are handing forward, not a bet the harness will settle. See
-`experiments/sarol-2024/optimizer/context/playbook.md`.
+`/workspace/ro/in/context/playbook.md`.
 
 ### Step 6 — predict, and record
 
-Write this iteration's findings to `experiments/sarol-2024/optimizer/findings/iter-<n>.md`: last
+Write this iteration's findings to `/workspace/rw/out/findings.md`: last
 iteration's prediction as you resolved it in step 1, the numbers from step 2, the modes you found
 with their counts, the edits you made, and for each edit **which verdict classes should move and in
 which direction**.
 
-Then append the durable lesson to `experiments/sarol-2024/optimizer/meta-learnings.md`.
+Then append the durable lesson to `/workspace/rw/out/meta-learnings.md`.
 
 Nothing scores your predictions back to you — there is no automated channel and none is coming. The
 check happens because step 1 of the next iteration does it by hand. That is why the prediction has
@@ -291,15 +291,15 @@ Three places, mutually exclusive scopes. Route by scope, not by how important th
 
 | surface | scope | who writes | committed |
 |---|---|---|---|
-| `experiments/sarol-2024/optimizer/findings/iter-<n>.md` | run-local per-iteration detail: metrics, blames, modes, edits, predictions | you, every iteration | no |
-| `experiments/sarol-2024/optimizer/meta-learnings.md` | **verified reusable** optimization heuristics only, each dated | you, when a lesson generalizes | yes |
+| `/workspace/rw/out/findings.md` | run-local per-iteration detail: metrics, blames, modes, edits, predictions | you, every iteration | no |
+| `/workspace/rw/out/meta-learnings.md` | **verified reusable** optimization heuristics only, each dated | you, when a lesson generalizes | yes |
 | `docs/journal/` | curated cross-run decisions and postmortems | a human, or the landing process promoting a finding | yes |
 
-- **`experiments/sarol-2024/optimizer/findings/iter-<n>.md` — this iteration.** Per-example blames,
+- **`/workspace/rw/out/findings.md` — this iteration.** Per-example blames,
   the modes you clustered, the hypotheses, the edits, the predictions. It may be long; it is one
   iteration's working notes and nothing reads it in bulk. **This is also where a defect you cannot
   fix goes** — a suspected-wrong gold label, a harness bug, a window you could not work around.
-- **`experiments/sarol-2024/optimizer/meta-learnings.md` — across iterations.** What is and is not
+- **`/workspace/rw/out/meta-learnings.md` — across iterations.** What is and is not
   working about optimizing *this task*: which kinds of edit have moved the number and whether the
   previous
   iteration's prediction held, what you deleted and whether it mattered. Keep it concise — it is
@@ -312,11 +312,11 @@ Three places, mutually exclusive scopes. Route by scope, not by how important th
 The test: if it is about *these examples*, it is a finding. If it is about *how to optimize this
 task*, it is a meta-learning. If it is about *this run's harness* rather than the task, it is a
 finding too — harness observations are never promoted into
-`experiments/sarol-2024/optimizer/meta-learnings.md`.
+`/workspace/rw/out/meta-learnings.md`.
 
 ## Verify what you inherited
 
-**`experiments/sarol-2024/optimizer/meta-learnings.md` was written by your predecessors and nothing
+**`/workspace/rw/out/meta-learnings.md` was written by your predecessors and nothing
 checks it.** Before relying on any claim in it about where a file is, what the harness wrote, or how
 batches are drawn, verify it — one `ls` is cheaper than an iteration. If an inherited claim is false,
 **delete it and say you deleted it.**
@@ -326,17 +326,19 @@ five iterations, and one of them ("no release files are written — this is now 
 iteration to skip an artifact that was sitting on disk the whole time.
 
 Lessons about the rubric and the judge belong in
-`experiments/sarol-2024/optimizer/meta-learnings.md`. Observations about *this run's*
+`/workspace/rw/out/meta-learnings.md`. Observations about *this run's*
 harness belong in this iteration's findings entry and are **never** promoted.
 
 **The artifacts you actually have** — check these exist before concluding one is missing:
 
-- `iter/<n>/release_{train,val}.json` — this iteration's release payloads, under the repository root,
+- `/workspace/ro/in/feedback/iter/<n>/release_{train,val}.json` — this iteration's release payloads,
   written **before** your session starts.
-- `run_summary.json` — every version's VAL scalar, so you can read a trend rather than a step.
-- the per-iteration `run_manifest.json` — per-claim cost, duration, status, and the verdict for
-  **all** claims in the batch, not just the misses. This is the only source of correct-answer traces.
-- `train/draw_history.json` — which claims each iteration actually drew.
+- `/workspace/ro/in/feedback/run_summary.json` — every version's VAL scalar, so you can read a trend
+  rather than a step.
+- `/workspace/ro/in/feedback/iter/<n>/run_manifest.json` — the TRAIN pass's per-claim cost, duration,
+  status, and the verdict for **all** claims in the batch, not just the misses, with each claim's trace
+  copied beside it. This is the only source of correct-answer traces.
+- `/workspace/ro/in/feedback/draw_history.json` — which TRAIN claims each iteration actually drew.
 - `trace_ref`, per record in the mistake corpus — the judge's full session for that claim.
 
 ## Simplicity criterion
@@ -364,7 +366,7 @@ This loosens as TRAIN and VAL grow — check the current `n_total` rather than a
 And an edit that adds thirty lines of guidance for a gain inside the scatter is not an improvement,
 it is a cost you have not noticed paying.
 
-When you delete something, say so in `experiments/sarol-2024/optimizer/meta-learnings.md` — a
+When you delete something, say so in `/workspace/rw/out/meta-learnings.md` — a
 shrinking prompt that scores the same
 is a genuine result, and is easy to mistake for a lost edit.
 
@@ -381,7 +383,7 @@ affordable if the first one surprises you. Fanning out over every mistake in the
 can is the failure mode this replaces.
 
 The per-claim cost of the *pipeline* is fixed by the profile and nothing you write can change it. See
-`experiments/sarol-2024/optimizer/context/edit-surface.md`.
+`/workspace/ro/in/context/edit-surface.md`.
 
 ## The round-trip canary
 
@@ -395,7 +397,7 @@ observed verdict and status. Three states, and all three have a prescribed respo
 | `canary` | What it means | What you do |
 |---|---|---|
 | a record, status `ok` | the round trip is intact; your numbers are comparable to earlier ones | nothing. Proceed |
-| absent / `null` | **no canary was wired for this run** | Your numbers carry no round-trip guarantee. Say so in `experiments/sarol-2024/optimizer/meta-learnings.md` and treat comparisons against other iterations as unverified. A real run now refuses to start without one, so `null` means someone passed `--no-canary` deliberately |
+| absent / `null` | **no canary was wired for this run** | Your numbers carry no round-trip guarantee. Say so in `/workspace/rw/out/meta-learnings.md` and treat comparisons against other iterations as unverified. A real run now refuses to start without one, so `null` means someone passed `--no-canary` deliberately |
 | a failure | the pipeline or the scorer moved | **Stop and report it. Do not edit around it.** Every number after the break is uncomparable to every number before it, and a silently broken metric invalidates all subsequent iterations, not just this one |
 
 The `null` row is not hypothetical: every iteration of the 2026-09-02 run carried it, the canary was
@@ -405,14 +407,14 @@ priced and designed and never actually constructed, and nothing said so.
 
 - **The previous edit was never scored** → the case you are most likely to actually meet: all three
   iterations of the 2026-09-02 run landed in it. It looks like `scored: false`, or a missing
-  `iter/<n>/release_train.json`, or a release whose numbers are identical to last iteration's.
+  `/workspace/ro/in/feedback/iter/<n>/release_train.json`, or a release whose numbers are identical to last iteration's.
   **Your predecessor's edit is in the tree and untested.** So: do not re-make it, do not revert it,
   and do not read the absent movement as evidence it failed. Record in
-  `experiments/sarol-2024/optimizer/findings/iter-<n>.md` that iteration *n-1*'s prediction is
+  `/workspace/rw/out/findings.md` that iteration *n-1*'s prediction is
   **still open**, carry it forward unchanged, and spend this iteration confirming it rather than
   stacking a second untested edit on top of the first. Two untested edits are not twice the
   progress; they are one unattributable result.
-  `experiments/sarol-2024/optimizer/context/release-format.md` has the recipe for finding out
+  `/workspace/ro/in/context/release-format.md` has the recipe for finding out
   whether the batch ran at all.
 - **A stage errored or timed out** → an infrastructure signal, not a program signal. Report it; do
   not edit prompts in response.
@@ -421,7 +423,7 @@ priced and designed and never actually constructed, and nothing said so.
 - **Your edit broke the output schema** → the exit validator rejects the file and those claims score
   as misses. Fix the edit; the validator is not yours to adjust.
 - **The score regressed and you still believe the direction is right** → say so explicitly in
-  `experiments/sarol-2024/optimizer/meta-learnings.md`, with your reasoning. Be aware this is a note
+  `/workspace/rw/out/meta-learnings.md`, with your reasoning. Be aware this is a note
   to your future self, not a signal
   to the engine: this consumer does not forward a step-back declaration, so declaring one neither
   protects the edit nor triggers a revert.
@@ -446,6 +448,6 @@ term in the bill.*)
 
 If you genuinely believe no edit is warranted, say why in **your findings entry** — that is where a
 per-run observation about *these examples* belongs, per the three-record-surfaces rule above. Do not
-route it to `experiments/sarol-2024/optimizer/meta-learnings.md`; that file is for what generalises about *how to optimize this task*,
+route it to `/workspace/rw/out/meta-learnings.md`; that file is for what generalises about *how to optimize this task*,
 and mixing the two is what made the inherited lessons unreadable. Stating the reason is a result.
 Silence is not.

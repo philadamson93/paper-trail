@@ -25,7 +25,7 @@ Nine labels. The emittable set is frozen in
 label *means* to the benchmark's annotators is transcribed in
 `experiments/sarol-2024/specs/verdict_definitions_sarol.md` — a reference for you. It is a **frozen manifest entry** that the judge never loads. You cannot change either. How to *apply* the labels is the
 editable clarifications layer, and it is the only thing the judge reads besides the enum — see
-`experiments/sarol-2024/optimizer/context/edit-surface.md`.
+`/workspace/ro/in/context/edit-surface.md`.
 
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`

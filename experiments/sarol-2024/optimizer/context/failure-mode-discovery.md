@@ -4,7 +4,7 @@
 to spend reading them, and how to turn the results into failure modes.
 
 **Your subagents do not read this file.** They get
-`experiments/sarol-2024/optimizer/context/subagent-blame-brief.md`, which is their whole brief — the
+`/workspace/ro/in/context/subagent-blame-brief.md`, which is their whole brief — the
 corpus fields, the per-claim procedure, the blame categories and the record they return. Hand each
 one that path plus its claim ids, and nothing else. It does not need your plan, and paying for it to
 read your plan buys you nothing.
@@ -13,10 +13,10 @@ read your plan buys you nothing.
 
 ## Where the failures are
 
-Your release payload (`iter/<n>/release_train.json`) carries `corpus.ref`, a path to
-`mistakes/<batch_id>.json` — the per-claim corpus for this iteration's TRAIN batch. That path is
+Your release payload (`/workspace/ro/in/feedback/iter/<n>/release_train.json`) carries `corpus.ref`, a path to
+`/workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json` — the per-claim corpus for this iteration's TRAIN batch. That path is
 what you hand your subagents.
-`experiments/sarol-2024/optimizer/context/release-format.md` has its full shape.
+`/workspace/ro/in/context/release-format.md` has its full shape.
 
 Two properties of it that change how you plan:
 
@@ -26,8 +26,8 @@ So it is a complete census of *this batch's* errors, not a sample of them — wh
 
 **Do not assume the TRAIN batch was re-drawn.** The draw is keyed on the iteration number, so a
 different roster is possible in principle — but measured over the last run's
-`train/draw_history.json`, all five iterations drew the **same 50 claims** (pairwise Jaccard 1.000).
-**Read `train/draw_history.json` for this run and check** before treating a missing failure as
+`/workspace/ro/in/feedback/draw_history.json`, all five iterations drew the **same 50 claims** (pairwise Jaccard 1.000).
+**Read `/workspace/ro/in/feedback/draw_history.json` for this run and check** before treating a missing failure as
 either fixed or undrawn. If the roster really did change, absence is not evidence. Confirm a fix by watching
 `per_class_f1_9way` move in the direction you predicted, never by failing to re-find the instance.
 (`per_class_f1` has only the three collapsed buckets in it and cannot answer a nine-class question.)
@@ -86,8 +86,8 @@ and the traces showed **92% ordered-gate compliance** — the forced-nuance arti
 iterations went into hardening rules that were already being followed, for 1,716 added words and a
 VAL move inside the scatter. **Restating an obeyed rule cannot help.** Sample the traces of correct
 answers too: if the gates are being walked on the claims you get right, "skipped" is not your
-explanation for the ones you get wrong. Correct-answer traces come from the per-iteration
-`run_manifest.json`, not the mistake corpus, which lists only errors.
+explanation for the ones you get wrong. Correct-answer traces come from the TRAIN pass's
+`/workspace/ro/in/feedback/iter/<n>/run_manifest.json`, not the mistake corpus, which lists only errors.
 
 **A fourth remedy, and the one this loop has never reached for: delete the competing guidance.** A
 rule that looks "skipped" is often a rule *contradicted* by an earlier layer aimed at the same
@@ -102,7 +102,7 @@ were not enough, not that the program is fine.
 
 ## Turning blames into modes
 
-Collect the records into `experiments/sarol-2024/optimizer/findings/iter-<n>.md`, then cluster.
+Collect the records into `/workspace/rw/out/findings.md`, then cluster.
 
 A **failure mode** is a recurring mechanism with a count and instances behind it. State it as the
 step the program takes, not as the symptom:
@@ -148,7 +148,7 @@ Watch for two things the counts will not tell you:
   a fact as absent from the paper when the fact was merely not retrieved. Teaching the rubric to
   separate *the paper does not say it* from *what I was given does not say it* is a clarifications-
   layer edit, it costs nothing, and it is documented as failure mode 2 in
-  `experiments/sarol-2024/optimizer/context/task-and-scoring.md`.
+  `/workspace/ro/in/context/task-and-scoring.md`.
 
   The distinction matters because these are the same blame label on the same claims. Earlier
   iterations read "retrieval-blamed modes are out of reach under a mechanical profile" as covering

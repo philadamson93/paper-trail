@@ -34,9 +34,9 @@ Concretely, as the manifest and the profiles stand today:
 | `src/prompts/extractor-dispatch-paperclip.md` | evidence retrieval, in-corpus read path | inert | ✅ |
 | `src/prompts/extractor-dispatch-pdf.md` | evidence retrieval, fetched-PDF read path | inert | ✅ |
 | `src/prompts/verifier-dispatch.md` | evidence spot-check | inert | ✅ |
-| `.claude/commands/sarol-eval-item.md` | the per-claim **driver** — which frozen prompt is dispatched, and how its slots are filled | ✅ | ✅ |
+| `src/commands/sarol-eval-item.md` | the per-claim **driver** — which frozen prompt is dispatched, and how its slots are filled | ✅ | ✅ |
 
-⚠ **The driver (`.claude/commands/sarol-eval-item.md`) is editable, and it is the one editable
+⚠ **The driver (`src/commands/sarol-eval-item.md`) is editable, and it is the one editable
 file that also carries the measurement's integrity rules.** You may change which frozen
 prompt is dispatched and how its slots are filled. You may **not** weaken any of its hard
 prohibitions — one dispatch per claim, never retry, never author or repair the verdict yourself,
@@ -89,11 +89,11 @@ So: **if a change is meant to be part of the program, it has to be a manifest en
 program to cover a new file — code included — is a change to the manifest, made deliberately between
 runs, not something an iteration can do for itself. If you find yourself wanting a file that is not in
 the manifest, that is a finding worth writing down in
-`experiments/sarol-2024/optimizer/meta-learnings.md`: name the file and what it
+`/workspace/rw/out/meta-learnings.md`: name the file and what it
 would do. It is a real request and it is how the surface grows.
 
 Scratch work is fine — write notes, sketch, compute — as long as you know it is scratch.
-`findings/iter-<n>.md` and `experiments/sarol-2024/optimizer/meta-learnings.md` are the exceptions
+`/workspace/rw/out/findings.md` and `/workspace/rw/out/meta-learnings.md` are the exceptions
 that are *meant* to live outside the
 program: they are your continuity, not part of the scored artifact.
 
@@ -104,14 +104,15 @@ change will open them:
 
 **The scorer.** How a prediction is turned into a number is not yours to edit. A program that can
 adjust its own metric is not being optimized. If you believe the scorer is wrong, that is a finding
-for `experiments/sarol-2024/optimizer/meta-learnings.md`, not an edit.
+for `/workspace/rw/out/meta-learnings.md`, not an edit.
 
-**VAL and TEST claim records, and all gold labels for them.** They live outside the repository tree
-entirely (`$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR`). **The isolation is by
-construction: there is no in-repo path that holds them, so there is nothing to be tempted by and
-nothing to deny.** That is a stronger guarantee than a permission check, because it does not depend
-on anything noticing. Nothing is watching you here and nothing needs to be — looking simply finds
-an empty tree.
+**VAL and TEST claim records, and all gold labels for them.** They live outside the repository
+(`$PAPER_TRAIL_BENCHMARKS_DIR`, `$PAPER_TRAIL_GOLD_DIR`), and you run in a sealed container that
+does not mount them at all. Neither are the scorer, the run outputs (the graders'
+answers, VAL included), the repository's history or the account's credentials. Only the folders listed
+under *Where things are* in your prompt exist for you; any other path finds nothing. This is checked,
+not assumed: before any run, a probe plants marker files in each of those folders and confirms your
+sealed session cannot read one while an unsealed control can.
 
 TRAIN gold **is** open to you, deliberately: seeing which claims were wrong and what they should have
 been is the mechanism by which you learn. The boundary is the held-out split, not gold as such.
