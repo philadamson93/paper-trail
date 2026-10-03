@@ -62,14 +62,17 @@ __all__ = [
 #: The `agentic-label-opt` commit this experiment requires, in full — short SHAs are ambiguous
 #: across repos and `cat-file -e` will happily resolve a prefix to the wrong object in a big one.
 #:
-#: Bumped 2026-09-18 from `82f547d` (the mid-run failure-handling hardening, 2026-09-09).
-ENGINE_PIN = "592862fe9e041a5597fac6cb8b3fe8f6549ed063"
+#: Bumped 2026-10-02 from `592862f` (PT-A, stage 14): the engine's sealed sessions (S1), seal proof and
+#: setup fingerprint (S2), contained optimizer (A), program runner (PR), the IPv4-only proxy (A13), and
+#: the contract-file copy-back rule plus paper-trail's seal replay on both grants (PT-A D12, D7).
+#: Earlier: 2026-09-18 from `82f547d`.
+ENGINE_PIN = "764419b22487b5ab00ebd6436eea6e63f1cb0bbe"
 
 #: What the pin buys, in one line, so the next person to bump it knows what they must not drop.
 ENGINE_PIN_REASON = (
-    "the contained-nested-session capability: SessionScope and build_contained_session_prefix "
-    "(isolation/session_scope.py), inherit_env for passing a credential by name, and "
-    "HostAllowlistNetworkStack.render_dispatch for one container per dispatch on a standing network"
+    "the engine's sealed sessions for both principals: SealedSession (S1), Forbidden entries, the setup "
+    "fingerprint and image-by-digest (S2), ContainedOptimizerAgent (A), ProgramRunner (PR), and the "
+    "IPv4-only allowlist proxy (A13), and the copy-back refusal of a contract-file edit (PT-A D12)"
 )
 
 #: Set to "1" to run against an engine that does not contain the pin. Same switch the shell uses.
@@ -134,48 +137,42 @@ def capability_problem(engine: pathlib.Path | None = None) -> str | None:
 
     Ancestry says the pin is *reachable*; it does not say a later commit did not remove the thing
     we need, and it says nothing at all about an uncommitted edit. This imports the symbols the
-    work is built on and fails on the first one missing: the contained-session vocabulary
-    (``SessionScope``, ``build_contained_session_prefix``, ``scope_problem``), ``inherit_env``,
-    ``render_dispatch``, and -- carried over from the shell probe this replaced -- ``LoopStop``'s
-    ``reason`` and ``EmptyCommitError``.
+    work is built on and fails on the first one missing: since PT-A, the sealed session, the strict
+    ``Forbidden`` entries, the program runner, the contained optimizer, the setup pins and the image
+    form, ``run_loop``'s ``expected_isolation_hash``, and -- carried over from the shell probe this
+    replaced -- ``LoopStop``'s ``reason`` and ``EmptyCommitError``.
 
-    ⚠ **This module sits beside ``optimizer/isolation.py``, and the engine's package is also called
-    ``isolation``.** With this directory on ``sys.path`` a plain ``import isolation.session_scope``
-    resolves to the sibling *file* and dies with "isolation is not a package". Same dance as
-    ``isolation._import_engine``: engine root to the front, this directory off, purge any
-    half-bound ``isolation*`` modules, and restore the path afterwards.
+    Paper-trail's own module was renamed ``sarol_isolation.py`` on 2026-10-01 so the engine's
+    ``isolation`` package imports plainly.
     """
     engine = engine or engine_path()
-    saved_path = list(sys.path)
-    saved_modules = {k: v for k, v in sys.modules.items()
-                     if k == "isolation" or k.startswith("isolation.")}
+    # Since 2026-10-01 paper-trail's own module is `sarol_isolation.py`, so the engine's `isolation`
+    # package no longer collides with a sibling file: putting the engine on the path is enough, and
+    # its modules stay bound for the rest of the process (one copy of each engine class).
+    if str(engine) not in sys.path:
+        sys.path.append(str(engine))  # appended: the engine root has its own adapter.py, which must never shadow ours
     try:
-        sys.path[:] = [p for p in sys.path if p and pathlib.Path(p).resolve() != _HERE]
-        sys.path.insert(0, str(engine))
-        for name in list(saved_modules):
-            del sys.modules[name]
-
         import inspect  # noqa: PLC0415
 
-        scope = importlib.import_module("isolation.session_scope")
-        for symbol in ("SessionScope", "build_contained_session_prefix", "scope_problem"):
-            if not hasattr(scope, symbol):
-                return f"the engine's isolation.session_scope has no {symbol}"
-
-        docker_prefix = importlib.import_module("isolation.docker_prefix")
-        params = inspect.signature(docker_prefix.build_docker_cmd_prefix).parameters
-        if "inherit_env" not in params:
-            return (
-                "the engine's build_docker_cmd_prefix takes no inherit_env, so a credential could "
-                "only be passed by value into the container command and its log"
-            )
-
-        allowlist = importlib.import_module("isolation.network_allowlist")
-        if not hasattr(allowlist.HostAllowlistNetworkStack, "render_dispatch"):
-            return (
-                "the engine's HostAllowlistNetworkStack has no render_dispatch, so one network "
-                "serves only one container and a per-claim dispatch loop cannot use it"
-            )
+        # What PT-A builds on (2026-10-01): the grant's strict entries, the program runner, the
+        # contained optimizer, the setup pins and the image form. A later commit that removed or
+        # renamed one would otherwise surface mid-run as an AttributeError.
+        needs = {
+            "isolation.session_scope": ("SessionScope", "Forbidden", "scope_problem", "host_path_leak"),
+            "isolation.sealed_session": ("SealedSession", "SessionDescription", "AnthropicApiProfile", "NO_CREDENTIAL", "UNPINNED"),
+            "isolation.program_runner": ("ProgramRunner", "ProgramSpec", "CALL_CONTAINER_PATH"),
+            "isolation.pass_outputs": ("Call", "PassStopped"),
+            "isolation.contained_agent": ("ContainedOptimizerAgent", "DeclaredOutput", "OPTIMIZER_TOOLS"),
+            "isolation.setup_fingerprint": ("setup_fingerprint", "combined_value", "committed_pin", "platform_key"),
+            "isolation.image_pin": ("image_ref", "image_ref_problem"),
+        }
+        for module, symbols in needs.items():
+            mod = importlib.import_module(module)
+            for symbol in symbols:
+                if not hasattr(mod, symbol):
+                    return f"the engine's {module} has no {symbol}"
+        if "expected_isolation_hash" not in inspect.signature(importlib.import_module("engine.loop").run_loop).parameters:
+            return "the engine's run_loop takes no expected_isolation_hash, so a release stamp could not be checked"
 
         # ⚠ Carried over from the probe this replaced in `run_hillclimb_vm.sh`, NOT dropped. It
         # guards a different failure: without these, a bad probe mid-run aborts with a bare
@@ -194,11 +191,6 @@ def capability_problem(engine: pathlib.Path | None = None) -> str | None:
         return None
     except ImportError as exc:
         return f"the engine at {engine} could not be imported for the capability probe: {exc}"
-    finally:
-        sys.path[:] = saved_path
-        for name in [k for k in sys.modules if k == "isolation" or k.startswith("isolation.")]:
-            del sys.modules[name]
-        sys.modules.update(saved_modules)
 
 
 @functools.lru_cache(maxsize=None)
@@ -244,7 +236,32 @@ def engine_description(engine: pathlib.Path | None = None) -> str:
     return f"{engine} @ {sha}{' (DIRTY -- uncommitted engine edits are in this run)' if dirty else ''}"
 
 
+def _selftest() -> int:
+    """The capability probe, positively and against a deliberately broken engine module."""
+    engine = engine_path()
+    real = capability_problem(engine)
+    scope_mod = importlib.import_module("isolation.session_scope")
+    saved = scope_mod.Forbidden
+    try:
+        del scope_mod.Forbidden
+        broken = capability_problem(engine)
+    finally:
+        scope_mod.Forbidden = saved
+    checks = [
+        ("the pinned engine passes the capability probe", real is None),
+        ("...and a missing symbol is reported by name (negative control)", broken is not None and "Forbidden" in broken),
+        ("...and putting it back passes again", capability_problem(engine) is None),
+    ]
+    failed = [n for n, ok in checks if not ok]
+    for n, ok in checks:
+        print(f"  {'PASS' if ok else 'FAIL'}  {n}")
+    print(f"{len(checks) - len(failed)}/{len(checks)} passed")
+    return 1 if failed else 0
+
+
 if __name__ == "__main__":  # pragma: no cover - a hand check, and what the shell runner calls
+    if "--selftest" in sys.argv:
+        sys.exit(_selftest())
     if "--print-pin" in sys.argv:
         print(ENGINE_PIN)
         raise SystemExit(0)

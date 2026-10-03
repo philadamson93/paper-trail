@@ -43,6 +43,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import inspect
 import json
@@ -60,7 +61,7 @@ if str(_HERE) not in sys.path:
 
 import adapter  # noqa: E402
 import canary as canary_mod  # noqa: E402
-import isolation as isolation_mod  # noqa: E402
+import sarol_isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 from adapter import STAGES, SarolProgramStore  # noqa: E402
@@ -380,72 +381,9 @@ PROMPT_PATH = _HERE / "prompt" / "optimizer-instructions.md"
 CONTEXT_DIR = _HERE / "context"
 
 
-class OptimizerAgent:
-    """The optimizer's own headless Claude Code session — the engine's ``agent`` port.
-
-    It edits files in ``repo_root`` and exits; the harness commits and tags. Note this is the one
-    port the engine *does* budget (`loop.py:513-521` counts these tokens), which is exactly
-    backwards from where paper-trail's spend actually is — hence :class:`BudgetGuard` on the
-    Runner side.
-    """
-
-    def __init__(
-        self,
-        *,
-        repo_root: pathlib.Path,
-        prompt_path: pathlib.Path = PROMPT_PATH,
-        context_dir: pathlib.Path = CONTEXT_DIR,
-        invoke=None,
-        timeout_seconds: float = 3600.0,
-        max_budget_usd: float = 20.0,
-        model: str = "opus",
-    ) -> None:
-        self.repo_root = pathlib.Path(repo_root).resolve()
-        self.prompt_path = pathlib.Path(prompt_path)
-        self.context_dir = pathlib.Path(context_dir)
-        self.invoke = invoke or adapter.headless_claude_invoke
-        self.timeout_seconds = timeout_seconds
-        self.max_budget_usd = max_budget_usd
-        self.model = model
-
-    def agent_instructions(self) -> str:
-        return self.prompt_path.read_text(encoding="utf-8")
-
-    def command(self, iter_n: int, materialized_path) -> list[str]:
-        return [
-            "claude",
-            "--dangerously-skip-permissions",
-            "-p",
-            (
-                f"Iteration {iter_n}. The frozen program for this iteration is materialized at "
-                f"{materialized_path}. Your reference docs are in {self.context_dir}. "
-                "Follow your standing instructions."
-            ),
-            "--append-system-prompt",
-            self.agent_instructions(),
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--model",
-            self.model,
-            "--setting-sources",
-            "project",
-            "--strict-mcp-config",
-            "--max-budget-usd",
-            str(self.max_budget_usd),
-        ]
-
-    def run(self, *, iter_n: int, materialized_path=None):  # keyword-only -- loop.py:398
-        res = self.invoke(
-            self.command(iter_n, materialized_path), self.repo_root, self.timeout_seconds
-        )
-        return adapter.GuardedOutcome(
-            exit_code=124 if res.timed_out else res.exit_code,
-            detail=res.detail,
-            token_usage={},
-            cost_usd=res.cost_usd,
-            attempting_step_back=False,
-        )
+# The host optimizer (`OptimizerAgent`: `claude` with its permission-skip flag and the repo as its
+# cwd) was removed by PT-A on 2026-10-01. The optimizer is the engine's contained optimizer, built in
+# `sarol_optimizer.SarolOptimizer` and wired in `build_components`.
 
 
 class _FakeStore:
@@ -499,99 +437,134 @@ def build_components(
     max_budget_usd: float,
     train_n: int,
     per_session_usd: float = DEFAULT_PER_SESSION_USD,
-    working_checkout: pathlib.Path = adapter.REPO_ROOT,
-    invoke=None,
-    paperclip_version_probe=None,
     gold_resolver=None,
     canary=None,
     require_command: bool = True,
     per_call_max_budget_usd: float = 2.0,
-    agent_invoke=None,
     program_store: SarolProgramStore | None = None,
     profile=None,
     train_output_root: pathlib.Path | None = None,
     val_output_root: pathlib.Path | None = None,
     val_n: int | None = None,
-    #: The JUDGE's model, not the optimizer's. Defaults to `adapter.SarolRunner`'s own default
-    #: rather than restating it here -- one place knows what the judge runs on.
+    #: The JUDGE's model, not the optimizer's.
     model: str | None = None,
-    #: How many claims the Runner dispatches at once. Rides through to `adapter.SarolRunner`;
-    #: see its constructor for why the default is 1 and why raising it does not move the
-    #: instrument.
+    #: How many claims run at once: the engine runner's ``max_concurrent``. Claims are independent
+    #: sessions, so this changes wall-clock only, not what any session sees.
     max_workers: int = 1,
-    #: The optimizer run these components belong to. Threaded through to the Runner so one run's
-    #: answers archive under ONE folder: the per-call `batch_id` this module builds is
-    #: deliberately different for TRAIN and VAL, so it cannot serve as the run's identity.
     run_id: str | None = None,
-    #: The container boundary every dispatch renders onto. Threaded, not defaulted: this function
-    #: is one of three routes to a Runner and the refusal lives in the constructor, which is the
-    #: only place all three pass through. Building a second gate here would miss the other two.
-    container: "isolation_mod.ContainerConfig | None" = None,
+    #: The loop's materialized trees. The engine runner refuses an output root inside it, and the
+    #: optimizer reads earlier versions from it.
+    materialize_root: pathlib.Path | None = None,
+    #: Where the engine runner keeps every pass (``live/``, ``archive/``). Default: beside the TRAIN
+    #: and VAL roots, as ``<run>/program-out``.
+    program_output_root: pathlib.Path | None = None,
+    #: Images by digest (``name:version@sha256:…``). Default: the locally built ones.
+    grader_image: str | None = None,
+    optimizer_image: str | None = None,
+    optimizer_model: str = "opus",
+    optimizer_max_budget_usd: float = 20.0,
+    optimizer_timeout_seconds: float = 3600.0,
+    #: ``{"program": …, "optimizer": …}``: the setup pins each session is held to. Default: the pins
+    #: committed in the manifest for this platform; ``ss.UNPINNED`` only when said explicitly.
+    expected_fingerprints: "dict | None" = None,
+    #: Run-level files the optimizer reads, copied into its feedback folder each iteration with host
+    #: paths stripped (D6): the run summary and the TRAIN draw history.
+    optimizer_feedback_files: "tuple | list" = (),
+    _program_runner_private: "dict | None" = None,
+    _agent_factory=None,
 ):
-    """Assemble the four protocol objects, the guards, and the guarded optimizer agent.
+    """Assemble the program, the engine runner around it, the contained optimizer, and the guards.
+
+    Since PT-A (2026-10-01) the graders run through the engine's ``ProgramRunner`` and the optimizer
+    is the engine's ``ContainedOptimizerAgent`` (``sarol_program``, ``sarol_optimizer``). The runner is
+    returned **not entered**: ``run_optimization`` enters it around ``run_loop``, which is what closes
+    its network on every exit path.
 
     The agent is wrapped in :class:`adapter.ContractGuardedAgent` **here**, not at the call site,
-    so there is no way to wire this loop up without the contract-file re-hash in place — an
-    unguarded agent was previously possible simply by forgetting.
+    so there is no way to wire this loop up without the contract-file re-hash in place.
     """
+    import sarol_optimizer  # noqa: PLC0415 -- both need the engine on the path
+    import sarol_program  # noqa: PLC0415
+    from isolation import sealed_session as ss  # noqa: PLC0415
+    from isolation.session_scope import Forbidden  # noqa: PLC0415
+
     store = program_store or SarolProgramStore()
     prof = profiles_mod.get(profile)
-    # `val_n` is the cost lever, and it has to reach the cost model or the preflight prices a run
-    # that is not the one about to happen. VAL is charged TWICE per iteration at a fixed size, so
-    # at TRAIN=10 it is ~98% of the bill -- subsampling TRAIN alone barely moves it.
-    # The canary is priced from whether one is actually WIRED, never from a separate flag. The
-    # 2026-09-02 run priced three canary firings per iteration and ran none: `canary_enabled`
-    # defaulted True while `canary` defaulted None, and the two could not see each other. Deriving
-    # one from the other makes "priced but absent" unrepresentable rather than merely discouraged.
     cost_model = CostModel.for_profile(
         prof,
         per_session_usd=per_session_usd,
         val_size=val_n or VAL_SIZE,
         canary_enabled=canary is not None,
     )
-    # C6.9. Stated, not derived: `train_output_root` is where the per-claim mistake corpus lands
-    # and must be readable by the optimizer; `val_output_root` must not be.
-    roots = {}
-    if train_output_root is not None:
-        roots["train"] = pathlib.Path(train_output_root)
-    if val_output_root is not None:
-        roots["val"] = pathlib.Path(val_output_root)
     leak = val_isolation_problem(val_output_root, store.repo_root)
     if leak:
         raise ValueError(f"VAL isolation (C6.9): {leak}")
+    if materialize_root is None:
+        raise ValueError("build_components needs materialize_root: the engine runner and the optimizer both read it")
+    scorer_roots = tuple(pathlib.Path(r) for r in (train_output_root, val_output_root) if r is not None)
+    if program_output_root is None:
+        if not scorer_roots:
+            raise ValueError("say where the program's passes go: program_output_root, or a TRAIN/VAL root beside it")
+        program_output_root = scorer_roots[0].parent / "program-out"
+    program_output_root = pathlib.Path(program_output_root)
+    pins = expected_fingerprints or sarol_program.committed_pins()
+    missing = [k for k in ("program", "optimizer") if not pins.get(k)]
+    if missing:
+        raise ValueError(
+            f"no setup fingerprint is pinned for {', '.join(missing)} on this platform "
+            f"({sarol_program.platform_key()}): run `sarol_program.py --print-pins` and commit the block "
+            f"under runtime_pins.{sarol_program.PIN_KEY} in the manifest, or pass ss.UNPINNED explicitly"
+        )
     budget = BudgetGuard(max_budget_usd=max_budget_usd, cost_model=cost_model, train_n=train_n)
-    runner = CachingRunner(
-        adapter.SarolRunner(
-            store,
-            working_checkout=working_checkout,
-            invoke=invoke,
-            paperclip_version_probe=paperclip_version_probe,
-            canary=canary,
-            require_command=require_command,
-            per_call_max_budget_usd=per_call_max_budget_usd,
-            profile=prof,
-            output_roots=roots,
-            max_workers=max_workers,
-            container=container,
-            archive_run_id=run_id,
-            **({"model": model} if model else {}),
-        ),
-        store,
-        budget=budget,
+    program = sarol_program.SarolProgram(
+        profile=prof,
+        model=model or adapter.DEFAULT_JUDGE_MODEL,
+        canary=canary,
+        per_call_max_budget_usd=per_call_max_budget_usd,
+        max_concurrent=max_workers,
+        require_command=require_command,
     )
-    agent = adapter.ContractGuardedAgent(
-        OptimizerAgent(repo_root=store.repo_root, invoke=agent_invoke),
-        store,
-        tree_root=store.repo_root,
+    grader_forbidden = sarol_program.forbidden_list(
+        repo_root=store.repo_root,
+        extra=tuple(Forbidden(r, representatives=("mistakes",)) for r in scorer_roots),
     )
+    program_runner = sarol_program.program_runner(
+        program,
+        output_root=program_output_root,
+        materialize_root=pathlib.Path(materialize_root),
+        image=grader_image or sarol_program.grader_image(),
+        transcript_dir=program_output_root / "transcripts",
+        expected_fingerprint=pins["program"],
+        forbidden=grader_forbidden,
+        **(_program_runner_private or {}),
+    )
+    optimizer = sarol_optimizer.SarolOptimizer(
+        store=store,
+        materialize_root=pathlib.Path(materialize_root),
+        program_output_root=program_output_root,
+        run_root=program_output_root.parent,
+        image=optimizer_image or sarol_optimizer.optimizer_image(),
+        expected_fingerprint=pins["optimizer"],
+        model=optimizer_model,
+        max_budget_usd=optimizer_max_budget_usd,
+        timeout_seconds=optimizer_timeout_seconds,
+        profile=prof,
+        scorer_roots=scorer_roots,
+        transcript_dir=program_output_root.parent / "optimizer-transcripts",
+        feedback_files=tuple(optimizer_feedback_files),
+        **({"_agent_factory": _agent_factory} if _agent_factory is not None else {}),
+    )
+    setup_value = sarol_program.setup_value(program_runner, optimizer, materialize_root=pathlib.Path(materialize_root))
+    agent = adapter.ContractGuardedAgent(optimizer, store, tree_root=store.repo_root)
     return {
         "program_store": store,
-        "runner": runner,
-        "scorer": adapter.SarolScorer(
-            gold_resolver=gold_resolver, mistakes_root=train_output_root
-        ),
+        "program": program,
+        "program_runner": program_runner,
+        "optimizer": optimizer,
+        "setup_value": setup_value,
+        "scorer": adapter.SarolScorer(gold_resolver=gold_resolver, mistakes_root=train_output_root),
         "profile": prof,
-        "release_builder": adapter.SarolReleaseBuilder(policy=container.policy),
+        "release_builder": adapter.SarolReleaseBuilder(setup_value=setup_value),
         "build_mistake_corpus": adapter.build_mistake_corpus,
         "agent": agent,
         "budget": budget,
@@ -612,7 +585,8 @@ def run_optimization(
     val_output_root: pathlib.Path | None = None,
     profile=None,
     per_session_usd: float = DEFAULT_PER_SESSION_USD,
-    current_tag: str = "program-v0",
+    #: The version the run starts from. Default: the one the manifest freezes (program-v11 since PT-A).
+    current_tag: str | None = None,
     components: dict | None = None,
     train_schedule: "list[int] | None" = None,
     draw_mode: str = "cumulative",
@@ -642,7 +616,7 @@ def run_optimization(
     """
     engine_root = adapter.engine_path()
     if str(engine_root) not in sys.path:
-        sys.path.insert(0, str(engine_root))
+        sys.path.append(str(engine_root))  # appended, never in front: see sarol_isolation.engine_on_path
     from engine.loop import LoopStop, run_loop  # noqa: PLC0415
     from engine.loop_ops import LocalLoopOps  # noqa: PLC0415
     from engine.schemas import RunInputs  # noqa: PLC0415
@@ -653,6 +627,8 @@ def run_optimization(
     # and `val_output_root` must lie outside the optimizer's readable tree (C6.9), which no
     # derived default can promise. Refused here rather than in `build_components` so selftests can
     # still assemble components freely; this function is the real-run entrypoint.
+    if current_tag is None:
+        current_tag = adapter.SarolProgramStore().program_version
     if components is None:
         missing = [
             name
@@ -756,6 +732,16 @@ def run_optimization(
     # expensive iteration the run can reach. Checking rung 0 would clear a run that cannot pay for
     # its own last iteration -- and the engine stops nothing.
     peak_train_n = max(train_schedule) if train_schedule else train_n
+    effective_run_summary = run_summary_path
+    if effective_run_summary is None and val_output_root is not None:
+        effective_run_summary = pathlib.Path(val_output_root).parent / "run_summary.json"
+    if components is None and "optimizer_feedback_files" not in component_kwargs:
+        feedback_files = []
+        if effective_run_summary is not None:
+            feedback_files.append(("run_summary.json", pathlib.Path(effective_run_summary)))
+        if sampling_root or train_output_root:
+            feedback_files.append(("draw_history.json", pathlib.Path(sampling_root or train_output_root) / "draw_history.json"))
+        component_kwargs["optimizer_feedback_files"] = feedback_files
 
     parts = components or build_components(
         max_budget_usd=max_budget_usd,
@@ -766,6 +752,7 @@ def run_optimization(
         val_output_root=val_output_root,
         val_n=val_n,
         run_id=run_id,
+        materialize_root=pathlib.Path(materialize_root),
         **component_kwargs,
     )
 
@@ -782,114 +769,121 @@ def run_optimization(
     # every iteration the engine rewrites it, so a mid-run crash stays resumable via `--resume`.
     # Default it under the VAL output root's run dir — outside the optimizer's readable tree, the
     # same C6.9 boundary VAL's own per-claim outputs sit behind — when no explicit path was named.
-    effective_run_summary = run_summary_path
-    if effective_run_summary is None and val_output_root is not None:
-        effective_run_summary = pathlib.Path(val_output_root).parent / "run_summary.json"
 
-    loop_kwargs = dict(
-        iterations=iterations,
-        run_id=run_id,
-        repo_root=parts["program_store"].repo_root,
-        program_store=parts["program_store"],
-        runner=parts["runner"],
-        scorer=parts["scorer"],
-        release_builder=parts["release_builder"],
-        agent=parts["agent"],
-        # A factory when a ramp was asked for, a fixed batch otherwise. `run_loop` accepts either
-        # (`train_inputs: RunInputs | Callable[[int], RunInputs]`), so the graduated cohort needs
-        # no engine change -- the same seam crc drives its growing batch through.
-        train_inputs=(
-            sampling.train_inputs_factory(
-                schedule=train_schedule,
-                mode=draw_mode,
-                split="train",
-                run_id=run_id,
-                staging_root=pathlib.Path(sampling_root or train_output_root) / "staging",
-                batch_root=pathlib.Path(sampling_root or train_output_root) / "batches",
-                history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
-            )
-            if train_schedule
-            else _static_train_inputs(
-                RunInputs, train_input_ref, run_id=run_id, train_n=train_n
-            )
-        ),
-        # A sampled VAL when one was asked for, the caller's fixed batch otherwise. Drawn ONCE and
-        # held constant for the run: the engine's frontier is a bare scalar, so a VAL that moved
-        # between iterations would turn sampling noise into phantom regressions and step-backs.
-        val_inputs=(
-            sampling.val_inputs_for(
-                n=val_n,
-                split="dev",
-                run_id=run_id,
-                staging_root=pathlib.Path(sampling_root or val_output_root) / "val-staging",
-                batch_root=pathlib.Path(sampling_root or val_output_root) / "val-batches",
-                history_path=pathlib.Path(sampling_root or val_output_root) / "val_draw.json",
-            )
-            if val_n
-            else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
-        ),
-        task_config={
-            "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
-            "profile": parts["profile"].name,
-        },
-        # C6.5: a resume whose profile differs from the recorded one must STOP, not silently
-        # continue a curve built from two different systems. The engine's frontier is a bare
-        # scalar and cannot notice this on its own.
-        hard_fields={
-            "profile": parts["profile"].name,
-            "retrieval_k": parts["profile"].retrieval_k,
-            "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
-        },
-        # Provenance-only drift (warns, never STOPs): a resume under a different judge is worth a
-        # note but not a hard stop the way a profile/rubric change is.
-        soft_fields={
-            "model": component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL,
-        },
-        # #4 resume wiring. `metric_field` names the ledger key the engine stores each frozen
-        # version's VAL scalar under and that `--resume` reads back; it must be stable across the
-        # original run and its resume. `resume=True` reconstructs the frontier from the ledger +
-        # the program-v0..vk tag chain and continues at k+1, re-checking `hard_fields` (a profile /
-        # rubric mismatch STOPs — the C6.5 guarantee the comment above always intended).
-        metric_field="sarol_accuracy_9class",
-        run_summary_path=effective_run_summary,
-        resume=resume,
-        materialize_root=pathlib.Path(materialize_root),
-        build_mistake_corpus=parts["build_mistake_corpus"],
-        current_tag=current_tag,
-        # ⚠ THIS ARGUMENT IS THE FEEDBACK LOOP. Without it the optimizer optimizes blind.
-        #
-        # `engine/loop.py:378-380` writes `iter/<n>/release_train.json` and `release_val.json`
-        # -- the per-iteration release payload, and the ONLY channel by which the held-out VAL
-        # scalar reaches the optimizer -- inside `if loop_ops is not None`. This call omitted it,
-        # so across all three iterations of the 2026-09-02 run no release file was ever written
-        # and no VAL number was ever visible to the agent. It edited the rubric three times with
-        # zero feedback on the quantity it was told to maximize. That is the entire explanation
-        # for that run's flat curve, and it is a wiring gap, not a result.
-        #
-        # Note the shape of the failure: Tier 2 was *over*-enforced. C6.9 correctly put VAL's
-        # per-claim outputs beyond the optimizer's reach, and then the payload designed to carry
-        # the scalar back across that boundary was never produced -- isolation without signal.
-        #
-        # `LocalLoopOps` is the same-user implementation; paper-trail's optimizer runs as this
-        # account, so there is no cross-user mechanism to express. It writes under `repo_root`,
-        # which is the optimizer's cwd, which is what makes `iter/<n>/release_*.json` readable to
-        # it exactly where `context/release-format.md` says to look. `commit_version` routes
-        # through it too and delegates straight back to `engine.versioning.commit_new_version`,
-        # so commit behaviour is unchanged. The corpus-cleanup paths it also enables are no-ops
-        # here: they require `corpus_ref`, which this consumer does not supply.
-        loop_ops=LocalLoopOps(parts["program_store"].repo_root),
-    )
+    # The engine runner owns one network for the whole run; entering it here, around `run_loop`,
+    # is what closes it on every exit path. Components handed in by a selftest bring their own
+    # runner and no engine runner.
+    program_runner = parts.get("program_runner")
+    with (program_runner if program_runner is not None else contextlib.nullcontext()) as pr:
+        runner = (
+            parts["runner"] if pr is None
+            else CachingRunner(pr.as_runner(run_id=run_id), parts["program_store"], budget=parts["budget"])
+        )
+        loop_kwargs = dict(
+            iterations=iterations,
+            run_id=run_id,
+            repo_root=parts["program_store"].repo_root,
+            program_store=parts["program_store"],
+            runner=runner,
+            scorer=parts["scorer"],
+            release_builder=parts["release_builder"],
+            agent=parts["agent"],
+            # A factory when a ramp was asked for, a fixed batch otherwise. `run_loop` accepts either
+            # (`train_inputs: RunInputs | Callable[[int], RunInputs]`), so the graduated cohort needs
+            # no engine change -- the same seam crc drives its growing batch through.
+            train_inputs=(
+                sampling.train_inputs_factory(
+                    schedule=train_schedule,
+                    mode=draw_mode,
+                    split="train",
+                    run_id=run_id,
+                    staging_root=pathlib.Path(sampling_root or train_output_root) / "staging",
+                    batch_root=pathlib.Path(sampling_root or train_output_root) / "batches",
+                    history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
+                )
+                if train_schedule
+                else _static_train_inputs(
+                    RunInputs, train_input_ref, run_id=run_id, train_n=train_n
+                )
+            ),
+            # A sampled VAL when one was asked for, the caller's fixed batch otherwise. Drawn ONCE and
+            # held constant for the run: the engine's frontier is a bare scalar, so a VAL that moved
+            # between iterations would turn sampling noise into phantom regressions and step-backs.
+            val_inputs=(
+                sampling.val_inputs_for(
+                    n=val_n,
+                    split="dev",
+                    run_id=run_id,
+                    staging_root=pathlib.Path(sampling_root or val_output_root) / "val-staging",
+                    batch_root=pathlib.Path(sampling_root or val_output_root) / "val-batches",
+                    history_path=pathlib.Path(sampling_root or val_output_root) / "val_draw.json",
+                )
+                if val_n
+                else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
+            ),
+            task_config={
+                "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
+                "profile": parts["profile"].name,
+            },
+            # C6.5: a resume whose profile differs from the recorded one must STOP, not silently
+            # continue a curve built from two different systems. The engine's frontier is a bare
+            # scalar and cannot notice this on its own.
+            hard_fields={
+                "profile": parts["profile"].name,
+                "retrieval_k": parts["profile"].retrieval_k,
+                "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
+            },
+            # Provenance-only drift (warns, never STOPs): a resume under a different judge is worth a
+            # note but not a hard stop the way a profile/rubric change is.
+            soft_fields={
+                "model": component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL,
+            },
+            # #4 resume wiring. `metric_field` names the ledger key the engine stores each frozen
+            # version's VAL scalar under and that `--resume` reads back; it must be stable across the
+            # original run and its resume. `resume=True` reconstructs the frontier from the ledger +
+            # the program-v0..vk tag chain and continues at k+1, re-checking `hard_fields` (a profile /
+            # rubric mismatch STOPs — the C6.5 guarantee the comment above always intended).
+            metric_field="sarol_accuracy_9class",
+            run_summary_path=effective_run_summary,
+            resume=resume,
+            materialize_root=pathlib.Path(materialize_root),
+            build_mistake_corpus=parts["build_mistake_corpus"],
+            current_tag=current_tag,
+            # ⚠ THIS ARGUMENT IS THE FEEDBACK LOOP. Without it the optimizer optimizes blind.
+            #
+            # `engine/loop.py:378-380` writes `iter/<n>/release_train.json` and `release_val.json`
+            # -- the per-iteration release payload, and the ONLY channel by which the held-out VAL
+            # scalar reaches the optimizer -- inside `if loop_ops is not None`. This call omitted it,
+            # so across all three iterations of the 2026-09-02 run no release file was ever written
+            # and no VAL number was ever visible to the agent. It edited the rubric three times with
+            # zero feedback on the quantity it was told to maximize. That is the entire explanation
+            # for that run's flat curve, and it is a wiring gap, not a result.
+            #
+            # Note the shape of the failure: Tier 2 was *over*-enforced. C6.9 correctly put VAL's
+            # per-claim outputs beyond the optimizer's reach, and then the payload designed to carry
+            # the scalar back across that boundary was never produced -- isolation without signal.
+            #
+            # `LocalLoopOps` is the same-user implementation; paper-trail's optimizer runs as this
+            # account, so there is no cross-user mechanism to express. It writes under `repo_root`,
+            # which is the optimizer's cwd, which is what makes `iter/<n>/release_*.json` readable to
+            # it exactly where `context/release-format.md` says to look. `commit_version` routes
+            # through it too and delegates straight back to `engine.versioning.commit_new_version`,
+            # so commit behaviour is unchanged. The corpus-cleanup paths it also enables are no-ops
+            # here: they require `corpus_ref`, which this consumer does not supply.
+            loop_ops=LocalLoopOps(parts["program_store"].repo_root),
+            expected_isolation_hash=parts.get("setup_value"),
+        )
 
-    # #3 consumer half: a mid-run LoopStop carries the partial run (best-so-far frontier) for
-    # `main` to summarize. Attach the BudgetGuard so `main` can report the REAL Runner/judge spend
-    # (`parts["budget"].spent_usd`) separately from the optimizer-agent spend the engine tracks on
-    # `LoopRun.spent_usd`; the guard is a run_optimization local and would otherwise be unreachable
-    # from `main`. The stop still re-raises loud — never swallowed.
-    try:
-        run = run_loop(**loop_kwargs)
-    except LoopStop as exc:
-        exc.budget = parts["budget"]
-        raise
+        # #3 consumer half: a mid-run LoopStop carries the partial run (best-so-far frontier) for
+        # `main` to summarize. Attach the BudgetGuard so `main` can report the REAL Runner/judge spend
+        # (`parts["budget"].spent_usd`) separately from the optimizer-agent spend the engine tracks on
+        # `LoopRun.spent_usd`; the guard is a run_optimization local and would otherwise be unreachable
+        # from `main`. The stop still re-raises loud — never swallowed.
+        try:
+            run = run_loop(**loop_kwargs)
+        except LoopStop as exc:
+            exc.budget = parts["budget"]
+            raise
     return run, parts["budget"]
 
 
@@ -945,6 +939,8 @@ def _seed_repo(dest: pathlib.Path, store: SarolProgramStore) -> str:
     run("git", "config", "user.email", "selftest@example.invalid")
     run("git", "config", "user.name", "selftest")
     for entry in store.entries:
+        if entry.get("pattern"):
+            continue  # a folder pattern (PT14) is not a file
         dst = dest / entry["path"]
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(store.repo_root / entry["path"], dst)
@@ -952,6 +948,32 @@ def _seed_repo(dest: pathlib.Path, store: SarolProgramStore) -> str:
     run("git", "commit", "-q", "-m", "program-v0")
     run("git", "tag", "program-v0")
     return run("git", "rev-parse", "HEAD")
+
+
+_TEST_ROOTS: list = []
+_FAKE_GRADER_IMAGE = "paper-trail-isolation:2.1.277@sha256:" + "0" * 64
+_FAKE_OPTIMIZER_IMAGE = "paper-trail-optimizer:2.1.277@sha256:" + "0" * 64
+
+
+def _test_components(**kw):
+    """``build_components`` over fresh temp roots, with stated fake images and no pins. Nothing it
+    builds is entered or run here."""
+    import atexit  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    from isolation import sealed_session as ss  # noqa: PLC0415
+
+    root = pathlib.Path(tempfile.mkdtemp(prefix="sarol-dispatch-", dir=pathlib.Path.home() / ".cache"))
+    if not _TEST_ROOTS:
+        atexit.register(lambda: [shutil.rmtree(r, ignore_errors=True) for r in _TEST_ROOTS])
+    _TEST_ROOTS.append(root)
+    base = dict(
+        train_output_root=root / "train", val_output_root=root / "val", materialize_root=root / "mat",
+        grader_image=_FAKE_GRADER_IMAGE, optimizer_image=_FAKE_OPTIMIZER_IMAGE, profile="retrieval",
+        expected_fingerprints={"program": ss.UNPINNED, "optimizer": ss.UNPINNED},
+    )
+    base.update(kw)
+    return build_components(**base)
 
 
 def _integration_checks(schemas) -> list[tuple[str, bool]]:
@@ -1029,7 +1051,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                 program_store=store,
                 runner=_Runner(),
                 scorer=_Scorer(),
-                release_builder=adapter.SarolReleaseBuilder(policy=adapter.isolation_mod.STAND_IN_POLICY),
+                release_builder=adapter.SarolReleaseBuilder(setup_value="setup-v1:selftest"),
                 agent=guarded,
                 train_inputs=schemas.RunInputs(
                     input_ref="unused", batch_id="t", split="train"),
@@ -1099,7 +1121,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                 program_store=store2,
                 runner=_Runner(),
                 scorer=_Scorer(),
-                release_builder=adapter.SarolReleaseBuilder(policy=adapter.isolation_mod.STAND_IN_POLICY),
+                release_builder=adapter.SarolReleaseBuilder(setup_value="setup-v1:selftest"),
                 agent=guarded2,
                 train_inputs=_recording_train_inputs,
                 val_inputs=schemas.RunInputs(input_ref="unused", batch_id="v", split="val"),
@@ -1215,7 +1237,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             "runner": _Runner(),
             "scorer": _Scorer(),
             "profile": profiles_mod.get("retrieval"),
-            "release_builder": adapter.SarolReleaseBuilder(policy=adapter.isolation_mod.STAND_IN_POLICY),
+            "release_builder": adapter.SarolReleaseBuilder(setup_value="setup-v1:selftest"),
             "build_mistake_corpus": None,
             "agent": adapter.ContractGuardedAgent(_CleanAgent(repo3), store3, tree_root=repo3),
             "budget": None,
@@ -1263,7 +1285,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ]
 
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
-    parts = build_components(max_budget_usd=1000.0, train_n=10, require_command=False, container=isolation_mod.fake_container())
+    parts = _test_components(max_budget_usd=1000.0, train_n=10, require_command=False)
 
     # argv -> run_optimization, with the real parser. `run_optimization` is stubbed so nothing
     # is dispatched, materialized or spent: the assertion is purely that the flag survives the
@@ -1408,13 +1430,13 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # already for --profile: it was parsed, priced the run, and dropped before the run began,
         # so the CLI printed a `retrieval` table and executed `agentic`. A flag that reaches only
         # the quote is worse than no flag, because the quote then lies with authority.
-        ("--model reaches the constructed Runner, not merely the cost table",
-         build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, model="sonnet", container=isolation_mod.fake_container())["runner"].inner.model == "sonnet"),
+        ("--model reaches the constructed grader program, not merely the cost table",
+         _test_components(
+             max_budget_usd=1e9, train_n=1, require_command=False, model="sonnet")["program"].model == "sonnet"),
         ("...and with no --model the judge takes the one documented default, so 'unspecified' "
          "means exactly one thing across dispatcher, canary and adapter",
-         build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, container=isolation_mod.fake_container())["runner"].inner.model == adapter.DEFAULT_JUDGE_MODEL),
+         _test_components(
+             max_budget_usd=1e9, train_n=1, require_command=False)["program"].model == adapter.DEFAULT_JUDGE_MODEL),
         ("...and that model reaches the CANARY check too, so a run cannot be judged by one model "
          "against a pin measured with another",
          _model_reaches_canary),
@@ -1431,33 +1453,40 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # every resume died on the guard whose own error text says to "pass a `current_tag`" -- a
         # flag that did not exist. Both halves are gated: the flag parses, and it actually reaches
         # `run_optimization`, because a flag that parses and is dropped looks identical from outside.
-        ("--current-tag parses and defaults to the baseline, so a plain run is unchanged",
-         _parser().parse_args(["--run"]).current_tag == "program-v0"),
+        ("--current-tag parses and defaults to the version the manifest freezes, so a plain run starts there",
+         _parser().parse_args(["--run"]).current_tag is None
+         and "current_tag = adapter.SarolProgramStore().program_version" in inspect.getsource(run_optimization)),
         ("...and names a later version when given one, which is what makes --resume reachable",
          _parser().parse_args(["--run", "--current-tag", "program-v7"]).current_tag == "program-v7"),
         ("...and `main` passes it through rather than dropping it on the floor",
          "current_tag=args.current_tag," in inspect.getsource(main)),
 
-        ("the run id reaches the constructed Runner, so one run's answers archive in one place",
-         build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, run_id="hillclimb-Z",
-             container=isolation_mod.fake_container())["runner"].inner.archive_run_id
-         == "hillclimb-Z"),
-        ("...and `run_optimization` is the caller that passes it, not something a future entry "
-         "point has to remember",
+        # Under the engine runner the run id is part of every pass key and of every archive path,
+        # and it reaches the runner in exactly one place: `as_runner(run_id=...)`.
+        ("the run id reaches the engine runner, so one run's passes archive under one run",
+         "pr.as_runner(run_id=run_id)" in inspect.getsource(run_optimization)),
+        ("...and `run_optimization` threads it to build_components as well",
          "run_id=run_id," in inspect.getsource(run_optimization)),
 
         # --max-workers is the same flag-plumbing hazard a third time, so it is gated at BOTH
         # seams: the kwarg into the Runner, and argv into the run. Concurrency that silently
         # stayed at 1 would look exactly like "the pool did not help" and would be debugged as
         # a rate limit rather than as a dropped flag.
-        ("--max-workers reaches the constructed Runner",
-         build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, max_workers=6, container=isolation_mod.fake_container())["runner"].inner.max_workers == 6),
+        ("a run with no committed pin for a session kind is refused before anything is built",
+         _raises_valueerror(lambda: _test_components(max_budget_usd=1.0, train_n=1, require_command=False,
+                                                     expected_fingerprints={"program": None, "optimizer": "x"}))),
+        ("the engine runner's output root defaults to <run>/program-out, beside the TRAIN and VAL roots",
+         (lambda p: p["program_runner"].root.root.name == "program-out"
+          and p["program_runner"].root.root.parent == p["optimizer"].run_root
+          and p["optimizer"].program_output_root == p["program_runner"].root.root)(
+             _test_components(max_budget_usd=1.0, train_n=1, require_command=False))),
+        ("--max-workers reaches the engine runner as max_concurrent",
+         _test_components(
+             max_budget_usd=1e9, train_n=1, require_command=False, max_workers=6)["program_runner"].spec.max_concurrent == 6),
         ("...and the default is serial, so concurrency is opt-in and every existing baseline "
          "was measured under the same dispatch the default still gives",
-         build_components(
-             max_budget_usd=1e9, train_n=1, require_command=False, container=isolation_mod.fake_container())["runner"].inner.max_workers == 1),
+         _test_components(
+             max_budget_usd=1e9, train_n=1, require_command=False)["program_runner"].spec.max_concurrent == 1),
         ("...and the CLI flag reaches the RUN, not merely the parser -- the defect that shipped "
          "for --profile and was nearly repeated for --model",
          _cli_max_workers == 6),
@@ -1496,7 +1525,10 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
 
         ("build_components wraps the optimizer agent in the contract guard",
          isinstance(parts["agent"], adapter.ContractGuardedAgent)),
-        ("...around the real OptimizerAgent", isinstance(parts["agent"].inner, OptimizerAgent)),
+        ("...around the contained optimizer (the engine's, sealed), never a host session",
+         type(parts["agent"].inner).__name__ == "SarolOptimizer"
+         and "--dangerously-skip-permissions" not in inspect.getsource(sys.modules[__name__])
+         .split("def _selftest", 1)[0].split("def _integration_checks", 1)[0]),
         # Keyed on the metric NAME the adapter actually emits, not on a phrase from the prose.
         # The previous version matched "maximize 3-way macro-F1", which broke the moment the
         # objective moved -- and would have gone on passing if the prompt kept the old wording
@@ -1504,8 +1536,11 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         ("...which loads the hot-path prompt as its instructions, naming the objective the "
          "adapter actually reports",
          adapter.PRIMARY_METRIC_NAME in parts["agent"].inner.agent_instructions()),
+        # The engine renders the description's `max_budget_usd` as `--max-budget-usd` on the session
+        # argv (its contained_argv); what paper-trail owns is that the cap is set and is the one stated.
         ("the optimizer session also carries a hard budget cap",
-         "--max-budget-usd" in parts["agent"].inner.command(1, pathlib.Path("/tmp/m"))),
+         parts["agent"].inner.pin_description(materialize_root=parts["optimizer"].materialize_root).max_budget_usd
+         == parts["agent"].inner.max_budget_usd > 0),
     ]
     return checks
 
@@ -1640,7 +1675,7 @@ def _selftest() -> int:
              _raises_valueerror(lambda: build_components(
                  max_budget_usd=1.0, train_n=1,
                  program_store=_FakeStore(repo),
-                 val_output_root=inside, container=isolation_mod.fake_container()))),
+                 val_output_root=inside))),
         ]
 
         # The CLI is where this broke: `--profile` was parsed, used to price the run, then dropped
@@ -1710,6 +1745,8 @@ def _selftest() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             tree = pathlib.Path(tmp) / "materialized"
             for entry in store.entries:
+                if entry.get("pattern"):
+                    continue  # a folder pattern (PT14) is not a file
                 dst = tree / entry["path"]
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes((store.repo_root / entry["path"]).read_bytes())
@@ -1813,6 +1850,8 @@ def _selftest() -> int:
                 ).stdout
                 _dst.write_bytes(_blob)
 
+            # The tag the manifest freezes (program-v11 since PT-A): the guard checks that version.
+            _TAG = SarolProgramStore().program_version
             # Make it a real repo and TAG it, because the tag is the half that matters most: the
             # engine materializes from `git show <tag>:<path>`, never off disk.
             def _g(*args: str) -> str:
@@ -1826,14 +1865,14 @@ def _selftest() -> int:
             _g("config", "user.email", "selftest@example.invalid")
             _g("config", "user.name", "selftest")
             _g("add", "-A")
-            _g("commit", "-q", "-m", "program-v0")
-            _g("tag", "-a", "program-v0", "-m", "program-v0")
+            _g("commit", "-q", "-m", _TAG)
+            _g("tag", "-a", _TAG, "-m", _TAG)
             _good_commit = _g("rev-parse", "HEAD")
 
             tag_store = SarolProgramStore(repo_root=tag_repo)
 
             pristine = not tag_store.verify_tree_matches_tag()
-            tag_pristine = not tag_store.verify_tag_tree("program-v0")
+            tag_pristine = not tag_store.verify_tag_tree(_TAG)
 
             # Edit an EDITABLE, non-contract file -- exactly what an optimizer iteration does, and
             # exactly what the contract re-hash is blind to by design.
@@ -1887,7 +1926,7 @@ def _selftest() -> int:
             checks += [
                 ("run_optimization REFUSES a tree that does not match the tag it would file its "
                  "numbers under",
-                 "does not match 'program-v0'" in refusal),
+                 f"does not match '{_TAG}'" in refusal),
                 ("...naming the file that drifted, so the fix is obvious",
                  "verdict_schema_sarol.md" in refusal),
             ]
@@ -1909,11 +1948,11 @@ def _selftest() -> int:
             _g("add", "-A")
             _g("commit", "-q", "-m", "stale enum")
             _stale_commit = _g("rev-parse", "HEAD")
-            _g("tag", "-f", "-a", "program-v0", _stale_commit, "-m", "stale")
+            _g("tag", "-f", "-a", _TAG, _stale_commit, "-m", "stale")
             _stale.write_text(_kept, encoding="utf-8")  # tree clean again, tag now wrong
 
             _tree_says = tag_store.verify_tree_matches_tag()
-            _tag_says = tag_store.verify_tag_tree("program-v0")
+            _tag_says = tag_store.verify_tag_tree(_TAG)
 
             checks += [
                 ("a stale TAG over a clean tree is caught -- the case the first version of this "
@@ -1925,10 +1964,11 @@ def _selftest() -> int:
                  "checking the tree alone was not enough",
                  _tree_says == []),
                 ("a tag that does not resolve at all is a violation, not a silent pass",
-                 len(tag_store.verify_tag_tree("program-v999")) == len(tag_store.entries)),
+                 len(tag_store.verify_tag_tree("program-v999"))
+                 == sum(1 for e in tag_store.entries if not e.get("pattern"))),
             ]
 
-            _g("tag", "-f", "-a", "program-v0", _good_commit, "-m", "program-v0")
+            _g("tag", "-f", "-a", _TAG, _good_commit, "-m", _TAG)
 
             # ...and the same wiring for the TAG half. Restore the tree first so the tree check
             # passes and execution actually REACHES the tag check -- otherwise this gate would go
@@ -1938,7 +1978,7 @@ def _selftest() -> int:
                     "\n<!-- an iteration's edit -->\n", ""),
                 encoding="utf-8",
             )
-            _g("tag", "-f", "-a", "program-v0", _stale_commit, "-m", "stale")
+            _g("tag", "-f", "-a", _TAG, _stale_commit, "-m", "stale")
             adapter.SarolProgramStore = lambda *a, **k: SarolProgramStore(repo_root=tag_repo)
             try:
                 run_optimization(
@@ -1957,14 +1997,14 @@ def _selftest() -> int:
                 tag_refusal = f"<wrong exception: {type(exc).__name__}: {exc}>"
             finally:
                 adapter.SarolProgramStore = _real_store_cls
-                _g("tag", "-f", "-a", "program-v0", _good_commit, "-m", "program-v0")
+                _g("tag", "-f", "-a", _TAG, _good_commit, "-m", _TAG)
 
             checks += [
                 ("run_optimization ALSO refuses when the tree is clean but the TAG is stale -- "
                  "the engine materializes from the tag, so this is the one that decides what runs",
                  "does not carry the frozen" in tag_refusal),
                 ("...naming the tag, and pointing at the re-cut that fixes it",
-                 "program-v0" in tag_refusal and "git tag -f" in tag_refusal),
+                 _TAG in tag_refusal and "git tag -f" in tag_refusal),
             ]
 
         checks += _integration_checks(schemas)
@@ -2043,17 +2083,20 @@ def _parser() -> "argparse.ArgumentParser":
     )
     ap.add_argument(
         "--image",
-        # ⚠ Not `required=True`: this parser also serves `--selftest`, which starts no container
-        # and so needs no image. Refused in the run branch instead (below), where it is actually
-        # needed -- an argparse-level requirement would make the free offline gate unrunnable.
         default=None,
         help=(
-            "the container image every judge dispatch runs in, BY DIGEST "
-            "(name@sha256:...). Required, and there is no uncontained mode: the program is "
-            "scored inside a mount boundary that cannot reach the gold labels, and a run "
-            "measured outside one is not comparable with any run measured inside one. A tag is "
-            "refused -- an image rebuilt on a newer base layer keeps its tag and changes its "
-            "bytes, so a tag cannot say what the run ran on."
+            "the grader image, BY DIGEST in the engine's form (name:version@sha256:...). Default: "
+            "the locally built paper-trail-isolation image (sarol_isolation.SHIPPING_IMAGE_TAG). A bare "
+            "tag is refused by the engine: an image rebuilt on a newer base layer keeps its tag and "
+            "changes its bytes, so a tag cannot say what the run ran on."
+        ),
+    )
+    ap.add_argument(
+        "--optimizer-image",
+        default=None,
+        help=(
+            "the optimizer image, by digest (name:version@sha256:...). Default: the locally built "
+            "paper-trail-optimizer image (optimizer/image/Dockerfile: the engine image plus python3)."
         ),
     )
     ap.add_argument("--train-n", type=int, default=None)
@@ -2119,9 +2162,9 @@ def _parser() -> "argparse.ArgumentParser":
     )
     ap.add_argument(
         "--current-tag",
-        default="program-v0",
-        help="the program version the working tree already holds. Defaults to `program-v0`, which "
-             "is right for a baseline run. ⚠ **Required to RESUME**: after any run the tree carries "
+        default=None,
+        help="the program version the working tree already holds. Defaults to the version the "
+             "manifest freezes (program-v11 since PT-A), which is right for a baseline run. ⚠ **Required to RESUME**: after any run the tree carries "
              "the last version the optimizer committed, and the S26 tree-vs-tag guard compares "
              "against the manifest's frozen version -- so without this, `--resume` is refused by "
              "the very guard whose error message tells you to pass it, and the feature is "
@@ -2173,19 +2216,8 @@ def main(argv: "list[str] | None" = None) -> int:
         # same lazily) so the `except LoopStop` below can name it.
         _eng = adapter.engine_path()
         if str(_eng) not in sys.path:
-            sys.path.insert(0, str(_eng))
+            sys.path.append(str(_eng))
         from engine.loop import LoopStop  # noqa: PLC0415
-        # Ordinary CLI argument validation, NOT a second boundary gate -- the boundary refusal
-        # lives in `SarolRunner.__init__` and still fires if this is somehow bypassed. This exists
-        # only so a missing flag reads as a missing flag rather than as a digest complaint about
-        # the value `None`.
-        if not args.image:
-            print(
-                "REFUSED  --image is required: every judge dispatch runs in a container and "
-                "there is no uncontained mode. Pass the image by digest (name@sha256:...).",
-                file=sys.stderr,
-            )
-            return 1
         try:
             run, budget = run_optimization(
                 iterations=args.iterations,
@@ -2219,10 +2251,10 @@ def main(argv: "list[str] | None" = None) -> int:
                 run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
                 resume=args.resume,
                 current_tag=args.current_tag,
-                # Rides `**component_kwargs` into `build_components`, which hands it to the
-                # Runner, whose constructor refuses without it. Same lesson as --profile and
-                # --model: a flag that reaches the estimate and not the run is worse than no flag.
-                container=isolation_mod.shipping_container(image=args.image),
+                # Ride `**component_kwargs` into `build_components`. None means the locally built
+                # image, resolved to its digest there; there is no uncontained mode either way.
+                grader_image=args.image,
+                optimizer_image=args.optimizer_image,
                 **({"model": args.model} if args.model else {}),
             )
         except BudgetExceeded as exc:

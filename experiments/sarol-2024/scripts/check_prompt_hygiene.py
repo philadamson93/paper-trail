@@ -55,7 +55,7 @@ FORBIDDEN: tuple[tuple[str, str], ...] = (
 #: dated logs -- dating them is a deliberate requirement (D4), so they are not swept.
 def agent_read_files() -> list[Path]:
     files: list[Path] = [
-        REPO / ".claude" / "commands" / "sarol-eval-item.md",
+        REPO / "src" / "commands" / "sarol-eval-item.md",
         EXPERIMENT / "prompts" / "adjudicator-dispatch-sarol.md",
         EXPERIMENT / "specs" / "verdict_enum_sarol.md",
         EXPERIMENT / "specs" / "verdict_schema_sarol.md",

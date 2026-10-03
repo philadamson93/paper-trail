@@ -121,15 +121,10 @@ fi
 # the half that fails if the archive silently moved nothing.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" \
   || fail "GATE H FAILED AFTER THE RESET: this checkout still holds a previous run's lessons, findings or releases. The archive step above did not clear them -- do not treat this run's numbers as a fresh run's."
-# The per-ITERATION half of the reset, proved before anything is spent. Gate H above clears what
-# must not cross a RUN; this one proves the machinery that clears what must not cross an
-# ITERATION -- the graders' answers, which are written by the grader and so were invisible to the
-# old derivation. It is a filesystem fixture, not a dispatch: what failed on hillclimb-2026-09-20c
-# was a save into an already-occupied slot, and that costs nothing to demonstrate. It carries its
-# own negative control, so a clear that silently stopped working cannot pass it.
-"$PY" "$OPT/canary.py" --stale-answer-check \
-  || fail "STALE-ANSWER PREFLIGHT FAILED: the graders' answers are not being cleared between passes, so this run would score the PREVIOUS version's verdicts as the new one's. Nothing has been dispatched."
-echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK, stale-answer OK"
+# The per-ITERATION half of the reset (the graders' answers) is no longer a preflight: since PT-A
+# (2026-10-01) every pass runs in its own folder in the engine's program runner, which refuses an
+# answer from another pass. Its tests are the engine's (tests/test_pass_outputs.py).
+echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
@@ -180,7 +175,7 @@ if [ -f "$CRED_FILE" ]; then
     600|400) : ;;
     *) fail "$CRED_FILE is mode $CRED_PERM -- a long-lived token must not be readable by group or other. Fix it:  chmod 600 $CRED_FILE" ;;
   esac
-  for CRED_NAME in $(cd "$OPT" && PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import isolation; print(" ".join(isolation.ENV_ALLOWLIST))'); do
+  for CRED_NAME in $(cd "$OPT" && PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import sarol_isolation as isolation; print(" ".join(isolation.ENV_ALLOWLIST))'); do
     CRED_LINE="$(grep -m1 "^${CRED_NAME}=" "$CRED_FILE" 2>/dev/null || true)"
     if [ -n "$CRED_LINE" ] && [ -z "$(eval "printf '%s' \"\${${CRED_NAME}:-}\"")" ]; then
       export "$CRED_NAME=${CRED_LINE#*=}"
@@ -201,7 +196,7 @@ fi
 # Read from the allowlist rather than hardcoding the name, so adding a credential to the boundary
 # cannot leave this check behind asserting the old set.
 CRED_REPORT="$(cd "$OPT" && PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c '
-import os, sys, isolation
+import os, sys, sarol_isolation as isolation
 missing = [v for v in isolation.ENV_ALLOWLIST if not os.environ.get(v)]
 if missing:
     print(", ".join(missing))
@@ -259,74 +254,29 @@ for m in adapter dispatcher sampling validate_sarol profiles canary evidence_pro
 done
 
 cd "$REPO_ROOT/experiments/sarol-2024"
-"$PY" scripts/freeze_program_v0.py --verify --tree program-v0 >/dev/null 2>&1 \
-  || fail "program-v0 does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
-echo "  program-v0 verifies against its tag"
+FROZEN_TAG="$("$PY" -c 'import json; print(json.load(open("program-v0/manifest.json"))["program_version"])')"
+"$PY" scripts/freeze_program_v0.py --verify --tree "$FROZEN_TAG" >/dev/null 2>&1 \
+  || fail "$FROZEN_TAG does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
+echo "  $FROZEN_TAG (the version the manifest freezes) verifies against its tag"
 [ "$CURRENT_TAG" = "program-v0" ] || echo "  continuing from $CURRENT_TAG (the tree is NOT the baseline, and that is deliberate)"
 
-# ---------------------------------------------------------------- container image
-# Every scored dispatch runs in a container and there is no uncontained mode, so the dispatcher
-# refuses without `--image` given BY DIGEST. This runner predated that refusal and never passed one,
-# which made it unable to start a run at all once the isolation work landed -- it got all the way to
-# the dispatch and stopped there, after the free gates but before spending anything.
-#
-# The digest is resolved from the tag the code itself ships (`isolation.SHIPPING_IMAGE_TAG`) rather
-# than written out here, so the runner cannot drift from the image the pin is keyed on. A locally
-# built image has a digest and Docker will run it by one -- no registry is needed.
-say "Container image"
+# ---------------------------------------------------------------- container images
+# Both principals run as the engine's sealed sessions (PT-A): the graders on the grader image, the
+# optimizer on the optimizer image (the engine's plus python3). Each is passed by digest in the engine's
+# one form, name:version@sha256:..., resolved from the tags the code ships, so this runner cannot drift
+# from what the setup pins are keyed on. A locally built image has a digest; no registry is needed.
+say "Container images"
 cd "$OPT"
-IMAGE_REF="$(PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import isolation, sys; r = isolation.image_digest_ref(); sys.exit(1) if not r else print(r)' 2>/dev/null)" \
-  || fail "the isolation image is not built on this box. Build it, then re-run:  docker build -t \$(PYTHONPATH=\"\$AGENTIC_LABEL_OPT\" \"\$PY\" -c 'import isolation; print(isolation.SHIPPING_IMAGE_TAG)') -f \"\$AGENTIC_LABEL_OPT/isolation/Dockerfile\" \"\$AGENTIC_LABEL_OPT/isolation\""
-case "$IMAGE_REF" in *@sha256:*) : ;; *) fail "resolved image ref is not a digest: $IMAGE_REF";; esac
-echo "  image:   $IMAGE_REF"
+IMAGE_REF="$(PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import sarol_program; print(sarol_program.grader_image())' 2>/dev/null)" \
+  || fail "the grader image is not built on this box. Build it, then re-run:  V=\$(PYTHONPATH=\"\$AGENTIC_LABEL_OPT\" \"\$PY\" -c 'import sarol_isolation as s; print(s.SHIPPING_IMAGE_TAG.rsplit(\":\", 1)[1])'); docker build --build-arg CLAUDE_CODE_VERSION=\$V -t paper-trail-isolation:\$V -f \"\$AGENTIC_LABEL_OPT/isolation/Dockerfile\" \"\$AGENTIC_LABEL_OPT/isolation\""
+OPTIMIZER_IMAGE_REF="$(PYTHONPATH="$AGENTIC_LABEL_OPT" "$PY" -c 'import sarol_optimizer; print(sarol_optimizer.optimizer_image())' 2>/dev/null)" \
+  || fail "the optimizer image is not built on this box. Build it, then re-run:  PYTHONPATH=\"\$AGENTIC_LABEL_OPT\" \"\$PY\" sarol_optimizer.py --build"
+for REF in "$IMAGE_REF" "$OPTIMIZER_IMAGE_REF"; do
+  case "$REF" in *:*@sha256:*) : ;; *) fail "resolved image ref is not name:version@sha256:... : $REF";; esac
+done
+echo "  grader image:    $IMAGE_REF"
+echo "  optimizer image: $OPTIMIZER_IMAGE_REF"
 
-# ---------------------------------------------------------------- canary staging
-# The canary's runtime staging tree is git-ignored, so it is ABSENT on a fresh clone -- and the
-# Runner refuses to dispatch a canary whose staged files are gone. Rebuild it deterministically
-# (offline, free: corpus source_mode, no LLM) from the seeded pinned claim, idempotently.
-say "Canary staging (offline, free)"
-cd "$OPT"
-PYTHONPATH="$AGENTIC_LABEL_OPT" PROFILE="$PROFILE" "$PY" - <<'PYCAN' || fail "could not rebuild/verify the canary staging tree -- see the reason it printed"
-import os
-import sys
-import canary
-import stage_claim
-
-PROFILE = os.environ.get("PROFILE", "retrieval")
-spec = canary.load(PROFILE)
-if spec is None:
-    print(f"  no pinned canary for {PROFILE!r} -- expected canary/canary-{PROFILE}.json in the checkout")
-    raise SystemExit(1)
-
-unit = canary.choose_claim("train")  # seeded draw -> the pinned claim, deterministically
-if unit.claim_id != spec.claim.claim_id:
-    print(f"  seeded claim {unit.claim_id!r} != pinned {spec.claim.claim_id!r} -- pool/pin drift")
-    raise SystemExit(1)
-
-staging = canary.canary_staging_dir(PROFILE) / unit.claim_id
-# Rebuild when the staged tree is absent or lacks its manifest (a fresh clone, or a half-write).
-# Presence-checked, not counted: the exact file set is stage_claim's business, not this guard's.
-if not (staging / "staging_info.json").is_file():
-    info = stage_claim.stage(
-        split="train",
-        claim_row_id=unit.claim_row_id,
-        cited_paper_bucket=unit.paper_bucket,
-        source_mode=spec.claim.source_mode,
-        out_dir=staging,
-    )
-    if info["citekey"] != spec.claim.citekey:
-        print(f"  staged citekey {info['citekey']!r} != pinned {spec.claim.citekey!r}")
-        raise SystemExit(1)
-
-n = sum(1 for p in staging.rglob("*") if p.is_file())
-if not (staging / "staging_info.json").is_file() or n == 0:
-    print(f"  canary staging incomplete at {staging} ({n} files, no staging_info.json)")
-    raise SystemExit(1)
-print(f"  canary {unit.claim_id} ({spec.claim.citekey}) staged: {n} files under {staging.name}/")
-PYCAN
-
-# ---------------------------------------------------------------- run
-say "Run: $RUN_ID (workers=$MAX_WORKERS, iterations=$ITERATIONS, from=$CURRENT_TAG)"
 mkdir -p "$RUNS"
 cd "$OPT"
 # errexit off across the run itself: we want the post-run assertions to report the failure in
@@ -334,6 +284,7 @@ cd "$OPT"
 set +e
 "$PY" -u dispatcher.py --run \
   --image "$IMAGE_REF" \
+  --optimizer-image "$OPTIMIZER_IMAGE_REF" \
   --profile "$PROFILE" \
   --current-tag "$CURRENT_TAG" \
   --iterations "$ITERATIONS" \

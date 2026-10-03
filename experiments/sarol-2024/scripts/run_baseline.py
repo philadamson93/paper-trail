@@ -1,4 +1,4 @@
-"""Score `program-v0` on a VAL subsample — the plan's "first real scoring run" gate.
+"""Score a frozen program (default: the version the manifest freezes) on a VAL subsample.
 
 This is deliberately NOT the optimizer loop. It answers one question: what does the frozen
 starting-point program actually score against Sarol, where no real number existed before. No
@@ -34,7 +34,6 @@ for _p in (str(_OPT), str(_HERE)):
         sys.path.insert(0, _p)
 
 import adapter  # noqa: E402
-import isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 
@@ -52,6 +51,41 @@ def _clear(dest: pathlib.Path) -> None:
     shutil.rmtree(dest)
 
 
+def resolve_program_tag(requested: str | None, store) -> str:
+    """The tag to score: the one asked for, else the version the manifest freezes."""
+    return requested or store.program_version
+
+
+def _selftest() -> int:
+    import subprocess as sp  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    class _Store:
+        program_version = "program-v11"
+
+    checks = [
+        ("with no --program-tag the baseline scores the version the manifest freezes",
+         resolve_program_tag(None, _Store()) == "program-v11"),
+        ("...and an explicit tag wins", resolve_program_tag("program-v10", _Store()) == "program-v10"),
+        ("...and the real manifest names a version", bool(adapter.SarolProgramStore().program_version)),
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        repo = pathlib.Path(td)
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": td, "GIT_CONFIG_NOSYSTEM": "1"}
+        for cmd in (["init", "-q", "-b", "main"], ["config", "user.email", "t@example.invalid"],
+                    ["config", "user.name", "t"], ["commit", "-q", "--allow-empty", "-m", "v"],
+                    ["tag", "-a", "program-vT", "-m", "annotated"]):
+            sp.run(["git", "-C", td, *cmd], check=True, capture_output=True, env=env)
+        commit = sp.run(["git", "-C", td, "rev-parse", "HEAD"], capture_output=True, text=True, env=env).stdout.strip()
+        checks.append(("an annotated tag resolves to its COMMIT, not the tag object",
+                       _tag_sha(repo, "program-vT") == commit))
+    failed = [n for n, ok in checks if not ok]
+    for n, ok in checks:
+        print(f"  {'PASS' if ok else 'FAIL'}  {n}")
+    print(f"{len(checks) - len(failed)}/{len(checks)} passed")
+    return 1 if failed else 0
+
+
 def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--split", default="dev", choices=("train", "dev"))
@@ -61,20 +95,20 @@ def main(argv: "list[str] | None" = None) -> int:
     ap.add_argument("--run-id", default="baseline")
     ap.add_argument(
         "--program-tag",
-        default="program-v0",
-        help="which frozen program to score. Defaults to the v0 starting point; pass the loop's "
-             "best_tag (e.g. program-v3) to re-score an OPTIMIZED program on the same VAL sample.",
+        default=None,
+        help="which frozen program to score. Default: the version the manifest freezes (program-v11 since "
+             "PT-A); pass an earlier tag (e.g. program-v10) to re-score a historical program.",
     )
     ap.add_argument(
         "--image",
-        required=True,
+        default=None,
         help=(
-            "the container image every judge dispatch runs in, BY DIGEST. Required and with no "
-            "uncontained mode: this script produces the baseline every later iteration is "
-            "compared against, so measuring it outside the boundary the iterations run inside "
-            "would not be a weaker guarantee -- it would be an invalid comparison."
+            "the grader image by digest (name:version@sha256:...). Default: the locally built "
+            "paper-trail-isolation image. There is no uncontained mode: this script produces the "
+            "baseline every later iteration is compared against, through the same engine runner."
         ),
     )
+    ap.add_argument("--max-workers", type=int, default=1, help="claims run at once (wall-clock only)")
     ap.add_argument("--per-call-max-budget-usd", type=float, default=2.0)
     ap.add_argument("--per-call-timeout-seconds", type=float, default=900.0)
     args = ap.parse_args(argv)
@@ -119,31 +153,45 @@ def main(argv: "list[str] | None" = None) -> int:
         for e in store.raw["entries"]
     ]
     manifest = ProgramManifest(entries=tuple(stripped), combined_hash=store.raw["combined_hash"])
+    args.program_tag = resolve_program_tag(args.program_tag, store)
     sha = _tag_sha(store.repo_root, args.program_tag)
-    dest = out_root / "materialized"
+    # One folder per tag under the materialize root: the engine runner keys a pass on the
+    # materialized folder's name and refuses an output root inside the materialize root.
+    materialize_root = out_root / "materialized"
+    dest = materialize_root / args.program_tag
     _clear(dest)
     materialize(manifest, sha, repo_root=store.repo_root, dest=dest)
     written = sorted(p for p in dest.rglob("*") if p.is_file())
-    print(f"materialized {len(written)} files from program-v0 @ {sha[:12]}")
+    print(f"materialized {len(written)} files from {args.program_tag} @ {sha[:12]}")
 
     # -- run -------------------------------------------------------------------------------------
-    runner = adapter.SarolRunner(
-        store,
-        working_checkout=store.repo_root,
-        profile=profile,
-        # Scored as VAL regardless of which split it was drawn from: this is a held-out
-        # measurement of the freeze, so nothing here should write a TRAIN mistake corpus.
-        output_roots={"val": out_root / "out"},
-        per_call_max_budget_usd=args.per_call_max_budget_usd,
-        per_call_timeout_seconds=args.per_call_timeout_seconds,
-        # The shipping boundary, not a stand-in: this is the widest adjudicator in the system and
-        # the one that produces the baseline recut (1f).
-        container=isolation_mod.shipping_container(image=args.image),
+    # Through the engine's runner (PT-A), as a run's graders are: one sealed session per claim, the
+    # materialized program read-only, each claim's own folder writable, under the program's committed
+    # setup pin. Scored as VAL regardless of the split it was drawn from: a held-out measurement of
+    # the freeze, so nothing here writes a TRAIN mistake corpus.
+    import sarol_program  # noqa: PLC0415 -- needs the engine on the path
+
+    pins = sarol_program.committed_pins(store.repo_root)
+    if not pins.get("program"):
+        print("REFUSED  no program setup pin is committed for this platform "
+              f"({sarol_program.platform_key()}); run sarol_program.py --print-pins and commit it",
+              file=sys.stderr)
+        return 2
+    program = sarol_program.SarolProgram(
+        profile=profile, model=adapter.DEFAULT_JUDGE_MODEL,
+        per_call_timeout_seconds=int(args.per_call_timeout_seconds),
+        per_call_max_budget_usd=args.per_call_max_budget_usd, max_concurrent=args.max_workers,
+    )
+    engine_runner = sarol_program.program_runner(
+        program, output_root=out_root / "program-out", materialize_root=materialize_root,
+        image=args.image or sarol_program.grader_image(), transcript_dir=out_root / "program-out" / "transcripts",
+        expected_fingerprint=pins["program"], forbidden=sarol_program.forbidden_list(repo_root=store.repo_root),
     )
     inputs = RunInputs(input_ref=str(batch), batch_id=f"{args.run_id}", split="val")
 
     started = time.time()
-    arts = runner.run(dest, inputs)
+    with engine_runner as pr:
+        arts = pr.as_runner(run_id=args.run_id).run(dest, inputs)
     elapsed = time.time() - started
 
     print(f"\nstatus={arts.status}  sessions={arts.sub_invocation_count}  "
@@ -152,21 +200,9 @@ def main(argv: "list[str] | None" = None) -> int:
         print(f"error: {arts.error.code} | {arts.error.message_redacted[:400]}")
 
     # -- score -----------------------------------------------------------------------------------
-    mf = out_root / "out/run_manifest.json"
-    if not mf.exists():
-        print("no run manifest -- nothing to score", file=sys.stderr)
-        return 1
-    ref_sha = hashlib.sha256(mf.read_bytes()).hexdigest()
-    from engine.schemas import ArtifactRef, RunArtifacts  # noqa: PLC0415
-
-    scored_arts = RunArtifacts(
-        batch_id=args.run_id,
-        status=arts.status,
-        artifact_refs=(ArtifactRef(path=str(mf), sha256=ref_sha),),
-        sub_invocation_count=arts.sub_invocation_count,
-        cost_usd=arts.cost_usd,
-    )
+    scored_arts = arts
     score = adapter.SarolScorer().score(scored_arts, "val", {"_split": "val", "_iter": 0})
+    manifest_path = arts.artifact_refs[0].path if arts.artifact_refs else None
 
     print("\n=== BASELINE ===")
     print(f"primary ({score.primary_metric.name}): {score.primary_metric.value:.4f}")
@@ -189,6 +225,7 @@ def main(argv: "list[str] | None" = None) -> int:
         "sessions": arts.sub_invocation_count,
         "cost_usd": arts.cost_usd,
         "elapsed_seconds": round(elapsed, 1),
+        "run_manifest": manifest_path,
         "primary_metric": score.primary_metric.value,
         "breakdown": score.breakdown,
     }
@@ -214,4 +251,6 @@ def _tag_sha(repo_root: pathlib.Path, tag: str = "program-v0") -> str:
 
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        sys.exit(_selftest())
     sys.exit(main())

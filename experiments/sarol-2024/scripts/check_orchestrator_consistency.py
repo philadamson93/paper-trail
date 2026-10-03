@@ -32,7 +32,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 EXPERIMENT = REPO / "experiments" / "sarol-2024"
-DRIVER = REPO / ".claude" / "commands" / "sarol-eval-item.md"
+DRIVER = REPO / "src" / "commands" / "sarol-eval-item.md"
 
 BEGIN_MARKER = "## Begin dispatch prompt"
 END_MARKER = "## End dispatch prompt"

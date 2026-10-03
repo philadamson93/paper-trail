@@ -72,7 +72,8 @@ def force_rmtree(path: Path) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tree", default="program-v0")
+    ap.add_argument("--tree", default=json.loads(MANIFEST.read_text()).get("program_version", "program-v0"),
+                    help="the tag to materialize; default the version the manifest freezes")
     ap.add_argument("--engine", type=Path, default=DEFAULT_ENGINE)
     args = ap.parse_args()
 
@@ -121,9 +122,16 @@ def main() -> int:
         written = sorted(p.relative_to(dest).as_posix() for p in dest.rglob("*") if p.is_file())
         print(f"OK  materialize({args.tree} @ {sha[:12]}) wrote {len(written)} files")
 
-        expected = {e["path"] for e in entries}
+        import fnmatch  # noqa: PLC0415
+
+        patterns = [e["path"] for e in entries if e.get("pattern")]
+        expected = {e["path"] for e in entries if not e.get("pattern")}
         missing = expected - set(written)
-        extra = set(written) - expected
+        # A file a folder pattern (PT14) admits is expected too: the optimizer may have added it.
+        extra = {w for w in set(written) - expected if not any(fnmatch.fnmatch(w, p) for p in patterns)}
+        unmatched = [p for p in patterns if not any(fnmatch.fnmatch(w, p) for w in written)]
+        if unmatched:
+            failures.append(f"a folder pattern matched no materialized file: {unmatched}")
         if missing:
             failures.append(f"materialize did not write: {sorted(missing)}")
         if extra:
@@ -131,6 +139,8 @@ def main() -> int:
 
         # --- 4. the materialized bytes hash to what the manifest froze ----------------------
         for e in entries:
+            if e.get("pattern"):
+                continue
             f = dest / e["path"]
             if not f.exists():
                 continue
@@ -141,7 +151,8 @@ def main() -> int:
                     f"       manifest {e['sha256']}\n       actual   {actual}"
                 )
         if not failures:
-            print(f"OK  all {len(entries)} materialized files hash to their frozen sha256")
+            n_files = sum(1 for e in entries if not e.get("pattern"))
+            print(f"OK  all {n_files} materialized files hash to their frozen sha256")
     finally:
         force_rmtree(dest)
 
@@ -150,7 +161,7 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print(f"\nPASS: program-v0 materializes from one version_sha and is byte-faithful to the freeze")
+    print(f"\nPASS: {args.tree} materializes from one version_sha and is byte-faithful to the freeze")
     return 0
 
 

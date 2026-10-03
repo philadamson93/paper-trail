@@ -75,7 +75,17 @@ FILESET: list[tuple[str, str, bool]] = [
     # verdict / never re-score), so an editable driver is a reward-hacking surface. The
     # invariant tests that would bound it migrated to the isolation plan and are NOT YET
     # IMPLEMENTED -- they must land before the next armed run.
-    (".claude/commands/sarol-eval-item.md", "sarol", False),
+    ("src/commands/sarol-eval-item.md", "sarol", False),
+]
+
+#: Folder patterns (PT14, Phil 2026-10-01): the optimizer may add prompt or spec files in the two
+#: experiment folders. Written as manifest entries with ``"pattern": true`` and no hash (a pattern has
+#: no bytes of its own); the files they match today are listed individually above. Never optional:
+#: the engine skips an optional entry that does not exist on disk, and a pattern never exists as a
+#: literal path, so new files would never be committed.
+PATTERNS: list[tuple[str, str]] = [
+    ("experiments/sarol-2024/prompts/*.md", "sarol"),
+    ("experiments/sarol-2024/specs/*.md", "sarol"),
 ]
 
 COMBINED_HASH_RECIPE = (
@@ -108,7 +118,8 @@ def rev_parse(ref: str) -> str:
 def combined_hash(entries: list[dict]) -> str:
     h = hashlib.sha256()
     for e in sorted(entries, key=lambda e: e["path"]):
-        h.update(e["path"].encode() + b"\0" + e["sha256"].encode() + b"\n")
+        mark = "pattern" if e.get("pattern") else e["sha256"]
+        h.update(e["path"].encode() + b"\0" + mark.encode() + b"\n")
     return h.hexdigest()
 
 
@@ -126,6 +137,9 @@ def build_entries(refs: dict[str, str]) -> list[dict]:
                 "sha256": hashlib.sha256(blob).hexdigest(),
             }
         )
+    for pattern, source in PATTERNS:
+        entries.append({"path": pattern, "source": source, "freeze_policy": "committed",
+                        "contract_file": False, "optional": False, "pattern": True})
     return entries
 
 
@@ -136,6 +150,8 @@ def cmd_write(args) -> int:
 
     manifest = dict(old)
     manifest["frozen_at_utc"] = args.date
+    if getattr(args, "version", None):
+        manifest["program_version"] = args.version
     manifest["source_refs"] = {
         "main": {
             "commit": refs["main"],
@@ -181,6 +197,8 @@ def cmd_verify(args) -> int:
     bad = 0
 
     for e in m["entries"]:
+        if e.get("pattern"):
+            continue
         actual = hashlib.sha256(git_show(refs[e["source"]], e["path"])).hexdigest()
         if actual != e["sha256"]:
             bad += 1
@@ -197,6 +215,8 @@ def cmd_verify(args) -> int:
     if args.tree:
         tree = rev_parse(args.tree)
         for e in m["entries"]:
+            if e.get("pattern"):
+                continue
             actual = hashlib.sha256(git_show(tree, e["path"])).hexdigest()
             if actual != e["sha256"]:
                 bad += 1
@@ -212,7 +232,12 @@ def cmd_verify(args) -> int:
 
 
 #: The tag the engine materializes the program from.
-PROGRAM_TAG = "program-v0"
+def _program_tag() -> str:
+    """The tag this manifest freezes: its own ``program_version`` (program-v0 until PT-A's v11)."""
+    return json.loads(MANIFEST.read_text()).get("program_version", "program-v0")
+
+
+PROGRAM_TAG = _program_tag()
 
 
 def cmd_retag(args) -> int:
@@ -294,6 +319,7 @@ def main() -> int:
     p.add_argument("--main-ref", default="main")
     p.add_argument("--sarol-ref", default="HEAD")
     p.add_argument("--date", default="2026-09-01")
+    p.add_argument("--version", default=None, help="the program_version this freeze records (e.g. program-v11)")
     args = p.parse_args()
 
     if args.write:
@@ -335,6 +361,12 @@ def cmd_selftest(args) -> int:
             MANIFEST = copy
             rc = cmd_write(args)
             after = json.loads(copy.read_text())
+            verify_rc = cmd_verify(argparse.Namespace(tree=None))
+            versioned = Path(td) / "versioned.json"
+            shutil.copyfile(real, versioned)
+            MANIFEST = versioned
+            cmd_write(argparse.Namespace(**{**vars(args), "version": "program-vSELFTEST"}))
+            renamed = json.loads(versioned.read_text()).get("program_version")
 
         checks.append(("the re-freeze itself succeeds against a copy", rc == 0))
         checks.append((
@@ -351,6 +383,16 @@ def cmd_selftest(args) -> int:
             after.get("output_vocabulary") == before.get("output_vocabulary")
             and after.get("deliberately_excluded") == before.get("deliberately_excluded"),
         ))
+        patterns = [e for e in after.get("entries", []) if e.get("pattern")]
+        checks.append((
+            "the folder patterns (PT14) are written as pattern entries with no hash, never optional",
+            len(patterns) == len(PATTERNS) and all("sha256" not in e and e["optional"] is False for e in patterns),
+        ))
+        checks.append((
+            "...the combined hash covers them by name, and verify skips them rather than failing",
+            after.get("combined_hash") == combined_hash(after["entries"]) and verify_rc == 0,
+        ))
+        checks.append(("--version sets the version the manifest freezes", renamed == "program-vSELFTEST"))
         checks.append((
             "the re-freeze DID rewrite what it owns, so the test is not passing on a no-op",
             after.get("combined_hash_recipe") == COMBINED_HASH_RECIPE and "entries" in after,

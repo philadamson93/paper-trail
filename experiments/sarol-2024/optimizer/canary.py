@@ -14,7 +14,7 @@ absent without announcing itself is not a guard.
 Two halves, deliberately separate:
 
 * **The pin** (`--pin`) is a *measurement*, not an assertion. It stages a claim, dispatches it
-  through the real `SarolRunner` — the same path that will later guard the run, not a
+  through the engine's program runner (PT-A) — the same path that will later guard the run, not a
   reimplementation of it — and records the verdict that actually came back. A hand-written
   expected verdict would be pinning a belief.
 * **The refusal** lives in `dispatcher.run_optimization`: a real run whose cost model prices a
@@ -49,8 +49,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import inspect
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -64,8 +66,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import adapter  # noqa: E402
-import check_run_scope  # noqa: E402
-import isolation as isolation_mod  # noqa: E402
+import sarol_isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
 
@@ -217,9 +218,10 @@ def pin(
     runner=None,
     program_store=None,
     claim: "adapter.ClaimRecord | None" = None,
-    #: The container boundary. Unused when `runner` is injected, which is how the selftests drive
-    #: this without a boundary at all.
-    container: "isolation_mod.ContainerConfig | None" = None,
+    #: The grader image by digest (``name:version@sha256:…``). Default: the locally built one.
+    image: str | None = None,
+    #: The engine runner's test fakes (``_session_factory`` etc.), for the selftest only.
+    _program_runner_private: "dict | None" = None,
 ) -> dict[str, Any]:
     """Dispatch the chosen claim `repeat` times through the REAL Runner and record the verdict.
 
@@ -284,12 +286,6 @@ def pin(
     # a canary measured on an uncontained instrument would certify an instrument nothing else runs
     # on. An injected `runner` still overrides this for the selftests, which is why this site needed
     # no new mechanism (1f).
-    run = runner or adapter.SarolRunner(
-        store,
-        profile=prof.name,
-        container=container,
-        **({"model": model} if model else {}),
-    )
     schemas = adapter._import_engine()
     # ⚠ **The frozen program, materialized — not the repo root, which this passed until 2026-09-18.**
     # The container grant mounts the program read-only and the engine refuses a mount containing a
@@ -299,30 +295,61 @@ def pin(
     _force_rmtree(materialized_root)
     materialized = adapter.materialize_program(store, materialized_root)
 
-    observed: list[str | None] = []
-    resolved_models: list[str] = []
-    for attempt in range(repeat):
-        artifacts = run.run(
-            materialized,
-            schemas.RunInputs(
-                input_ref=str(batch_path),
-                batch_id=f"canary-pin-{prof.name}-{attempt}",
-                split="train",
-            ),
-        )
-        if artifacts.status != "ok" or not artifacts.artifact_refs:
+    # Through the engine's runner, the same path a run's graders take (PT-A): one sealed session
+    # per dispatch, the materialized program mounted read-only, the claim's own folder writable.
+    # Its passes go outside the repo, under ~/.paper-trail, and each repeat is its own pass.
+    stack = contextlib.ExitStack()
+    if runner is None:
+        import sarol_program  # noqa: PLC0415 -- needs the engine on the path
+
+        pins = sarol_program.committed_pins(store.repo_root)
+        if not pins.get("program") and not _program_runner_private:
             raise RuntimeError(
-                f"canary pin attempt {attempt + 1}/{repeat} did not complete "
-                f"(status={artifacts.status!r}); nothing pinned"
+                "no program setup pin is committed for this platform; a canary measured on an "
+                "unpinned setup pins an instrument nobody approved. Commit the pin first "
+                "(sarol_program.py --print-pins)"
             )
-        manifest = json.loads(
-            pathlib.Path(artifacts.artifact_refs[0].path).read_text(encoding="utf-8")
+        out = pathlib.Path.home() / ".paper-trail" / "canary-runs" / prof.name
+        engine_runner = sarol_program.program_runner(
+            sarol_program.SarolProgram(profile=prof.name, model=model or adapter.DEFAULT_JUDGE_MODEL),
+            output_root=out,
+            materialize_root=CANARY_DIR / "materialized",
+            image=image or sarol_program.grader_image(),
+            transcript_dir=out / "transcripts",
+            expected_fingerprint=pins.get("program") or "UNPINNED",
+            forbidden=sarol_program.forbidden_list(repo_root=store.repo_root),
+            **(_program_runner_private or {}),
         )
-        record = manifest["claims"][0]
-        observed.append((record.get("validation") or {}).get("overall_verdict"))
-        # The run manifest carries the RESOLVED model id the sessions actually reported.
-        if manifest.get("model"):
-            resolved_models.append(manifest["model"])
+        run = stack.enter_context(engine_runner).as_runner(run_id=f"canary-pin-{prof.name}")
+    else:
+        run = runner
+    try:
+        observed: list[str | None] = []
+        resolved_models: list[str] = []
+        for attempt in range(repeat):
+            artifacts = run.run(
+                materialized,
+                schemas.RunInputs(
+                    input_ref=str(batch_path),
+                    batch_id=f"canary-pin-{prof.name}-{attempt}",
+                    split="train",
+                ),
+            )
+            if artifacts.status != "ok" or not artifacts.artifact_refs:
+                raise RuntimeError(
+                    f"canary pin attempt {attempt + 1}/{repeat} did not complete "
+                    f"(status={artifacts.status!r}); nothing pinned"
+                )
+            manifest = json.loads(
+                pathlib.Path(artifacts.artifact_refs[0].path).read_text(encoding="utf-8")
+            )
+            record = manifest["claims"][0]
+            observed.append((record.get("validation") or {}).get("overall_verdict"))
+            # The run manifest carries the RESOLVED model id the sessions actually reported.
+            if manifest.get("model"):
+                resolved_models.append(manifest["model"])
+    finally:
+        stack.close()
 
     if len(set(observed)) != 1 or observed[0] is None:
         raise RuntimeError(
@@ -338,7 +365,7 @@ def pin(
         # before it spends anything. `model` is what that alias RESOLVED to at pin time
         # (`claude-haiku-4-5`), which is what makes the pinned verdict reproducible after the
         # alias moves under a new release.
-        "model_requested": getattr(run, "model", None),
+        "model_requested": getattr(run, "model", None) or model or adapter.DEFAULT_JUDGE_MODEL,
         "model": resolved_models[0] if resolved_models else None,
         "expected_verdict": observed[0],
         "observations": observed,
@@ -426,7 +453,7 @@ def _selftest() -> int:
                     self.artifact_refs = (type("R", (), {"path": str(path)})(),)
 
             class _FakeRunner:
-                """Writes a manifest carrying a verdict, exactly as SarolRunner does."""
+                """Writes a manifest carrying a verdict, in the shape the grader runner's manifest has."""
                 def __init__(self, verdicts):
                     self.verdicts = list(verdicts)
                     self.calls = 0
@@ -470,58 +497,35 @@ def _selftest() -> int:
                  not pin_path("retrieval").exists()),
             ]
 
-            # ...and the same path driven through the REAL Runner, because every gate above
-            # injects a `runner` and therefore never builds a container grant at all. That is
-            # exactly how this site was left refusing every pin when the dispatch became
-            # contained: `pin()` handed the Runner the REPO ROOT as its program mount, the engine
-            # refuses a mount containing a denied path, and no gate here noticed (2026-09-18).
-            # A spy invoker keeps it free; what is asserted is that a dispatch was rendered at
-            # all, and that it mounts the materialized program rather than the checkout.
-            real_dispatches: list[list[str]] = []
+            # ...and the same path driven through the ENGINE's runner, with its fake sessions: every
+            # gate above injects a `runner` and so never builds a grant at all. This is the site that
+            # was left refusing every pin when the dispatch first became contained (2026-09-18), so
+            # it is asserted that the pin completes and mounts the materialized program, never the
+            # checkout.
+            import sarol_program  # noqa: PLC0415
+
+            adapter._staged_batch(pathlib.Path(tmp) / "real")
             real_pin_claim = adapter.ClaimRecord(
-                claim_id="C1",
-                citekey="k1",
+                claim_id="C1", citekey="k1",
                 staging_dir=pathlib.Path(tmp) / "real" / "run" / "train" / "staging" / "C1",
                 source_mode="corpus",
             )
-            adapter._staged_batch(pathlib.Path(tmp) / "real")
-            real_runner = adapter.SarolRunner(
-                adapter.SarolProgramStore(),
-                invoke=lambda cmd, cwd, t_: real_dispatches.append(list(cmd)) or adapter.InvocationResult(
-                    exit_code=0, cost_usd=0.0, duration_seconds=0.1
-                ),
-                paperclip_version_probe=lambda: adapter.SarolProgramStore().runtime_pins[
-                    "paperclip_cli"
-                ],
-                require_command=False,
-                profile="retrieval",
-                container=isolation_mod.fake_container(),
+            world = sarol_program._FakeWorld()
+            os.environ.setdefault(sarol_program.TOKEN_ENV_NAME, "selftest-token")
+            real_payload = pin(
+                profile="retrieval", repeat=1, claim=real_pin_claim, program_store=adapter.SarolProgramStore(),
+                image="paper-trail-isolation:2.1.277@sha256:" + "0" * 64,
+                _program_runner_private={"_session_factory": world.session, "_stack_factory": world.stack,
+                                         "_docker": world},
             )
-            try:
-                pin(profile="retrieval", repeat=1, runner=real_runner,
-                    claim=real_pin_claim, program_store=adapter.SarolProgramStore())
-            except RuntimeError:
-                pass  # no verdict file is written by a spy, so the pin itself cannot complete
-            real_program_mounts = [
-                host
-                for cmd in real_dispatches
-                for host, container, _mode in isolation_mod.rendered_mounts(cmd)
-                if container == isolation_mod.CONTAINER_PROGRAM
-            ]
+            mounts = [d.scope.program for d in world.descriptions]
             checks += [
-                ("the REAL Runner's canary pin gets past the grant and actually dispatches",
-                 len(real_dispatches) == 1),
-                ("...mounting the materialized program, not the checkout, which the engine "
-                 "refuses because the repo holds denied paths",
-                 len(real_program_mounts) == 1
-                 and pathlib.Path(real_program_mounts[0]).name == "retrieval"
-                 and "materialized" in real_program_mounts[0]),
-                ("...and the checkout itself is nowhere in the mount set",
-                 all(
-                     pathlib.Path(host) != adapter.REPO_ROOT
-                     for cmd in real_dispatches
-                     for host, _c, _m in isolation_mod.rendered_mounts(cmd)
-                 )),
+                ("the canary pin completes through the engine runner", real_payload["expected_verdict"] == "OVERSIMPLIFY"),
+                ("...mounting the materialized program, not the checkout",
+                 len(mounts) == 1 and pathlib.Path(mounts[0]).name == "retrieval" and "materialized" in str(mounts[0])),
+                ("...and the checkout itself is nowhere in the grant",
+                 all(pathlib.Path(h) != adapter.REPO_ROOT for d in world.descriptions
+                     for h in [d.scope.program, *(x for x, _c in d.scope.readable), *(x for x, _c in d.scope.writable)])),
             ]
         finally:
             CANARY_DIR = original
@@ -631,22 +635,10 @@ def _selftest() -> int:
     except Exception:
         checks.append(("--repeat 0 is refused rather than pinning nothing", False))
 
-    # The stale-answer preflight is a gate in its own right (`--stale-answer-check`, wired into
-    # the VM runner's free pre-spend block). Run it here too so a suite-only check cannot pass
-    # while the gate the runner actually calls is broken. Its own lines are captured so this
-    # suite still reports one line per check.
-    import contextlib
-    import io
-
-    _buf = io.StringIO()
-    with contextlib.redirect_stdout(_buf):
-        _preflight_rc = stale_answer_preflight()
-    checks.append(
-        ("the stale-answer preflight passes, including its skip-the-clear negative control",
-         _preflight_rc == 0)
-    )
-    if _preflight_rc != 0:
-        print(_buf.getvalue())
+    # The stale-answer preflight (`--stale-answer-check`) was removed by PT-A: the per-pass answer
+    # reset it proved is now the engine runner's (each pass in its own folder, stale outputs refused;
+    # engine tests `test_receipt_from_other_pass_refused`, `test_program_stamp_from_other_pass_refused`,
+    # `test_output_changed_since_receipt_refused` in tests/test_pass_outputs.py).
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
@@ -665,96 +657,9 @@ def _raises(fn, exc) -> bool:
     return False
 
 
-def stale_answer_preflight() -> int:
-    """Prove, on THIS box and before anything is spent, that a grader's answer cannot carry from
-    one pass into the next.
-
-    Free and offline: what failed on `hillclimb-2026-09-20c` is a filesystem behaviour -- a save
-    into a slot that is already occupied -- so a filesystem fixture proves it. A second
-    canary-shaped Runner call would cost a real session every iteration to test the same thing.
-
-    Three gates, and the middle one is the one that matters:
-
-    1. A populated answer slot is emptied before dispatch, and the old answer is in the archive.
-    2. **Negative control** -- skip the clear and the freshness rule must flag the row. A guard
-       that has never been watched failing is not a guard, and "the clear silently moved nothing"
-       looks exactly like "the tree was already clean" from the outside.
-    3. The round-trip canary still runs before the first scored claim. The whole point of putting
-       this check here rather than at the end of the batch was to add a protection without moving
-       that one, so the suite has to say that is still true.
-    """
-    import tempfile
-
-    ok = True
-    with tempfile.TemporaryDirectory() as td:
-        tmp = pathlib.Path(td)
-        real_root = check_run_scope.ARCHIVE_ROOT
-        check_run_scope.ARCHIVE_ROOT = tmp / "_archive"
-        try:
-            staging = tmp / "staging" / "X1"
-            slot = staging / "ledger" / "claims"
-            slot.mkdir(parents=True, exist_ok=True)
-            answer = slot / "X1.json"
-            answer.write_text(json.dumps({"claim_id": "X1", "run_id": "the-previous-pass"}),
-                              encoding="utf-8")
-
-            # -- 1. cleared, and kept -----------------------------------------------------------
-            swept = check_run_scope.archive_and_clear_answers(
-                [staging], run_id="preflight", iter_name="iter1-current", split="train"
-            )
-            archived = sorted((tmp / "_archive").rglob("answers/*.json"))
-            cleared = not answer.exists() and not swept["remaining"]
-            kept = len(archived) == 1 and json.loads(
-                archived[0].read_text(encoding="utf-8")
-            )["run_id"] == "the-previous-pass"
-            print(f"  {'PASS' if cleared else 'FAIL'}  a populated answer slot is emptied before "
-                  f"the pass dispatches")
-            print(f"  {'PASS' if kept else 'FAIL'}  ...and the old answer is in the archive, "
-                  f"moved rather than deleted")
-            ok &= cleared and kept
-
-            # -- 2. the negative control --------------------------------------------------------
-            # What the run looked like BEFORE the fix: the slot is never cleared, the grader's
-            # save is refused, and the file still carries the previous pass's id at scoring time.
-            unswept = tmp / "staging" / "X2"
-            (unswept / "ledger" / "claims").mkdir(parents=True, exist_ok=True)
-            (unswept / "ledger" / "claims" / "X2.json").write_text(
-                json.dumps({"claim_id": "X2", "run_id": "the-previous-pass"}), encoding="utf-8"
-            )
-            old_behaviour = [{"claim_id": "X2", "answer_run_id": "the-previous-pass"}]
-            new_behaviour = [{"claim_id": "X1", "answer_run_id": "this-pass"}]
-            red = bool(adapter.stale_answer_rows(old_behaviour, "this-pass"))
-            green = not adapter.stale_answer_rows(new_behaviour, "this-pass")
-            print(f"  {'PASS' if red else 'FAIL'}  ...and with the clear SKIPPED, the freshness "
-                  f"rule goes red on the answer left behind")
-            print(f"  {'PASS' if green else 'FAIL'}  ...while an answer from this pass is "
-                  f"accepted, so the rule is not simply always-on")
-            ok &= red and green
-
-            # -- 3. the round-trip canary has not moved -----------------------------------------
-            src = inspect.getsource(adapter.SarolRunner.run)
-            i_clear = src.find("archive_and_clear_answers")
-            i_canary = src.find("canary_record = process(self.canary.claim)")
-            i_pool = src.find("ThreadPoolExecutor")
-            i_batch_gate = src.find("stale = stale_answer_rows(results")
-            order = -1 not in (i_clear, i_canary, i_pool, i_batch_gate) and (
-                i_clear < i_canary < i_pool < i_batch_gate
-            )
-            print(f"  {'PASS' if order else 'FAIL'}  the round-trip canary still runs before the "
-                  f"first scored claim, with the clear ahead of it and the batch check behind")
-            ok &= order
-        finally:
-            check_run_scope.ARCHIVE_ROOT = real_root
-
-    print(f"\n{'stale-answer preflight OK' if ok else 'STALE-ANSWER PREFLIGHT FAILED'}")
-    return 0 if ok else 1
-
-
 def main(argv: "list[str] | None" = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--stale-answer-check", action="store_true",
-                    help="offline proof that a grader's answer cannot carry into the next pass")
     ap.add_argument("--show", action="store_true", help="print the current pin for --profile")
     ap.add_argument("--pin", action="store_true",
                     help="MEASURE and write the pin. Dispatches real sessions and costs money.")
@@ -777,8 +682,6 @@ def main(argv: "list[str] | None" = None) -> int:
                          "reveals nothing a held-out one would not.")
     args = ap.parse_args(argv)
 
-    if args.stale_answer_check:
-        return stale_answer_preflight()
     if args.selftest:
         return _selftest()
     if args.show:

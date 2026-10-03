@@ -47,7 +47,12 @@ RUBRIC_GUIDANCE = "experiments/sarol-2024/specs/verdict_schema_sarol.md"
 EXTRACTOR_PDF = "src/prompts/extractor-dispatch-pdf.md"
 EXTRACTOR_PAPERCLIP = "src/prompts/extractor-dispatch-paperclip.md"
 VERIFIER = "src/prompts/verifier-dispatch.md"
-DRIVER = ".claude/commands/sarol-eval-item.md"
+DRIVER = "src/commands/sarol-eval-item.md"
+#: Folder patterns (PT14, Phil 2026-10-01): the optimizer may ADD prompt or spec files in the two
+#: experiment folders. The frozen contract files in specs/ stay frozen: the engine refuses a change
+#: to any manifest entry marked contract_file, even under a pattern that matches it.
+NEW_PROMPTS = "experiments/sarol-2024/prompts/*.md"
+NEW_SPECS = "experiments/sarol-2024/specs/*.md"
 
 #: The judge, the guidance it reads, and the driver that dispatches it. Editable under **every**
 #: profile — optimizing the adjudicator is the one thing common to the whole ladder, and the driver
@@ -55,15 +60,15 @@ DRIVER = ".claude/commands/sarol-eval-item.md"
 #: editable; it is in JUDGE_SCOPE rather than only in AGENTIC's so the ruling is not inert on
 #: `retrieval`, which is the only runnable profile today). ⚠ The driver also carries the
 #: measurement's integrity rules — see the warning in `optimizer/context/edit-surface.md`.
-JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER)
+JUDGE_SCOPE = (ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER, NEW_PROMPTS, NEW_SPECS)
 
 #: Everything the agentic profiles add: the evidence-acquisition surface.
 ACQUISITION_SCOPE = (EXTRACTOR_PDF, EXTRACTOR_PAPERCLIP, VERIFIER)
 
 ALL_STAGES = ("extractor", "adjudicator", "verifier")
 
-#: Stages `.claude/commands/sarol-eval-item.md` can actually dispatch today. The command implements
-#: the Phase 1 adjudicator path and aborts `extractor` / `verifier` with `STAGE_NOT_IMPLEMENTED`,
+#: Stages the dispatcher can actually run today: the Phase 1 adjudicator path. `extractor` and
+#: `verifier` have no prompt to render (`STAGE_NOT_IMPLEMENTED`, `src/commands/sarol-eval-item.md`),
 #: so a profile requiring them cannot complete a run however well-formed it is.
 #:
 #: This exists because a profile being *selectable* and a profile being *runnable* are different
