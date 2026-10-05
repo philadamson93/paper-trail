@@ -62,17 +62,21 @@ __all__ = [
 #: The `agentic-label-opt` commit this experiment requires, in full — short SHAs are ambiguous
 #: across repos and `cat-file -e` will happily resolve a prefix to the wrong object in a big one.
 #:
-#: Bumped 2026-10-02 from `592862f` (PT-A, stage 14): the engine's sealed sessions (S1), seal proof and
+#: Bumped 2026-10-05 from `764419b` (PT-B, stage 14): the engine's run bookkeeping (B: version lock,
+#: run-start reset, notes history, same-run pass reuse, failed versions, signal stop) and the optional-glob
+#: staging fix.
+#: Earlier: 2026-10-02 from `592862f` (PT-A, stage 14): the engine's sealed sessions (S1), seal proof and
 #: setup fingerprint (S2), contained optimizer (A), program runner (PR), the IPv4-only proxy (A13), and
 #: the contract-file copy-back rule plus paper-trail's seal replay on both grants (PT-A D12, D7).
 #: Earlier: 2026-09-18 from `82f547d`.
-ENGINE_PIN = "764419b22487b5ab00ebd6436eea6e63f1cb0bbe"
+ENGINE_PIN = "8258569d9e388564bfce102b6e10c5e670ba9024"
 
 #: What the pin buys, in one line, so the next person to bump it knows what they must not drop.
 ENGINE_PIN_REASON = (
     "the engine's sealed sessions for both principals: SealedSession (S1), Forbidden entries, the setup "
     "fingerprint and image-by-digest (S2), ContainedOptimizerAgent (A), ProgramRunner (PR), and the "
-    "IPv4-only allowlist proxy (A13), and the copy-back refusal of a contract-file edit (PT-A D12)"
+    "IPv4-only allowlist proxy (A13), the copy-back refusal of a contract-file edit (PT-A D12), and the run "
+    "bookkeeping: version lock, run-start reset, notes history, failed-version records (B)"
 )
 
 #: Set to "1" to run against an engine that does not contain the pin. Same switch the shell uses.
@@ -165,12 +169,22 @@ def capability_problem(engine: pathlib.Path | None = None) -> str | None:
             "isolation.contained_agent": ("ContainedOptimizerAgent", "DeclaredOutput", "OPTIMIZER_TOOLS"),
             "isolation.setup_fingerprint": ("setup_fingerprint", "combined_value", "committed_pin", "platform_key"),
             "isolation.image_pin": ("image_ref", "image_ref_problem"),
+            # PT-B (2026-10-05): the run bookkeeping paper-trail now calls instead of its own copies.
+            "engine.versioning": ("version_lock", "VersionLockHeld"),
+            "engine.run_start": ("prepare_run_start", "Carried"),
+            "engine.run_store": ("FakeRunStore",),
         }
         for module, symbols in needs.items():
             mod = importlib.import_module(module)
             for symbol in symbols:
                 if not hasattr(mod, symbol):
                     return f"the engine's {module} has no {symbol}"
+        if not hasattr(importlib.import_module("engine.run_store").FakeRunStore, "version_status"):
+            return "the engine's FakeRunStore has no version_status, so a failed version would not block a later start"
+        agent_params = inspect.signature(importlib.import_module("isolation.contained_agent").ContainedOptimizerAgent.__init__).parameters
+        for param in ("notes_root", "run_id"):
+            if param not in agent_params:
+                return f"the engine's ContainedOptimizerAgent takes no {param}, so the optimizer's notes would not be filed"
         if "expected_isolation_hash" not in inspect.signature(importlib.import_module("engine.loop").run_loop).parameters:
             return "the engine's run_loop takes no expected_isolation_hash, so a release stamp could not be checked"
 
@@ -247,8 +261,16 @@ def _selftest() -> int:
         broken = capability_problem(engine)
     finally:
         scope_mod.Forbidden = saved
+    agent_cls = importlib.import_module("isolation.contained_agent").ContainedOptimizerAgent
+    saved_init = agent_cls.__init__
+    try:
+        agent_cls.__init__ = lambda self, *, run_id=None: None  # an engine from before B4: no notes_root
+        no_notes = capability_problem(engine)
+    finally:
+        agent_cls.__init__ = saved_init
     checks = [
         ("the pinned engine passes the capability probe", real is None),
+        ("...and an optimizer agent without notes_root is reported (negative control)", no_notes is not None and "notes_root" in no_notes),
         ("...and a missing symbol is reported by name (negative control)", broken is not None and "Forbidden" in broken),
         ("...and putting it back passes again", capability_problem(engine) is None),
     ]
