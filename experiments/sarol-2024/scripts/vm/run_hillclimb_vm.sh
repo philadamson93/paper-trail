@@ -18,10 +18,13 @@ ITERATIONS="${3:-5}"
 # itself all read this, so they cannot disagree about what is being run -- `retrieval` is the only
 # runnable rung today (`profiles.IMPLEMENTED_STAGES`).
 PROFILE="${PROFILE:-retrieval}"
-# Which program version the working tree already holds. `program-v0` is right for a baseline run.
-# Set it to continue hill-climbing from a version an earlier run committed -- the tree-vs-tag guard
-# compares against this, so leaving it at the default on a continued run refuses before any spend.
-CURRENT_TAG="${CURRENT_TAG:-program-v0}"
+# Which program version the working tree already holds, and so the version the run starts from.
+# Default (set below, once the manifest is read): the version the manifest freezes. Set it to continue
+# from a version an earlier run committed. The tree-vs-tag guard checks the tree against whatever this
+# names, so a wrong value refuses before any spend. It also decides what the run keeps: starting from
+# program-v0's content is a fresh start (the notebook and notes are archived), anything later continues
+# the lineage and keeps them (next-run H2, decided by the engine's run-start reset).
+CURRENT_TAG="${CURRENT_TAG:-}"
 
 # Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
 # resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
@@ -97,34 +100,14 @@ fi
 # instruction restated verbatim stays actionable to a model skimming for what to do.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_prompt_hygiene.py" \
   || fail "GATE G FAILED: an agent-read prompt carries development history (what it used to say, or a dated edit). State the rule as it stands -- the history belongs in git and docs/."
-# Phase 4, the run-start reset. `meta-learnings.md` is injected into every optimizer session, the
-# per-iteration findings are read the same way, and `iter/<n>/` is keyed by iteration number rather
-# than by run -- so run N+1 writes over run N's releases. A run that inherits any of the three opens
-# with hypotheses it did not earn, measured against a program that may no longer exist.
-#
-# ⚠ **This archives first and then asserts, rather than refusing and waiting for a human.** Nobody
-# is watching a VM run, so a gate whose only outcome is "stop and ask someone to run the archive
-# command" costs the whole run. Archiving is a MOVE, never a delete: everything lands under
-# ~/.paper-trail/runs/_archive/<timestamp>-<run id>/ and the assertion below then proves the tree is
-# actually clean. The reset is idempotent, so a resumed run either finds the archive it made or
-# makes one.
-#
-# The continuation escape hatch still wins: with SAROL_ALLOW_INHERITED_LESSONS=1 nothing is moved
-# and the gate passes carrying the state, loudly.
-if [ "${SAROL_ALLOW_INHERITED_LESSONS:-}" = "1" ]; then
-  say "  reset:   SKIPPED -- SAROL_ALLOW_INHERITED_LESSONS=1, this is a CONTINUATION run"
-else
-  "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" --archive "$RUN_ID" \
-    || fail "RESET FAILED: could not archive the previous run's lessons, findings or releases. Nothing has been dispatched."
-fi
-# ...and now assert it worked. A reset with no assertion after it is an inert mechanism -- this is
-# the half that fails if the archive silently moved nothing.
-"$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_run_scope.py" \
-  || fail "GATE H FAILED AFTER THE RESET: this checkout still holds a previous run's lessons, findings or releases. The archive step above did not clear them -- do not treat this run's numbers as a fresh run's."
+# The run-start reset is not a preflight any more (PT-B, 2026-10-05): the dispatcher calls the engine's
+# `prepare_run_start` under its version lock, so two drivers cannot both archive, and it decides fresh
+# or continuing from CURRENT_TAG's content, with no switch. It archives (moves, never deletes) into
+# ~/.paper-trail/runs/_archive/<timestamp>-<run id>/ and refuses to start if anything is left behind.
 # The per-ITERATION half of the reset (the graders' answers) is no longer a preflight: since PT-A
 # (2026-10-01) every pass runs in its own folder in the engine's program runner, which refuses an
 # answer from another pass. Its tests are the engine's (tests/test_pass_outputs.py).
-echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK, run-scope OK"
+echo "  gates:   paper-fidelity OK, empty-window OK, orchestrator-consistency OK, prompt-hygiene OK"
 
 command -v paperclip >/dev/null || fail "paperclip not on PATH -- the Runner asserts the manifest paperclip pin before any dispatch"
 echo "  paperclip: $(paperclip --version 2>&1 | head -1)"
@@ -247,9 +230,14 @@ say "Instrument checks (offline, free)"
 cd "$OPT"
 # evidence_producers was omitted here while contributing 26 checks to the reported total, so the
 # preflight under-reported the suite it claims to gate -- and it is the runnable retrieval path.
-for m in adapter dispatcher sampling validate_sarol profiles canary evidence_producers; do
+# sarol_optimizer and sarol_program were missing here while carrying the optimizer's grant and the
+# graders' runner; PT-B added them.
+for m in adapter dispatcher sampling validate_sarol profiles canary evidence_producers sarol_optimizer sarol_program; do
   out=$("$PY" "$m.py" --selftest 2>&1 | tail -1)
-  case "$out" in *"passed"*) : ;; *) fail "$m selftest did not pass: $out";; esac
+  # "N/M passed" with N equal to M. Matching the word alone let "44/48 passed" through (found in PT-B).
+  case "$out" in *" passed"*) : ;; *) fail "$m selftest did not pass: $out";; esac
+  counts="${out%% passed*}"; counts="${counts##* }"; n="${counts%%/*}"; m_="${counts##*/}"
+  [[ "$counts" == */* && "$n" =~ ^[1-9][0-9]*$ && "$n" = "$m_" ]] || fail "$m selftest did not pass every check: $out"
   echo "  $m: $out"
 done
 
@@ -258,7 +246,8 @@ FROZEN_TAG="$("$PY" -c 'import json; print(json.load(open("program-v0/manifest.j
 "$PY" scripts/freeze_program_v0.py --verify --tree "$FROZEN_TAG" >/dev/null 2>&1 \
   || fail "$FROZEN_TAG does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
 echo "  $FROZEN_TAG (the version the manifest freezes) verifies against its tag"
-[ "$CURRENT_TAG" = "program-v0" ] || echo "  continuing from $CURRENT_TAG (the tree is NOT the baseline, and that is deliberate)"
+CURRENT_TAG="${CURRENT_TAG:-$FROZEN_TAG}"
+[ "$CURRENT_TAG" = "$FROZEN_TAG" ] || echo "  starting from $CURRENT_TAG, not the manifest's $FROZEN_TAG (deliberate; the dispatcher checks the tree against it)"
 
 # ---------------------------------------------------------------- container images
 # Both principals run as the engine's sealed sessions (PT-A): the graders on the grader image, the
