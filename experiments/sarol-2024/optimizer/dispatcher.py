@@ -1392,6 +1392,8 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
 
     def _capture_run_optimization(**kwargs):
         nonlocal_holder["mw"] = kwargs.get("max_workers")
+        nonlocal_holder["state_root"] = kwargs.get("state_root")
+        nonlocal_holder["opt_budget"] = kwargs.get("optimizer_max_budget_usd")
         raise _StopCapture()
 
     class _StopCapture(Exception):
@@ -1409,6 +1411,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             "--val-output-root", "/tmp/pt-gate-val",
             "--train-inputs", "/tmp/pt-gate-train.json",
             "--val-inputs", "/tmp/pt-gate-val.json",
+            "--state-root", "/tmp/pt-gate-state", "--optimizer-max-budget-usd", "1.5",
         ])
     except _StopCapture:
         pass
@@ -1417,6 +1420,10 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
     finally:
         globals()["run_optimization"] = _real_run_optimization
     _cli_max_workers = nonlocal_holder.get("mw")
+    checks.append(("--state-root and --optimizer-max-budget-usd reach the run (a live check's notes stay in "
+                   "its scratch folder; its optimizer session keeps to its cap)",
+                   nonlocal_holder.get("state_root") == pathlib.Path("/tmp/pt-gate-state")
+                   and nonlocal_holder.get("opt_budget") == 1.5))
 
     # Finding 4: the canary must be priced from what is WIRED, and a real run must refuse to start
     # without one. The first optimization run priced three firings per iteration and executed
@@ -2555,6 +2562,19 @@ def _parser() -> "argparse.ArgumentParser":
              "chain and resume at iteration k+1. STOPs if the profile / rubric differ from the "
              "recorded run (a curve must not mix two systems).",
     )
+    ap.add_argument(
+        "--state-root",
+        default=None,
+        help="where the run's lasting state lives: the optimizer's notes history, the run store and "
+             "the run-start archive (default ~/.paper-trail). A check run on a throwaway clone passes a "
+             "scratch folder so its notes never reach the real lineage.",
+    )
+    ap.add_argument(
+        "--optimizer-max-budget-usd",
+        type=float,
+        default=None,
+        help="cap on each optimizer session's spend (default: build_components' own, $20)",
+    )
     return ap
 
 
@@ -2627,6 +2647,9 @@ def main(argv: "list[str] | None" = None) -> int:
                 run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
                 resume=args.resume,
                 current_tag=args.current_tag,
+                state_root=pathlib.Path(args.state_root) if args.state_root else None,
+                **({"optimizer_max_budget_usd": args.optimizer_max_budget_usd}
+                   if args.optimizer_max_budget_usd is not None else {}),
                 # Ride `**component_kwargs` into `build_components`. None means the locally built
                 # image, resolved to its digest there; there is no uncontained mode either way.
                 grader_image=args.image,
