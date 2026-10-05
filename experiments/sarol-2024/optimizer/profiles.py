@@ -35,6 +35,7 @@ of the plan (Open Questions §11), so it is restated wherever the ladder is defi
 from __future__ import annotations
 
 import dataclasses
+import subprocess
 import re
 from dataclasses import dataclass
 
@@ -268,6 +269,15 @@ def as_dict(profile: Profile) -> dict:
 # =================================================================================================
 
 
+
+def _committed(folder: pathlib.Path, name: str) -> str:
+    """``name`` as committed at HEAD. Raises when git cannot show it: two empty strings compare equal,
+    so a check fed nothing would pass (PT-B test review)."""
+    done = subprocess.run(["git", "-C", str(folder), "show", f"HEAD:./{name}"], capture_output=True, text=True)
+    if done.returncode != 0 or not done.stdout.strip():
+        raise RuntimeError(f"cannot read the committed {name} from {folder}: {done.stderr.strip() or 'empty'}")
+    return done.stdout
+
 def _selftest() -> int:
     import json
     import pathlib
@@ -286,7 +296,8 @@ def _selftest() -> int:
         # remembered copy of it. A manifest change that renames a prompt fails here.
         ("every profile's edit scope validates against the freeze",
          validate_against_manifest(entries) == []),
-        ("...and the freeze is the 10-entry program-v0", len(entries) == 10),
+        ("...and the freeze is program-v11's 12 entries: 10 files and the 2 folder patterns (PT14)",
+         len(entries) == 12 and sum(1 for e in entries if e.get("pattern")) == 2),
 
         # The ladder's shape.
         ("the ladder is retrieval -> agentic -> paperclip",
@@ -300,8 +311,10 @@ def _selftest() -> int:
          all("adjudicator" in p.stages for p in PROFILES.values())),
 
         # Edit scope. The invariant with teeth: you may not optimize a stage you do not run.
-        ("retrieval may edit the judge, its rubric, and the driver that dispatches it",
-         set(RETRIEVAL.editable) == {ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER}),
+        ("retrieval may edit the judge, its rubric, the driver that dispatches it, and add files in the "
+         "two program folders (PT14)",
+         set(RETRIEVAL.editable) == {ADJUDICATOR, RUBRIC_GUIDANCE, DRIVER,
+                                     "experiments/sarol-2024/prompts/*.md", "experiments/sarol-2024/specs/*.md"}),
         ("...and may NOT touch the extractor it does not run",
          EXTRACTOR_PDF not in RETRIEVAL.editable and VERIFIER not in RETRIEVAL.editable),
         ("agentic's scope is every non-contract entry",
@@ -374,6 +387,24 @@ def _selftest() -> int:
             for f in ("adapter.py", "dispatcher.py", "sampling.py")
         )
 
+    #: Container paths the optimizer's docs cite (its cwd has been the sealed container since PT-A),
+    #: each mapped back to the host folder that is mounted there. ``/workspace/rw/out/`` holds only the
+    #: declared outputs; any other container path is not in the session at all.
+    _MOUNTS = {
+        "/workspace/ro/in/context/": pathlib.Path(__file__).resolve().parent / "context",
+        "/workspace/rw/program/": pathlib.Path(__file__).resolve().parents[3],
+    }
+    _OUTPUTS = {"/workspace/rw/out/findings.md", "/workspace/rw/out/meta-learnings.md",
+                "/workspace/ro/in/meta-learnings.md"}
+
+    def _resolves(cited: str, root: pathlib.Path) -> bool:
+        if cited in _OUTPUTS:
+            return True
+        for prefix, host in _MOUNTS.items():
+            if cited.startswith(prefix):
+                return (host / cited[len(prefix):]).exists()
+        return not cited.startswith("/") and (root / cited).exists()
+
     def _unresolvable_doc_paths(docs: dict) -> list:
         """Every repo-relative `.md` path the optimizer-facing docs cite that does not exist.
 
@@ -388,7 +419,7 @@ def _selftest() -> int:
         cited = set()
         for text in docs.values():
             cited.update(re.findall(r"`([A-Za-z0-9_./-]+\.md)`", text))
-        return sorted(c for c in cited if not (root / c).exists())
+        return sorted(c for c in cited if not _resolves(c, root))
 
     # -- C6.7: the optimizer's own docs must agree with this module --------------------------
     # The plan is explicit that these three files be updated *in the same change* that lands the
@@ -400,10 +431,15 @@ def _selftest() -> int:
         "playbook.md": (here / "context" / "playbook.md").read_text(encoding="utf-8"),
         "optimizer-instructions.md": (here / "prompt" / "optimizer-instructions.md")
         .read_text(encoding="utf-8"),
-        "meta-learnings.md": (here / "meta-learnings.md").read_text(encoding="utf-8"),
-        # The clean per-run sheet Gate H resets to. Read so the guard below can recognise the
+        # The COMMITTED notebook, not the working copy (PT-B, 2026-10-05). Since the engine's run-start
+        # reset (B3) a run that continues a lineage keeps the notebook the optimizer has been writing,
+        # so the working copy legitimately carries that lineage's history. What must stay clean is the
+        # copy a fresh clone starts from.
+        "meta-learnings.md": _committed(here, "meta-learnings.md"),
+        # The clean sheet a fresh lineage starts from (the engine's reset puts it back). Read so the guard below can recognise the
         # reset state without hard-coding a sentinel string that would drift from the stub.
-        "meta-learnings.stub.md": (here / "meta-learnings.stub.md").read_text(encoding="utf-8"),
+        # Committed too, so the two are compared at the same commit.
+        "meta-learnings.stub.md": _committed(here, "meta-learnings.stub.md"),
         # Added after a Codex-prompted check found this file still telling the optimizer that
         # `corpus.ref` points at the run manifest -- false since C6.8 -- while the gate did not
         # read it. A gate that covers three of four optimizer-facing docs gives false assurance.
@@ -425,9 +461,6 @@ def _selftest() -> int:
         # with no brief at all.
         "subagent-blame-brief.md": (here / "context" / "subagent-blame-brief.md")
         .read_text(encoding="utf-8"),
-        # The findings dir's own README. Agent-facing (the optimizer writes `iter-<n>.md` to the
-        # shape it specifies) and it cites paths, so it belongs in the path check like the rest.
-        "findings/README.md": (here / "findings" / "README.md").read_text(encoding="utf-8"),
     }
     # The scope-and-cost claims live in `edit-surface.md` since the redesign; it is part of the
     # guidance corpus, not merely path-checked.
@@ -456,8 +489,20 @@ def _selftest() -> int:
         # It only worked because the per-turn prompt separately handed over an absolute context
         # dir and the agent was capable enough to reconcile two conventions in one document.
         # Resolving every cited path from the root is the check that keeps that fixed.
-        ("every path the optimizer's docs cite resolves from the agent's cwd, the repo root",
+        # PT-B review: the writable notebook output starts EMPTY every session, so "read the notebook"
+        # must point at the read-only copy, never at the output.
+        ("the instructions send the optimizer to read the notebook at its read-only copy, never at the "
+         "empty output",
+         "Read it before you plan" in docs["optimizer-instructions.md"].split("`/workspace/ro/in/meta-learnings.md`", 1)[-1][:200]
+         and not re.search(r"`/workspace/rw/out/meta-learnings\.md`[^\n]*(Read it before|written by your predecessors)",
+                           docs["optimizer-instructions.md"])),
+        ("every path the optimizer's docs cite resolves: a container path to the folder mounted there, "
+         "anything else from the repo root",
          not _unresolvable_doc_paths(docs)),
+        ("...and a container path to a file that is not there, or to an unmounted folder, does not "
+         "(negative control)",
+         not _resolves("/workspace/ro/in/context/no-such-doc.md", pathlib.Path(__file__).resolve().parents[3])
+         and not _resolves("/workspace/ro/in/gold/claims.md", pathlib.Path(__file__).resolve().parents[3])),
 
         # The mirror of the Sev-1 class. `followups` had a whole section describing a channel that
         # scored the agent's predictions back to it; `grep -rn followups *.py` returned nothing,
@@ -501,8 +546,9 @@ def _selftest() -> int:
         # not the emptiness.
         # Stabilised 2026-09-11. This assertion has now flipped twice chasing a file whose
         # lifecycle was undefined -- first pinning "deliberately empty of history", then requiring
-        # the opposite. Gate H (`check_run_scope.py`) gives the sheet a defined lifecycle: it is
-        # archived and reset to `meta-learnings.stub.md` at the start of every run. So there are
+        # the opposite. The sheet's lifecycle is the engine's run-start reset (PT-B): archived and reset
+        # to `meta-learnings.stub.md` on a fresh start, kept on a continuation, and this reads the
+        # committed copy (above). So there are
         # exactly two legitimate states, and the guard accepts either rather than tracking which
         # one is current: a CLEAN sheet has no history to mis-read, and a sheet carrying inherited
         # history must qualify it. Anything else -- unqualified inherited entries -- stays red.
