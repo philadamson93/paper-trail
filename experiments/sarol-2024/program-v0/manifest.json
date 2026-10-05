@@ -141,8 +141,8 @@
       },
       "optimizer": {
         "darwin-arm64": {
-          "hash": "aafce85df6ff3eb765a7b8f5a74720b025182836d8a41fe1f106eaefde0bb702",
-          "computed": "2026-10-02, darwin-arm64 Mac, images paper-trail-isolation:2.1.277 and paper-trail-optimizer:2.1.277"
+          "hash": "c497426b8ca4fe4b3c412aa6f8c3ef460d7c52054c319950852bf08c7ba62b71",
+          "computed": "2026-10-05 (PT-B: the notes history mounted, the findings input dropped), darwin-arm64 Mac, images paper-trail-isolation:2.1.277 and paper-trail-optimizer:2.1.277"
         }
       }
     }

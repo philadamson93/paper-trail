@@ -91,7 +91,6 @@ if str(_SCRIPTS) not in sys.path:
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-import check_run_scope  # noqa: E402
 import dispatch_prompt  # noqa: E402
 import engine_pin  # noqa: E402
 import evidence_producers  # noqa: E402
@@ -309,6 +308,25 @@ class SarolProgramStore:
             if actual != entry["sha256"]:
                 violations.append(ContractViolation(entry["path"], entry["sha256"], actual))
         return violations
+
+    def tree_differs_from(self, tag: str) -> list[str]:
+        """The program files on disk that differ from the COMMITTED tree ``tag`` names: edited,
+        deleted, or new and untracked under a folder pattern. Empty when they match.
+
+        S26 for a start tag other than the manifest's own (PT-B). Versions the engine mints have no
+        frozen hashes to re-hash, but each is a commit, so the question becomes "is the tree that
+        commit's program?". A tag that does not resolve is reported as the one difference.
+        """
+        root = str(self.repo_root)
+        ref = f"{tag}^{{commit}}"
+        if subprocess.run(["git", "-C", root, "rev-parse", "--verify", "--quiet", ref], capture_output=True).returncode:
+            return [f"<{tag} does not resolve to a commit>"]
+        specs = [e["path"] for e in self.entries]
+        changed = subprocess.run(["git", "-C", root, "diff", "--name-only", ref, "--", *specs],
+                                 capture_output=True, text=True, check=True).stdout.split()
+        new = subprocess.run(["git", "-C", root, "ls-files", "--others", "--exclude-standard", "--", *specs],
+                             capture_output=True, text=True, check=True).stdout.split()
+        return sorted(set(changed) | set(new))
 
     def verify_tree_matches_tag(self, tree_root: pathlib.Path | None = None) -> list[ContractViolation]:
         """Re-hash **every** entry, contract or not — "is this tree really `program-v0`?" (S26).

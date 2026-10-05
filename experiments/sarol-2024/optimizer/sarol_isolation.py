@@ -26,7 +26,7 @@ import sys
 
 _HERE = pathlib.Path(__file__).resolve().parent
 # This folder and the experiment's scripts folder, which the old module also put on the path and
-# several modules import from by bare name (`stage_claim`, `check_run_scope`, `parse_verdict`).
+# several modules import from by bare name (`stage_claim`, `parse_verdict`).
 for _p in (_HERE, _HERE.parent / "scripts"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))

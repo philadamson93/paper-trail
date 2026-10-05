@@ -17,8 +17,9 @@ Three things here are not obvious and are the reason this is a module rather tha
 * **Two of those three calls are redundant across iteration boundaries.** Unless an iteration
   step-back-reverts, the probe at `:410` runs the newly-committed version against VAL, and then
   iteration *n+1* runs the *same* program against the *same* VAL batch at `:335`. Same bytes, same
-  batch, same answer. :class:`CachingRunner` content-addresses on the materialized program's own
-  bytes plus the batch id, so the second call is free. This is crc's pattern.
+  batch, same answer. The engine's ``run_loop`` reuses that pass within the run (plan B, B6: keyed on
+  the tree's content, the batch and the runner's own pass identity), so the second call is free.
+  paper-trail kept its own copy of this cache until PT-B.
 
 * **The refusal has to live in the Runner.** ``run_loop`` exposes no pre-iteration hook — ``on_iter``
   fires *after* an iteration completes, which is too late to decline to spend. The Runner is where
@@ -45,6 +46,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import hashlib
+import importlib
 import inspect
 import json
 import os
@@ -144,8 +146,8 @@ class CostModel:
     def iteration_cost(self, train_n: int, *, probe_cached: bool = False) -> float:
         """TRAIN + current-VAL + probe-VAL, plus the canary.
 
-        ``probe_cached=True`` prices an iteration whose probe is served from
-        :class:`CachingRunner` -- one VAL call instead of two.
+        ``probe_cached=True`` prices an iteration whose probe is reused by the engine's run_loop
+        (B6) -- one VAL call instead of two.
         """
         return self.sessions_per_iteration(train_n, probe_cached=probe_cached) * self.per_session_usd
 
@@ -289,64 +291,40 @@ class BudgetGuard:
 # =================================================================================================
 
 
-def program_digest(materialized_path: pathlib.Path, rel_paths: list[str]) -> str:
-    """Order-stable hash over the materialized program's own bytes.
+class BudgetedRunner:
+    """Wraps the engine's runner with the budget refusal (was ``CachingRunner``, PT-B).
 
-    Content-addressed on purpose: the probe and the next iteration's VAL call are the same work
-    exactly when the program bytes and the batch are the same, which is a property of content,
-    not of the tag or the iteration number (a step-back revert breaks any name-based assumption).
-    """
-    h = hashlib.sha256()
-    for rel in sorted(rel_paths):
-        target = pathlib.Path(materialized_path) / rel
-        h.update(rel.encode("utf-8"))
-        h.update(b"\0")
-        h.update(target.read_bytes() if target.exists() else b"<missing>")
-        h.update(b"\0")
-    return h.hexdigest()
+    Never raises: like the runner it wraps, every refusal is a ``RunArtifacts`` status the scorer can
+    decline. The validation-pass reuse it used to do is the engine's since B (one pass per tree,
+    split, batch and runner identity, within one run).
 
-
-class CachingRunner:
-    """Wraps a Runner with the budget refusal and the probe cache.
-
-    Never raises: like the Runner it wraps, every refusal is a ``RunArtifacts`` status the Scorer
-    can decline, because the engine wraps none of its three Runner calls in a try/except.
+    ⚠ It must pass through the wrapped runner's ``run_id`` and ``cache_identity``: ``run_loop`` reads
+    both off the runner it is handed. Without the identity its reuse key loses the graders' call list,
+    setup fingerprint and prompt tag, so an edited grader prompt could reuse an old pass; without the
+    run id it cannot stop a runner bound to another run.
     """
 
-    def __init__(
-        self,
-        inner,
-        program_store: SarolProgramStore,
-        *,
-        budget: BudgetGuard | None = None,
-        enable_cache: bool = True,
-    ) -> None:
+    def __init__(self, inner, *, budget: BudgetGuard | None = None) -> None:
         self.inner = inner
-        self.program_store = program_store
         self.budget = budget
-        self.enable_cache = enable_cache
-        self._cache: dict[tuple[str, str, str], Any] = {}
-        self.hits = 0
-        self.misses = 0
+        self.calls = 0
         self.refusals = 0
 
-    def _key(self, materialized_path, inputs) -> tuple[str, str, str]:
-        digest = program_digest(materialized_path, [e["path"] for e in self.program_store.entries])
-        return (digest, str(inputs.input_ref), inputs.split)
+    @property
+    def run_id(self):
+        return getattr(self.inner, "run_id", None)
+
+    def cache_identity(self, materialized_path, inputs):
+        identity = getattr(self.inner, "cache_identity", None)
+        return identity(materialized_path, inputs) if identity is not None else None
 
     def run(self, materialized_path, inputs):  # positional -- matches the engine's call sites
         schemas = adapter._import_engine()
-        key = self._key(materialized_path, inputs) if self.enable_cache else None
-
-        if key is not None and key in self._cache:
-            self.hits += 1
-            return self._cache[key]
-
         if self.budget is not None:
-            # If the probe for this exact program+batch is already cached, the iteration owes one
-            # fewer VAL call -- so price the refusal against the cheaper, truthful sequence.
-            probe_cached = key is not None and key in self._cache
-            reason = self.budget.check(inputs.split, probe_cached=probe_cached)
+            # The engine reuses a pass before this is ever called, so this cannot know whether the
+            # iteration's next validation pass will be reused: it prices the worst case (two left).
+            # Near the cap a run may stop one iteration early; it never starts what it cannot finish.
+            reason = self.budget.check(inputs.split)
             if reason is not None:
                 self.refusals += 1
                 return schemas.RunArtifacts(
@@ -357,19 +335,14 @@ class CachingRunner:
                     sub_invocation_count=0,
                     cost_usd=0.0,
                 )
-
-        self.misses += 1
+        self.calls += 1
         artifacts = self.inner.run(materialized_path, inputs)
-
         if self.budget is not None:
             self.budget.record(artifacts.cost_usd or 0.0)
-        if key is not None and artifacts.status == "ok":
-            # Only a clean run is reusable. Caching a timeout would make one flaky batch permanent.
-            self._cache[key] = artifacts
         return artifacts
 
     def stats(self) -> dict[str, int]:
-        return {"hits": self.hits, "misses": self.misses, "refusals": self.refusals}
+        return {"calls": self.calls, "refusals": self.refusals}
 
 
 # =================================================================================================
@@ -432,6 +405,50 @@ def val_isolation_problem(val_root, repo_root) -> str | None:
     return None
 
 
+# =================================================================================================
+# Run state the engine resets and keeps (PT-B: the engine's B3/B4/B5 replace check_run_scope.py)
+# =================================================================================================
+
+#: Where a run's lasting state lives: the optimizer's notes history, the run store (failed-version
+#: records, program snapshots) and the archive of what a run start moved aside. One setting so the
+#: live check and the self-tests can point it at a scratch folder and never touch the real notebook.
+STATE_ROOT = pathlib.Path.home() / ".paper-trail"
+
+
+def state_paths(state_root: pathlib.Path) -> dict:
+    """The three folders under a state root. The archive stays ``runs/_archive`` (isolation OQ9: moving
+    it would orphan the notebooks earlier runs archived there)."""
+    root = pathlib.Path(state_root)
+    return {"notes": root / "optimizer-notes", "run_store": root / "run-store", "archive": root / "runs" / "_archive"}
+
+
+def run_carried(*, repo_root: pathlib.Path, notebook: "pathlib.Path | None", notes_root: pathlib.Path) -> list:
+    """paper-trail's state and how long each piece lives (was ``check_run_scope.CARRIED``).
+
+    ``iter/`` is the run's own: archived at every start. The notebook and the notes history are the
+    lineage's: kept when a run continues from a later version, archived only on a fresh start from
+    program-v0's content, the notebook put back as its stub (next-run H2). The fourth piece the old
+    list named, the graders' ledger, is the engine program runner's since PT-A.
+    """
+    from engine.run_start import Carried  # noqa: PLC0415
+    import sarol_optimizer  # noqa: PLC0415 -- needs the engine on the path
+
+    carried = [Carried(pathlib.Path(repo_root) / "iter", "run"), Carried(pathlib.Path(notes_root), "lineage")]
+    if notebook is not None:
+        carried.append(Carried(pathlib.Path(notebook), "lineage", stub=sarol_optimizer.NOTEBOOK_STUB))
+    return carried
+
+
+def reset_carried(parts: dict, notes_root: pathlib.Path) -> list:
+    """What ``run_optimization`` hands the run-start reset: :func:`run_carried` over the components'
+    own repo and optimizer, so a selftest checks the same lookup a run does."""
+    return run_carried(
+        repo_root=parts["program_store"].repo_root,
+        notebook=getattr(parts.get("optimizer"), "notebook", None),
+        notes_root=notes_root,
+    )
+
+
 def build_components(
     *,
     max_budget_usd: float,
@@ -470,6 +487,8 @@ def build_components(
     #: Run-level files the optimizer reads, copied into its feedback folder each iteration with host
     #: paths stripped (D6): the run summary and the TRAIN draw history.
     optimizer_feedback_files: "tuple | list" = (),
+    #: The run's lasting state (:func:`state_paths`). Default: ``~/.paper-trail``.
+    state_root: pathlib.Path | None = None,
     _program_runner_private: "dict | None" = None,
     _agent_factory=None,
 ):
@@ -552,6 +571,11 @@ def build_components(
         scorer_roots=scorer_roots,
         transcript_dir=program_output_root.parent / "optimizer-transcripts",
         feedback_files=tuple(optimizer_feedback_files),
+        notes_root=state_paths(state_root or STATE_ROOT)["notes"],
+        # A real run always names itself (run_optimization). Without one (the pin printer, selftests)
+        # a placeholder: the run id names a folder inside the notes history, not a mount, so the
+        # session's description and its setup pin are the same either way (checked in the selftest).
+        run_id=run_id or "unnamed-run",
         **({"_agent_factory": _agent_factory} if _agent_factory is not None else {}),
     )
     setup_value = sarol_program.setup_value(program_runner, optimizer, materialize_root=pathlib.Path(materialize_root))
@@ -569,6 +593,7 @@ def build_components(
         "agent": agent,
         "budget": budget,
         "cost_model": cost_model,
+        "state_root": pathlib.Path(state_root or STATE_ROOT),
     }
 
 
@@ -595,12 +620,16 @@ def run_optimization(
     require_canary: bool = True,
     run_summary_path: pathlib.Path | None = None,
     resume: bool = False,
+    #: The run's lasting state (:func:`state_paths`). Default ``~/.paper-trail``; the live check uses a
+    #: scratch folder. Components handed in by a selftest bring their own (``parts["state_root"]``) or
+    #: none, and with none there is no reset and no run store.
+    state_root: pathlib.Path | None = None,
     **component_kwargs,
 ):
     """Drive the engine's ``run_loop``. This is the entrypoint the plan's Files-to-create names.
 
     A whole-run affordability check runs before anything is dispatched; the per-iteration refusal
-    still lives in :class:`CachingRunner`, because ``run_loop`` exposes no pre-iteration hook.
+    still lives in :class:`BudgetedRunner`, because ``run_loop`` exposes no pre-iteration hook.
 
     **Graduated N.** Pass ``train_schedule`` (e.g. ``[5, 10, 20]``) to grow the TRAIN batch across
     iterations instead of running a fixed cohort every time — the engine takes ``train_inputs`` as
@@ -620,6 +649,10 @@ def run_optimization(
     from engine.loop import LoopStop, run_loop  # noqa: PLC0415
     from engine.loop_ops import LocalLoopOps  # noqa: PLC0415
     from engine.schemas import RunInputs  # noqa: PLC0415
+    from engine.run_start import prepare_run_start  # noqa: PLC0415
+    from engine.run_store import FakeRunStore  # noqa: PLC0415
+    from engine.versioning import VersionLockHeld, version_lock  # noqa: PLC0415
+    import sarol_optimizer  # noqa: PLC0415 -- needs the engine on the path
 
     # A real run must SAY where its outputs go. Both roots are load-bearing and neither has a
     # safe default: `train_output_root` is where the per-claim mistake corpus lands (C6.8 -- with
@@ -691,10 +724,21 @@ def run_optimization(
         # still says v0. A curve built from mislabelled baselines is not wrong in a way anyone can
         # see -- it is unreadable, and only afterwards, once the sessions are paid for.
         #
-        # Only checked when the tag is the manifest's own frozen version: `program-v1` and up are
-        # minted by the engine mid-loop and there are no frozen hashes to check them against.
+        # For the manifest's own frozen version the tree and the tag are re-hashed against the frozen
+        # hashes. A version the engine minted has none, but it is a commit: the tree must equal that
+        # commit's program (PT-B; it used to be skipped, which is why the VM runner defaulted to
+        # `program-v0` to get past it).
         store = adapter.SarolProgramStore()
-        if current_tag == store.program_version:
+        if current_tag != store.program_version:
+            differ = store.tree_differs_from(current_tag)
+            if differ:
+                raise ValueError(
+                    f"the working tree does not match {current_tag!r}, the version this run starts from "
+                    f"and files its numbers under:\n  " + "\n  ".join(differ)
+                    + f"\n\nCheck out {current_tag}'s program files, or pass the `current_tag` the tree "
+                    "actually holds. Running as-is produces numbers that cannot be attributed to a version."
+                )
+        else:
             # TWO checks, because they answer different questions and the run needs both.
             #
             # The working tree is what a human reads and edits. The TAG is what the engine
@@ -753,6 +797,7 @@ def run_optimization(
         val_n=val_n,
         run_id=run_id,
         materialize_root=pathlib.Path(materialize_root),
+        state_root=state_root,
         **component_kwargs,
     )
 
@@ -774,10 +819,33 @@ def run_optimization(
     # is what closes it on every exit path. Components handed in by a selftest bring their own
     # runner and no engine runner.
     program_runner = parts.get("program_runner")
-    with (program_runner if program_runner is not None else contextlib.nullcontext()) as pr:
+    repo_root = parts["program_store"].repo_root
+    state = parts.get("state_root")
+    paths = state_paths(state) if state is not None else None
+    # The run store records a failed version across runs, so a later run never starts from one (B5).
+    run_store = FakeRunStore(paths["run_store"]) if paths is not None else None
+    # B5: one driver per repo. The lock covers the reset too, so two drivers starting at once cannot
+    # both archive the notes before one of them loses.
+    with contextlib.ExitStack() as held:
+        try:
+            held.enter_context(version_lock(repo_root, run_id))
+        except VersionLockHeld as exc:
+            # The same stop the engine's own lock path gives, so `main` reports it like any other.
+            raise LoopStop(str(exc), reason="version_lock_held") from exc
+        # B3: fresh or continuing is decided by the start version's content, never by a switch. A
+        # resume continues its own run, whose iter/ files it still reads, so it skips the reset.
+        if paths is not None and not resume:
+            prepare_run_start(
+                repo_root=repo_root, run_id=run_id, start_tag=current_tag,
+                carried=reset_carried(parts, paths["notes"]),
+                archive_root=paths["archive"],
+                manifest_for_version=sarol_optimizer.earlier_version_view(parts["program_store"]),
+                run_store=run_store,
+            )
+        pr = held.enter_context(program_runner) if program_runner is not None else None
         runner = (
             parts["runner"] if pr is None
-            else CachingRunner(pr.as_runner(run_id=run_id), parts["program_store"], budget=parts["budget"])
+            else BudgetedRunner(pr.as_runner(run_id=run_id), budget=parts["budget"])
         )
         loop_kwargs = dict(
             iterations=iterations,
@@ -872,6 +940,7 @@ def run_optimization(
             # here: they require `corpus_ref`, which this consumer does not supply.
             loop_ops=LocalLoopOps(parts["program_store"].repo_root),
             expected_isolation_hash=parts.get("setup_value"),
+            run_store=run_store,
         )
 
         # #3 consumer half: a mid-run LoopStop carries the partial run (best-so-far frontier) for
@@ -971,6 +1040,7 @@ def _test_components(**kw):
         train_output_root=root / "train", val_output_root=root / "val", materialize_root=root / "mat",
         grader_image=_FAKE_GRADER_IMAGE, optimizer_image=_FAKE_OPTIMIZER_IMAGE, profile="retrieval",
         expected_fingerprints={"program": ss.UNPINNED, "optimizer": ss.UNPINNED},
+        state_root=root / "state",
     )
     base.update(kw)
     return build_components(**base)
@@ -1287,6 +1357,34 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
     parts = _test_components(max_budget_usd=1000.0, train_n=10, require_command=False)
 
+    # PT-B: what the run-start reset is handed comes from the optimizer build_components really builds.
+    import sarol_optimizer  # noqa: PLC0415
+    import sarol_program  # noqa: PLC0415
+
+    carried = {pathlib.Path(c.path): c for c in reset_carried(parts, state_paths(parts["state_root"])["notes"])}
+    named = _test_components(max_budget_usd=1000.0, train_n=10, require_command=False, run_id="pt-b-real-run")
+    mat = pathlib.Path(parts["state_root"]).parent / "mat"
+    saved_notes = parts["optimizer"].notes_root
+    parts["optimizer"].notes_root = None
+    try:
+        no_notes_value = sarol_program.setup_value(parts["program_runner"], parts["optimizer"], materialize_root=mat)
+    finally:
+        parts["optimizer"].notes_root = saved_notes
+    checks += [
+        ("the built optimizer hands the reset the REAL notebook, as lineage state with its stub",
+         sarol_optimizer.NOTEBOOK in carried and carried[sarol_optimizer.NOTEBOOK].lifetime == "lineage"
+         and pathlib.Path(carried[sarol_optimizer.NOTEBOOK].stub) == sarol_optimizer.NOTEBOOK_STUB),
+        ("...and the notes root the reset carries is the one the optimizer mounts",
+         parts["optimizer"].notes_root == state_paths(parts["state_root"])["notes"]
+         and carried[parts["optimizer"].notes_root].lifetime == "lineage"),
+        ("D4: the setup value does not depend on the run id or the state root (so --print-pins matches a run)",
+         parts["setup_value"] == named["setup_value"]),
+        ("...negative control: without the notes mount the setup value changes, so that comparison can fail",
+         no_notes_value != parts["setup_value"]),
+        ("the one-time legacy copy writes into the notes root a real run mounts",
+         importlib.import_module("copy_legacy_findings").NOTES_ROOT == state_paths(STATE_ROOT)["notes"]),
+    ]
+
     # argv -> run_optimization, with the real parser. `run_optimization` is stubbed so nothing
     # is dispatched, materialized or spent: the assertion is purely that the flag survives the
     # hop from `args` into the run's kwargs.
@@ -1545,6 +1643,241 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
     return checks
 
 
+def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
+    """PT-B: the engine's run bookkeeping as paper-trail wires it, driven through ``run_optimization``
+    and the engine's real ``run_loop`` (fake runner, scorer and agent; no sessions, no spend).
+
+    Every run uses a scratch state root, so the real notebook, notes history and archive are never
+    touched. The optimizer's notes filing needs a real session and is the live check's to prove.
+    """
+    import tempfile  # noqa: PLC0415
+    import types  # noqa: PLC0415
+
+    import engine.run_start as run_start_mod  # noqa: PLC0415
+    from engine.loop import LoopStop  # noqa: PLC0415
+    from engine.versioning import version_lock  # noqa: PLC0415
+    import sarol_optimizer  # noqa: PLC0415
+
+    checks: list[tuple[str, bool]] = []
+    real_store = SarolProgramStore()
+    stub = sarol_optimizer.NOTEBOOK_STUB.read_text(encoding="utf-8")
+
+    class _Runner:
+        """Counts validation passes; can fail the k-th one; can change its pass identity after each
+        training pass (as an edited grader prompt would)."""
+
+        def __init__(self, run_id, *, fail_val_call=None, identity_moves=False):
+            self.run_id = run_id
+            self.val_calls = 0
+            self.fail_val_call = fail_val_call
+            self.identity_moves = identity_moves
+            self.prompt = 0
+
+        def run(self, materialized_path, inputs):
+            if inputs.split == "val":
+                self.val_calls += 1
+                if self.val_calls == self.fail_val_call:
+                    return schemas.RunArtifacts(
+                        batch_id=inputs.batch_id, status="program_error", artifact_refs=(), cost_usd=0.0,
+                        error=schemas.ErrorInfo(code="PROGRAM_CRASHED", message_redacted="MARKER-a validation claim"),
+                    )
+            elif self.identity_moves:
+                self.prompt += 1
+            return schemas.RunArtifacts(batch_id=inputs.batch_id, status="ok", artifact_refs=(), cost_usd=0.0)
+
+        def cache_identity(self, materialized_path, inputs):
+            return f"prompt-{self.prompt}"
+
+    class _NoForwarding:
+        """What the old wrapper exposed to the engine: run(), and nothing else."""
+
+        def __init__(self, inner):
+            self.inner = inner
+
+        def run(self, materialized_path, inputs):
+            return self.inner.run(materialized_path, inputs)
+
+    class _Scorer:
+        def score(self, artifacts, split, task_config):
+            return schemas.ScoreResult(
+                primary_metric=schemas.PrimaryMetric(name=adapter.PRIMARY_METRIC_NAME, value=0.4, higher_is_better=True),
+                breakdown={"scored": True, "n_total": 1, "n_invalid": 0, "retrieval_k": 20, "profile": "retrieval",
+                           "per_class_f1": {"ACCURATE": 0.9}},
+                task_config={**task_config, "_split": split},
+            )
+
+    class _CleanAgent:
+        def __init__(self, root):
+            self.root = root
+
+        def run(self, *, iter_n: int, materialized_path=None):
+            editable = self.root / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
+            editable.write_text(editable.read_text(encoding="utf-8") + f"\n<!-- iter {iter_n} -->\n", encoding="utf-8")
+            return adapter.GuardedOutcome(exit_code=0, detail="clean edit")
+
+    with tempfile.TemporaryDirectory(dir=pathlib.Path.home() / ".cache") as td:
+        tmp = pathlib.Path(td)
+        state = tmp / "state"
+        batch = tmp / "batch.json"
+        batch.write_text(json.dumps({"claims": [{"claim_id": "C0", "citekey": "k0", "staging_dir": td}]}),
+                         encoding="utf-8")
+
+        def _repo(name):
+            repo = tmp / name
+            repo.mkdir()
+            _seed_repo(repo, real_store)
+            notebook = tmp / f"{name}-meta-learnings.md"
+            return repo, notebook
+
+        def _run(repo, notebook, runner, *, run_id, current_tag="program-v0", iterations=1, resume=False):
+            store = SarolProgramStore(repo_root=repo)
+            parts = {
+                "program_store": store, "runner": runner, "scorer": _Scorer(),
+                "profile": profiles_mod.get("retrieval"),
+                "release_builder": adapter.SarolReleaseBuilder(setup_value="setup-v1:selftest"),
+                "build_mistake_corpus": None,
+                "agent": adapter.ContractGuardedAgent(_CleanAgent(repo), store, tree_root=repo),
+                "budget": None, "cost_model": CostModel.for_profile("retrieval", val_size=1),
+                "optimizer": types.SimpleNamespace(notebook=notebook), "state_root": state,
+            }
+            return run_optimization(
+                iterations=iterations, run_id=run_id, train_input_ref=str(batch), val_input_ref=str(batch),
+                max_budget_usd=1e9, train_n=1, materialize_root=tmp / f"mat-{run_id}", current_tag=current_tag,
+                components=parts, run_summary_path=tmp / f"summary-{run_id}.json", resume=resume,
+            )
+
+        def _archived(run_id):
+            return sorted((state / "runs" / "_archive").glob(f"*-{run_id}"))
+
+        # -- B3: a fresh start archives the lineage; a continuation keeps it -------------------------
+        repo_a, nb_a = _repo("a")
+        nb_a.write_text("a lesson from an earlier lineage\n", encoding="utf-8")
+        (repo_a / "iter" / "9").mkdir(parents=True)
+        (repo_a / "iter" / "9" / "old.json").write_text("{}", encoding="utf-8")
+        fresh_runner = _Runner("fresh-1")
+        _run(repo_a, nb_a, fresh_runner, run_id="fresh-1", iterations=2)
+        fresh_archive = _archived("fresh-1")
+        moved = "".join(p.read_text(encoding="utf-8") for d in fresh_archive for p in d.rglob("*") if p.is_file())
+        checks += [
+            ("B3: a run from program-v0's content is FRESH: the notebook is archived and its stub put back",
+             nb_a.read_text(encoding="utf-8") == stub and "a lesson from an earlier lineage" in moved),
+            ("...and the previous run's iter/ is archived too", not (repo_a / "iter" / "9").exists() and "{}" in moved),
+            ("B6: the probe and the next iteration's score of one version cost one validation pass (3, not 4)",
+             fresh_runner.val_calls == 3),
+        ]
+        nb_a.write_text("a lesson this lineage earned\n", encoding="utf-8")
+        _run(repo_a, nb_a, _Runner("cont-1"), run_id="cont-1", current_tag="program-v2")
+        checks.append(("B3: a run from a later version CONTINUES the lineage and keeps the notebook (next-run H2)",
+                       nb_a.read_text(encoding="utf-8") == "a lesson this lineage earned\n"))
+        notes = state / "optimizer-notes"
+        (notes / "earlier-run" / "iter-1").mkdir(parents=True, exist_ok=True)
+        (notes / "earlier-run" / "iter-1" / "findings.md").write_text("an earlier note\n", encoding="utf-8")
+        _run(repo_a, nb_a, _Runner("cont-n"), run_id="cont-n", current_tag="program-v3")
+        kept = (notes / "earlier-run" / "iter-1" / "findings.md").exists()
+        repo_n, nb_n = _repo("n")
+        _run(repo_n, nb_n, _Runner("fresh-n"), run_id="fresh-n")
+        moved_n = "".join(p.read_text(encoding="utf-8") for d in _archived("fresh-n") for p in d.rglob("*") if p.is_file())
+        checks += [
+            ("B3: a continuation keeps the notes history", kept),
+            ("...and a fresh start archives it (moved, not deleted)",
+             not (notes / "earlier-run").exists() and "an earlier note" in moved_n),
+        ]
+
+        # -- B6 through the wrapper: the runner's identity and run id must reach the engine -----------
+        repo_b, nb_b = _repo("b")
+        moving = _Runner("ident-1", identity_moves=True)
+        _run(repo_b, nb_b, BudgetedRunner(moving), run_id="ident-1", iterations=2)
+        repo_c, nb_c = _repo("c")
+        moving_bare = _Runner("ident-2", identity_moves=True)
+        _run(repo_c, nb_c, _NoForwarding(moving_bare), run_id="ident-2", iterations=2)
+        checks += [
+            ("B6: through BudgetedRunner, a changed grader identity means a fresh validation pass (4 passes)",
+             moving.val_calls == 4),
+            ("...negative control: a wrapper that does not forward it reuses the stale pass (3 passes)",
+             moving_bare.val_calls == 3),
+        ]
+        repo_d, nb_d = _repo("d")
+        try:
+            _run(repo_d, nb_d, BudgetedRunner(_Runner("someone-elses-run")), run_id="mine")
+            mismatch = None
+        except LoopStop as exc:
+            mismatch = exc.reason
+        checks.append(("B5: through BudgetedRunner, a runner bound to another run id stops the run",
+                       mismatch == "run_id_mismatch"))
+
+        # -- B6: a version whose validation pass crashes is a failed version, told to the optimizer ---
+        repo_e, nb_e = _repo("e")
+        failing = _Runner("fail-1", fail_val_call=2)
+        _run(repo_e, nb_e, failing, run_id="fail-1", iterations=2)
+        release2 = (repo_e / "iter" / "2" / "release_train.json")
+        release_text = release2.read_text(encoding="utf-8") if release2.exists() else ""
+        feedback = tmp / "feedback-e"
+        sarol_optimizer.prepare_feedback(2, repo_root=repo_e, feedback_root=feedback)
+        copied = feedback / "iter" / "2" / "release_train.json"
+        copied_text = copied.read_text(encoding="utf-8") if copied.exists() else ""
+        status_file = state / "run-store" / "version_status.json"
+        checks += [
+            ("B6: the next TRAIN release carries frontier.previous_attempt for the failed version",
+             '"previous_attempt": {' in release_text and '"validation_pass"' in release_text),
+            ("...and so does the copy in the optimizer's feedback folder, the only place it can read it",
+             '"previous_attempt": {' in copied_text),
+            ("...with no error message in either (the seal)",
+             "MARKER" not in release_text and "MARKER" not in copied_text),
+            ("...and the run store records the version as failed, so no later run starts from it",
+             status_file.exists() and '"failed"' in status_file.read_text(encoding="utf-8")),
+            ("...and the iteration after it scores the held base without a new pass (3 passes, not 4)",
+             failing.val_calls == 3),
+        ]
+        try:
+            _run(repo_e, nb_e, _Runner("after-fail"), run_id="after-fail", current_tag="program-v1")
+            after_fail = None
+        except LoopStop as exc:
+            after_fail = exc.reason
+        checks.append(("B5: a later run starting from the failed version is refused at run start (the run store "
+                       "reaches the reset)", after_fail == "start_from_failed_version"))
+
+        # -- B5: a second driver stops at the lock, before the reset touches anything ----------------
+        repo_f, nb_f = _repo("f")
+        nb_f.write_text("must survive\n", encoding="utf-8")
+        with version_lock(repo_f, "first-driver"):
+            try:
+                _run(repo_f, nb_f, _Runner("second-driver"), run_id="second-driver")
+                second = None
+            except LoopStop as exc:
+                second = f"{exc.reason}: {exc}"
+        checks.append(("B5: a second driver on the same repo stops at once (version_lock_held, as the "
+                       "engine reports it), and nothing is archived",
+                       second is not None and second.startswith("version_lock_held") and "first-driver" in second
+                       and nb_f.read_text(encoding="utf-8") == "must survive\n" and not _archived("second-driver")))
+
+        # -- a resume continues its own run: no reset ------------------------------------------------
+        repo_g, nb_g = _repo("g")
+        calls = []
+        real_prepare = run_start_mod.prepare_run_start
+        run_start_mod.prepare_run_start = lambda **kw: calls.append(kw)
+        try:
+            try:
+                _run(repo_g, nb_g, _Runner("res-1"), run_id="res-1", resume=True)
+                resume_stop = "completed"
+            except LoopStop as exc:  # a resume with no history stops; the reset is what is checked here
+                resume_stop = exc.reason
+            with version_lock(repo_g, "someone-else"):
+                try:
+                    _run(repo_g, nb_g, _Runner("res-locked"), run_id="res-locked", resume=True)
+                    resume_locked = None
+                except LoopStop as exc:
+                    resume_locked = exc.reason
+            _run(repo_g, nb_g, _Runner("res-2"), run_id="res-2")
+        finally:
+            run_start_mod.prepare_run_start = real_prepare
+        checks += [
+            (f"a resume skips the run-start reset; a plain run calls it (the resume ended: {resume_stop})",
+             [c["run_id"] for c in calls] == ["res-2"]),
+            ("...and a resume still takes the lock (D2)", resume_locked == "version_lock_held"),
+        ]
+    return checks
+
+
 def _selftest() -> int:
     checks: list[tuple[str, bool]] = []
     cm = CostModel(per_session_usd=0.05)
@@ -1758,6 +2091,8 @@ def _selftest() -> int:
             calls: list[str] = []
 
             class _Inner:
+                run_id = "run-a"
+
                 def run(self, materialized_path, inp):
                     calls.append(inp.split)
                     return schemas.RunArtifacts(
@@ -1765,40 +2100,31 @@ def _selftest() -> int:
                         sub_invocation_count=3, cost_usd=1.25,
                     )
 
-            budget = BudgetGuard(max_budget_usd=1_000_000.0, cost_model=cm, train_n=10)
-            caching = CachingRunner(_Inner(), store, budget=budget)
+                def cache_identity(self, materialized_path, inp):
+                    return f"calls+setup+prompt:{inp.batch_id}"
 
-            first = caching.run(tree, inputs)
-            second = caching.run(tree, inputs)
+            budget = BudgetGuard(max_budget_usd=1_000_000.0, cost_model=cm, train_n=10)
+            budgeted = BudgetedRunner(_Inner(), budget=budget)
+            first = budgeted.run(tree, inputs)
+            # The pass reuse is the engine's now (B6). Its tests cover what the cache checks here did:
+            # one pass for the probe and the next score (test_the_probe_and_the_next_score_of_the_same_
+            # version_cost_one_pass), a changed runner identity misses (test_a_change_in_the_runners_own_
+            # pass_identity_is_a_cache_miss), a changed file reruns (test_a_cached_pass_whose_files_changed_
+            # is_run_again). "A timeout is never cached" has no loop counterpart: a failed validation pass
+            # stops the run or makes a failed version, never re-scored (B close-out, 2026-10-05).
+            budgeted.run(tree, inputs)
             checks += [
-                ("the first VAL call actually runs", first.status == "ok" and len(calls) == 1),
-                ("the identical probe/VAL pair is served from cache", len(calls) == 1),
-                ("...and returns the same artifacts", second is first),
-                ("cache stats are honest", caching.stats()["hits"] == 1),
-                ("real metered spend is recorded, not the estimate", budget.spent_usd == 1.25),
+                ("every call reaches the runner (the wrapper keeps no cache of its own)",
+                 first.status == "ok" and len(calls) == 2 and budgeted.stats()["calls"] == 2),
+                ("real metered spend is recorded, not the estimate", budget.spent_usd == 2.5),
+                ("the wrapper passes the runner's run id through, for the engine's run-id check",
+                 budgeted.run_id == "run-a"),
+                ("...and its pass identity, for the engine's reuse key",
+                 budgeted.cache_identity(tree, inputs) == "calls+setup+prompt:b1"),
             ]
 
-            # A changed program byte must miss the cache -- this is the whole point of
-            # content-addressing rather than keying on a tag or iteration number.
-            editable = tree / "experiments/sarol-2024/specs/verdict_schema_sarol.md"
-            editable.write_text(
-                editable.read_text(encoding="utf-8") + "\n<!-- optimizer edit -->\n",
-                encoding="utf-8",
-            )
-            caching.run(tree, inputs)
-            checks.append(("an edited program misses the cache", len(calls) == 2))
-
-            # A failed run must not be cached.
-            class _Failing:
-                def run(self, materialized_path, inp):
-                    return schemas.RunArtifacts(
-                        batch_id=inp.batch_id, status="timeout", artifact_refs=(), cost_usd=0.0
-                    )
-
-            flaky = CachingRunner(_Failing(), store, budget=None)
-            flaky.run(tree, inputs)
-            flaky.run(tree, inputs)
-            checks.append(("a timeout is never cached", flaky.misses == 2))
+            # The negative control (a wrapper that does not forward reuses a stale pass) drives the
+            # engine's real loop, in _integration_checks.
 
             # Budget refusal returns infra_error rather than raising or spending.
             broke_calls: list[str] = []
@@ -1810,8 +2136,8 @@ def _selftest() -> int:
                         batch_id=inp.batch_id, status="ok", artifact_refs=(), cost_usd=0.0
                     )
 
-            broke = CachingRunner(
-                _Spy(), store,
+            broke = BudgetedRunner(
+                _Spy(),
                 budget=BudgetGuard(max_budget_usd=0.01, cost_model=cm, train_n=50),
             )
             refused = broke.run(tree, schemas.RunInputs(
@@ -1822,10 +2148,6 @@ def _selftest() -> int:
                  and refused.error.code == "BUDGET_EXCEEDED"),
                 ("...without dispatching anything", not broke_calls),
             ]
-
-            digest_a = program_digest(tree, [e["path"] for e in store.entries])
-            digest_b = program_digest(tree, [e["path"] for e in store.entries])
-            checks.append(("the program digest is stable", digest_a == digest_b))
 
         # -- S26: the tag guard ---------------------------------------------------------------
         # Two halves, because either alone gives false assurance: that the re-hash SEES a drifted
@@ -2007,7 +2329,61 @@ def _selftest() -> int:
                  _TAG in tag_refusal and "git tag -f" in tag_refusal),
             ]
 
+            # PT-B: a start tag other than the manifest's own is checked too, against its commit.
+            editable.write_text(editable.read_text(encoding="utf-8") + "\n<!-- a later version -->\n",
+                                encoding="utf-8")
+            _g("commit", "-q", "-am", "a later version")
+            _g("tag", "-a", "program-v12", "-m", "program-v12")
+            later_clean = tag_store.tree_differs_from("program-v12") == []
+
+            def _start_from(tag):
+                adapter.SarolProgramStore = lambda *a, **k: SarolProgramStore(repo_root=tag_repo)
+                try:
+                    run_optimization(
+                        iterations=1, run_id="laterguard", train_input_ref="unused", val_input_ref="unused",
+                        max_budget_usd=1.0, train_n=1, materialize_root=pathlib.Path(tag_tmp) / "mat3",
+                        train_output_root=pathlib.Path(tag_tmp) / "trainout3",
+                        val_output_root=pathlib.Path(tag_tmp) / "valout3",
+                        profile="retrieval", require_canary=False, current_tag=tag,
+                        state_root=pathlib.Path(tag_tmp) / "state",
+                    )
+                    return ""
+                except ValueError as exc:
+                    return str(exc)
+                except Exception as exc:  # noqa: BLE001 -- any other failure means the guard was passed
+                    return f"<wrong exception: {type(exc).__name__}: {exc}>"
+                finally:
+                    adapter.SarolProgramStore = _real_store_cls
+
+            editable.write_text(editable.read_text(encoding="utf-8") + "\n<!-- uncommitted -->\n", encoding="utf-8")
+            edited_refusal = _start_from("program-v12")
+            _g("checkout", "--", str(editable.relative_to(tag_repo)))
+            new_prompt = tag_repo / "experiments/sarol-2024/prompts/new-helper.md"
+            new_prompt.parent.mkdir(parents=True, exist_ok=True)
+            new_prompt.write_text("an untracked new file under a folder pattern\n", encoding="utf-8")
+            new_listed = "experiments/sarol-2024/prompts/new-helper.md" in tag_store.tree_differs_from("program-v12")
+            new_prompt.unlink()
+            missing_refusal = _start_from("program-v99")
+            past_guard = _start_from("program-v12")
+            deleted = tag_repo / "experiments/sarol-2024/specs/verdict_enum_sarol.md"
+            deleted_text = deleted.read_bytes()
+            deleted.unlink()
+            deleted_listed = "experiments/sarol-2024/specs/verdict_enum_sarol.md" in tag_store.tree_differs_from("program-v12")
+            deleted.write_bytes(deleted_text)
+            checks += [
+                ("run_optimization lets a clean tree past the guard for a LATER start tag (it fails later, not there)",
+                 "does not match 'program-v12'" not in past_guard and "does not resolve" not in past_guard),
+                ("...and a deleted program file counts as a difference", deleted_listed),
+                ("a later start tag whose commit the tree matches passes its check", later_clean),
+                ("run_optimization REFUSES a tree edited since a LATER start tag (was skipped before PT-B)",
+                 "does not match 'program-v12'" in edited_refusal and "verdict_schema_sarol.md" in edited_refusal),
+                ("...and a new untracked file under a folder pattern counts as a difference", new_listed),
+                ("...and a start tag that does not exist is refused, not skipped",
+                 "program-v99 does not resolve" in missing_refusal),
+            ]
+
         checks += _integration_checks(schemas)
+        checks += _lifecycle_checks(schemas)
     else:
         checks.append((f"engine not found at {adapter.engine_path()} -- engine checks SKIPPED", True))
 

@@ -18,7 +18,7 @@ Container path                         What paper-trail puts there              
 ``/workspace/rw/out/meta-learnings.md``  the whole notebook, rewritten                 writable
 ``/workspace/ro/versions``             earlier program versions, materialized          read-only
 ``/workspace/ro/in/context``           the reference docs                              read-only
-``/workspace/ro/in/findings``          earlier iterations' findings notes              read-only
+``/workspace/ro/notes``                every earlier note of the lineage (B4)          read-only
 ``/workspace/ro/in/meta-learnings.md`` the notebook as it stands                       read-only
 ``/workspace/ro/in/feedback``          every iteration's releases and train mistakes   read-only
 =====================================  ==============================================  ==========
@@ -29,15 +29,18 @@ runner's roots, which are forbidden too. Before each iteration this module copie
 releases, the train mistakes file and the traces it cites into the feedback folder, rewriting each host
 path to its container path.
 
-⚠ **The two outputs are held, then filed.** The engine creates every declared output empty and copies
-back whatever is there, so a notebook the optimizer did not rewrite would come back empty and replace
-the real one. The outputs go to a holding folder; afterwards a non-empty notebook replaces the real
-one and a non-empty findings note is filed as ``findings/iter-<n>.md``.
+**The two outputs are the engine's to file (B4, adopted in PT-B).** Each session starts with both
+empty. A non-empty one is filed into the notes history at ``<notes root>/<run id>/iter-<n>/`` (a failed
+session's notes too, under ``iter-<n>-failed``), which every later session reads at
+``/workspace/ro/notes``. The notebook is also a running file: a non-empty copy replaces the real
+notebook after a clean session; an empty one replaces nothing. paper-trail used to hold and file these
+itself (``_file_outputs``, ``findings/iter-<n>.md``), success only.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import functools
 import json
 import os
 import subprocess
@@ -69,8 +72,9 @@ DOCKERFILE = _HERE / "image" / "Dockerfile"
 
 PROMPT_PATH = _HERE / "prompt" / "optimizer-instructions.md"
 CONTEXT_DIR = _HERE / "context"
-FINDINGS_DIR = _HERE / "findings"
 NOTEBOOK = _HERE / "meta-learnings.md"
+#: What a fresh lineage's notebook starts as; the run-start reset puts it back (B3).
+NOTEBOOK_STUB = _HERE / "meta-learnings.stub.md"
 
 IN = ca.INPUTS_PATH
 OUT = ca.OUT_PATH
@@ -269,10 +273,10 @@ def prepare_feedback(iter_n: int, *, repo_root: pathlib.Path, feedback_root: pat
 # =================================================================================================
 
 
-def sandbox_note(iter_n: int) -> str:
+def sandbox_note(iter_n: int, run_id: str | None = None) -> str:
     """Where everything is in the sealed container, and what is not there at all (PT3)."""
     return (
-        f"## Where things are (iteration {iter_n})\n\n"
+        f"## Where things are (iteration {iter_n}" + (f", run `{run_id}`" if run_id else "") + ")\n\n"
         "You are in a sealed container. Only these exist for you:\n\n"
         f"- `{ca.PROGRAM_PATH}`: a copy of the program as of this iteration, and your working folder. "
         "Edit program files here, at the same repo-relative paths your docs name "
@@ -282,7 +286,10 @@ def sandbox_note(iter_n: int) -> str:
         f"- Your notebook: `{OUT}/meta-learnings.md`, which starts EMPTY. First copy the notebook as it "
         f"stands into it (`cp {IN}/meta-learnings.md {OUT}/meta-learnings.md`), then read and edit it there. "
         "Whatever that file holds when you exit becomes the notebook; left empty, the notebook is unchanged.\n"
-        f"- `{IN}/findings/`: earlier iterations' findings notes. Write this iteration's to `{OUT}/findings.md`.\n"
+        f"- `{ca.NOTES_PATH}/`: every earlier note of this lineage, one folder per run and iteration "
+        "(`<run id>/iter-<n>/findings.md`, `meta-learnings.md`; `iter-<n>-failed` for a session that failed; "
+        "`legacy/` for notes from before this layout). Write this iteration's findings to "
+        f"`{OUT}/findings.md`.\n"
         f"- `{IN}/feedback/iter/<n>/`: each iteration's releases (`release_train.json`, `release_val.json`), "
         "the train mistakes file the train release points at, and the judge traces its rows cite.\n"
         f"- `{ca.VERSIONS_PATH}/`: earlier program versions, materialized. Read an earlier version's file "
@@ -293,10 +300,10 @@ def sandbox_note(iter_n: int) -> str:
     )
 
 
-def prompt_builder(iter_n: int, paths) -> str:
+def prompt_builder(iter_n: int, paths, run_id: str | None = None) -> str:
     return (
-        f"Iteration {iter_n}. The program to improve is the copy in `{paths.program}`. "
-        "Follow your standing instructions.\n\n" + sandbox_note(iter_n)
+        f"Iteration {iter_n}" + (f" of run `{run_id}`" if run_id else "") + f". The program to improve is the "
+        f"copy in `{paths.program}`. Follow your standing instructions.\n\n" + sandbox_note(iter_n, run_id)
     )
 
 
@@ -329,20 +336,22 @@ class SarolOptimizer:
         transcript_dir: pathlib.Path | None = None,
         feedback_files: Sequence[tuple[str, pathlib.Path]] = (),
         notebook: pathlib.Path = NOTEBOOK,
-        findings_dir: pathlib.Path = FINDINGS_DIR,
         context_dir: pathlib.Path = CONTEXT_DIR,
+        #: The notes history (B4) and the run it is keyed by. Both or neither.
+        notes_root: pathlib.Path | None = None,
+        run_id: str | None = None,
         _agent_factory=None,
     ) -> None:
         self.feedback_files = tuple((n, pathlib.Path(p)) for n, p in feedback_files)
         self.notebook = pathlib.Path(notebook)
-        self.findings_dir = pathlib.Path(findings_dir)
+        self.notes_root = pathlib.Path(notes_root) if notes_root is not None else None
+        self.run_id = run_id
         self.context_dir = pathlib.Path(context_dir)
         self.store = store
         self.repo_root = pathlib.Path(store.repo_root)
         self.materialize_root = pathlib.Path(materialize_root)
         self.run_root = pathlib.Path(run_root)
         self.feedback_root = self.run_root / "optimizer-feedback"
-        self.holding_root = self.run_root / "optimizer-outputs"
         self.program_output_root = pathlib.Path(program_output_root)
         self.image = image
         self.expected_fingerprint = expected_fingerprint
@@ -356,7 +365,6 @@ class SarolOptimizer:
         self.transcript_dir = transcript_dir
         self._agent_factory = _agent_factory or ca.ContainedOptimizerAgent
         self.feedback_records: list[dict] = []
-        self.findings_dir.mkdir(parents=True, exist_ok=True)
         if not self.notebook.exists():
             self.notebook.write_text("", encoding="utf-8")
         self.feedback_root.mkdir(parents=True, exist_ok=True)
@@ -367,12 +375,10 @@ class SarolOptimizer:
         return PROMPT_PATH.read_text(encoding="utf-8")
 
     def agent(self, iter_n: int):
-        hold = self.holding_root / f"iter-{iter_n}"
-        hold.mkdir(parents=True, exist_ok=True)
         return self._agent_factory(
             model=self.model,
             system_prompt=self.agent_instructions(),
-            prompt_builder=prompt_builder,
+            prompt_builder=functools.partial(prompt_builder, run_id=self.run_id),
             manifest=program_manifest(self.store),
             manifest_for_version=earlier_version_view(self.store),
             repo_root=self.repo_root,
@@ -383,16 +389,20 @@ class SarolOptimizer:
             image=self.image,
             expected_fingerprint=self.expected_fingerprint,
             transcript_dir=self.transcript_dir,
+            # findings.md is per iteration (filed in the notes history only); the notebook is a running
+            # file, replaced by a non-empty copy. Its current copy stays readable below: the history
+            # holds per-iteration copies only, and a fresh lineage starts from the stub, never filed.
             declared_outputs=(
-                ca.DeclaredOutput("findings.md", hold / "findings.md"),
-                ca.DeclaredOutput("meta-learnings.md", hold / "meta-learnings.md"),
+                ca.DeclaredOutput("findings.md"),
+                ca.DeclaredOutput("meta-learnings.md", self.notebook),
             ),
             readable_inputs=(
                 ("context", self.context_dir),
-                ("findings", self.findings_dir),
                 ("meta-learnings.md", self.notebook),
                 ("feedback", self.feedback_root),
             ),
+            notes_root=self.notes_root,
+            run_id=self.run_id,
             max_budget_usd=self.max_budget_usd,
             timeout_seconds=self.timeout_seconds,
             host_env=self._host_env(),
@@ -402,7 +412,7 @@ class SarolOptimizer:
         """The optimizer session's description over placeholder folders, for the setup pin (the
         fingerprint reads container paths and roles, never host folders)."""
         agent = self.agent(0)
-        stage = self.holding_root / "pin-stage"
+        stage = self.run_root / "optimizer-pin-stage"
         return agent.description(agent.scope(stage / "program", stage / "out"),
                                  materialized_path=pathlib.Path(materialize_root) / "iter0-pin")
 
@@ -415,23 +425,7 @@ class SarolOptimizer:
         record = prepare_feedback(iter_n, repo_root=self.repo_root, feedback_root=self.feedback_root)
         record["run_files"] = copy_feedback_files(self.feedback_files, feedback_root=self.feedback_root)
         self.feedback_records.append(record)
-        outcome = self.agent(iter_n).run(iter_n=iter_n, materialized_path=materialized_path)
-        if outcome.exit_code == 0:
-            self._file_outputs(iter_n)
-        return outcome
-
-    def _file_outputs(self, iter_n: int) -> None:
-        hold = self.holding_root / f"iter-{iter_n}"
-        notebook = hold / "meta-learnings.md"
-        if notebook.is_file() and notebook.stat().st_size > 0:
-            # The notebook it replaces is kept beside this iteration's outputs, so a rewrite that
-            # dropped content can be recovered by hand.
-            if self.notebook.is_file():
-                shutil.copyfile(self.notebook, hold / "meta-learnings.before.md")
-            shutil.copyfile(notebook, self.notebook)
-        findings = hold / "findings.md"
-        if findings.is_file() and findings.stat().st_size > 0:
-            shutil.copyfile(findings, self.findings_dir / f"iter-{iter_n}.md")
+        return self.agent(iter_n).run(iter_n=iter_n, materialized_path=materialized_path)
 
 
 # =================================================================================================
@@ -537,14 +531,14 @@ def _selftest() -> int:
         checks.append(("a release pointing anywhere but a mistakes file has the path dropped",
                        json.loads((feedback / "iter" / "2" / "release_train.json").read_text())["corpus"]["ref"] is None))
 
-        # -- the agent, built for real (no session), and its outputs filed ------------------------
+        # -- the agent, built for real (no session), with the engine filing its notes (B4) ----------
         notebook = root / "notes" / "meta-learnings.md"
         notebook.parent.mkdir()
         notebook.write_text("earlier lessons\n", encoding="utf-8")
-        findings = root / "notes" / "findings"
         context = root / "notes" / "context"
         context.mkdir()
         (context / "playbook.md").write_text("docs\n")
+        notes_root = root / "state" / "optimizer-notes"
         mat_root = root / "mat"
         mat_root.mkdir()
         store = adapter.SarolProgramStore()
@@ -557,41 +551,50 @@ def _selftest() -> int:
                 built.append(self)
 
             def run(self, *, iter_n, materialized_path=None):
-                hold = {o.name: pathlib.Path(o.destination) for o in self.kw["declared_outputs"]}
-                hold["findings.md"].write_text(f"what iteration {iter_n} found\n", encoding="utf-8")
-                hold["meta-learnings.md"].write_text("" if iter_n == 1 else "rewritten notebook\n", encoding="utf-8")
                 return type("O", (), {"exit_code": 0, "detail": "", "token_usage": {}, "cost_usd": 0.0})()
 
-        opt = SarolOptimizer(
-            store=store, materialize_root=mat_root, program_output_root=run_root / "program-out", run_root=run_root,
-            image=fake_image, expected_fingerprint=ss.UNPINNED, scorer_roots=(run_root / "scorer",),
-            notebook=notebook, findings_dir=findings, context_dir=context, _agent_factory=_FakeAgent,
-        )
-        opt.run(iter_n=1, materialized_path=mat_root / "iter1-current")
+        def _optimizer(**overrides):
+            kw = dict(
+                store=store, materialize_root=mat_root, program_output_root=run_root / "program-out", run_root=run_root,
+                image=fake_image, expected_fingerprint=ss.UNPINNED, scorer_roots=(run_root / "scorer",),
+                notebook=notebook, context_dir=context, notes_root=notes_root, run_id="selftest-run",
+                _agent_factory=_FakeAgent,
+            )
+            kw.update(overrides)
+            return SarolOptimizer(**kw)
+
+        opt = _optimizer()
+        outcome = opt.run(iter_n=1, materialized_path=mat_root / "iter1-current")
+        kw = built[-1].kw
+        outs = {o.name: o.destination for o in kw["declared_outputs"]}
+        inputs = dict(kw["readable_inputs"])
         checks += [
-            ("a real ContainedOptimizerAgent accepts paper-trail's grant (no construction refusal)", len(built) == 1),
-            ("an empty notebook output leaves the notebook as it was", notebook.read_text() == "earlier lessons\n"),
-            ("a findings note is filed under its iteration", (findings / "iter-1.md").read_text() == "what iteration 1 found\n"),
+            ("a real ContainedOptimizerAgent accepts paper-trail's grant with a notes root (no construction refusal)",
+             len(built) == 1 and outcome.exit_code == 0),
+            ("the engine files the notes: notes root and run id are passed through",
+             kw["notes_root"] == notes_root and kw["run_id"] == "selftest-run"),
+            ("findings.md is a per-iteration note (no destination); the notebook is a running file onto the real one",
+             outs == {"findings.md": None, "meta-learnings.md": notebook}),
+            ("the old findings folder is no longer an input; the notebook, context and feedback still are",
+             set(inputs) == {"context", "meta-learnings.md", "feedback"} and inputs["meta-learnings.md"] == notebook),
+            ("paper-trail no longer files outputs itself (the holding folder is gone)",
+             not (run_root / "optimizer-outputs").exists() and not hasattr(opt, "_file_outputs")),
         ]
-        opt.run(iter_n=2, materialized_path=mat_root / "iter2-current")
-        checks.append(("a rewritten notebook replaces the old one", notebook.read_text() == "rewritten notebook\n"))
-
-        class _FailingAgent(_FakeAgent):
-            def run(self, *, iter_n, materialized_path=None):
-                super().run(iter_n=iter_n, materialized_path=materialized_path)
-                return type("O", (), {"exit_code": 1, "detail": "copy_back_refused: x", "token_usage": {}, "cost_usd": 0.0})()
-
-        opt._agent_factory = _FailingAgent
-        opt.run(iter_n=4, materialized_path=mat_root / "iter4-current")
-        checks.append(("a failed optimizer session files neither its notebook nor its findings",
-                       notebook.read_text() == "rewritten notebook\n" and not (findings / "iter-4.md").exists()))
+        # Negative control: a notes root inside the checkout (here, under iter/) is refused at construction.
+        try:
+            _optimizer(notes_root=store.repo_root / "iter" / "notes").agent(1)
+            inside_refused = False
+        except ValueError as exc:
+            inside_refused = "overlaps the checkout" in str(exc)
+        checks.append(("a notes root inside the checkout is refused (negative control)", inside_refused))
         agent = built[-1].real
         prompt = agent.prompt(2)
         scope = agent.scope(root / "stage" / "program", root / "stage" / "out")
         d = agent.description(scope, materialized_path=mat_root / "iter2-current")
         checks += [
             ("the optimizer's prompt carries its standing instructions and the sandbox map",
-             PROMPT_PATH.read_text(encoding="utf-8")[:200] in prompt and "Where things are (iteration 2)" in prompt),
+             PROMPT_PATH.read_text(encoding="utf-8")[:200] in prompt and "Where things are (iteration 2, run `selftest-run`)" in prompt),
+            ("...and it names the run id, which the notes history is keyed by", "Iteration 2 of run `selftest-run`" in prompt),
             ("...and no host path the engine can see", host_path_leak([prompt], scope, extra_paths=d.extra_host_paths) is None),
             ("the optimizer's manifest covers the whole program, contract files marked as such",
              {e.path for e in program_manifest(store).entries} >= set(store.contract_paths())
@@ -638,8 +641,8 @@ def _selftest() -> int:
         ("the optimizer's forbidden list covers gold, benchmark, run outputs, iter/, scorer, manifest, .git, token",
          {str(stage_claim.GOLD_ROOT.parent), str(stage_claim.BENCH_DIR.parent), "/x/out", "/x/scorer",
           str(adapter.REPO_ROOT / "iter"), str(adapter.REPO_ROOT / ".git"), str(pathlib.Path.home() / ".claude")} <= paths),
-        ("...and never its own inputs (context, findings, notebook)",
-         not {str(CONTEXT_DIR), str(FINDINGS_DIR), str(NOTEBOOK)} & paths),
+        ("...and never its own inputs (context, notebook)",
+         not {str(CONTEXT_DIR), str(NOTEBOOK)} & paths),
         ("every entry names a representative", all(f.representatives for f in fl)),
     ]
     # Earlier versions materialize through the view; the strict manifest fails on a pre-v11 tag
