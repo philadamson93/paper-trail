@@ -49,7 +49,8 @@ shape, and the difference is the whole leakage design.
       }
     },
     "frontier": { "best_tag": "...", "best_metric_value": 0.44,
-                  "current_tag": "...", "current_metric_value": 0.41 },
+                  "current_tag": "...", "current_metric_value": 0.41,
+                  "previous_attempt": null },
     "budget":   { "spent_usd": 212.40, "spent_input": ..., "spent_output": ..., ... }
   }
 }
@@ -247,6 +248,12 @@ on.
 
 - **`frontier`** carries best-so-far versus current, so you can tell "worse than my last edit" from
   "worse than the best we have ever had". Only the scalar, on both sides.
+- **`frontier.previous_attempt`** is `null` unless the version you saved last iteration failed (it
+  could not be built, its whole validation pass crashed or timed out, or its outputs could not be
+  scored). Then it holds typed fields only: `tag`, `stage` (`build`, `validation_pass` or `scoring`),
+  `status`, `error_code`, `failed_entry` (a program file, for a build failure) and
+  `consecutive_failures`. No error message, ever: one could quote a validation claim. The iteration
+  starts from the last good version; see *Crash handling* in your instructions.
 - **`budget`** is the engine's own accounting of the *optimizer session's* token spend. It does not
   include the Runner's cost, which is where nearly all real spend lives — that is bounded
   separately and consumer-side by `dispatcher.py`. If a run stops for budget reasons it will say so
@@ -260,7 +267,7 @@ so do not wait for one.
 What you do instead, and where: **write the prediction into
 `/workspace/rw/out/findings.md`** when you make the edit — which verdict
 classes should move, in which direction, per edit. **Then, as the FIRST thing you do next
-iteration, open `iter-<n-1>.md` and check it** against `per_class_f1_9way` in the new TRAIN release.
+iteration, open last iteration's findings note in `/workspace/ro/notes/` and check it** against `per_class_f1_9way` in the new TRAIN release.
 (`per_class_f1` has only the three collapsed buckets and cannot answer a nine-class prediction.)
 
 Both halves are on you, and the second one is the half that gets skipped. Writing a prediction

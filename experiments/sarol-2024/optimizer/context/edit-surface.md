@@ -35,6 +35,12 @@ Concretely, as the manifest and the profiles stand today:
 | `src/prompts/extractor-dispatch-pdf.md` | evidence retrieval, fetched-PDF read path | inert | ✅ |
 | `src/prompts/verifier-dispatch.md` | evidence spot-check | inert | ✅ |
 | `src/commands/sarol-eval-item.md` | the per-claim **driver** — which frozen prompt is dispatched, and how its slots are filled | ✅ | ✅ |
+| `experiments/sarol-2024/prompts/*.md` | any **new** prompt file you add in that folder | ✅ | ✅ |
+| `experiments/sarol-2024/specs/*.md` | any **new** spec file you add in that folder | ✅ | ✅ |
+
+The last two rows are folder patterns: a new `.md` file you create in either folder is part of the
+program and is frozen with the version. A new file anywhere else is not, and stops the run. A new file
+does nothing until something the judge already reads points at it.
 
 ⚠ **The driver (`src/commands/sarol-eval-item.md`) is editable, and it is the one editable
 file that also carries the measurement's integrity rules.** You may change which frozen
@@ -85,9 +91,10 @@ document, or edit a file elsewhere in the tree, then:
 - a retrospective re-run of that version will not have it;
 - and any improvement it appeared to produce is unattributable and unreproducible.
 
-So: **if a change is meant to be part of the program, it has to be a manifest entry.** Widening the
-program to cover a new file — code included — is a change to the manifest, made deliberately between
-runs, not something an iteration can do for itself. If you find yourself wanting a file that is not in
+So: **if a change is meant to be part of the program, it has to be a manifest entry.** A new `.md`
+file in `experiments/sarol-2024/prompts/` or `experiments/sarol-2024/specs/` is covered by the two
+folder patterns above. Widening the program to any other new file — code included — is a change to the
+manifest, made deliberately between runs, not something an iteration can do for itself. If you find yourself wanting a file that is not in
 the manifest, that is a finding worth writing down in
 `/workspace/rw/out/meta-learnings.md`: name the file and what it
 would do. It is a real request and it is how the surface grows.

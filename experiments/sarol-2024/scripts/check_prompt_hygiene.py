@@ -51,7 +51,7 @@ FORBIDDEN: tuple[tuple[str, str], ...] = (
     ("dated-edit", r"\b(added|changed|fixed|removed)\s+20\d\d-\d\d-\d\d"),
 )
 
-#: Files an agent reads as instructions. `meta-learnings.md` and `findings/` are the OPTIMIZER's own
+#: Files an agent reads as instructions. `meta-learnings.md` and its findings notes are the OPTIMIZER's own
 #: dated logs -- dating them is a deliberate requirement (D4), so they are not swept.
 def agent_read_files() -> list[Path]:
     files: list[Path] = [

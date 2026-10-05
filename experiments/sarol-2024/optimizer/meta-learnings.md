@@ -8,7 +8,7 @@ everything learned after N), so this file is the only thing that carries forward
 do not delete them. A reverted attempt is as useful as a confirmed one, and more likely to be
 retried by accident.
 
-**What belongs here rather than in `findings/iter-<n>.md`** is defined in one place: the
+**What belongs here rather than in an iteration's `findings.md`** is defined in one place: the
 *"The three record surfaces, and what goes in which"* section of
 `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`. The short form is that this
 file is about *how to optimize this task* and that one is about *these examples* — but do not
@@ -18,9 +18,10 @@ carry a second copy of the rule in your head from here.
 
 ## Status
 
-**This run has established nothing yet.** You are the first iteration of a fresh run, and this
-sheet belongs to this run alone — it is archived and reset at the start of every run, so there is
-no prior-run history here and none is missing. Nothing below is empty because something broke.
+**This lineage has established nothing yet.** You are at the start of a fresh lineage. This sheet is
+archived and reset to this text when a run starts fresh from program-v0's content; a run continuing
+from a later version keeps it, so whatever it holds was written by this lineage. Nothing below is empty
+because something broke.
 
 Record what *this* run establishes. Sections are ordered by how settled a claim is; move entries
 between them as evidence accumulates rather than rewriting them in place.

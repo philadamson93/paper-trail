@@ -187,7 +187,7 @@ against whatever the gold class was, and counted under `invalid_label` and
 A head start, not a complete taxonomy. **They are ordered by weight of evidence, best first**, and
 numbered in that order — modes 1-3 come from the **n=50** run of 2026-09-02; modes 4 and 5 were
 observed on a stratified **N=5** smoke run in April 2026
-(`docs/plans/experiment-april-20-findings.md`). Where they disagree, prefer the larger sample. The
+(the April 20 experiment's findings, in the planning notes outside this repository). Where they disagree, prefer the larger sample. The
 bracketed id after each heading is the number the mode carried in earlier documents, which numbered
 them by discovery date rather than by evidence, so a reader working top-to-bottom met the weakest
 evidence first and its correction afterwards.

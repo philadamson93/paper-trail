@@ -55,8 +55,10 @@ nine-label vocabulary. Up to three prompt-driven stages — **extractor** → **
   and how the lock is enforced.
 - `/workspace/ro/in/context/playbook.md` — the iteration procedure and the standing
   decisions you do not need to relitigate.
-- `/workspace/rw/out/meta-learnings.md` — what previous iterations established about
-  optimizing *this task*. Read it before you plan; append to it when you finish.
+- `/workspace/ro/in/meta-learnings.md` — the notebook: what previous iterations established about
+  optimizing *this task*. Read it before you plan. To change it, copy it to
+  `/workspace/rw/out/meta-learnings.md` (which starts empty) and edit that copy; left empty, the
+  notebook is unchanged.
 
 ## The objective
 
@@ -140,8 +142,11 @@ distribution, then fix what carries mass.
 
 ### Step 1 — check last iteration's prediction
 
-**Open `/workspace/ro/in/findings/iter-<n-1>.md` before anything else**, where `<n>`
-is the iteration number in your turn prompt. It contains the previous iteration's edits and, per
+**Open last iteration's findings before anything else:**
+`/workspace/ro/notes/<run id>/iter-<n-1>/findings.md`, where `<n>` and the run id are in your turn
+prompt. On a run's first iteration, take the newest folder from an earlier run of this lineage in
+`/workspace/ro/notes/` (or `legacy/`, notes from before that layout); a folder ending `-failed` holds
+the notes of a session that failed. It contains the previous iteration's edits and, per
 edit, which verdict classes it predicted would move and in which direction. Check each against
 `per_class_f1_9way` in the release you have just been handed. (`per_class_f1` carries only the three
 collapsed buckets and cannot answer a nine-class prediction.)
@@ -260,7 +265,8 @@ entries, so an iteration that changes none of them raises `EmptyCommitError`, wh
 into a terminal stop. The run ends there. That is the intended behaviour, not a crash.
 
 ⚠ **The loop is forward-only.** Nothing reverts a regressing edit; version *n+1* is built on version
-*n* whatever it scored, and declaring a step-back does nothing. An edit you doubt is a liability you
+*n* whatever it scored (the one exception: a version that could not be measured at all, below under
+*Crash handling*), and declaring a step-back does nothing. An edit you doubt is a liability you
 are handing forward, not a bet the harness will settle. See
 `/workspace/ro/in/context/playbook.md`.
 
@@ -271,7 +277,8 @@ iteration's prediction as you resolved it in step 1, the numbers from step 2, th
 with their counts, the edits you made, and for each edit **which verdict classes should move and in
 which direction**.
 
-Then append the durable lesson to `/workspace/rw/out/meta-learnings.md`.
+Then append the durable lesson to your copy of the notebook, `/workspace/rw/out/meta-learnings.md`
+(copied from `/workspace/ro/in/meta-learnings.md` first, so the whole notebook comes back).
 
 Nothing scores your predictions back to you — there is no automated channel and none is coming. The
 check happens because step 1 of the next iteration does it by hand. That is why the prediction has
@@ -289,11 +296,11 @@ enough; say so, and write a sharper one.
 
 Three places, mutually exclusive scopes. Route by scope, not by how important the thing feels.
 
-| surface | scope | who writes | committed |
+| surface | scope | who writes | where it is kept |
 |---|---|---|---|
-| `/workspace/rw/out/findings.md` | run-local per-iteration detail: metrics, blames, modes, edits, predictions | you, every iteration | no |
-| `/workspace/rw/out/meta-learnings.md` | **verified reusable** optimization heuristics only, each dated | you, when a lesson generalizes | yes |
-| `docs/journal/` | curated cross-run decisions and postmortems | a human, or the landing process promoting a finding | yes |
+| `/workspace/rw/out/findings.md` | run-local per-iteration detail: metrics, blames, modes, edits, predictions | you, every iteration | the notes history, `/workspace/ro/notes/` |
+| `/workspace/rw/out/meta-learnings.md` | **verified reusable** optimization heuristics only, each dated | you, when a lesson generalizes | the notebook: your non-empty copy replaces it, and every later session reads it at `/workspace/ro/in/meta-learnings.md`; a run continuing this lineage keeps it |
+| `docs/journal/` | curated cross-run decisions and postmortems | a human, or the landing process promoting a finding | committed to the repository |
 
 - **`/workspace/rw/out/findings.md` — this iteration.** Per-example blames,
   the modes you clustered, the hypotheses, the edits, the predictions. It may be long; it is one
@@ -306,8 +313,8 @@ Three places, mutually exclusive scopes. Route by scope, not by how important th
   injected reading for every future iteration, and a log of per-example blames in here makes it
   useless. **Date every entry.**
 - **`docs/journal/` — the committed cross-run record.** ⚠ **You do not write here.** Promotion out of
-  `findings/` into the journal happens at landing, under human curation. Writing a journal entry per
-  suspected defect would duplicate `findings/` and bypass that curation.
+  the notes history into the journal happens at landing, under human curation. Writing a journal
+  entry per suspected defect would duplicate the findings and bypass that curation.
 
 The test: if it is about *these examples*, it is a finding. If it is about *how to optimize this
 task*, it is a meta-learning. If it is about *this run's harness* rather than the task, it is a
@@ -316,7 +323,7 @@ finding too — harness observations are never promoted into
 
 ## Verify what you inherited
 
-**`/workspace/rw/out/meta-learnings.md` was written by your predecessors and nothing
+**The notebook (`/workspace/ro/in/meta-learnings.md`) was written by your predecessors and nothing
 checks it.** Before relying on any claim in it about where a file is, what the harness wrote, or how
 batches are drawn, verify it — one `ls` is cheaper than an iteration. If an inherited claim is false,
 **delete it and say you deleted it.**
@@ -405,6 +412,14 @@ priced and designed and never actually constructed, and nothing said so.
 
 ## Crash handling
 
+- **The previous version failed** → `frontier.previous_attempt` in this iteration's TRAIN release is
+  set. The version you saved last time could not be measured: its program would not build, its whole
+  validation pass crashed or timed out, or the scorer could not read its outputs. It keeps its tag, so
+  its files are in `/workspace/ro/versions/`, but it is **not** your starting point: this iteration
+  starts from the last good version. The record names the `stage`, the `status`, an `error_code` and,
+  for a build failure, the `failed_entry` file, and never a message. Read the failed version's files
+  against the last good one's, find what broke, and do not remake it. Three failed versions in a row
+  stop the run.
 - **The previous edit was never scored** → the case you are most likely to actually meet: all three
   iterations of the 2026-09-02 run landed in it. It looks like `scored: false`, or a missing
   `/workspace/ro/in/feedback/iter/<n>/release_train.json`, or a release whose numbers are identical to last iteration's.

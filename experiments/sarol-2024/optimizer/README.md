@@ -28,7 +28,7 @@ This is enforced, not merely conventional: `commit_new_version` stages **only** 
 |---|---|---|
 | **Program, editable** | `prompts/adjudicator-dispatch-sarol.md`, `specs/verdict_schema_sarol.md`, and the 3 extractor/verifier prompts under `src/prompts/` | **The optimizer**, during a run |
 | **Program, frozen** | `specs/verdict_enum_sarol.md`, `specs/verdict_definitions_sarol.md`, `src/specs/verdict_schema.md`, `src/specs/verifier_results.md` | Nobody during a run; humans between runs |
-| **Machinery** | `prompt/`, `context/` (6 docs), `findings/`, `meta-learnings.md`, and the `.py` files beside this README | **Us** |
+| **Machinery** | `prompt/`, `context/` (6 docs), `meta-learnings.md`, and the `.py` files beside this README | **Us** |
 
 ⚠ **"Program, editable" is not editable all the way down.** The rubric's **eight class definitions are
 the paper's verbatim text** (Sarol et al. 2024 §2.2 / Table 1) and are not the optimizer's to reword;
@@ -45,10 +45,13 @@ definitions everywhere the judge can read them, and fails if a retired clause re
 
 ### Three record surfaces, not two
 
-`findings/iter-<n>.md` is run-local per-iteration detail and is not committed. `meta-learnings.md`
-carries **verified reusable** heuristics only, dated, and is committed. `docs/journal/` is the curated
-cross-run record — **the optimizer never writes it**; promotion out of `findings/` happens at landing,
-under human curation. The routing rule lives in
+Each iteration's `findings.md` is run-local detail. The engine files it, with the notebook, in the notes
+history `~/.paper-trail/optimizer-notes/<run id>/iter-<n>/` (B4, since PT-B), which every later
+session reads; it is not in git. `meta-learnings.md` carries **verified reusable** heuristics only,
+dated: a running file the engine replaces with a non-empty rewrite, kept across a run that continues
+a lineage and reset to `meta-learnings.stub.md` on a fresh start from program-v0 (B3). The committed
+copy stays the stub. `docs/journal/` is the curated cross-run record — **the optimizer never writes
+it**; promotion out of the notes history happens at landing, under human curation. The routing rule lives in
 `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`; the other two files restate it
 and must be kept in step.
 
