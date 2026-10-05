@@ -64,12 +64,13 @@ __all__ = [
 #:
 #: Bumped 2026-10-05 from `764419b` (PT-B, stage 14): the engine's run bookkeeping (B: version lock,
 #: run-start reset, notes history, same-run pass reuse, failed versions, signal stop) and the optional-glob
-#: staging fix.
+#: staging fix. Then to `1141256` (same day): a run's start recorded as its tag's commit, so a
+#: paper-trail run (whose main is ahead of its start tag) can be resumed; found by PT-B's live check.
 #: Earlier: 2026-10-02 from `592862f` (PT-A, stage 14): the engine's sealed sessions (S1), seal proof and
 #: setup fingerprint (S2), contained optimizer (A), program runner (PR), the IPv4-only proxy (A13), and
 #: the contract-file copy-back rule plus paper-trail's seal replay on both grants (PT-A D12, D7).
 #: Earlier: 2026-09-18 from `82f547d`.
-ENGINE_PIN = "8258569d9e388564bfce102b6e10c5e670ba9024"
+ENGINE_PIN = "1141256e5ec691942f1ea61634cabeaf98b9f146"
 
 #: What the pin buys, in one line, so the next person to bump it knows what they must not drop.
 ENGINE_PIN_REASON = (
