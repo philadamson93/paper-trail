@@ -8,7 +8,7 @@ everything learned after N), so this file is the only thing that carries forward
 do not delete them. A reverted attempt is as useful as a confirmed one, and more likely to be
 retried by accident.
 
-**What belongs here rather than in an iteration's `findings.md`** is defined in one place: the
+**What belongs here rather than in an iteration's findings note** is defined in one place: the
 *"The three record surfaces, and what goes in which"* section of
 `experiments/sarol-2024/optimizer/prompt/optimizer-instructions.md`. The short form is that this
 file is about *how to optimize this task* and that one is about *these examples* — but do not
