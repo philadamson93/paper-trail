@@ -100,9 +100,10 @@ fi
 # instruction restated verbatim stays actionable to a model skimming for what to do.
 "$PY" "$REPO_ROOT/experiments/sarol-2024/scripts/check_prompt_hygiene.py" \
   || fail "GATE G FAILED: an agent-read prompt carries development history (what it used to say, or a dated edit). State the rule as it stands -- the history belongs in git and docs/."
-# The run-start reset is not a preflight any more (PT-B, 2026-10-05): the dispatcher calls the engine's
-# `prepare_run_start` under its version lock, so two drivers cannot both archive, and it decides fresh
-# or continuing from CURRENT_TAG's content, with no switch. It archives (moves, never deletes) into
+# The run-start reset is not a preflight any more (PT-B, 2026-10-05): the engine's shared driver (C-core)
+# runs it under its version lock, so two drivers cannot both archive, and it decides fresh or continuing
+# from CURRENT_TAG's content, with no switch. The driver also checks both sealed setups against their
+# committed pins before anything is materialized, and records every refusal in the run summary. It archives (moves, never deletes) into
 # ~/.paper-trail/runs/_archive/<timestamp>-<run id>/ and refuses to start if anything is left behind.
 # The per-ITERATION half of the reset (the graders' answers) is no longer a preflight: since PT-A
 # (2026-10-01) every pass runs in its own folder in the engine's program runner, which refuses an
