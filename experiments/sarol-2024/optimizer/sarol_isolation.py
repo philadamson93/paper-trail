@@ -72,18 +72,13 @@ def engine_on_path() -> pathlib.Path:
         # in front of this folder would shadow paper-trail's `adapter` for every later bare import.
         sys.path.append(str(path))
     # ...which means an engine installed elsewhere on the path would win silently, at an unpinned
-    # version. Refuse that rather than run on it.
-    import engine as _engine  # noqa: PLC0415
-    import isolation as _isolation  # noqa: PLC0415
+    # version. Refuse that rather than run on it, even under the divergence override. The check is the
+    # engine's (`engine.engine_version.import_origin_problem`, C2).
+    from engine.engine_version import import_origin_problem  # noqa: PLC0415
 
-    for mod in (_engine, _isolation):
-        where = pathlib.Path(getattr(mod, "__file__", None) or next(iter(getattr(mod, "__path__", [""])))).resolve()
-        if pathlib.Path(path).resolve() not in where.parents:
-            raise RuntimeError(
-                f"`{mod.__name__}` imports from {where}, not from the pinned engine checkout {path}; "
-                "another copy of agentic-label-opt is installed on this Python path. Remove it, or run "
-                "with that copy's directory off the path"
-            )
+    problem = import_origin_problem(path)
+    if problem is not None:
+        raise RuntimeError(f"{problem}. Remove it, or run with that copy's directory off the path")
     return path
 
 

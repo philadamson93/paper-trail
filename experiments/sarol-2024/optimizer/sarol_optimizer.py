@@ -408,13 +408,11 @@ class SarolOptimizer:
             host_env=self._host_env(),
         )
 
-    def pin_description(self, *, materialize_root: pathlib.Path):
-        """The optimizer session's description over placeholder folders, for the setup pin (the
-        fingerprint reads container paths and roles, never host folders)."""
-        agent = self.agent(0)
-        stage = self.run_root / "optimizer-pin-stage"
-        return agent.description(agent.scope(stage / "program", stage / "out"),
-                                 materialized_path=pathlib.Path(materialize_root) / "iter0-pin")
+    def setup_description(self):
+        """The optimizer session's description, for the setup check at run start and the pin: the
+        engine's own builder (``ContainedOptimizerAgent.setup_description``, C0), over placeholder
+        folders the fingerprint never reads. Replaces the hand-built ``pin_description``."""
+        return self.agent(0).setup_description()
 
     @staticmethod
     def _host_env() -> dict:

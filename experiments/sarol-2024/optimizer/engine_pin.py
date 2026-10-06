@@ -55,6 +55,7 @@ __all__ = [
     "engine_path",
     "pin_problem",
     "capability_problem",
+    "CAPABILITIES",
     "require_engine",
     "engine_description",
 ]
@@ -62,7 +63,10 @@ __all__ = [
 #: The `agentic-label-opt` commit this experiment requires, in full — short SHAs are ambiguous
 #: across repos and `cat-file -e` will happily resolve a prefix to the wrong object in a big one.
 #:
-#: Bumped 2026-10-05 from `764419b` (PT-B, stage 14): the engine's run bookkeeping (B: version lock,
+#: Bumped 2026-10-06 to `5b512d9` (C-core, stage 14): the engine's shared driver (`engine.driver.run_driver`),
+#: the setup check at run start (C0, `isolation.setup_gate`) and the engine-version check paper-trail's own
+#: checks now call (C2, `engine.engine_version`).
+#: Earlier: 2026-10-05 from `764419b` (PT-B, stage 14): the engine's run bookkeeping (B: version lock,
 #: run-start reset, notes history, same-run pass reuse, failed versions, signal stop) and the optional-glob
 #: staging fix. Then to `1141256` (same day): a run's start recorded as its tag's commit, so a
 #: paper-trail run (whose main is ahead of its start tag) can be resumed; found by PT-B's live check.
@@ -70,14 +74,15 @@ __all__ = [
 #: setup fingerprint (S2), contained optimizer (A), program runner (PR), the IPv4-only proxy (A13), and
 #: the contract-file copy-back rule plus paper-trail's seal replay on both grants (PT-A D12, D7).
 #: Earlier: 2026-09-18 from `82f547d`.
-ENGINE_PIN = "1141256e5ec691942f1ea61634cabeaf98b9f146"
+ENGINE_PIN = "5b512d9a824a4124cfcfbf5bef14c50604b64455"
 
 #: What the pin buys, in one line, so the next person to bump it knows what they must not drop.
 ENGINE_PIN_REASON = (
     "the engine's sealed sessions for both principals: SealedSession (S1), Forbidden entries, the setup "
     "fingerprint and image-by-digest (S2), ContainedOptimizerAgent (A), ProgramRunner (PR), and the "
     "IPv4-only allowlist proxy (A13), the copy-back refusal of a contract-file edit (PT-A D12), and the run "
-    "bookkeeping: version lock, run-start reset, notes history, failed-version records (B)"
+    "bookkeeping: version lock, run-start reset, notes history, failed-version records (B), and the shared driver "
+    "with the setup check at run start and the engine-version check (C0, C-core)"
 )
 
 #: Set to "1" to run against an engine that does not contain the pin. Same switch the shell uses.
@@ -103,109 +108,90 @@ def _git(engine: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+#: What paper-trail builds on, as the engine's capability names (``engine.engine_version``, C2):
+#: ``module:name`` for an attribute, ``module:function(param)`` for a parameter. A later commit that
+#: removed or renamed one would otherwise surface mid-run as an AttributeError.
+CAPABILITIES = (
+    # PT-A (2026-10-01): the grant's strict entries, the program runner, the contained optimizer, the
+    # setup pins and the image form.
+    "isolation.session_scope:SessionScope", "isolation.session_scope:Forbidden",
+    "isolation.session_scope:scope_problem", "isolation.session_scope:host_path_leak",
+    "isolation.sealed_session:SealedSession", "isolation.sealed_session:SessionDescription",
+    "isolation.sealed_session:AnthropicApiProfile", "isolation.sealed_session:NO_CREDENTIAL",
+    "isolation.sealed_session:UNPINNED",
+    "isolation.program_runner:ProgramRunner", "isolation.program_runner:ProgramSpec",
+    "isolation.program_runner:CALL_CONTAINER_PATH",
+    "isolation.pass_outputs:Call", "isolation.pass_outputs:PassStopped",
+    "isolation.contained_agent:ContainedOptimizerAgent", "isolation.contained_agent:DeclaredOutput",
+    "isolation.contained_agent:OPTIMIZER_TOOLS",
+    "isolation.setup_fingerprint:setup_fingerprint", "isolation.setup_fingerprint:combined_value",
+    "isolation.setup_fingerprint:committed_pin", "isolation.setup_fingerprint:platform_key",
+    "isolation.image_pin:image_ref", "isolation.image_pin:image_ref_problem",
+    # PT-B (2026-10-05): the run bookkeeping, and the optimizer's notes history.
+    "engine.versioning:version_lock", "engine.versioning:VersionLockHeld",
+    "engine.run_start:prepare_run_start", "engine.run_start:Carried",
+    "engine.run_store:FakeRunStore.version_status",
+    "isolation.contained_agent:ContainedOptimizerAgent(notes_root)",
+    "isolation.contained_agent:ContainedOptimizerAgent(run_id)",
+    "engine.loop:run_loop(expected_isolation_hash)",
+    # Carried over from the shell probe this replaced: without these a bad probe mid-run aborts with a
+    # bare traceback and loses the partial-run summary.
+    "engine.loop:LoopStop(reason)", "engine.versioning:EmptyCommitError",
+    # C-core (2026-10-05): the shared driver and the setup check at run start.
+    "engine.driver:run_driver", "engine.driver:DriverConfig(after_pass)", "engine.driver:record_pre_loop_stop",
+    "isolation.setup_gate:check_setup",
+    "isolation.contained_agent:ContainedOptimizerAgent.setup_description",
+    "isolation.program_runner:ProgramRunner.setup_description",
+)
+
+
+def _engine_version(engine: pathlib.Path):
+    """The engine's own version checks (C2), imported from ``engine``. ``None`` when that engine
+    predates them, which also means it predates the pin."""
+    if str(engine) not in sys.path:
+        sys.path.append(str(engine))  # appended: the engine root has its own adapter.py, which must never shadow ours
+    try:
+        return importlib.import_module("engine.engine_version")
+    except ImportError:
+        return None
+
+
 def pin_problem(engine: pathlib.Path | None = None) -> str | None:
     """Is the engine checkout missing the pinned commit? Returns a problem, or None.
 
-    Follows this codebase's ``-> str | None`` problem idiom (``dispatcher.val_isolation_problem``,
-    ``isolation.unspecified_stage_problem``): the caller decides whether a problem is fatal.
+    The check itself is the engine's (``engine.engine_version.version_problem``, C2: a full-SHA pin
+    that must be an ancestor of the engine's HEAD); this module keeps the pin, the reason and the
+    override. Follows this codebase's ``-> str | None`` problem idiom: the caller decides.
     """
     engine = engine or engine_path()
-
     if not engine.is_dir():
         return (
             f"the engine checkout {engine} is not a directory; set AGENTIC_LABEL_OPT to an "
             "agentic-label-opt checkout (the built-in default is a Mac-only path)"
         )
-    if _git(engine, "rev-parse", "--git-dir").returncode != 0:
-        return f"the engine checkout {engine} is not a git repository, so its version is unknowable"
-    if _git(engine, "cat-file", "-e", f"{ENGINE_PIN}^{{commit}}").returncode != 0:
-        return (
-            f"the engine checkout {engine} does not contain the required commit "
-            f"{ENGINE_PIN[:7]} at all -- wrong repository, or a shallow clone. Fetch it, or set "
-            f"{OVERRIDE_ENV}=1 to proceed anyway. The pin buys {ENGINE_PIN_REASON}."
-        )
-    if _git(engine, "merge-base", "--is-ancestor", ENGINE_PIN, "HEAD").returncode != 0:
-        head = _git(engine, "rev-parse", "--short", "HEAD").stdout.strip() or "?"
-        branch = _git(engine, "branch", "--show-current").stdout.strip() or "detached"
-        return (
-            f"the engine at {engine} is on {head} (branch '{branch}'), which does NOT contain the "
-            f"required commit {ENGINE_PIN[:7]} -- so it predates or has forked below it. This is "
-            f"usually a checkout left on another session's branch. Check out a commit containing "
-            f"the pin, or set {OVERRIDE_ENV}=1 if the divergence is intended. The pin buys "
-            f"{ENGINE_PIN_REASON}."
-        )
-    return None
+    ev = _engine_version(engine)
+    problem = (
+        f"the engine at {engine} has no engine.engine_version, so it predates the required commit "
+        f"{ENGINE_PIN[:7]}" if ev is None else ev.version_problem(ENGINE_PIN, engine_root=engine)
+    )
+    if problem is None:
+        return None
+    return f"{problem}. Check out a commit containing the pin, or set {OVERRIDE_ENV}=1 if the divergence is intended. The pin buys {ENGINE_PIN_REASON}."
 
 
 def capability_problem(engine: pathlib.Path | None = None) -> str | None:
-    """Can the engine actually produce a contained session? Returns a problem, or None.
+    """Can the engine actually produce what paper-trail builds on? Returns a problem, or None.
 
-    Ancestry says the pin is *reachable*; it does not say a later commit did not remove the thing
-    we need, and it says nothing at all about an uncommitted edit. This imports the symbols the
-    work is built on and fails on the first one missing: since PT-A, the sealed session, the strict
-    ``Forbidden`` entries, the program runner, the contained optimizer, the setup pins and the image
-    form, ``run_loop``'s ``expected_isolation_hash``, and -- carried over from the shell probe this
-    replaced -- ``LoopStop``'s ``reason`` and ``EmptyCommitError``.
-
-    Paper-trail's own module was renamed ``sarol_isolation.py`` on 2026-10-01 so the engine's
-    ``isolation`` package imports plainly.
+    Ancestry says the pin is *reachable*; it does not say a later commit kept what we need, and it says
+    nothing at all about an uncommitted edit. The engine's ``capability_problem`` imports each name in
+    :data:`CAPABILITIES` and reports the first one missing; ``import_origin_problem`` refuses an
+    ``engine`` or ``isolation`` package imported from anywhere but this checkout.
     """
     engine = engine or engine_path()
-    # Since 2026-10-01 paper-trail's own module is `sarol_isolation.py`, so the engine's `isolation`
-    # package no longer collides with a sibling file: putting the engine on the path is enough, and
-    # its modules stay bound for the rest of the process (one copy of each engine class).
-    if str(engine) not in sys.path:
-        sys.path.append(str(engine))  # appended: the engine root has its own adapter.py, which must never shadow ours
-    try:
-        import inspect  # noqa: PLC0415
-
-        # What PT-A builds on (2026-10-01): the grant's strict entries, the program runner, the
-        # contained optimizer, the setup pins and the image form. A later commit that removed or
-        # renamed one would otherwise surface mid-run as an AttributeError.
-        needs = {
-            "isolation.session_scope": ("SessionScope", "Forbidden", "scope_problem", "host_path_leak"),
-            "isolation.sealed_session": ("SealedSession", "SessionDescription", "AnthropicApiProfile", "NO_CREDENTIAL", "UNPINNED"),
-            "isolation.program_runner": ("ProgramRunner", "ProgramSpec", "CALL_CONTAINER_PATH"),
-            "isolation.pass_outputs": ("Call", "PassStopped"),
-            "isolation.contained_agent": ("ContainedOptimizerAgent", "DeclaredOutput", "OPTIMIZER_TOOLS"),
-            "isolation.setup_fingerprint": ("setup_fingerprint", "combined_value", "committed_pin", "platform_key"),
-            "isolation.image_pin": ("image_ref", "image_ref_problem"),
-            # PT-B (2026-10-05): the run bookkeeping paper-trail now calls instead of its own copies.
-            "engine.versioning": ("version_lock", "VersionLockHeld"),
-            "engine.run_start": ("prepare_run_start", "Carried"),
-            "engine.run_store": ("FakeRunStore",),
-        }
-        for module, symbols in needs.items():
-            mod = importlib.import_module(module)
-            for symbol in symbols:
-                if not hasattr(mod, symbol):
-                    return f"the engine's {module} has no {symbol}"
-        if not hasattr(importlib.import_module("engine.run_store").FakeRunStore, "version_status"):
-            return "the engine's FakeRunStore has no version_status, so a failed version would not block a later start"
-        agent_params = inspect.signature(importlib.import_module("isolation.contained_agent").ContainedOptimizerAgent.__init__).parameters
-        for param in ("notes_root", "run_id"):
-            if param not in agent_params:
-                return f"the engine's ContainedOptimizerAgent takes no {param}, so the optimizer's notes would not be filed"
-        if "expected_isolation_hash" not in inspect.signature(importlib.import_module("engine.loop").run_loop).parameters:
-            return "the engine's run_loop takes no expected_isolation_hash, so a release stamp could not be checked"
-
-        # ⚠ Carried over from the probe this replaced in `run_hillclimb_vm.sh`, NOT dropped. It
-        # guards a different failure: without these, a bad probe mid-run aborts with a bare
-        # traceback and loses the partial-run summary -- the exact thing that runner exists to
-        # prevent. Folding the two probes together is the only reason it was safe to delete the
-        # shell copy.
-        loop = importlib.import_module("engine.loop")
-        if "reason" not in inspect.signature(loop.LoopStop.__init__).parameters:
-            return (
-                "the engine's LoopStop takes no reason, so a mid-run failure would abort with a "
-                "bare traceback and lose the partial-run summary"
-            )
-        versioning = importlib.import_module("engine.versioning")
-        if not hasattr(versioning, "EmptyCommitError"):
-            return "the engine's engine.versioning has no EmptyCommitError"
-        return None
-    except ImportError as exc:
-        return f"the engine at {engine} could not be imported for the capability probe: {exc}"
+    ev = _engine_version(engine)
+    if ev is None:
+        return f"the engine at {engine} has no engine.engine_version (it predates the shared driver, C-core)"
+    return ev.import_origin_problem(engine) or ev.capability_problem(CAPABILITIES)
 
 
 @functools.lru_cache(maxsize=None)

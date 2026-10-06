@@ -63,6 +63,7 @@ if str(_HERE) not in sys.path:
 
 import adapter  # noqa: E402
 import canary as canary_mod  # noqa: E402
+import engine_pin  # noqa: E402
 import sarol_isolation as isolation_mod  # noqa: E402
 import profiles as profiles_mod  # noqa: E402
 import sampling  # noqa: E402
@@ -249,8 +250,8 @@ class BudgetExceeded(RuntimeError):
 class BudgetGuard:
     """Refuses to start what it cannot afford to finish.
 
-    The engine has no pre-iteration hook (``on_iter`` fires after the fact), so this is consulted
-    from inside the Runner wrapper -- the point where spend actually happens.
+    Consulted before each pass and charged after it, through the driver's ``before_pass`` and
+    ``after_pass`` hooks (:func:`budget_hooks`): the point where spend actually happens.
     """
 
     max_budget_usd: float
@@ -287,65 +288,6 @@ class BudgetGuard:
 
 
 # =================================================================================================
-# Caching + budgeted Runner wrapper
-# =================================================================================================
-
-
-class BudgetedRunner:
-    """Wraps the engine's runner with the budget refusal (was ``CachingRunner``, PT-B).
-
-    Never raises: like the runner it wraps, every refusal is a ``RunArtifacts`` status the scorer can
-    decline. The validation-pass reuse it used to do is the engine's since B (one pass per tree,
-    split, batch and runner identity, within one run).
-
-    ⚠ It must pass through the wrapped runner's ``run_id`` and ``cache_identity``: ``run_loop`` reads
-    both off the runner it is handed. Without the identity its reuse key loses the graders' call list,
-    setup fingerprint and prompt tag, so an edited grader prompt could reuse an old pass; without the
-    run id it cannot stop a runner bound to another run.
-    """
-
-    def __init__(self, inner, *, budget: BudgetGuard | None = None) -> None:
-        self.inner = inner
-        self.budget = budget
-        self.calls = 0
-        self.refusals = 0
-
-    @property
-    def run_id(self):
-        return getattr(self.inner, "run_id", None)
-
-    def cache_identity(self, materialized_path, inputs):
-        identity = getattr(self.inner, "cache_identity", None)
-        return identity(materialized_path, inputs) if identity is not None else None
-
-    def run(self, materialized_path, inputs):  # positional -- matches the engine's call sites
-        schemas = adapter._import_engine()
-        if self.budget is not None:
-            # The engine reuses a pass before this is ever called, so this cannot know whether the
-            # iteration's next validation pass will be reused: it prices the worst case (two left).
-            # Near the cap a run may stop one iteration early; it never starts what it cannot finish.
-            reason = self.budget.check(inputs.split)
-            if reason is not None:
-                self.refusals += 1
-                return schemas.RunArtifacts(
-                    batch_id=inputs.batch_id,
-                    status="infra_error",
-                    artifact_refs=(),
-                    error=schemas.ErrorInfo(code="BUDGET_EXCEEDED", message_redacted=reason),
-                    sub_invocation_count=0,
-                    cost_usd=0.0,
-                )
-        self.calls += 1
-        artifacts = self.inner.run(materialized_path, inputs)
-        if self.budget is not None:
-            self.budget.record(artifacts.cost_usd or 0.0)
-        return artifacts
-
-    def stats(self) -> dict[str, int]:
-        return {"calls": self.calls, "refusals": self.refusals}
-
-
-# =================================================================================================
 # Wiring
 # =================================================================================================
 
@@ -365,6 +307,24 @@ class _FakeStore:
 
     def __init__(self, repo_root):
         self.repo_root = pathlib.Path(repo_root)
+
+
+def _drift_refusal_text(exc: BaseException) -> str:
+    """The text of the tree/tag drift refusal: the driver's ``consumer_refused`` stop, nothing else.
+    Any other exception means the guard was passed, so it comes back marked as the wrong one."""
+    if type(exc).__name__ == "LoopStop" and getattr(exc, "reason", None) == "consumer_refused":
+        return str(exc)
+    return f"<wrong exception: {type(exc).__name__}: {getattr(exc, 'reason', None)}: {exc}>"
+
+
+def _stops(fn, reason: str) -> bool:
+    """Does ``fn`` stop the run (the engine's ``LoopStop``) with ``reason``? A refusal through the
+    shared driver is a recorded stop, not an exception of paper-trail's own (C-core)."""
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001 -- the stop's type and reason are what is asserted
+        return type(exc).__name__ == "LoopStop" and getattr(exc, "reason", None) == reason
+    return False
 
 
 def _raises_valueerror(fn) -> bool:
@@ -515,9 +475,7 @@ def build_components(
         val_size=val_n or VAL_SIZE,
         canary_enabled=canary is not None,
     )
-    leak = val_isolation_problem(val_output_root, store.repo_root)
-    if leak:
-        raise ValueError(f"VAL isolation (C6.9): {leak}")
+    # VAL isolation (C6.9) is checked by the driver on every run (`run_refusals`), not at build time.
     if materialize_root is None:
         raise ValueError("build_components needs materialize_root: the engine runner and the optimizer both read it")
     scorer_roots = tuple(pathlib.Path(r) for r in (train_output_root, val_output_root) if r is not None)
@@ -622,163 +580,102 @@ def run_optimization(
     resume: bool = False,
     #: The run's lasting state (:func:`state_paths`). Default ``~/.paper-trail``; the live check uses a
     #: scratch folder. Components handed in by a selftest bring their own (``parts["state_root"]``) or
-    #: none, and with none there is no reset and no run store.
+    #: none, and with none there is no run store and nothing carried across the reset.
     state_root: pathlib.Path | None = None,
     **component_kwargs,
 ):
-    """Drive the engine's ``run_loop``. This is the entrypoint the plan's Files-to-create names.
+    """Run the optimization through the engine's shared driver (``engine.driver.run_driver``, C-core).
 
-    A whole-run affordability check runs before anything is dispatched; the per-iteration refusal
-    still lives in :class:`BudgetedRunner`, because ``run_loop`` exposes no pre-iteration hook.
+    The driver owns the order (consumer refusals, signals, lock, run-start reset, resume, engine-version
+    check, sealed-setup check, runner, loop) and records every refusal as a stop in the run summary.
+    This function builds paper-trail's components and draws, hands them over, and supplies paper-trail's
+    hooks: its refusals (:func:`run_refusals`) and the per-pass budget (:func:`budget_hooks`).
+
+    Two refusals stay ahead of the build, because the build needs what they check: a profile that can't
+    run, and the canary a run must pin. They are stops recorded the same way, with the driver's helper.
 
     **Graduated N.** Pass ``train_schedule`` (e.g. ``[5, 10, 20]``) to grow the TRAIN batch across
-    iterations instead of running a fixed cohort every time — the engine takes ``train_inputs`` as
-    a factory, so this needs no engine change. ``draw_mode`` selects `sampling`'s cumulative /
-    fresh / reproduce semantics. Omit ``train_schedule`` and the old static-batch behaviour is
-    unchanged, which is what every existing caller and gate relies on.
+    iterations instead of running a fixed cohort every time; ``draw_mode`` selects `sampling`'s
+    cumulative / fresh / reproduce semantics. Omit it and the batch is fixed.
 
     ⚠ **The ramp is not the cost fix on its own.** An iteration is three Runner calls, two of them
     VAL at a fixed size, so at TRAIN=10 roughly 98% of the bill is VAL. ``val_n`` is the knob that
-    actually moves the number; ``train_schedule`` is the knob that controls what the optimizer
-    learns from. Both are priced, and the preflight below uses the ramp's TOP rung so the check
-    describes the most expensive iteration the run can reach, not its cheapest.
+    actually moves the number; ``train_schedule`` controls what the optimizer learns from. Both are
+    priced, and the budget check uses the ramp's TOP rung, the most expensive iteration the run can reach.
     """
-    engine_root = adapter.engine_path()
-    if str(engine_root) not in sys.path:
-        sys.path.append(str(engine_root))  # appended, never in front: see sarol_isolation.engine_on_path
-    from engine.loop import LoopStop, run_loop  # noqa: PLC0415
+    # The engine is checked (pin, import origin, what paper-trail builds on) before its code is trusted
+    # to run anything, including the driver that records stops: an engine too old to have the driver
+    # can't record one. A refusal here still becomes a recorded `engine_version` stop when the engine
+    # can import the driver's stop writer (implementation review, 2026-10-06).
+    try:
+        isolation_mod.engine_on_path()
+    except RuntimeError as exc:
+        _engine_refused(exc, run_summary_path=run_summary_path, val_output_root=val_output_root, run_id=run_id)
+    from engine.driver import DriverConfig, record_pre_loop_stop, run_driver  # noqa: PLC0415
+    from engine.loop import LoopStop  # noqa: PLC0415
     from engine.loop_ops import LocalLoopOps  # noqa: PLC0415
-    from engine.schemas import RunInputs  # noqa: PLC0415
-    from engine.run_start import prepare_run_start  # noqa: PLC0415
     from engine.run_store import FakeRunStore  # noqa: PLC0415
-    from engine.versioning import VersionLockHeld, version_lock  # noqa: PLC0415
-    import sarol_optimizer  # noqa: PLC0415 -- needs the engine on the path
+    from engine.schemas import RunInputs  # noqa: PLC0415
+    import sarol_optimizer  # noqa: PLC0415
 
-    # A real run must SAY where its outputs go. Both roots are load-bearing and neither has a
-    # safe default: `train_output_root` is where the per-claim mistake corpus lands (C6.8 -- with
-    # no root the optimizer silently drops back to counts-only, the exact defect C6.8 repairs),
-    # and `val_output_root` must lie outside the optimizer's readable tree (C6.9), which no
-    # derived default can promise. Refused here rather than in `build_components` so selftests can
-    # still assemble components freely; this function is the real-run entrypoint.
     if current_tag is None:
         current_tag = adapter.SarolProgramStore().program_version
+    effective_run_summary = run_summary_path
+    if effective_run_summary is None and val_output_root is not None:
+        effective_run_summary = pathlib.Path(val_output_root).parent / "run_summary.json"
+    model = component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL
+
+    def refuse_before_build(message: str, step: str):
+        stop = LoopStop(message, reason="consumer_refused")
+        record_pre_loop_stop(effective_run_summary, run_id=run_id, stop=stop, step=step)
+        raise stop
+
+    # A real run must SAY where its outputs go. `train_output_root` is where the per-claim mistake
+    # corpus lands (C6.8) and `val_output_root` must lie outside the optimizer's readable tree (C6.9);
+    # neither has a safe default. An argument error, like a missing flag: there is no run yet.
     if components is None:
-        missing = [
-            name
-            for name, value in (
-                ("train_output_root", train_output_root),
-                ("val_output_root", val_output_root),
-            )
-            if value is None
-        ]
+        missing = [n for n, v in (("train_output_root", train_output_root), ("val_output_root", val_output_root)) if v is None]
         if missing:
             raise ValueError(
                 f"a real run must specify {', '.join(missing)}: "
                 "TRAIN's root carries the per-claim mistake corpus (C6.8) and VAL's must sit "
                 "outside the optimizer's readable tree (C6.9); neither can be safely derived"
             )
-        # Selectable != runnable. `agentic` and `paperclip` are fully specified and correctly
-        # priced, but /sarol-eval-item implements only the adjudicator stage, so they would abort
-        # on the first claim -- after the session has been paid for. Refuse at the entrypoint.
-        blocked = profiles_mod.unrunnable_reason(profile)
-        if blocked:
-            raise ValueError(blocked)
 
-        # FAIL CLOSED on a missing canary (Finding 4). The 2026-09-02 run carried `"canary": null`
-        # in every manifest: it was designed, resolved (OQ12), priced at three firings per
-        # iteration -- and never constructed, because `CanarySpec` defaulted to None and no code
-        # path noticed. So no number that run produced carries the round-trip guarantee the design
-        # calls load-bearing, and nothing said so.
-        #
-        # A silently absent guard is worse than no guard: it buys the confidence without the
-        # check. Absence therefore stops the run, here, before anything is dispatched. Turning it
-        # off is possible but has to be SAID -- `require_canary=False` / `--no-canary` -- and the
-        # cost model then prices the cheaper reality, so the estimate and the run stay the same
-        # run. Refused at this entrypoint rather than in `build_components` for the same reason
-        # the output roots are: selftests must still be able to assemble components freely.
-        if require_canary and component_kwargs.get("canary") is None:
-            pinned = canary_mod.load(
-                profiles_mod.get(profile).name,
-                # The alias this run will actually dispatch with. Falling back to the Runner's
-                # own default rather than restating it keeps "no --model given" meaning one thing.
-                model=component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL,
+    # Selectable != runnable: `agentic` and `paperclip` would abort on the first claim, after the
+    # session is paid for. Refused before the build, which would refuse it less clearly.
+    blocked = profiles_mod.unrunnable_reason(profile if components is None else components["profile"].name)
+    if blocked:
+        refuse_before_build(blocked, "before_run")
+
+    # FAIL CLOSED on a missing canary (Finding 4): the 2026-09-02 run carried `"canary": null` in every
+    # manifest and nothing noticed. Turning it off has to be SAID (`require_canary=False` / `--no-canary`),
+    # and the cost model then prices the cheaper reality. Before the build, because the canary is an
+    # input to it.
+    if components is None and require_canary and component_kwargs.get("canary") is None:
+        pinned = canary_mod.load(profiles_mod.get(profile).name, model=model)
+        if pinned is None:
+            refuse_before_build(
+                f"no round-trip canary is pinned for profile "
+                f"{profiles_mod.get(profile).name!r}. Every number from a run without one "
+                "lacks the instrument check the design requires, and the first optimization "
+                "run produced exactly that silently. Pin one with "
+                f"`python3 canary.py --pin --profile {profiles_mod.get(profile).name} "
+                "--repeat 3` (costs real sessions), or say `--no-canary` to run without it "
+                "-- which also reprices the run, so the estimate stays honest.",
+                "before_run",
             )
-            if pinned is None:
-                raise ValueError(
-                    f"no round-trip canary is pinned for profile "
-                    f"{profiles_mod.get(profile).name!r}. Every number from a run without one "
-                    "lacks the instrument check the design requires, and the first optimization "
-                    "run produced exactly that silently. Pin one with "
-                    f"`python3 canary.py --pin --profile {profiles_mod.get(profile).name} "
-                    "--repeat 3` (costs real sessions), or say `--no-canary` to run without it "
-                    "-- which also reprices the run, so the estimate stays honest."
-                )
-            component_kwargs["canary"] = pinned
+        component_kwargs["canary"] = pinned
 
-        # S26: the tree must BE the version it says it is.
-        #
-        # `current_tag` names the baseline every number this run produces will be filed under, and
-        # it is the string `"program-v0"` by default. Nothing checked that the files on disk were
-        # actually v0's. They are not, today: an optimizer run rewrites the adjudicator and the
-        # rubric in place, so after any run the working tree carries v3's program while the tag
-        # still says v0. A curve built from mislabelled baselines is not wrong in a way anyone can
-        # see -- it is unreadable, and only afterwards, once the sessions are paid for.
-        #
-        # For the manifest's own frozen version the tree and the tag are re-hashed against the frozen
-        # hashes. A version the engine minted has none, but it is a commit: the tree must equal that
-        # commit's program (PT-B; it used to be skipped, which is why the VM runner defaulted to
-        # `program-v0` to get past it).
-        store = adapter.SarolProgramStore()
-        if current_tag != store.program_version:
-            differ = store.tree_differs_from(current_tag)
-            if differ:
-                raise ValueError(
-                    f"the working tree does not match {current_tag!r}, the version this run starts from "
-                    f"and files its numbers under:\n  " + "\n  ".join(differ)
-                    + f"\n\nCheck out {current_tag}'s program files, or pass the `current_tag` the tree "
-                    "actually holds. Running as-is produces numbers that cannot be attributed to a version."
-                )
-        else:
-            # TWO checks, because they answer different questions and the run needs both.
-            #
-            # The working tree is what a human reads and edits. The TAG is what the engine
-            # materializes from -- `engine.materialize` resolves the tag to one `version_sha` and
-            # reads every entry out of it with `git show`, never off disk. So a tree that matches
-            # the manifest while the tag points at older bytes still runs the OLD program and files
-            # the numbers under the new name. Checking only the tree misses exactly that, which is
-            # how the 2026-09-07 re-freeze left `program-v0` on the pre-trim enum with every gate
-            # green (caught by a Codex audit, not by this guard's first version).
-            drift = store.verify_tree_matches_tag()
-            if drift:
-                raise ValueError(
-                    f"the working tree does not match {current_tag!r}, which is the tag every "
-                    f"number from this run would be filed under:\n  "
-                    + "\n  ".join(str(v) for v in drift)
-                    + f"\n\nRestore the {len(drift)} file(s) to the frozen "
-                    f"{store.program_version} content before starting a baseline run, or pass a "
-                    "`current_tag` that names what the tree actually holds. Running as-is "
-                    "produces numbers that cannot be attributed to a program version."
-                )
-            tag_drift = store.verify_tag_tree(current_tag)
-            if tag_drift:
-                raise ValueError(
-                    f"the git tag {current_tag!r} does not carry the frozen "
-                    f"{store.program_version} content, and the tag is what the engine actually "
-                    f"materializes from -- so this run would evaluate the tagged bytes while "
-                    f"reporting under the manifest's identity:\n  "
-                    + "\n  ".join(str(v) for v in tag_drift)
-                    + f"\n\nRe-cut the tag onto a commit whose tree matches the manifest "
-                    f"(`git tag -f -a {current_tag} <commit>`), then confirm with "
-                    f"`freeze_program_v0.py --verify --tree {current_tag}`."
-                )
+    # S26: the tree must BE the version it says it is. Checked before the build for a real run (the
+    # build needs the real images, and a mislabelled tree should say so first); the driver checks it
+    # again on every run, injected components included.
+    if components is None:
+        drift = start_version_problem(adapter.SarolProgramStore(), current_tag)
+        if drift:
+            refuse_before_build(drift, "before_run")
 
-    # The ramp's top rung, not its first: the affordability check has to describe the most
-    # expensive iteration the run can reach. Checking rung 0 would clear a run that cannot pay for
-    # its own last iteration -- and the engine stops nothing.
     peak_train_n = max(train_schedule) if train_schedule else train_n
-    effective_run_summary = run_summary_path
-    if effective_run_summary is None and val_output_root is not None:
-        effective_run_summary = pathlib.Path(val_output_root).parent / "run_summary.json"
     if components is None and "optimizer_feedback_files" not in component_kwargs:
         feedback_files = []
         if effective_run_summary is not None:
@@ -801,159 +698,218 @@ def run_optimization(
         **component_kwargs,
     )
 
-    ok, message = preflight(
-        parts["cost_model"],
-        train_n=peak_train_n,
-        iterations=iterations,
-        max_budget_usd=max_budget_usd,
-    )
-    if not ok:
-        raise BudgetExceeded(message)
-
-    # Always write the durable resume ledger (cheap, no downside — the load-bearing half of #4):
-    # every iteration the engine rewrites it, so a mid-run crash stays resumable via `--resume`.
-    # Default it under the VAL output root's run dir — outside the optimizer's readable tree, the
-    # same C6.9 boundary VAL's own per-claim outputs sit behind — when no explicit path was named.
-
-    # The engine runner owns one network for the whole run; entering it here, around `run_loop`,
-    # is what closes it on every exit path. Components handed in by a selftest bring their own
-    # runner and no engine runner.
-    program_runner = parts.get("program_runner")
-    repo_root = parts["program_store"].repo_root
+    store = parts["program_store"]
+    repo_root = store.repo_root
     state = parts.get("state_root")
     paths = state_paths(state) if state is not None else None
     # The run store records a failed version across runs, so a later run never starts from one (B5).
     run_store = FakeRunStore(paths["run_store"]) if paths is not None else None
-    # B5: one driver per repo. The lock covers the reset too, so two drivers starting at once cannot
-    # both archive the notes before one of them loses.
-    with contextlib.ExitStack() as held:
-        try:
-            held.enter_context(version_lock(repo_root, run_id))
-        except VersionLockHeld as exc:
-            # The same stop the engine's own lock path gives, so `main` reports it like any other.
-            raise LoopStop(str(exc), reason="version_lock_held") from exc
-        # B3: fresh or continuing is decided by the start version's content, never by a switch. A
-        # resume continues its own run, whose iter/ files it still reads, so it skips the reset.
-        if paths is not None and not resume:
-            prepare_run_start(
-                repo_root=repo_root, run_id=run_id, start_tag=current_tag,
-                carried=reset_carried(parts, paths["notes"]),
-                archive_root=paths["archive"],
-                manifest_for_version=sarol_optimizer.earlier_version_view(parts["program_store"]),
-                run_store=run_store,
+    program_runner = parts.get("program_runner")
+    if "setup_owners" in parts or "unsealed" in parts:
+        # Components handed in by a selftest say which sessions they seal, out loud.
+        owners, unsealed = dict(parts.get("setup_owners") or {}), tuple(parts.get("unsealed") or ())
+    else:
+        owners, unsealed = {"optimizer": parts["optimizer"], "program": program_runner}, ()
+
+    config = DriverConfig(
+        run_id=run_id,
+        repo_root=repo_root,
+        iterations=iterations,
+        program_store=store,
+        scorer=parts["scorer"],
+        release_builder=parts["release_builder"],
+        agent=parts["agent"],
+        # The engine runner, entered and bound to the run id by the driver (one network for the whole
+        # run, closed on every exit path); a selftest's own runner otherwise.
+        runner=program_runner if program_runner is not None else parts["runner"],
+        # A factory when a ramp was asked for, a fixed batch otherwise.
+        train_inputs=(
+            sampling.train_inputs_factory(
+                schedule=train_schedule,
+                mode=draw_mode,
+                split="train",
+                run_id=run_id,
+                staging_root=pathlib.Path(sampling_root or train_output_root) / "staging",
+                batch_root=pathlib.Path(sampling_root or train_output_root) / "batches",
+                history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
             )
-        pr = held.enter_context(program_runner) if program_runner is not None else None
-        runner = (
-            parts["runner"] if pr is None
-            else BudgetedRunner(pr.as_runner(run_id=run_id), budget=parts["budget"])
-        )
-        loop_kwargs = dict(
-            iterations=iterations,
-            run_id=run_id,
-            repo_root=parts["program_store"].repo_root,
-            program_store=parts["program_store"],
-            runner=runner,
-            scorer=parts["scorer"],
-            release_builder=parts["release_builder"],
-            agent=parts["agent"],
-            # A factory when a ramp was asked for, a fixed batch otherwise. `run_loop` accepts either
-            # (`train_inputs: RunInputs | Callable[[int], RunInputs]`), so the graduated cohort needs
-            # no engine change -- the same seam crc drives its growing batch through.
-            train_inputs=(
-                sampling.train_inputs_factory(
-                    schedule=train_schedule,
-                    mode=draw_mode,
-                    split="train",
-                    run_id=run_id,
-                    staging_root=pathlib.Path(sampling_root or train_output_root) / "staging",
-                    batch_root=pathlib.Path(sampling_root or train_output_root) / "batches",
-                    history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
-                )
-                if train_schedule
-                else _static_train_inputs(
-                    RunInputs, train_input_ref, run_id=run_id, train_n=train_n
-                )
-            ),
-            # A sampled VAL when one was asked for, the caller's fixed batch otherwise. Drawn ONCE and
-            # held constant for the run: the engine's frontier is a bare scalar, so a VAL that moved
-            # between iterations would turn sampling noise into phantom regressions and step-backs.
-            val_inputs=(
-                sampling.val_inputs_for(
-                    n=val_n,
-                    split="dev",
-                    run_id=run_id,
-                    staging_root=pathlib.Path(sampling_root or val_output_root) / "val-staging",
-                    batch_root=pathlib.Path(sampling_root or val_output_root) / "val-batches",
-                    history_path=pathlib.Path(sampling_root or val_output_root) / "val_draw.json",
-                )
-                if val_n
-                else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
-            ),
+            if train_schedule
+            else _static_train_inputs(RunInputs, train_input_ref, run_id=run_id, train_n=train_n)
+        ),
+        # A sampled VAL when one was asked for, the caller's fixed batch otherwise, drawn once and held
+        # for the run.
+        val_inputs=(
+            sampling.val_inputs_for(
+                n=val_n,
+                split="dev",
+                run_id=run_id,
+                staging_root=pathlib.Path(sampling_root or val_output_root) / "val-staging",
+                batch_root=pathlib.Path(sampling_root or val_output_root) / "val-batches",
+                history_path=pathlib.Path(sampling_root or val_output_root) / "val_draw.json",
+            )
+            if val_n
+            else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
+        ),
+        materialize_root=pathlib.Path(materialize_root),
+        start_tag=current_tag,
+        manifest_for_version=sarol_optimizer.earlier_version_view(store),
+        # B3: fresh or continuing is decided by the start version's content. With no state root (a
+        # selftest's components) nothing is carried, so the reset only checks and archives nothing.
+        carried=reset_carried(parts, paths["notes"]) if paths is not None else (),
+        archive_root=paths["archive"] if paths is not None else pathlib.Path(materialize_root).parent / "run-archive",
+        run_summary_path=effective_run_summary,
+        resume=resume,
+        run_store=run_store,
+        engine_pin=engine_pin.ENGINE_PIN,
+        engine_root=engine_pin.engine_path(),
+        engine_capabilities=engine_pin.CAPABILITIES,
+        allow_engine_divergence=os.environ.get(engine_pin.OVERRIDE_ENV) == "1",
+        pin_command="python3 experiments/sarol-2024/optimizer/sarol_program.py --print-pins",
+        setup_owners=owners,
+        unsealed=unsealed,
+        before_run=run_refusals(
+            parts, current_tag=current_tag, val_output_root=val_output_root,
+            peak_train_n=peak_train_n, iterations=iterations, max_budget_usd=max_budget_usd,
+        ),
+        **budget_hooks(parts.get("budget")),
+        loop_options=dict(
             task_config={
                 "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
                 "profile": parts["profile"].name,
             },
             # C6.5: a resume whose profile differs from the recorded one must STOP, not silently
-            # continue a curve built from two different systems. The engine's frontier is a bare
-            # scalar and cannot notice this on its own.
+            # continue a curve built from two different systems.
             hard_fields={
                 "profile": parts["profile"].name,
                 "retrieval_k": parts["profile"].retrieval_k,
                 "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
             },
-            # Provenance-only drift (warns, never STOPs): a resume under a different judge is worth a
-            # note but not a hard stop the way a profile/rubric change is.
-            soft_fields={
-                "model": component_kwargs.get("model") or adapter.DEFAULT_JUDGE_MODEL,
-            },
-            # #4 resume wiring. `metric_field` names the ledger key the engine stores each frozen
-            # version's VAL scalar under and that `--resume` reads back; it must be stable across the
-            # original run and its resume. `resume=True` reconstructs the frontier from the ledger +
-            # the program-v0..vk tag chain and continues at k+1, re-checking `hard_fields` (a profile /
-            # rubric mismatch STOPs — the C6.5 guarantee the comment above always intended).
+            # Provenance-only drift (warns, never STOPs).
+            soft_fields={"model": model},
+            # The ledger key each frozen version's VAL scalar is stored under and `--resume` reads back.
             metric_field="sarol_accuracy_9class",
-            run_summary_path=effective_run_summary,
-            resume=resume,
-            materialize_root=pathlib.Path(materialize_root),
             build_mistake_corpus=parts["build_mistake_corpus"],
-            current_tag=current_tag,
-            # ⚠ THIS ARGUMENT IS THE FEEDBACK LOOP. Without it the optimizer optimizes blind.
-            #
-            # `engine/loop.py:378-380` writes `iter/<n>/release_train.json` and `release_val.json`
-            # -- the per-iteration release payload, and the ONLY channel by which the held-out VAL
-            # scalar reaches the optimizer -- inside `if loop_ops is not None`. This call omitted it,
-            # so across all three iterations of the 2026-09-02 run no release file was ever written
-            # and no VAL number was ever visible to the agent. It edited the rubric three times with
-            # zero feedback on the quantity it was told to maximize. That is the entire explanation
-            # for that run's flat curve, and it is a wiring gap, not a result.
-            #
-            # Note the shape of the failure: Tier 2 was *over*-enforced. C6.9 correctly put VAL's
-            # per-claim outputs beyond the optimizer's reach, and then the payload designed to carry
-            # the scalar back across that boundary was never produced -- isolation without signal.
-            #
-            # `LocalLoopOps` is the same-user implementation; paper-trail's optimizer runs as this
-            # account, so there is no cross-user mechanism to express. It writes under `repo_root`,
-            # which is the optimizer's cwd, which is what makes `iter/<n>/release_*.json` readable to
-            # it exactly where `context/release-format.md` says to look. `commit_version` routes
-            # through it too and delegates straight back to `engine.versioning.commit_new_version`,
-            # so commit behaviour is unchanged. The corpus-cleanup paths it also enables are no-ops
-            # here: they require `corpus_ref`, which this consumer does not supply.
-            loop_ops=LocalLoopOps(parts["program_store"].repo_root),
-            expected_isolation_hash=parts.get("setup_value"),
-            run_store=run_store,
-        )
+            # ⚠ THIS ARGUMENT IS THE FEEDBACK LOOP. `run_loop` writes `iter/<n>/release_train.json` and
+            # `release_val.json` (the only channel by which the held-out VAL scalar reaches the
+            # optimizer) only when it has loop_ops. The 2026-09-02 run omitted it and optimized blind.
+            loop_ops=LocalLoopOps(repo_root),
+        ),
+    )
+    # #3 consumer half: a stop carries the partial run; attach the BudgetGuard so `main` can report the
+    # graders' real spend beside the optimizer's. The stop still re-raises.
+    try:
+        run = run_driver(config)
+    except LoopStop as exc:
+        exc.budget = parts.get("budget")
+        raise
+    return run, parts.get("budget")
 
-        # #3 consumer half: a mid-run LoopStop carries the partial run (best-so-far frontier) for
-        # `main` to summarize. Attach the BudgetGuard so `main` can report the REAL Runner/judge spend
-        # (`parts["budget"].spent_usd`) separately from the optimizer-agent spend the engine tracks on
-        # `LoopRun.spent_usd`; the guard is a run_optimization local and would otherwise be unreachable
-        # from `main`. The stop still re-raises loud — never swallowed.
-        try:
-            run = run_loop(**loop_kwargs)
-        except LoopStop as exc:
-            exc.budget = parts["budget"]
-            raise
-    return run, parts["budget"]
+
+def start_version_problem(store, current_tag: str) -> str | None:
+    """S26: is the tree the version the run starts from and files its numbers under? A problem, or
+    ``None``. Called before the build for a real run and by the driver on every run."""
+    # S26: the tree must BE the version it says it is. For the manifest's own frozen version the
+    # tree and the tag are re-hashed against the frozen hashes; a version the engine minted is a
+    # commit, so the tree must equal that commit's program (PT-B).
+    if current_tag != store.program_version:
+        differ = store.tree_differs_from(current_tag)
+        if differ:
+            return (
+                f"the working tree does not match {current_tag!r}, the version this run starts from "
+                f"and files its numbers under:\n  " + "\n  ".join(differ)
+                + f"\n\nCheck out {current_tag}'s program files, or pass the `current_tag` the tree "
+                "actually holds. Running as-is produces numbers that cannot be attributed to a version."
+            )
+        return None
+    # TWO checks: the working tree is what a human reads; the TAG is what the engine materializes
+    # from. A tree that matches while the tag points at older bytes runs the OLD program under the
+    # new name (the 2026-09-07 re-freeze).
+    drift = store.verify_tree_matches_tag()
+    if drift:
+        return (
+            f"the working tree does not match {current_tag!r}, which is the tag every "
+            f"number from this run would be filed under:\n  " + "\n  ".join(str(v) for v in drift)
+            + f"\n\nRestore the {len(drift)} file(s) to the frozen {store.program_version} content "
+            "before starting a baseline run, or pass a `current_tag` that names what the tree "
+            "actually holds. Running as-is produces numbers that cannot be attributed to a program version."
+        )
+    tag_drift = store.verify_tag_tree(current_tag)
+    if tag_drift:
+        return (
+            f"the git tag {current_tag!r} does not carry the frozen {store.program_version} content, "
+            "and the tag is what the engine actually materializes from -- so this run would evaluate "
+            "the tagged bytes while reporting under the manifest's identity:\n  "
+            + "\n  ".join(str(v) for v in tag_drift)
+            + f"\n\nRe-cut the tag onto a commit whose tree matches the manifest "
+            f"(`git tag -f -a {current_tag} <commit>`), then confirm with "
+            f"`freeze_program_v0.py --verify --tree {current_tag}`."
+        )
+    return None
+
+
+def _engine_refused(exc: RuntimeError, *, run_summary_path, val_output_root, run_id: str):
+    """Raise the engine check's refusal as an ``engine_version`` stop recorded in the run summary, when
+    the engine on the path has the driver's stop writer; otherwise re-raise it as it is. The engine path
+    is already on ``sys.path`` (``engine_pin`` appends it before checking)."""
+    try:
+        from engine.driver import record_pre_loop_stop  # noqa: PLC0415
+        from engine.loop import LoopStop  # noqa: PLC0415
+    except ImportError:
+        raise exc from None
+    summary = run_summary_path or (pathlib.Path(val_output_root).parent / "run_summary.json" if val_output_root else None)
+    stop = LoopStop(str(exc), reason="engine_version")
+    record_pre_loop_stop(summary, run_id=run_id, stop=stop, step="engine_version")
+    raise stop from exc
+
+
+def run_refusals(parts: dict, *, current_tag: str, val_output_root, peak_train_n: int, iterations: int,
+                 max_budget_usd: float) -> tuple:
+    """paper-trail's refusals the driver runs first, before the lock, on every run: built components
+    and a selftest's injected ones alike (isolation OQ10: no switch skips them). Each returns a message
+    or ``None``; the driver turns a message into a stop recorded in the run summary."""
+    store = parts["program_store"]
+
+    def profile_runnable(config) -> str | None:
+        return profiles_mod.unrunnable_reason(parts["profile"].name)
+
+    def val_isolation(config) -> str | None:
+        leak = val_isolation_problem(val_output_root, store.repo_root)
+        return f"VAL isolation (C6.9): {leak}" if leak else None
+
+    def tree_is_the_start_version(config) -> str | None:
+        return start_version_problem(store, current_tag)
+
+    def affordable(config) -> str | None:
+        # The ramp's top rung: the check describes the most expensive iteration the run can reach.
+        ok, message = preflight(parts["cost_model"], train_n=peak_train_n, iterations=iterations,
+                                max_budget_usd=max_budget_usd)
+        return None if ok else f"budget: {message}"
+
+    return (profile_runnable, val_isolation, tree_is_the_start_version, affordable)
+
+
+def budget_hooks(budget: "BudgetGuard | None") -> dict:
+    """The per-pass budget as driver hooks (was ``BudgetedRunner``, PT-B): refuse a pass the run can't
+    finish the iteration after, and record what each pass cost. A pass the engine reuses is not run,
+    so it is neither checked nor charged. The engine's hook wrapper keeps the runner's ``run_id`` and
+    ``cache_identity``."""
+    if budget is None:
+        return {}
+    from engine.loop import LoopStop  # noqa: PLC0415
+
+    def within_budget(inputs) -> None:
+        # The engine reuses a pass before this is ever called, so this cannot know whether the
+        # iteration's next validation pass will be reused: it prices the worst case. Near the cap a
+        # run may stop one iteration early; it never starts what it cannot finish.
+        reason = budget.check(inputs.split)
+        if reason is not None:
+            raise LoopStop(reason, reason="budget_exhausted")
+        return None
+
+    def charge(inputs, artifacts) -> None:
+        budget.record(artifacts.cost_usd or 0.0)
+
+    return {"before_pass": (within_budget,), "after_pass": (charge,)}
 
 
 def _static_train_inputs(RunInputs, train_input_ref, *, run_id: str, train_n: int | None):
@@ -1312,6 +1268,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             "agent": adapter.ContractGuardedAgent(_CleanAgent(repo3), store3, tree_root=repo3),
             "budget": None,
             "cost_model": CostModel.for_profile("retrieval", val_size=1),
+            "unsealed": ("optimizer", "program"),
         }
         entrypoint_error = None
         try:
@@ -1517,14 +1474,13 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
 
     no_canary_model = CostModel.for_profile("retrieval", canary_enabled=False)
     checks += [
-        ("a real run REFUSES to start with no canary pinned (Finding 4)",
-         isinstance(canary_refusal, ValueError)),
+        ("a real run REFUSES to start with no canary pinned (Finding 4), as a recorded stop",
+         type(canary_refusal).__name__ == "LoopStop" and getattr(canary_refusal, "reason", None) == "consumer_refused"),
         ("...saying so in the message, and naming how to pin one",
          canary_refusal is not None and "canary" in str(canary_refusal)
          and "--pin" in str(canary_refusal)),
         ("...and --no-canary gets PAST that gate, so the refusal really is about the canary",
-         other_refusal is not None and not (
-             isinstance(other_refusal, ValueError) and "canary" in str(other_refusal))),
+         other_refusal is not None and "canary" not in str(other_refusal)),
         ("a fixed --train-inputs batch whose size disagrees with the priced --train-n is "
          "REFUSED -- the other half of Bug 1, where the ramp is not in play", _mismatch),
         ("...and a matching one passes through, so the check is on size and not on the path",
@@ -1568,8 +1524,6 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
 
         # Under the engine runner the run id is part of every pass key and of every archive path,
         # and it reaches the runner in exactly one place: `as_runner(run_id=...)`.
-        ("the run id reaches the engine runner, so one run's passes archive under one run",
-         "pr.as_runner(run_id=run_id)" in inspect.getsource(run_optimization)),
         ("...and `run_optimization` threads it to build_components as well",
          "run_id=run_id," in inspect.getsource(run_optimization)),
 
@@ -1644,7 +1598,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # The engine renders the description's `max_budget_usd` as `--max-budget-usd` on the session
         # argv (its contained_argv); what paper-trail owns is that the cap is set and is the one stated.
         ("the optimizer session also carries a hard budget cap",
-         parts["agent"].inner.pin_description(materialize_root=parts["optimizer"].materialize_root).max_budget_usd
+         parts["agent"].inner.setup_description().max_budget_usd
          == parts["agent"].inner.max_budget_usd > 0),
     ]
     return checks
@@ -1736,7 +1690,7 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
             notebook = tmp / f"{name}-meta-learnings.md"
             return repo, notebook
 
-        def _run(repo, notebook, runner, *, run_id, current_tag="program-v0", iterations=1, resume=False):
+        def _run(repo, notebook, runner, *, run_id, current_tag="program-v0", iterations=1, resume=False, budget=None):
             store = SarolProgramStore(repo_root=repo)
             parts = {
                 "program_store": store, "runner": runner, "scorer": _Scorer(),
@@ -1744,8 +1698,10 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
                 "release_builder": adapter.SarolReleaseBuilder(setup_value="setup-v1:selftest"),
                 "build_mistake_corpus": None,
                 "agent": adapter.ContractGuardedAgent(_CleanAgent(repo), store, tree_root=repo),
-                "budget": None, "cost_model": CostModel.for_profile("retrieval", val_size=1),
+                "budget": budget, "cost_model": CostModel.for_profile("retrieval", val_size=1),
                 "optimizer": types.SimpleNamespace(notebook=notebook), "state_root": state,
+                # The selftest's stand-ins are not sealed sessions; said out loud, as the driver requires.
+                "unsealed": ("optimizer", "program"),
             }
             return run_optimization(
                 iterations=iterations, run_id=run_id, train_input_ref=str(batch), val_input_ref=str(batch),
@@ -1793,23 +1749,24 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
         # -- B6 through the wrapper: the runner's identity and run id must reach the engine -----------
         repo_b, nb_b = _repo("b")
         moving = _Runner("ident-1", identity_moves=True)
-        _run(repo_b, nb_b, BudgetedRunner(moving), run_id="ident-1", iterations=2)
+        _roomy = lambda: BudgetGuard(max_budget_usd=1e9, cost_model=CostModel.for_profile("retrieval", val_size=1), train_n=1)  # noqa: E731
+        _run(repo_b, nb_b, moving, run_id="ident-1", iterations=2, budget=_roomy())
         repo_c, nb_c = _repo("c")
         moving_bare = _Runner("ident-2", identity_moves=True)
         _run(repo_c, nb_c, _NoForwarding(moving_bare), run_id="ident-2", iterations=2)
         checks += [
-            ("B6: through BudgetedRunner, a changed grader identity means a fresh validation pass (4 passes)",
+            ("B6: through the driver's budget hooks, a changed grader identity means a fresh validation pass (4 passes)",
              moving.val_calls == 4),
             ("...negative control: a wrapper that does not forward it reuses the stale pass (3 passes)",
              moving_bare.val_calls == 3),
         ]
         repo_d, nb_d = _repo("d")
         try:
-            _run(repo_d, nb_d, BudgetedRunner(_Runner("someone-elses-run")), run_id="mine")
+            _run(repo_d, nb_d, _Runner("someone-elses-run"), run_id="mine", budget=_roomy())
             mismatch = None
         except LoopStop as exc:
             mismatch = exc.reason
-        checks.append(("B5: through BudgetedRunner, a runner bound to another run id stops the run",
+        checks.append(("B5: through the driver's budget hooks, a runner bound to another run id stops the run",
                        mismatch == "run_id_mismatch"))
 
         # -- B6: a version whose validation pass crashes is a failed version, told to the optimizer ---
@@ -1835,13 +1792,25 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
             ("...and the iteration after it scores the held base without a new pass (3 passes, not 4)",
              failing.val_calls == 3),
         ]
-        try:
-            _run(repo_e, nb_e, _Runner("after-fail"), run_id="after-fail", current_tag="program-v1")
-            after_fail = None
-        except LoopStop as exc:
-            after_fail = exc.reason
-        checks.append(("B5: a later run starting from the failed version is refused at run start (the run store "
-                       "reaches the reset)", after_fail == "start_from_failed_version"))
+        def _after(run_id):
+            try:
+                _run(repo_e, nb_e, _Runner(run_id), run_id=run_id, current_tag="program-v1")
+                return None
+            except LoopStop as exc:
+                return exc.reason
+
+        # No bypass (C-core, isolation OQ10): the tree still holds the later version, so the drift check
+        # refuses first, for injected components too (it used to be skipped for them).
+        drift_first = _after("after-fail-drift")
+        subprocess.run(["git", "-C", str(repo_e), "checkout", "program-v1", "--", "experiments"], check=True,
+                       capture_output=True)
+        after_fail = _after("after-fail")
+        checks += [
+            (f"no bypass: a tree that is not the start version is refused even with injected components [got {drift_first}]",
+             drift_first == "consumer_refused"),
+            (f"B5: with the tree on program-v1, a run starting from that failed version is refused at run start "
+             f"(the run store reaches the reset) [got {after_fail}]", after_fail == "start_from_failed_version"),
+        ]
 
         # -- B5: a second driver stops at the lock, before the reset touches anything ----------------
         repo_f, nb_f = _repo("f")
@@ -1857,11 +1826,70 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
                        second is not None and second.startswith("version_lock_held") and "first-driver" in second
                        and nb_f.read_text(encoding="utf-8") == "must survive\n" and not _archived("second-driver")))
 
+        # -- the run id and the runner reach the driver, which binds one to the other (C-core) ---------
+        # Captured at the driver's door rather than read from the source: the driver's own tests prove it
+        # binds the runner it is handed to the run id it is handed (`as_runner(run_id=...)`).
+        driver_mod = importlib.import_module("engine.driver")
+        handed = {}
+        real_run_driver = driver_mod.run_driver
+
+        def _capture(config):
+            handed["config"] = config
+            raise LoopStop("captured", reason="captured")
+
+        driver_mod.run_driver = _capture
+        try:
+            repo_h, nb_h = _repo("h")
+            runner_h = _Runner("bind-1")
+            try:
+                _run(repo_h, nb_h, runner_h, run_id="bind-1")
+            except LoopStop:
+                pass
+        finally:
+            driver_mod.run_driver = real_run_driver
+        cfg = handed.get("config")
+        checks.append(("the run id and the runner reach the driver, which binds one to the other, so one run's "
+                       "passes archive under one run",
+                       cfg is not None and cfg.run_id == "bind-1" and cfg.runner is runner_h))
+
+        # -- a stale engine is a recorded stop, not a traceback (implementation review, 2026-10-06) ------
+        stale_val = tmp / "stale-engine" / "val"
+        stale_summary = stale_val.parent / "run_summary.json"
+        stale_summary.parent.mkdir(parents=True)
+        stale_rows = [{"iter": 1, "tag": "program-v12"}, {"iter": 2, "tag": "program-v13"}]
+        stale_summary.write_text(json.dumps({"config": {}, "run_id": "eng-stale", "iters": stale_rows}), encoding="utf-8")
+        real_on_path = isolation_mod.engine_on_path
+
+        def _stale_engine():
+            raise RuntimeError("refusing to run against this engine checkout: the engine does not contain the "
+                               "pinned commit (selftest stand-in)")
+
+        isolation_mod.engine_on_path = _stale_engine
+        try:
+            import contextlib as _cl  # noqa: PLC0415
+            import io as _io  # noqa: PLC0415
+
+            with _cl.redirect_stdout(_io.StringIO()), _cl.redirect_stderr(_io.StringIO()):
+                stale_rc = main([
+                    "--run", "--image", isolation_mod.FAKE_IMAGE, "--run-id", "eng-stale", "--train-n", "1",
+                    "--max-budget-usd", "1", "--train-inputs", str(batch), "--val-inputs", str(batch),
+                    "--materialize-root", str(tmp / "stale-engine" / "mat"),
+                    "--train-output-root", str(tmp / "stale-engine" / "train"), "--val-output-root", str(stale_val),
+                ])
+        finally:
+            isolation_mod.engine_on_path = real_on_path
+        stale_after = json.loads(stale_summary.read_text(encoding="utf-8"))
+        checks.append(("a stale engine stops the CLI with exit 3 and a recorded engine_version stop, keeping the "
+                       "summary's rows (no traceback)",
+                       stale_rc == 3 and stale_after.get("iters") == stale_rows
+                       and (stale_after.get("stop") or {}).get("reason") == "engine_version"))
+
         # -- a resume continues its own run: no reset ------------------------------------------------
         repo_g, nb_g = _repo("g")
         calls = []
-        real_prepare = run_start_mod.prepare_run_start
-        run_start_mod.prepare_run_start = lambda **kw: calls.append(kw)
+        # The driver calls the reset (C-core), so the stand-in goes where the driver looks it up.
+        real_prepare = driver_mod.prepare_run_start
+        driver_mod.prepare_run_start = lambda **kw: calls.append(kw)
         try:
             try:
                 _run(repo_g, nb_g, _Runner("res-1"), run_id="res-1", resume=True)
@@ -1876,7 +1904,7 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
                     resume_locked = exc.reason
             _run(repo_g, nb_g, _Runner("res-2"), run_id="res-2")
         finally:
-            run_start_mod.prepare_run_start = real_prepare
+            driver_mod.prepare_run_start = real_prepare
         checks += [
             (f"a resume skips the run-start reset; a plain run calls it (the resume ended: {resume_stop})",
              [c["run_id"] for c in calls] == ["res-2"]),
@@ -2003,19 +2031,28 @@ def _selftest() -> int:
         # implements only the adjudicator stage.
         ("only retrieval is runnable today",
          profiles_mod.runnable_profiles() == ["retrieval"]),
-        ("a real run refuses an unrunnable profile before spending anything",
-         _raises_valueerror(lambda: run_optimization(
+        ("a real run refuses an unrunnable profile before spending anything, as a recorded stop",
+         _stops(lambda: run_optimization(
              iterations=1, run_id="r", train_input_ref="t", val_input_ref="v",
              max_budget_usd=1.0, train_n=1, materialize_root=repo,
              train_output_root=repo / "trainout",
-             val_output_root=pathlib.Path(_outside), profile="agentic"))),
-            # The negative control the plan asks for: wiring the loop up with a readable VAL root
-            # must fail loudly at construction, not quietly produce a leaky run.
-            ("build_components refuses to assemble a loop with a readable VAL root",
-             _raises_valueerror(lambda: build_components(
-                 max_budget_usd=1.0, train_n=1,
-                 program_store=_FakeStore(repo),
-                 val_output_root=inside))),
+             val_output_root=pathlib.Path(_outside), profile="agentic"), "consumer_refused")),
+        ]
+        # The negative control the plan asks for: a run wired with a readable VAL root must refuse,
+        # not quietly produce a leaky run. Since C-core the refusal is one of the driver's before_run
+        # hooks, which run on every run, injected components included (isolation OQ10).
+        _hook_parts = {"program_store": _FakeStore(repo), "profile": profiles_mod.get("retrieval"),
+                       "cost_model": CostModel.for_profile("retrieval")}
+
+        def _val_hook(root):
+            hooks = {h.__name__: h for h in run_refusals(_hook_parts, current_tag="program-v0", val_output_root=root,
+                                                          peak_train_n=1, iterations=1, max_budget_usd=1e9)}
+            return hooks["val_isolation"](None)
+
+        checks += [
+            ("the driver's VAL-isolation refusal names a readable VAL root",
+             "VAL isolation (C6.9)" in (_val_hook(inside) or "")),
+            ("...and passes one outside the tree (negative control)", _val_hook(pathlib.Path(_outside)) is None),
         ]
 
         # The CLI is where this broke: `--profile` was parsed, used to price the run, then dropped
@@ -2023,21 +2060,27 @@ def _selftest() -> int:
         # ran `agentic`. Capture what main() actually forwards.
         seen: dict = {}
 
+        class _StopRecorder(Exception):
+            pass
+
         def _recorder(**kw):
             seen.update(kw)
-            raise BudgetExceeded("stop before doing any work")
+            raise _StopRecorder("stop before doing any work")
 
         _real = globals()["run_optimization"]
         globals()["run_optimization"] = _recorder
         try:
-            main([
-                "--run", "--image", isolation_mod.FAKE_IMAGE, "--profile", "retrieval",
-                "--run-id", "r1", "--train-n", "10", "--max-budget-usd", "1",
-                "--train-inputs", "t.json", "--val-inputs", "v.json",
-                "--materialize-root", str(repo),
-                "--train-output-root", str(repo / "trainout"),
-                "--val-output-root", _outside,
-            ])
+            try:
+                main([
+                    "--run", "--image", isolation_mod.FAKE_IMAGE, "--profile", "retrieval",
+                    "--run-id", "r1", "--train-n", "10", "--max-budget-usd", "1",
+                    "--train-inputs", "t.json", "--val-inputs", "v.json",
+                    "--materialize-root", str(repo),
+                    "--train-output-root", str(repo / "trainout"),
+                    "--val-output-root", _outside,
+                ])
+            except _StopRecorder:
+                pass
             no_roots = main([
                 "--run", "--image", isolation_mod.FAKE_IMAGE, "--run-id", "r", "--train-n", "10", "--max-budget-usd", "1",
                 "--train-inputs", "t", "--val-inputs", "v",
@@ -2110,50 +2153,31 @@ def _selftest() -> int:
                 def cache_identity(self, materialized_path, inp):
                     return f"calls+setup+prompt:{inp.batch_id}"
 
+            # The budget is two driver hooks since C-core (`budget_hooks`): refuse before a pass, charge
+            # after it. The engine's hook wrapper keeps the runner's run id and pass identity; its tests
+            # and the lifecycle checks above (through the driver) cover that.
             budget = BudgetGuard(max_budget_usd=1_000_000.0, cost_model=cm, train_n=10)
-            budgeted = BudgetedRunner(_Inner(), budget=budget)
-            first = budgeted.run(tree, inputs)
-            # The pass reuse is the engine's now (B6). Its tests cover what the cache checks here did:
-            # one pass for the probe and the next score (test_the_probe_and_the_next_score_of_the_same_
-            # version_cost_one_pass), a changed runner identity misses (test_a_change_in_the_runners_own_
-            # pass_identity_is_a_cache_miss), a changed file reruns (test_a_cached_pass_whose_files_changed_
-            # is_run_again). "A timeout is never cached" has no loop counterpart: a failed validation pass
-            # stops the run or makes a failed version, never re-scored (B close-out, 2026-10-05).
-            budgeted.run(tree, inputs)
+            hooks = budget_hooks(budget)
+            inner = _Inner()
+            for _ in range(2):
+                hooks["before_pass"][0](inputs)
+                hooks["after_pass"][0](inputs, inner.run(tree, inputs))
             checks += [
-                ("every call reaches the runner (the wrapper keeps no cache of its own)",
-                 first.status == "ok" and len(calls) == 2 and budgeted.stats()["calls"] == 2),
-                ("real metered spend is recorded, not the estimate", budget.spent_usd == 2.5),
-                ("the wrapper passes the runner's run id through, for the engine's run-id check",
-                 budgeted.run_id == "run-a"),
-                ("...and its pass identity, for the engine's reuse key",
-                 budgeted.cache_identity(tree, inputs) == "calls+setup+prompt:b1"),
+                ("a roomy budget lets each pass through, and real metered spend is recorded, not the estimate",
+                 len(calls) == 2 and budget.spent_usd == 2.5),
+                ("no budget, no hooks", budget_hooks(None) == {}),
             ]
 
-            # The negative control (a wrapper that does not forward reuses a stale pass) drives the
-            # engine's real loop, in _integration_checks.
-
-            # Budget refusal returns infra_error rather than raising or spending.
-            broke_calls: list[str] = []
-
-            class _Spy:
-                def run(self, materialized_path, inp):
-                    broke_calls.append(inp.split)
-                    return schemas.RunArtifacts(
-                        batch_id=inp.batch_id, status="ok", artifact_refs=(), cost_usd=0.0
-                    )
-
-            broke = BudgetedRunner(
-                _Spy(),
-                budget=BudgetGuard(max_budget_usd=0.01, cost_model=cm, train_n=50),
-            )
-            refused = broke.run(tree, schemas.RunInputs(
-                input_ref=str(batch), batch_id="b2", split="train"))
+            broke = budget_hooks(BudgetGuard(max_budget_usd=0.01, cost_model=cm, train_n=50))
+            refused = None
+            try:
+                broke["before_pass"][0](schemas.RunInputs(input_ref=str(batch), batch_id="b2", split="train"))
+            except Exception as exc:  # noqa: BLE001 -- the stop's reason is what is asserted
+                refused = exc
             checks += [
-                ("an unaffordable iteration returns infra_error", refused.status == "infra_error"),
-                ("...naming the budget", refused.error is not None
-                 and refused.error.code == "BUDGET_EXCEEDED"),
-                ("...without dispatching anything", not broke_calls),
+                ("an unaffordable pass stops the run before it is dispatched, as budget_exhausted",
+                 type(refused).__name__ == "LoopStop" and getattr(refused, "reason", None) == "budget_exhausted"),
+                ("...naming the budget", "budget:" in str(refused)),
             ]
 
         # -- S26: the tag guard ---------------------------------------------------------------
@@ -2245,10 +2269,8 @@ def _selftest() -> int:
                     profile="retrieval", require_canary=False,
                 )
                 refusal = ""
-            except ValueError as exc:
-                refusal = str(exc)
-            except Exception as exc:  # noqa: BLE001 -- any other failure means the guard was passed
-                refusal = f"<wrong exception: {type(exc).__name__}: {exc}>"
+            except Exception as exc:  # noqa: BLE001 -- only the drift refusal's own stop counts
+                refusal = _drift_refusal_text(exc)
             finally:
                 adapter.SarolProgramStore = _real_store_cls
 
@@ -2320,10 +2342,8 @@ def _selftest() -> int:
                     profile="retrieval", require_canary=False,
                 )
                 tag_refusal = ""
-            except ValueError as exc:
-                tag_refusal = str(exc)
-            except Exception as exc:  # noqa: BLE001
-                tag_refusal = f"<wrong exception: {type(exc).__name__}: {exc}>"
+            except Exception as exc:  # noqa: BLE001 -- only the drift refusal's own stop counts
+                tag_refusal = _drift_refusal_text(exc)
             finally:
                 adapter.SarolProgramStore = _real_store_cls
                 _g("tag", "-f", "-a", _TAG, _good_commit, "-m", _TAG)
@@ -2355,10 +2375,8 @@ def _selftest() -> int:
                         state_root=pathlib.Path(tag_tmp) / "state",
                     )
                     return ""
-                except ValueError as exc:
-                    return str(exc)
-                except Exception as exc:  # noqa: BLE001 -- any other failure means the guard was passed
-                    return f"<wrong exception: {type(exc).__name__}: {exc}>"
+                except Exception as exc:  # noqa: BLE001 -- only the drift refusal's own stop counts
+                    return _drift_refusal_text(exc)
                 finally:
                     adapter.SarolProgramStore = _real_store_cls
 
@@ -2608,12 +2626,18 @@ def main(argv: "list[str] | None" = None) -> int:
         if missing:
             print(f"--run requires: {', '.join(missing)}", file=sys.stderr)
             return 2
-        # LoopStop lives in the shared engine; put its root on the path (run_optimization does the
-        # same lazily) so the `except LoopStop` below can name it.
-        _eng = adapter.engine_path()
+        # LoopStop lives in the shared engine. Only make it importable here: run_optimization checks the
+        # engine and turns a refusal into a recorded `engine_version` stop, caught below like any other.
+        _eng = engine_pin.engine_path()
         if str(_eng) not in sys.path:
-            sys.path.append(str(_eng))
-        from engine.loop import LoopStop  # noqa: PLC0415
+            sys.path.append(str(_eng))  # appended, never in front: see sarol_isolation.engine_on_path
+        try:
+            from engine.driver import exit_code  # noqa: PLC0415
+            from engine.loop import LoopStop  # noqa: PLC0415
+        except ImportError as exc:
+            print(f"STOP (engine_version): the engine at {_eng} cannot run the shared driver: {exc}. "
+                  f"{engine_pin.pin_problem(_eng) or ''}", file=sys.stderr)
+            return 3
         try:
             run, budget = run_optimization(
                 iterations=args.iterations,
@@ -2656,20 +2680,18 @@ def main(argv: "list[str] | None" = None) -> int:
                 optimizer_image=args.optimizer_image,
                 **({"model": args.model} if args.model else {}),
             )
-        except BudgetExceeded as exc:
-            print(f"REFUSED  {exc}", file=sys.stderr)
-            return 1
         except LoopStop as exc:
-            # A mid-run hard stop (bad probe, no-edit iteration, a resume config mismatch, a
-            # security trip-wire, budget). Print the partial-run summary the engine attached — the
-            # completed iterations' frontier-best survives — and exit non-zero. NOT swallowed.
+            # Every refusal and every hard stop (a stale setup pin, the budget, a bad probe, a resume
+            # config mismatch, a security trip-wire) is a stop, recorded in the run summary by the
+            # driver. Print the partial-run summary the engine attached, if the loop started, and exit
+            # non-zero. NOT swallowed.
             run = exc.run
             budget = getattr(exc, "budget", None)
             print(f"STOP ({exc.reason or 'loop_stop'}): {exc}", file=sys.stderr)
             print(json.dumps(_run_summary_json(run, budget, stopped=True), indent=2))
-            return 3
+            return exit_code(exc)
         print(json.dumps(_run_summary_json(run, budget, stopped=False), indent=2))
-        return 0
+        return exit_code(run)
 
     # The preflight table prices what a run would ACTUALLY do: a canary term only if one is
     # pinned and not waived. A quote that assumes a guard the run will not execute is the same

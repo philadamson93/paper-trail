@@ -461,33 +461,14 @@ def committed_pins(repo_root: pathlib.Path = adapter.REPO_ROOT) -> dict:
     return {kind: committed_pin(pathlib.Path(repo_root), MANIFEST_REL, kind=kind) for kind in ("program", "optimizer")}
 
 
-def program_pin_description(runner: ProgramRunner) -> ss.SessionDescription:
-    """A grader session's description as the runner builds one for a call (its ``_call_scope`` and
-    ``_description``), over placeholder host folders, which the fingerprint never reads. The selftest
-    holds its fingerprint to the one the runner's own sessions are given."""
-    from dataclasses import replace  # noqa: PLC0415
-
-    spec, template = runner.spec, runner.template
-    folder = runner.root.root / "live" / "pin" / "calls" / "pin"
-    scope = SessionScope(
-        program=pathlib.Path("/pin/program"),
-        readable=tuple((pathlib.Path(h), f"/workspace/ro/{name}") for h, name in spec.readable),
-        writable=((folder, CALL_CONTAINER_PATH),),
-        denied=(*spec.forbidden, Forbidden(runner.root.root, representatives=("live/pin/receipts",), allowed_inside=("live",))),
-    )
-    return replace(
-        template, scope=scope, transcript_dir=None if template.transcript_dir is None else folder,
-        timeout_seconds=spec.timeout_seconds, max_budget_usd=spec.max_budget_usd, kind="program", editable_patterns=(),
-    )
-
-
 def fingerprints(runner: ProgramRunner, optimizer, *, materialize_root: pathlib.Path) -> dict:
     """``{"program": fingerprint, "optimizer": fingerprint}`` for this run's two session kinds."""
     from isolation.setup_fingerprint import setup_fingerprint  # noqa: PLC0415
 
+    # The engine's builders (C0): the same descriptions the driver's setup check reads at run start.
     return {
-        "program": setup_fingerprint(program_pin_description(runner)),
-        "optimizer": setup_fingerprint(optimizer.pin_description(materialize_root=materialize_root)),
+        "program": setup_fingerprint(runner.setup_description()),
+        "optimizer": setup_fingerprint(optimizer.setup_description()),
     }
 
 
@@ -732,7 +713,7 @@ def _selftest() -> int:
 
         given = {fingerprint_hash(setup_fingerprint(d)) for d in world.descriptions}
         checks.append(("the program pin is computed from the same setup the runner hands its sessions",
-                       len(given) == 1 and given == {fingerprint_hash(setup_fingerprint(program_pin_description(runners[-1])))}))
+                       len(given) == 1 and given == {fingerprint_hash(setup_fingerprint(runners[-1].setup_description()))}))
         gold = {"pred_label": "OVERSIMPLIFY", "gold_label": "OVERSIMPLIFY"}
         scored = adapter.SarolScorer(gold_resolver=lambda _p: gold).score(art, "train", {})
         checks.append(("the scorer scores a clean pass in full", scored.breakdown.get("scored") is True
