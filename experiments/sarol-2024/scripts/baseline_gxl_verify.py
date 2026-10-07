@@ -68,6 +68,11 @@ PT_RUNS = {
     "paper-trail v8": RUNS / "hillclimb-2026-09-22a/val/iter1-program-v8/run_manifest.json",
     "paper-trail v9": RUNS / "hillclimb-2026-09-22c/val/iter1-current/run_manifest.json",
     "paper-trail v9 (re-measure)": RUNS / "measure-v9-2026-09-22/val/val/mat-v9/run_manifest.json",
+    # The original hand-written program, before any optimization (Phil 2026-10-07: "our v1"). These
+    # hill-climbs started from program-v0, so their `iter1-current` VAL run measures it. 09-21d is
+    # left out: 21 of its 50 calls failed. Both ran on the 09-20 harness, two days before v8's.
+    "paper-trail v0 (original, 09-20b)": RUNS / "hillclimb-2026-09-20b/val/iter1-current/run_manifest.json",
+    "paper-trail v0 (original, 09-20c)": RUNS / "hillclimb-2026-09-20c/val/iter1-current/run_manifest.json",
 }
 NOISE = 0.08  # the two v9 runs differ by this much on the same program and claims
 
@@ -495,8 +500,9 @@ def score_only(out: pathlib.Path) -> int:
            "results": results, "disagreements": disagree}
     (out / "scores.json").write_text(json.dumps(doc, indent=1), encoding="utf-8")
     (out / "card.md").write_text(card(doc), encoding="utf-8")
+    (out / "card.html").write_text(card_html(doc, verdicts, systems, gold), encoding="utf-8")
     print(f"[score] 2-way accuracy: gxl {results['gxl claim checker']['2way_accuracy']:.2f} vs v8 {v8['2way_accuracy']:.2f} -> {readout}")
-    print(f"[score] wrote {out / 'scores.json'} and {out / 'card.md'}")
+    print(f"[score] wrote {out / 'scores.json'}, {out / 'card.md'} and {out / 'card.html'}")
     return 0 if all(ok for _, ok in sanity) else 6
 
 
@@ -539,6 +545,183 @@ Run-to-run noise on the same program is about {NOISE}.
 |---|---|---|---|
 {dis}
 """
+
+
+_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gxl Checker Baseline</title>
+<style>
+:root{--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;
+--bar:#2a78d6;--band:#eef3fb;--line:#e1e0d9;--code:#f0efec}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;
+--muted:#898781;--grid:#2c2c2a;--axis:#383835;--bar:#3987e5;--band:#1d2633;--line:#2c2c2a;--code:#262624}}
+:root[data-theme="dark"]{--page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;
+--bar:#3987e5;--band:#1d2633;--line:#2c2c2a;--code:#262624}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:26px;line-height:1.2;margin:0 0 4px}h2{font-size:18px;margin:40px 0 8px}
+.sub{color:var(--ink2);margin:0 0 24px}
+.answer{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;font-size:16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.tile .v{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums}.tile .k{color:var(--ink2);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+svg text{font-family:inherit}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ink2);font-weight:600}td.n{text-align:right}th.n{text-align:right}
+.note{color:var(--ink2);font-size:13.5px}ul.note{padding-left:18px}
+details{border-bottom:1px solid var(--line);padding:8px 0}summary{cursor:pointer}
+.q{background:var(--code);border-radius:6px;padding:8px 10px;margin:6px 0;white-space:pre-wrap;font-size:13px}
+code{background:var(--code);border-radius:4px;padding:1px 4px;font-size:12.5px;word-break:break-all}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--page);font-size:12.5px;padding:6px 8px;border-radius:6px;display:none;max-width:280px}
+</style></head><body><main>
+%%BODY%%
+</main><div id="tip"></div>
+<script>
+(function(){var t=document.getElementById('tip');document.querySelectorAll('[data-tip]').forEach(function(el){
+el.addEventListener('mousemove',function(e){t.textContent=el.getAttribute('data-tip');t.style.display='block';
+t.style.left=Math.min(e.clientX+12,window.innerWidth-290)+'px';t.style.top=(e.clientY+12)+'px';});
+el.addEventListener('mouseleave',function(){t.style.display='none';});});})();
+</script></body></html>
+"""
+
+
+def _bar_chart(results: dict[str, Any], v8_value: float) -> str:
+    """Horizontal bars of 2-way accuracy, one hue, the floor dashed, v8's noise band shaded."""
+    import html  # noqa: PLC0415
+
+    names = list(results)
+    left, width, row, top = 250, 440, 34, 28
+    height = top + row * len(names) + 30
+
+    def x(v: float) -> float:
+        return left + v * width
+
+    floor = results["always ACCURATE"]["2way_accuracy"]
+    lo, hi = max(0.0, v8_value - NOISE), min(1.0, v8_value + NOISE)
+    parts = [f'<svg viewBox="0 0 {left + width + 60} {height}" width="100%" role="img" '
+             f'aria-label="2-way accuracy by system; the table below has every number">']
+    parts.append(f'<rect x="{x(lo):.1f}" y="{top - 8}" width="{x(hi) - x(lo):.1f}" height="{row * len(names) + 8}" fill="var(--band)"/>')
+    parts.append(f'<text x="{x(lo) + 4:.1f}" y="{top - 12}" font-size="11" fill="var(--ink2)">within {NOISE:.2f} of v8</text>')
+    for t in (0, 0.2, 0.4, 0.6, 0.8, 1.0):
+        parts.append(f'<line x1="{x(t):.1f}" x2="{x(t):.1f}" y1="{top - 8}" y2="{top + row * len(names)}" stroke="var(--grid)" stroke-width="1"/>')
+        parts.append(f'<text x="{x(t):.1f}" y="{top + row * len(names) + 18}" font-size="11" fill="var(--muted)" text-anchor="middle">{t:.1f}</text>')
+    parts.append(f'<line x1="{x(floor):.1f}" x2="{x(floor):.1f}" y1="{top - 8}" y2="{top + row * len(names)}" '
+                 f'stroke="var(--ink2)" stroke-width="1.5" stroke-dasharray="4 3"/>')
+    for i, name in enumerate(names):
+        r = results[name]
+        v, y = r["2way_accuracy"], top + i * row + 8
+        w, h = max(v * width, 4), 18
+        path = (f"M{left},{y} h{w - 4:.1f} a4,4 0 0 1 4,4 v{h - 8} a4,4 0 0 1 -4,4 h{-(w - 4):.1f} z")
+        tip = (f"{name}: 2-way accuracy {v:.2f} · caught {r['binary']['caught']}/{r['binary']['n_gold_flagged']} "
+               f"Sarol-flagged claims")
+        parts.append(f'<g data-tip="{html.escape(tip)}"><rect x="0" y="{y - 8}" width="{left + width + 60}" height="{row}" fill="transparent"/>'
+                     f'<text x="{left - 10}" y="{y + 13}" font-size="13" fill="var(--ink)" text-anchor="end">{html.escape(name)}</text>'
+                     f'<path d="{path}" fill="var(--bar)"/>'
+                     f'<text x="{x(v) + 6:.1f}" y="{y + 13}" font-size="12.5" fill="var(--ink2)" stroke="var(--surface)" '
+                     f'stroke-width="4" paint-order="stroke">{v:.2f}</text></g>')
+    parts.append(f'<text x="{x(floor) - 4:.1f}" y="{top - 12}" font-size="11" fill="var(--ink2)" text-anchor="end">always ACCURATE {floor:.2f}</text>')
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def card_html(doc: dict[str, Any], verdicts: dict[str, Any], systems: dict[str, dict[str, str]],
+              gold: dict[str, str]) -> str:
+    """The comparison card as one self-contained HTML page (no external files, light and dark)."""
+    import html  # noqa: PLC0415
+
+    e = html.escape
+    res = doc["results"]
+    gxl, v8 = res["gxl claim checker"], res["paper-trail v8"]
+    v0 = [res[n]["2way_accuracy"] for n in res if n.startswith("paper-trail v0")]
+    by_id = {c["claim_id"]: c for c in verdicts["claims"]}
+
+    def f(x: "float | None") -> str:
+        return "–" if x is None else f"{x:.3f}"
+
+    rows = "".join(
+        f"<tr><td>{e(n)}</td><td class=n>{f(r['2way_accuracy'])}</td><td class=n>{f(r['3way_all']['accuracy'])}</td>"
+        f"<td class=n>{f(r['3way_all']['macro_f1'])}</td><td class=n>{f(r['3way_irrelevant_dropped']['accuracy'])}</td>"
+        f"<td class=n>{f(r['3way_irrelevant_dropped']['macro_f1'])}</td>"
+        f"<td class=n>{f(r['9way_accuracy']) if r['9way_accuracy'] is not None else f(r['9way_upper_bound']) + '*'}</td>"
+        f"<td class=n>{r['binary']['caught']}/{r['binary']['n_gold_flagged']}</td><td class=n>{r['binary']['passed_flagged']}</td>"
+        f"<td class=n>{f(r['binary']['precision'])}</td><td class=n>{r['n_misses_invalid']}</td></tr>"
+        for n, r in res.items()
+    )
+
+    def evidence(c: dict[str, Any]) -> str:
+        lines = [ln.strip() for ln in (c.get("block") or "").splitlines()[1:] if ln.strip()]
+        return "\n".join(lines) or "(gxl gave no evidence text)"
+
+    dis = "".join(
+        f"<details><summary><b>{e(d['claim_id'])}</b> — gold {e(d['gold'])} · v8 {e(d['paper-trail v8'])} · gxl {e(d['gxl'])}</summary>"
+        f"<div class=note>Claim sent to gxl (cited paper {e(by_id[d['claim_id']]['pmcid'])}):</div>"
+        f"<div class=q>{e(by_id[d['claim_id']]['text'])}</div><div class=note>gxl's evidence:</div>"
+        f"<div class=q>{e(evidence(by_id[d['claim_id']]))}</div></details>"
+        for d in doc["disagreements"]
+    )
+    cols = [n for n in systems if n != "always ACCURATE"]
+    head = "".join(f"<th>{e(n.replace('paper-trail ', 'pt ').replace('gxl claim checker', 'gxl'))}</th>" for n in cols)
+    all_rows = "".join(
+        f"<tr><td>{e(cid)}</td><td>{e(gold[cid])}</td>"
+        + "".join(f"<td>{e(by_id[cid]['verdict'] if n == 'gxl claim checker' else systems[n][cid])}</td>" for n in cols)
+        + "</tr>"
+        for cid in by_id
+    )
+    gap = doc["two_way_gap_gxl_minus_v8"]
+    v8_right = sum(1 for d in doc["disagreements"] if two_way(d["paper-trail v8"]) == two_way(d["gold"]))
+    body = f"""
+<h1>gxl's claim checker vs paper-trail</h1>
+<p class=sub>Sarol 2024 citation-integrity benchmark · the same 50 validation claims paper-trail's hill-climb uses (roster md5
+<code>{e(str(doc['roster_md5']))}</code>) · scored {e(doc['scored_at'][:10])}</p>
+<div class=answer><b>{e(doc['readout'][:1].upper() + doc['readout'][1:])}.</b> On accurate-vs-not, paper-trail v8 scores
+{v8['2way_accuracy']:.2f} and gxl {gxl['2way_accuracy']:.2f}, a gap of {abs(gap):.2f} against {NOISE:.2f} run-to-run noise.
+They disagree on {len(doc['disagreements'])} claims and v8 is right on {v8_right}; had one of those gone the other way, the gap
+would be {abs(abs(gap) - 2 / len(by_id)):.2f}. gxl scores exactly what answering "accurate" every time scores ({res['always ACCURATE']['2way_accuracy']:.2f}).
+The original paper-trail (program-v0, before optimization) scored {min(v0):.2f}–{max(v0):.2f}, below gxl.</div>
+<div class=tiles>
+<div class=tile><div class=v>{gxl['2way_accuracy']:.2f}</div><div class=k>gxl claim checker</div></div>
+<div class=tile><div class=v>{v8['2way_accuracy']:.2f}</div><div class=k>paper-trail v8 (best optimized)</div></div>
+<div class=tile><div class=v>{min(v0):.2f}–{max(v0):.2f}</div><div class=k>paper-trail v0 (original), two runs</div></div>
+<div class=tile><div class=v>{res['always ACCURATE']['2way_accuracy']:.2f}</div><div class=k>always answer "accurate"</div></div>
+</div>
+<h2>Accurate vs not accurate, by system</h2>
+<p class=note>The go/no-go view: a claim is right if the system says "accurate" exactly when Sarol's label is ACCURATE.
+Sarol's "unclear what is cited" class counts as not accurate here, for every system. Hover a bar for how many flagged claims it caught.</p>
+<div class=card>{_bar_chart(res, v8['2way_accuracy'])}</div>
+<h2>Every view</h2>
+<div class=card><table><thead><tr><th>System</th><th class=n>2-way acc</th><th class=n>3-way acc</th><th class=n>3-way macro-F1</th>
+<th class=n>3-way acc, irrel. dropped</th><th class=n>macro-F1, irrel. dropped</th><th class=n>9-way acc</th>
+<th class=n>caught flagged</th><th class=n>passed flagged</th><th class=n>precision</th><th class=n>misses</th></tr></thead>
+<tbody>{rows}</tbody></table></div>
+<ul class=note>
+<li>gxl only says supported or not. In "3-way, all 50" its "not supported" counts as NOT_ACCURATE, so the 7 claims in
+Sarol's irrelevant class are always wrong for it. The "irrelevant dropped" columns score the other 43.</li>
+<li>* gxl's 9-way figure is an upper bound (equal to its 2-way accuracy): the best any mapping of its yes/no onto Sarol's nine labels could do.</li>
+<li>"Caught flagged": of the 15 claims Sarol labels anything but ACCURATE, how many the system also flagged. "Passed flagged": how many it called accurate.</li>
+<li>Misses are gxl errors or unreadable verdicts, or paper-trail calls that failed; each is scored wrong.</li>
+</ul>
+<h2>Where gxl and paper-trail v8 disagree</h2>
+<p class=note>{len(doc['disagreements'])} claims. Open one to see the sentence gxl checked and the evidence it quoted.</p>
+<div class=card>{dis}</div>
+<h2>All 50 claims</h2>
+<details><summary>Show every claim's gold label and each system's answer</summary>
+<div class=card><table><thead><tr><th>claim</th><th>gold</th>{head}</tr></thead><tbody>{all_rows}</tbody></table></div></details>
+<h2>How this was measured</h2>
+<ul class=note>
+<li>gxl: each claim attached to one paperclip repo (<code>{e(str(verdicts.get('repo')))}</code>) against its cited paper's
+PMC full text, then verified with gxl's checker as shipped. The only guidance: "{e(VERIFIER_CONTEXT)}" No Sarol label definitions.
+Verdicts: {e(str(doc['gxl_counts']))}.</li>
+<li>No peeking: verdicts were saved at {e(doc['verdicts_written_at'][:19])} UTC, before gold was first read at {e(doc['gold_read_at'][:19])} UTC.</li>
+<li>paper-trail rows are saved runs on the same 50 claims (Haiku, retrieval profile). v8 and v9 ran on the 09-22 harness;
+v0 on 09-20. The two v9 runs differ by {NOISE:.2f} on the same program, which is the noise figure used above.</li>
+<li>Scoring checks passed: {e(', '.join(n for n, ok in doc['sanity'].items() if ok))}.</li>
+<li>Plan: <code>planning/paper-trail/2026-10-06-gxl-claim-checker-baseline.md</code>. Code: paper-trail
+<code>experiments/sarol-2024/scripts/baseline_gxl_verify.py</code>.</li>
+</ul>"""
+    return _HTML.replace("%%BODY%%", body)
 
 
 # -------------------------------------------------------------------------------------------------
