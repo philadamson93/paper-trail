@@ -1,7 +1,7 @@
 # Release format — what you are handed each iteration
 
 Two files land per iteration, written by the engine before your session starts:
-`/workspace/ro/in/feedback/iter/<n>/release_train.json` and `/workspace/ro/in/feedback/iter/<n>/release_val.json`, where `<n>` is the iteration number
+`/workspace/ro/feedback/iter/<n>/release_train.json` and `/workspace/ro/feedback/iter/<n>/release_val.json`, where `<n>` is the iteration number
 your turn prompt gives you. **Every path in this document is relative to your working directory,
 which is the repository root.** They are deliberately not the same
 shape, and the difference is the whole leakage design.
@@ -16,7 +16,7 @@ shape, and the difference is the whole leakage design.
   "produced_at_utc": "2026-09-01T18:04:11+00:00",
   "optimizer_isolation_hash": "sarol-2024",
   "corpus": {
-    "ref": "<path to /workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json -- the per-claim corpus itself>",
+    "ref": "<path to /workspace/ro/feedback/iter/<n>/files/<batch_id>.json -- the per-claim corpus itself>",
     "counts": { "invalid_label": 0 },
     "profile": "retrieval",
     "retrieval_k": 20,
@@ -86,8 +86,8 @@ numbers in your head from here.
 the draw discipline, the blame record, and what to hand a subagent. This section is the shape; that
 document is the procedure.
 
-**`corpus.ref` points at the per-claim mistake corpus itself** — `/workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json` under
-the run's TRAIN output root. Not at the run manifest: the manifest carries dispatch bookkeeping
+**`corpus.ref` points at the per-claim mistake corpus itself** — `/workspace/ro/feedback/iter/<n>/files/<batch_id>.json`, a copy
+of the run's TRAIN mistakes file. Not at the run manifest: the manifest carries dispatch bookkeeping
 (exit codes, costs, timings, the canary record) and **no gold and no structured reasoning**, so
 following it told you nothing about *why* you were wrong. Read the corpus; it is the point.
 
@@ -153,7 +153,7 @@ label, and both were previously invisible to you.
 ### `trace_ref` — the judge's full session, if you want it
 
 **Every mistake-corpus row carries `trace_ref`**: a path to a copy of the judge's own session
-transcript for that claim (`<run>/traces/<claim_id>-<stage>.jsonl`). It is `null` when the
+transcript for that claim, copied into the same `files/` folder. It is `null` when the
 transcript could not be captured. The run manifest carries the same path per claim and per stage,
 alongside the `model` that produced it and the `session_id` — but you do not need the manifest for
 this, and a blame subagent, which is handed the corpus and nothing else, could not reach it there.
@@ -252,8 +252,9 @@ on.
   could not be built, its whole validation pass crashed or timed out, or its outputs could not be
   scored). Then it holds typed fields only: `tag`, `stage` (`build`, `validation_pass` or `scoring`),
   `status`, `error_code`, `failed_entry` (a program file, for a build failure) and
-  `consecutive_failures`. No error message, ever: one could quote a validation claim. The iteration
-  starts from the last good version; see *Crash handling* in your instructions.
+  `consecutive_failures`. No error message, ever: one could quote a validation claim. The same record
+  is in `/workspace/ro/feedback/iter/<n>/previous_attempt.json`. The iteration starts from the last good
+  version; see *Crash handling* in your instructions.
 - **`budget`** is the engine's own accounting of the *optimizer session's* token spend. It does not
   include the Runner's cost, which is where nearly all real spend lives — that is bounded
   separately and consumer-side by `dispatcher.py`. If a run stops for budget reasons it will say so
@@ -281,20 +282,16 @@ reported "no release files were written" and every one of them was **wrong**: th
 disk the whole time, and the sessions had looked in the wrong place. Reaching this section on a false
 absence costs an entire iteration, so the check comes before the recipe.
 
-**Where the releases actually are:** `/workspace/ro/in/feedback/iter/<n>/release_{train,val}.json`, relative to **the loop
-clone — your own working directory, the repository root you are editing in.** The engine writes both
-before your session starts (`engine/loop.py`, immediately after it builds the payloads), and the
-dispatcher passes the `loop_ops` handle that enables the write on every real run, with a
-negative-controlled regression test guarding that seam.
-
-**Where they are:** only in your feedback folder, `/workspace/ro/in/feedback/iter/<n>/`, copied there
-before your session starts. Nothing else in your container holds them: the run's own folders are not
-mounted.
+**Where the releases actually are:** `/workspace/ro/feedback/iter/<n>/release_{train,val}.json`. The
+engine writes both before your session starts (`engine/loop.py`, immediately after it builds the
+payloads) and stages them, with every earlier iteration's, into your feedback folder,
+`/workspace/ro/feedback/`, before the session opens. Nothing else in your container holds them: the
+run's own folders are not mounted.
 
 So before you conclude the release is missing, run the check from your working directory:
 
 ```
-ls /workspace/ro/in/feedback/iter/<n>/release_train.json /workspace/ro/in/feedback/iter/<n>/release_val.json
+ls /workspace/ro/feedback/iter/<n>/release_train.json /workspace/ro/feedback/iter/<n>/release_val.json
 ```
 
 If that resolves, the release exists — read it and carry on; nothing below applies. **Only if that
@@ -304,10 +301,11 @@ check fails** does the recipe below apply:
    never written says nothing about how the program scored. It is the same class of event as
    `scored: false`.
 2. **Look for the run manifest instead.** For TRAIN it is copied beside the release as
-   `/workspace/ro/in/feedback/iter/<n>/run_manifest.json`, with `claims[]` carrying per-claim `status`,
+   `/workspace/ro/feedback/iter/<n>/files/run_manifest.json` (the mistake corpus's `run_manifest_ref` names
+   it), with `claims[]` carrying per-claim `status`,
    `stages` and the canary record. That tells you whether the batch ran at all, and where it stopped if
    not. If it is absent too, the batch produced nothing to copy; say so in your findings.
-3. **Look for the mistake corpus directly**, at `/workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json` under the same root. It
+3. **Look for the mistake corpus directly**, at `/workspace/ro/feedback/iter/<n>/files/<batch_id>.json`. It
    is written by the scorer, independently of the release, so it frequently exists when the release
    does not — and it is the file you actually wanted.
 4. **If neither exists, the batch did not run.** Report that and stop. Do not edit prompts in

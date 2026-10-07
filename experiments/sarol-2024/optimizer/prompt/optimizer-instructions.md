@@ -156,7 +156,7 @@ and is not a cop-out — use it when the class had too little support to say (ch
 when the move was inside the instrument's own scatter. ⚠ Do **not** reach for it on the assumption
 that the class "was not drawn": TRAIN has in practice been the *same* 50 claims every iteration
 (pairwise Jaccard 1.000 across the 2026-09-09 run), so absence is usually a real absence. Read
-`/workspace/ro/in/feedback/draw_history.json` rather than assuming either way.
+`/workspace/ro/feedback/draw_history.json` rather than assuming either way.
 
 This is the step that makes the loop a loop. Skip it and you are running the first iteration again
 with more history. On iteration 1 there is no predecessor: say so and go to step 2.
@@ -222,7 +222,7 @@ you get right, "skipped" is not your explanation for the ones you get wrong.
 single trace; when the traces were finally read they showed **92% ordered-gate compliance**, and four
 iterations' worth of hardening had gone into rules that were already being followed. `trace_ref` may
 legitimately be null, and the mistake corpus lists **only errors** — for a correct-answer trace, read
-the TRAIN pass's `/workspace/ro/in/feedback/iter/<n>/run_manifest.json`, which carries the verdict for every claim in the batch, not
+the TRAIN pass's `/workspace/ro/feedback/iter/<n>/files/run_manifest.json`, which carries the verdict for every claim in the batch, not
 just the misses. If neither is available for a claim, say the trace was unavailable; do not silently
 fall back to assuming a skip.
 
@@ -338,14 +338,16 @@ harness belong in this iteration's findings entry and are **never** promoted.
 
 **The artifacts you actually have** — check these exist before concluding one is missing:
 
-- `/workspace/ro/in/feedback/iter/<n>/release_{train,val}.json` — this iteration's release payloads,
+- `/workspace/ro/feedback/iter/<n>/release_{train,val}.json` — this iteration's release payloads,
   written **before** your session starts.
-- `/workspace/ro/in/feedback/run_summary.json` — every version's VAL scalar, so you can read a trend
+- `/workspace/ro/feedback/run_summary.json` — every version's VAL scalar, so you can read a trend
   rather than a step.
-- `/workspace/ro/in/feedback/iter/<n>/run_manifest.json` — the TRAIN pass's per-claim cost, duration,
+- `/workspace/ro/feedback/iter/<n>/files/run_manifest.json` — the TRAIN pass's per-claim cost, duration,
   status, and the verdict for **all** claims in the batch, not just the misses, with each claim's trace
   copied beside it. This is the only source of correct-answer traces.
-- `/workspace/ro/in/feedback/draw_history.json` — which TRAIN claims each iteration actually drew.
+- `/workspace/ro/feedback/draw_history.json` — which TRAIN claims each iteration actually drew.
+- `/workspace/ro/feedback/iter/<n>/previous_attempt.json` — present only when the version saved before
+  iteration `<n>` failed: the failure record, typed fields only.
 - `trace_ref`, per record in the mistake corpus — the judge's full session for that claim.
 
 ## Simplicity criterion
@@ -413,7 +415,7 @@ priced and designed and never actually constructed, and nothing said so.
 ## Crash handling
 
 - **The previous version failed** → `frontier.previous_attempt` in this iteration's TRAIN release is
-  set. The version you saved last time could not be measured: its program would not build, its whole
+  set (the same record is in `/workspace/ro/feedback/iter/<n>/previous_attempt.json`). The version you saved last time could not be measured: its program would not build, its whole
   validation pass crashed or timed out, or the scorer could not read its outputs. It keeps its tag, so
   its files are in `/workspace/ro/versions/`, but it is **not** your starting point: this iteration
   starts from the last good version. The record names the `stage`, the `status`, an `error_code` and,
@@ -422,7 +424,7 @@ priced and designed and never actually constructed, and nothing said so.
   stop the run.
 - **The previous edit was never scored** → the case you are most likely to actually meet: all three
   iterations of the 2026-09-02 run landed in it. It looks like `scored: false`, or a missing
-  `/workspace/ro/in/feedback/iter/<n>/release_train.json`, or a release whose numbers are identical to last iteration's.
+  `/workspace/ro/feedback/iter/<n>/release_train.json`, or a release whose numbers are identical to last iteration's.
   **Your predecessor's edit is in the tree and untested.** So: do not re-make it, do not revert it,
   and do not read the absent movement as evidence it failed. Record in
   `/workspace/rw/out/findings.md` that iteration *n-1*'s prediction is

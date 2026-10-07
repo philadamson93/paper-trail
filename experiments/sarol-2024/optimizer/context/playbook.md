@@ -97,10 +97,10 @@ The VAL draw is seeded once and stays the same across iterations, so the VAL cur
 programs.
 
 ⚠ **TRAIN has been identical too.**
-Measured over the 2026-09-09 run's `/workspace/ro/in/feedback/draw_history.json`: all five iterations drew the **same 50
+Measured over the 2026-09-09 run's `/workspace/ro/feedback/draw_history.json`: all five iterations drew the **same 50
 claims**, pairwise Jaccard **1.000** on every pair. The draw is keyed on the iteration number, so a
 *different* roster is possible in principle, but do not assume it happened — **read
-`/workspace/ro/in/feedback/draw_history.json` for this run and check.**
+`/workspace/ro/feedback/draw_history.json` for this run and check.**
 
 The consequences flip with the fact, so hold the right ones:
 

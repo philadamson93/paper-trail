@@ -13,8 +13,8 @@ read your plan buys you nothing.
 
 ## Where the failures are
 
-Your release payload (`/workspace/ro/in/feedback/iter/<n>/release_train.json`) carries `corpus.ref`, a path to
-`/workspace/ro/in/feedback/iter/<n>/mistakes/<batch_id>.json` — the per-claim corpus for this iteration's TRAIN batch. That path is
+Your release payload (`/workspace/ro/feedback/iter/<n>/release_train.json`) carries `corpus.ref`, a path to
+`/workspace/ro/feedback/iter/<n>/files/<batch_id>.json` — the per-claim corpus for this iteration's TRAIN batch. That path is
 what you hand your subagents.
 `/workspace/ro/in/context/release-format.md` has its full shape.
 
@@ -26,8 +26,8 @@ So it is a complete census of *this batch's* errors, not a sample of them — wh
 
 **Do not assume the TRAIN batch was re-drawn.** The draw is keyed on the iteration number, so a
 different roster is possible in principle — but measured over the last run's
-`/workspace/ro/in/feedback/draw_history.json`, all five iterations drew the **same 50 claims** (pairwise Jaccard 1.000).
-**Read `/workspace/ro/in/feedback/draw_history.json` for this run and check** before treating a missing failure as
+`/workspace/ro/feedback/draw_history.json`, all five iterations drew the **same 50 claims** (pairwise Jaccard 1.000).
+**Read `/workspace/ro/feedback/draw_history.json` for this run and check** before treating a missing failure as
 either fixed or undrawn. If the roster really did change, absence is not evidence. Confirm a fix by watching
 `per_class_f1_9way` move in the direction you predicted, never by failing to re-find the instance.
 (`per_class_f1` has only the three collapsed buckets in it and cannot answer a nine-class question.)
@@ -87,7 +87,7 @@ iterations went into hardening rules that were already being followed, for 1,716
 VAL move inside the scatter. **Restating an obeyed rule cannot help.** Sample the traces of correct
 answers too: if the gates are being walked on the claims you get right, "skipped" is not your
 explanation for the ones you get wrong. Correct-answer traces come from the TRAIN pass's
-`/workspace/ro/in/feedback/iter/<n>/run_manifest.json`, not the mistake corpus, which lists only errors.
+`/workspace/ro/feedback/iter/<n>/files/run_manifest.json`, not the mistake corpus, which lists only errors.
 
 **A fourth remedy, and the one this loop has never reached for: delete the competing guidance.** A
 rule that looks "skipped" is often a rule *contradicted* by an earlier layer aimed at the same
