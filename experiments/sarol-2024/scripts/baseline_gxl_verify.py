@@ -434,6 +434,31 @@ def views(pairs: list[tuple[str, str]], *, nine_way_is_real: bool) -> dict[str, 
     }
 
 
+def gold_evidence(ids: list[str]) -> dict[str, list[dict[str, str]]]:
+    """Sarol's annotated evidence per claim: the cited paper's sentences and the label each supports.
+
+    Read only in the scoring phase, like gold. ``claims-<split>.jsonl`` names sentence indices per
+    corpus document (``{doc_id: [{"sentences": [i], "label": ...}]}``); the text is the document's
+    ``abstract`` list in ``corpus.jsonl``. Only documents in the claim's cited bucket count. The
+    ETIQUETTE / IRRELEVANT classes are defined by having no such evidence, so they come back empty.
+    """
+    rows = {int(r["id"]): r for r in stage_claim.load_claims(SPLIT)}
+    corpus = stage_claim.load_corpus()
+    out: dict[str, list[dict[str, str]]] = {}
+    for cid in ids:
+        row_id, bucket = (int(x) for x in cid.split("-"))
+        found = []
+        for doc_id, spans in sorted((rows[row_id].get("evidence") or {}).items()):
+            doc = corpus.get(int(doc_id))
+            if int(doc_id) // 1000 != bucket or not spans or doc is None:
+                continue
+            for span in spans:
+                text = " ".join(doc["abstract"][i].strip() for i in span.get("sentences", []) if i < len(doc["abstract"]))
+                found.append({"label": span.get("label", ""), "text": text})
+        out[cid] = found
+    return out
+
+
 def pt_predictions(manifest: pathlib.Path) -> dict[str, str]:
     m = json.loads(manifest.read_text(encoding="utf-8"))
     out = {}
@@ -500,7 +525,7 @@ def score_only(out: pathlib.Path) -> int:
            "results": results, "disagreements": disagree}
     (out / "scores.json").write_text(json.dumps(doc, indent=1), encoding="utf-8")
     (out / "card.md").write_text(card(doc), encoding="utf-8")
-    (out / "card.html").write_text(card_html(doc, verdicts, systems, gold), encoding="utf-8")
+    (out / "card.html").write_text(card_html(doc, verdicts, systems, gold, gold_evidence(ids)), encoding="utf-8")
     print(f"[score] 2-way accuracy: gxl {results['gxl claim checker']['2way_accuracy']:.2f} vs v8 {v8['2way_accuracy']:.2f} -> {readout}")
     print(f"[score] wrote {out / 'scores.json'}, {out / 'card.md'} and {out / 'card.html'}")
     return 0 if all(ok for _, ok in sanity) else 6
@@ -628,7 +653,7 @@ def _bar_chart(results: dict[str, Any], v8_value: float) -> str:
 
 
 def card_html(doc: dict[str, Any], verdicts: dict[str, Any], systems: dict[str, dict[str, str]],
-              gold: dict[str, str]) -> str:
+              gold: dict[str, str], gold_ev: "dict[str, list[dict[str, str]]] | None" = None) -> str:
     """The comparison card as one self-contained HTML page (no external files, light and dark)."""
     import html  # noqa: PLC0415
 
@@ -652,14 +677,33 @@ def card_html(doc: dict[str, Any], verdicts: dict[str, Any], systems: dict[str, 
     )
 
     def evidence(c: dict[str, Any]) -> str:
-        lines = [ln.strip() for ln in (c.get("block") or "").splitlines()[1:] if ln.strip()]
+        # The block runs to the next claim's line, so it can end with the NEXT paper's header
+        # (`[X] PMC… title`); a line that opens with a verdict marker ends this claim's evidence.
+        lines = []
+        for ln in (c.get("block") or "").splitlines()[1:]:
+            if MARKER.match(ln.strip()):
+                break
+            if ln.strip():
+                lines.append(ln.strip())
         return "\n".join(lines) or "(gxl gave no evidence text)"
+
+    def sarol(cid: str) -> str:
+        found = (gold_ev or {}).get(cid) or []
+        if not found:
+            why = {
+                "ETIQUETTE": "means it is unclear what is being cited to this paper",
+                "IRRELEVANT": "means nothing in the cited paper is relevant to the claim",
+            }.get(gold[cid], "carries no annotated evidence for this claim")
+            return (f"<div class=note>Sarol's evidence: none. {e(gold[cid])} {why}, so annotators mark no "
+                    "evidence sentences for it.</div>")
+        items = "".join(f"<div class=q><b>{e(x['label'])}</b> · {e(x['text'])}</div>" for x in found)
+        return f"<div class=note>Sarol's evidence (the cited-paper sentences annotators marked, with each one's label):</div>{items}"
 
     dis = "".join(
         f"<details><summary><b>{e(d['claim_id'])}</b> — gold {e(d['gold'])} · v8 {e(d['paper-trail v8'])} · gxl {e(d['gxl'])}</summary>"
         f"<div class=note>Claim sent to gxl (cited paper {e(by_id[d['claim_id']]['pmcid'])}):</div>"
         f"<div class=q>{e(by_id[d['claim_id']]['text'])}</div><div class=note>gxl's evidence:</div>"
-        f"<div class=q>{e(evidence(by_id[d['claim_id']]))}</div></details>"
+        f"<div class=q>{e(evidence(by_id[d['claim_id']]))}</div>{sarol(d['claim_id'])}</details>"
         for d in doc["disagreements"]
     )
     cols = [n for n in systems if n != "always ACCURATE"]
@@ -704,7 +748,8 @@ Sarol's irrelevant class are always wrong for it. The "irrelevant dropped" colum
 <li>Misses are gxl errors or unreadable verdicts, or paper-trail calls that failed; each is scored wrong.</li>
 </ul>
 <h2>Where gxl and paper-trail v8 disagree</h2>
-<p class=note>{len(doc['disagreements'])} claims. Open one to see the sentence gxl checked and the evidence it quoted.</p>
+<p class=note>{len(doc['disagreements'])} claims. Open one to see the sentence gxl checked, the evidence gxl quoted, and the
+evidence Sarol's annotators based the gold label on.</p>
 <div class=card>{dis}</div>
 <h2>All 50 claims</h2>
 <details><summary>Show every claim's gold label and each system's answer</summary>
