@@ -141,8 +141,8 @@
       },
       "optimizer": {
         "darwin-arm64": {
-          "hash": "c497426b8ca4fe4b3c412aa6f8c3ef460d7c52054c319950852bf08c7ba62b71",
-          "computed": "2026-10-05 (PT-B: the notes history mounted, the findings input dropped), darwin-arm64 Mac, images paper-trail-isolation:2.1.277 and paper-trail-optimizer:2.1.277"
+          "hash": "4330c23ad481dcec197ef39cf3302156c9aec32e2f4d1af55cf97818c98cdda8",
+          "computed": "2026-10-07 (B9: the engine stages the feedback at /workspace/ro/feedback, replacing the /workspace/ro/in/feedback input), darwin-arm64 Mac, images paper-trail-isolation:2.1.277 and paper-trail-optimizer:2.1.277"
         }
       }
     }
