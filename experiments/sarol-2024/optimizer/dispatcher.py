@@ -444,9 +444,10 @@ def build_components(
     #: ``{"program": …, "optimizer": …}``: the setup pins each session is held to. Default: the pins
     #: committed in the manifest for this platform; ``ss.UNPINNED`` only when said explicitly.
     expected_fingerprints: "dict | None" = None,
-    #: Run-level files the optimizer reads, copied into its feedback folder each iteration with host
-    #: paths stripped (D6): the run summary and the TRAIN draw history.
+    #: Run-level files the engine stages in the optimizer's feedback folder each iteration, host paths
+    #: stripped (B9): the TRAIN draw history. The run summary is ``optimizer_run_summary_path``.
     optimizer_feedback_files: "tuple | list" = (),
+    optimizer_run_summary_path: pathlib.Path | None = None,
     #: The run's lasting state (:func:`state_paths`). Default: ``~/.paper-trail``.
     state_root: pathlib.Path | None = None,
     _program_runner_private: "dict | None" = None,
@@ -519,7 +520,6 @@ def build_components(
         store=store,
         materialize_root=pathlib.Path(materialize_root),
         program_output_root=program_output_root,
-        run_root=program_output_root.parent,
         image=optimizer_image or sarol_optimizer.optimizer_image(),
         expected_fingerprint=pins["optimizer"],
         model=optimizer_model,
@@ -528,7 +528,10 @@ def build_components(
         profile=prof,
         scorer_roots=scorer_roots,
         transcript_dir=program_output_root.parent / "optimizer-transcripts",
+        train_output_root=train_output_root,
+        val_output_root=val_output_root,
         feedback_files=tuple(optimizer_feedback_files),
+        run_summary_path=optimizer_run_summary_path,
         notes_root=state_paths(state_root or STATE_ROOT)["notes"],
         # A real run always names itself (run_optimization). Without one (the pin printer, selftests)
         # a placeholder: the run id names a folder inside the notes history, not a mount, so the
@@ -568,8 +571,10 @@ def run_optimization(
     val_output_root: pathlib.Path | None = None,
     profile=None,
     per_session_usd: float = DEFAULT_PER_SESSION_USD,
-    #: The version the run starts from. Default: the one the manifest freezes (program-v11 since PT-A).
-    current_tag: str | None = None,
+    #: Where the run starts (B8): ``None`` (the default) is the version the manifest freezes, for
+    #: experiments; ``"newest"`` the newest version the run store doesn't record as failed, for the
+    #: hill-climb and resumed lineages; ``"seed"`` program-v0; anything else a version tag.
+    start: str | None = None,
     components: dict | None = None,
     train_schedule: "list[int] | None" = None,
     draw_mode: str = "cumulative",
@@ -618,8 +623,6 @@ def run_optimization(
     from engine.schemas import RunInputs  # noqa: PLC0415
     import sarol_optimizer  # noqa: PLC0415
 
-    if current_tag is None:
-        current_tag = adapter.SarolProgramStore().program_version
     effective_run_summary = run_summary_path
     if effective_run_summary is None and val_output_root is not None:
         effective_run_summary = pathlib.Path(val_output_root).parent / "run_summary.json"
@@ -629,6 +632,24 @@ def run_optimization(
         stop = LoopStop(message, reason="consumer_refused")
         record_pre_loop_stop(effective_run_summary, run_id=run_id, stop=stop, step=step)
         raise stop
+
+    # The run's lasting state. Components handed in by a selftest bring their own or none, and with none
+    # there is no run store and nothing carried across the reset.
+    state = components.get("state_root") if components is not None else pathlib.Path(state_root or STATE_ROOT)
+    paths = state_paths(state) if state is not None else None
+    # The run store records a failed version across runs, so a later run never starts from one (B5).
+    run_store = FakeRunStore(paths["run_store"]) if paths is not None else None
+
+    # B8: the start is resolved once, by the engine's rule, and the resolved tag goes to both the drift
+    # check and the driver, so they can't disagree about which version this run is.
+    try:
+        start_tag = resolve_start_tag(
+            start, store=components["program_store"] if components is not None else adapter.SarolProgramStore(),
+            run_store=run_store,
+        )
+    except LoopStop as exc:
+        record_pre_loop_stop(effective_run_summary, run_id=run_id, stop=exc, step="before_run")
+        raise
 
     # A real run must SAY where its outputs go. `train_output_root` is where the per-claim mistake
     # corpus lands (C6.8) and `val_output_root` must lie outside the optimizer's readable tree (C6.9);
@@ -671,18 +692,18 @@ def run_optimization(
     # build needs the real images, and a mislabelled tree should say so first); the driver checks it
     # again on every run, injected components included.
     if components is None:
-        drift = start_version_problem(adapter.SarolProgramStore(), current_tag)
+        drift = start_version_problem(adapter.SarolProgramStore(), start_tag)
         if drift:
             refuse_before_build(drift, "before_run")
 
     peak_train_n = max(train_schedule) if train_schedule else train_n
     if components is None and "optimizer_feedback_files" not in component_kwargs:
         feedback_files = []
-        if effective_run_summary is not None:
-            feedback_files.append(("run_summary.json", pathlib.Path(effective_run_summary)))
         if sampling_root or train_output_root:
             feedback_files.append(("draw_history.json", pathlib.Path(sampling_root or train_output_root) / "draw_history.json"))
         component_kwargs["optimizer_feedback_files"] = feedback_files
+    if components is None and "optimizer_run_summary_path" not in component_kwargs:
+        component_kwargs["optimizer_run_summary_path"] = effective_run_summary
 
     parts = components or build_components(
         max_budget_usd=max_budget_usd,
@@ -700,10 +721,6 @@ def run_optimization(
 
     store = parts["program_store"]
     repo_root = store.repo_root
-    state = parts.get("state_root")
-    paths = state_paths(state) if state is not None else None
-    # The run store records a failed version across runs, so a later run never starts from one (B5).
-    run_store = FakeRunStore(paths["run_store"]) if paths is not None else None
     program_runner = parts.get("program_runner")
     if "setup_owners" in parts or "unsealed" in parts:
         # Components handed in by a selftest say which sessions they seal, out loud.
@@ -751,7 +768,7 @@ def run_optimization(
             else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
         ),
         materialize_root=pathlib.Path(materialize_root),
-        start_tag=current_tag,
+        start=start_tag,
         manifest_for_version=sarol_optimizer.earlier_version_view(store),
         # B3: fresh or continuing is decided by the start version's content. With no state root (a
         # selftest's components) nothing is carried, so the reset only checks and archives nothing.
@@ -768,7 +785,7 @@ def run_optimization(
         setup_owners=owners,
         unsealed=unsealed,
         before_run=run_refusals(
-            parts, current_tag=current_tag, val_output_root=val_output_root,
+            parts, start_tag=start_tag, val_output_root=val_output_root,
             peak_train_n=peak_train_n, iterations=iterations, max_budget_usd=max_budget_usd,
         ),
         **budget_hooks(parts.get("budget")),
@@ -805,19 +822,39 @@ def run_optimization(
     return run, parts.get("budget")
 
 
-def start_version_problem(store, current_tag: str) -> str | None:
+#: ``--start``'s two named choices; anything else is a version tag.
+START_CHOICES = ("newest", "seed")
+
+
+def resolve_start_tag(start: str | None, *, store, run_store) -> str:
+    """B8: the version tag a run starts from. ``None`` is the version the manifest freezes (today's
+    default, for experiments); ``"newest"`` and ``"seed"`` go through the engine's own rule
+    (``engine.run_start.resolve_start``), which prints what it chose and, for the newest, the failed
+    versions it skipped; a tag is returned as it is (the engine still refuses a failed one at the reset).
+    ``newest`` stops with ``start_needs_run_store`` when there is no run store to read failures from."""
+    from engine.run_start import StartPoint, resolve_start  # noqa: PLC0415
+    import sarol_optimizer  # noqa: PLC0415
+
+    if start is None:
+        return store.program_version
+    point = {"newest": StartPoint.NEWEST_GOOD, "seed": StartPoint.SEED}.get(start, start)
+    return resolve_start(point, repo_root=store.repo_root, run_store=run_store,
+                         manifest_for_version=sarol_optimizer.earlier_version_view(store))
+
+
+def start_version_problem(store, start_tag: str) -> str | None:
     """S26: is the tree the version the run starts from and files its numbers under? A problem, or
     ``None``. Called before the build for a real run and by the driver on every run."""
     # S26: the tree must BE the version it says it is. For the manifest's own frozen version the
     # tree and the tag are re-hashed against the frozen hashes; a version the engine minted is a
     # commit, so the tree must equal that commit's program (PT-B).
-    if current_tag != store.program_version:
-        differ = store.tree_differs_from(current_tag)
+    if start_tag != store.program_version:
+        differ = store.tree_differs_from(start_tag)
         if differ:
             return (
-                f"the working tree does not match {current_tag!r}, the version this run starts from "
+                f"the working tree does not match {start_tag!r}, the version this run starts from "
                 f"and files its numbers under:\n  " + "\n  ".join(differ)
-                + f"\n\nCheck out {current_tag}'s program files, or pass the `current_tag` the tree "
+                + f"\n\nCheck out {start_tag}'s program files, or pass the `--start` the tree "
                 "actually holds. Running as-is produces numbers that cannot be attributed to a version."
             )
         return None
@@ -827,22 +864,22 @@ def start_version_problem(store, current_tag: str) -> str | None:
     drift = store.verify_tree_matches_tag()
     if drift:
         return (
-            f"the working tree does not match {current_tag!r}, which is the tag every "
+            f"the working tree does not match {start_tag!r}, which is the tag every "
             f"number from this run would be filed under:\n  " + "\n  ".join(str(v) for v in drift)
             + f"\n\nRestore the {len(drift)} file(s) to the frozen {store.program_version} content "
-            "before starting a baseline run, or pass a `current_tag` that names what the tree "
+            "before starting a baseline run, or pass a `--start` that names what the tree "
             "actually holds. Running as-is produces numbers that cannot be attributed to a program version."
         )
-    tag_drift = store.verify_tag_tree(current_tag)
+    tag_drift = store.verify_tag_tree(start_tag)
     if tag_drift:
         return (
-            f"the git tag {current_tag!r} does not carry the frozen {store.program_version} content, "
+            f"the git tag {start_tag!r} does not carry the frozen {store.program_version} content, "
             "and the tag is what the engine actually materializes from -- so this run would evaluate "
             "the tagged bytes while reporting under the manifest's identity:\n  "
             + "\n  ".join(str(v) for v in tag_drift)
             + f"\n\nRe-cut the tag onto a commit whose tree matches the manifest "
-            f"(`git tag -f -a {current_tag} <commit>`), then confirm with "
-            f"`freeze_program_v0.py --verify --tree {current_tag}`."
+            f"(`git tag -f -a {start_tag} <commit>`), then confirm with "
+            f"`freeze_program_v0.py --verify --tree {start_tag}`."
         )
     return None
 
@@ -862,7 +899,7 @@ def _engine_refused(exc: RuntimeError, *, run_summary_path, val_output_root, run
     raise stop from exc
 
 
-def run_refusals(parts: dict, *, current_tag: str, val_output_root, peak_train_n: int, iterations: int,
+def run_refusals(parts: dict, *, start_tag: str, val_output_root, peak_train_n: int, iterations: int,
                  max_budget_usd: float) -> tuple:
     """paper-trail's refusals the driver runs first, before the lock, on every run: built components
     and a selftest's injected ones alike (isolation OQ10: no switch skips them). Each returns a message
@@ -877,7 +914,7 @@ def run_refusals(parts: dict, *, current_tag: str, val_output_root, peak_train_n
         return f"VAL isolation (C6.9): {leak}" if leak else None
 
     def tree_is_the_start_version(config) -> str | None:
-        return start_version_problem(store, current_tag)
+        return start_version_problem(store, start_tag)
 
     def affordable(config) -> str | None:
         # The ramp's top rung: the check describes the most expensive iteration the run can reach.
@@ -1280,7 +1317,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                 max_budget_usd=1e9,
                 train_n=1,
                 materialize_root=pathlib.Path(tmp) / "materialized3",
-                current_tag="program-v0",
+                start="program-v0",
                 components=_parts3,
             )
         except Exception as exc:  # noqa: BLE001 -- the files on disk are what is asserted
@@ -1473,6 +1510,14 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             _cpath.write_text(_csaved, encoding="utf-8")
 
     no_canary_model = CostModel.for_profile("retrieval", canary_enabled=False)
+
+    def _start_stop_reason(start, *, run_store):
+        try:
+            resolve_start_tag(start, store=SarolProgramStore(), run_store=run_store)
+            return None
+        except LoopStop as exc:
+            return exc.reason
+
     checks += [
         ("a real run REFUSES to start with no canary pinned (Finding 4), as a recorded stop",
          type(canary_refusal).__name__ == "LoopStop" and getattr(canary_refusal, "reason", None) == "consumer_refused"),
@@ -1511,16 +1556,19 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # asserted rather than assumed.
         # `--resume` was unreachable from the CLI until 2026-09-22: the S26 guard compares the tree
         # against the manifest's frozen version, and after ANY run the tree carries a later one, so
-        # every resume died on the guard whose own error text says to "pass a `current_tag`" -- a
-        # flag that did not exist. Both halves are gated: the flag parses, and it actually reaches
+        # every resume died on the guard whose own error text says to name the start -- with a flag
+        # that did not exist. Both halves are gated: the flag parses, and it actually reaches
         # `run_optimization`, because a flag that parses and is dropped looks identical from outside.
-        ("--current-tag parses and defaults to the version the manifest freezes, so a plain run starts there",
-         _parser().parse_args(["--run"]).current_tag is None
-         and "current_tag = adapter.SarolProgramStore().program_version" in inspect.getsource(run_optimization)),
-        ("...and names a later version when given one, which is what makes --resume reachable",
-         _parser().parse_args(["--run", "--current-tag", "program-v7"]).current_tag == "program-v7"),
+        ("--start parses and defaults to the version the manifest freezes, so a plain run starts there",
+         _parser().parse_args(["--run"]).start is None
+         and resolve_start_tag(None, store=SarolProgramStore(), run_store=None) == SarolProgramStore().program_version),
+        ("...and takes newest, seed or a later version, which is what makes --resume reachable",
+         [_parser().parse_args(["--run", "--start", v]).start for v in ("newest", "seed", "program-v7")]
+         == ["newest", "seed", "program-v7"]),
         ("...and `main` passes it through rather than dropping it on the floor",
-         "current_tag=args.current_tag," in inspect.getsource(main)),
+         "start=args.start," in inspect.getsource(main)),
+        ("...and `newest` without a run store stops rather than guessing (the engine's start_needs_run_store)",
+         _start_stop_reason("newest", run_store=None) == "start_needs_run_store"),
 
         # Under the engine runner the run id is part of every pass key and of every archive path,
         # and it reaches the runner in exactly one place: `as_runner(run_id=...)`.
@@ -1536,7 +1584,8 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                                                      expected_fingerprints={"program": None, "optimizer": "x"}))),
         ("the engine runner's output root defaults to <run>/program-out, beside the TRAIN and VAL roots",
          (lambda p: p["program_runner"].root.root.name == "program-out"
-          and p["program_runner"].root.root.parent == p["optimizer"].run_root
+          and p["program_runner"].root.root.parent == p["optimizer"].train_output_root.parent
+          and p["optimizer"].val_output_root.parent == p["optimizer"].train_output_root.parent
           and p["optimizer"].program_output_root == p["program_runner"].root.root)(
              _test_components(max_budget_usd=1.0, train_n=1, require_command=False))),
         ("--max-workers reaches the engine runner as max_concurrent",
@@ -1616,6 +1665,7 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
 
     import engine.run_start as run_start_mod  # noqa: PLC0415
     from engine.loop import LoopStop  # noqa: PLC0415
+    from engine.run_store import FakeRunStore  # noqa: PLC0415
     from engine.versioning import version_lock  # noqa: PLC0415
     import sarol_optimizer  # noqa: PLC0415
 
@@ -1690,7 +1740,7 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
             notebook = tmp / f"{name}-meta-learnings.md"
             return repo, notebook
 
-        def _run(repo, notebook, runner, *, run_id, current_tag="program-v0", iterations=1, resume=False, budget=None):
+        def _run(repo, notebook, runner, *, run_id, start="program-v0", iterations=1, resume=False, budget=None):
             store = SarolProgramStore(repo_root=repo)
             parts = {
                 "program_store": store, "runner": runner, "scorer": _Scorer(),
@@ -1705,7 +1755,7 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
             }
             return run_optimization(
                 iterations=iterations, run_id=run_id, train_input_ref=str(batch), val_input_ref=str(batch),
-                max_budget_usd=1e9, train_n=1, materialize_root=tmp / f"mat-{run_id}", current_tag=current_tag,
+                max_budget_usd=1e9, train_n=1, materialize_root=tmp / f"mat-{run_id}", start=start,
                 components=parts, run_summary_path=tmp / f"summary-{run_id}.json", resume=resume,
             )
 
@@ -1729,13 +1779,13 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
              fresh_runner.val_calls == 3),
         ]
         nb_a.write_text("a lesson this lineage earned\n", encoding="utf-8")
-        _run(repo_a, nb_a, _Runner("cont-1"), run_id="cont-1", current_tag="program-v2")
+        _run(repo_a, nb_a, _Runner("cont-1"), run_id="cont-1", start="program-v2")
         checks.append(("B3: a run from a later version CONTINUES the lineage and keeps the notebook (next-run H2)",
                        nb_a.read_text(encoding="utf-8") == "a lesson this lineage earned\n"))
         notes = state / "optimizer-notes"
         (notes / "earlier-run" / "iter-1").mkdir(parents=True, exist_ok=True)
         (notes / "earlier-run" / "iter-1" / "findings.md").write_text("an earlier note\n", encoding="utf-8")
-        _run(repo_a, nb_a, _Runner("cont-n"), run_id="cont-n", current_tag="program-v3")
+        _run(repo_a, nb_a, _Runner("cont-n"), run_id="cont-n", start="program-v3")
         kept = (notes / "earlier-run" / "iter-1" / "findings.md").exists()
         repo_n, nb_n = _repo("n")
         _run(repo_n, nb_n, _Runner("fresh-n"), run_id="fresh-n")
@@ -1775,26 +1825,38 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
         _run(repo_e, nb_e, failing, run_id="fail-1", iterations=2)
         release2 = (repo_e / "iter" / "2" / "release_train.json")
         release_text = release2.read_text(encoding="utf-8") if release2.exists() else ""
-        feedback = tmp / "feedback-e"
-        sarol_optimizer.prepare_feedback(2, repo_root=repo_e, feedback_root=feedback)
-        copied = feedback / "iter" / "2" / "release_train.json"
-        copied_text = copied.read_text(encoding="utf-8") if copied.exists() else ""
         status_file = state / "run-store" / "version_status.json"
+        # B8, by construction: iteration 1 made program-v1 and its validation pass (call 2) failed;
+        # iteration 2 made program-v2 from the held base and it scored. Newest good = program-v2. A second
+        # repo stops after the failing iteration, so its newest version IS the failed one: newest good is
+        # the seed, with program-v1 skipped.
+        repo_fn, nb_fn = _repo("failnewest")
+        _run(repo_fn, nb_fn, _Runner("fail-g", fail_val_call=2), run_id="fail-g", iterations=1)
+
+        def _newest(repo):
+            try:
+                return resolve_start_tag("newest", store=SarolProgramStore(repo_root=repo),
+                                         run_store=FakeRunStore(state / "run-store"))
+            except LoopStop as exc:
+                return f"stopped: {exc.reason}"
+
+        newest_e, newest_g = _newest(repo_e), _newest(repo_fn)
         checks += [
             ("B6: the next TRAIN release carries frontier.previous_attempt for the failed version",
              '"previous_attempt": {' in release_text and '"validation_pass"' in release_text),
-            ("...and so does the copy in the optimizer's feedback folder, the only place it can read it",
-             '"previous_attempt": {' in copied_text),
-            ("...with no error message in either (the seal)",
-             "MARKER" not in release_text and "MARKER" not in copied_text),
+            ("...with no error message in it (the seal)", "MARKER" not in release_text),
             ("...and the run store records the version as failed, so no later run starts from it",
              status_file.exists() and '"failed"' in status_file.read_text(encoding="utf-8")),
+            (f"B8: --start newest picks the newer good program-v2 over the failed program-v1 [got {newest_e}]",
+             newest_e == "program-v2"),
+            (f"...and when the newest version is the failed one, skips it for the seed [got {newest_g}]",
+             newest_g == "program-v0"),
             ("...and the iteration after it scores the held base without a new pass (3 passes, not 4)",
              failing.val_calls == 3),
         ]
         def _after(run_id):
             try:
-                _run(repo_e, nb_e, _Runner(run_id), run_id=run_id, current_tag="program-v1")
+                _run(repo_e, nb_e, _Runner(run_id), run_id=run_id, start="program-v1")
                 return None
             except LoopStop as exc:
                 return exc.reason
@@ -2045,7 +2107,7 @@ def _selftest() -> int:
                        "cost_model": CostModel.for_profile("retrieval")}
 
         def _val_hook(root):
-            hooks = {h.__name__: h for h in run_refusals(_hook_parts, current_tag="program-v0", val_output_root=root,
+            hooks = {h.__name__: h for h in run_refusals(_hook_parts, start_tag="program-v0", val_output_root=root,
                                                           peak_train_n=1, iterations=1, max_budget_usd=1e9)}
             return hooks["val_isolation"](None)
 
@@ -2371,7 +2433,7 @@ def _selftest() -> int:
                         max_budget_usd=1.0, train_n=1, materialize_root=pathlib.Path(tag_tmp) / "mat3",
                         train_output_root=pathlib.Path(tag_tmp) / "trainout3",
                         val_output_root=pathlib.Path(tag_tmp) / "valout3",
-                        profile="retrieval", require_canary=False, current_tag=tag,
+                        profile="retrieval", require_canary=False, start=tag,
                         state_root=pathlib.Path(tag_tmp) / "state",
                     )
                     return ""
@@ -2562,15 +2624,18 @@ def _parser() -> "argparse.ArgumentParser":
              "original run and its --resume continuation.",
     )
     ap.add_argument(
-        "--current-tag",
+        "--start",
         default=None,
-        help="the program version the working tree already holds. Defaults to the version the "
-             "manifest freezes (program-v11 since PT-A), which is right for a baseline run. ⚠ **Required to RESUME**: after any run the tree carries "
-             "the last version the optimizer committed, and the S26 tree-vs-tag guard compares "
-             "against the manifest's frozen version -- so without this, `--resume` is refused by "
-             "the very guard whose error message tells you to pass it, and the feature is "
-             "unreachable from the command line (found 2026-09-22 trying to resume a run that had "
-             "stopped on a usage limit).",
+        metavar="newest|seed|TAG",
+        help="where the run starts, and so the version the working tree must already hold (B8). "
+             "`newest`: the newest version no run recorded as failed (the hill-climb, and continuing a "
+             "lineage). `seed`: program-v0. A tag: that version (an experiment's fixed baseline). "
+             "Default: the version the manifest freezes (program-v11 since PT-A), right for a baseline "
+             "run. ⚠ **A resume needs it too**: after any run the tree carries the last version the "
+             "optimizer committed, and the S26 tree-vs-tag guard compares against the start, so a resume "
+             "with the default is refused (found 2026-09-22 resuming a run stopped on a usage limit). "
+             "The engine never checks a version out for you: a start the tree doesn't hold is refused "
+             "with the `git checkout` that fixes it.",
     )
     ap.add_argument(
         "--resume",
@@ -2670,7 +2735,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 # `build_components`, which hands it to the Runner.
                 run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
                 resume=args.resume,
-                current_tag=args.current_tag,
+                start=args.start,
                 state_root=pathlib.Path(args.state_root) if args.state_root else None,
                 **({"optimizer_max_budget_usd": args.optimizer_max_budget_usd}
                    if args.optimizer_max_budget_usd is not None else {}),

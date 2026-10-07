@@ -63,7 +63,11 @@ __all__ = [
 #: The `agentic-label-opt` commit this experiment requires, in full — short SHAs are ambiguous
 #: across repos and `cat-file -e` will happily resolve a prefix to the wrong object in a big one.
 #:
-#: Bumped 2026-10-06 to `5b512d9` (C-core, stage 14): the engine's shared driver (`engine.driver.run_driver`),
+#: Bumped 2026-10-07 to `993dda1` (B8 + B9, stage 14): a run's start chosen by the engine's rule
+#: (`engine.run_start.resolve_start`: newest good, seed or a tag; HEAD must hold it), the sealed optimizer's
+#: feedback staged by the engine at `/workspace/ro/feedback` (`ContainedOptimizerAgent(iter_root)`), and
+#: `bb018e5`, which puts HEAD back on the last good version after a failed one.
+#: Earlier: 2026-10-06 from `5b512d9` (C-core, stage 14): the engine's shared driver (`engine.driver.run_driver`),
 #: the setup check at run start (C0, `isolation.setup_gate`) and the engine-version check paper-trail's own
 #: checks now call (C2, `engine.engine_version`).
 #: Earlier: 2026-10-05 from `764419b` (PT-B, stage 14): the engine's run bookkeeping (B: version lock,
@@ -74,7 +78,7 @@ __all__ = [
 #: setup fingerprint (S2), contained optimizer (A), program runner (PR), the IPv4-only proxy (A13), and
 #: the contract-file copy-back rule plus paper-trail's seal replay on both grants (PT-A D12, D7).
 #: Earlier: 2026-09-18 from `82f547d`.
-ENGINE_PIN = "5b512d9a824a4124cfcfbf5bef14c50604b64455"
+ENGINE_PIN = "993dda11328236182b48050ecfcedcb69e5f7470"
 
 #: What the pin buys, in one line, so the next person to bump it knows what they must not drop.
 ENGINE_PIN_REASON = (
@@ -82,7 +86,8 @@ ENGINE_PIN_REASON = (
     "fingerprint and image-by-digest (S2), ContainedOptimizerAgent (A), ProgramRunner (PR), and the "
     "IPv4-only allowlist proxy (A13), the copy-back refusal of a contract-file edit (PT-A D12), and the run "
     "bookkeeping: version lock, run-start reset, notes history, failed-version records (B), and the shared driver "
-    "with the setup check at run start and the engine-version check (C0, C-core)"
+    "with the setup check at run start and the engine-version check (C0, C-core), and the run's start "
+    "chosen by the engine's rule plus the optimizer's feedback staged by the engine (B8, B9)"
 )
 
 #: Set to "1" to run against an engine that does not contain the pin. Same switch the shell uses.
@@ -142,6 +147,13 @@ CAPABILITIES = (
     "isolation.setup_gate:check_setup",
     "isolation.contained_agent:ContainedOptimizerAgent.setup_description",
     "isolation.program_runner:ProgramRunner.setup_description",
+    # B8 + B9 (2026-10-07): the start point, and the feedback the engine stages for the optimizer.
+    "engine.run_start:resolve_start", "engine.run_start:StartPoint", "engine.driver:DriverConfig(start)",
+    "isolation.contained_agent:ContainedOptimizerAgent(iter_root)",
+    "isolation.contained_agent:ContainedOptimizerAgent(train_feedback_roots)",
+    "isolation.contained_agent:ContainedOptimizerAgent(validation_roots)",
+    "isolation.contained_agent:ContainedOptimizerAgent(run_summary_path)",
+    "isolation.contained_agent:FEEDBACK_PATH", "isolation.feedback:stage_feedback",
 )
 
 

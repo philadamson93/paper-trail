@@ -20,14 +20,16 @@ Container path                         What paper-trail puts there              
 ``/workspace/ro/in/context``           the reference docs                              read-only
 ``/workspace/ro/notes``                every earlier note of the lineage (B4)          read-only
 ``/workspace/ro/in/meta-learnings.md`` the notebook as it stands                       read-only
-``/workspace/ro/in/feedback``          every iteration's releases and train mistakes   read-only
+``/workspace/ro/feedback``             every iteration's releases and train mistakes   read-only
 =====================================  ==============================================  ==========
 
-⚠ **Feedback is copied, not mounted from the repo (D6).** The engine forbids the repo's ``iter/``
-folder wholesale (A6), and the train mistakes and judge traces live in the scorer's and the program
-runner's roots, which are forbidden too. Before each iteration this module copies that iteration's
-releases, the train mistakes file and the traces it cites into the feedback folder, rewriting each host
-path to its container path.
+⚠ **The engine stages the feedback (B9), from folders paper-trail names.** The engine forbids the
+repo's ``iter/`` folder wholesale (A6), and the train mistakes and judge traces live in the scorer's
+and the program runner's roots, which are forbidden too. Before each session the engine copies every
+iteration's releases and failure records from ``iter/`` and follows the train release's references,
+but only into the train roots paper-trail gives it (:func:`feedback_roots`), never into a validation
+root. paper-trail's own copy step (D6) is gone. Plan:
+``planning/agentic-label-opt/2026-10-06-engine-restart-point-and-optimizer-feedback.md`` (Phase 3).
 
 **The two outputs are the engine's to file (B4, adopted in PT-B).** Each session starts with both
 empty. A non-empty one is filed into the notes history at ``<notes root>/<run id>/iter-<n>/`` (a failed
@@ -45,8 +47,7 @@ import json
 import os
 import subprocess
 import pathlib
-import shutil
-from typing import Any, Sequence
+from typing import Sequence
 
 import adapter
 import sarol_isolation as iso
@@ -158,114 +159,48 @@ def forbidden_list(
 
 
 # =================================================================================================
-# Feedback (D6)
+# Feedback (B9): the engine stages it; paper-trail names the folders
 # =================================================================================================
 
 
-def _copy_into(src: str | None, dest_dir: pathlib.Path, container_dir: str) -> str | None:
-    """Copy one host file into ``dest_dir`` and return its container path, or ``None``."""
-    if not src:
-        return None
-    path = pathlib.Path(src)
-    if not path.is_file():
-        return None
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / path.name
-    if dest.exists() and dest.read_bytes() != path.read_bytes():
-        dest = dest_dir / f"{path.parent.name}-{path.name}"
-    shutil.copyfile(path, dest)
-    return f"{container_dir}/{dest.name}"
+def _is_train_pass(pass_dir: pathlib.Path) -> bool:
+    """A program pass ran the TRAIN split, by its own record (``pass.json``'s key). Unreadable is not."""
+    try:
+        return json.loads((pass_dir / "pass.json").read_text(encoding="utf-8"))["key"]["split"] == "train"
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
 
 
-def _without_host_paths(obj, *, roots: Sequence[str] = ()):
-    """``obj`` with every string that is an absolute host path replaced by ``None`` (the optimizer's
-    container has none of them; a host path in what it reads is a wiring bug, S1's ``host_path_leak``)."""
-    home = str(pathlib.Path.home())
-    if isinstance(obj, dict):
-        return {k: _without_host_paths(v, roots=roots) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_without_host_paths(v, roots=roots) for v in obj]
-    if isinstance(obj, str) and obj.startswith("/") and not obj.startswith("/workspace/") and (
-        obj.startswith(home) or obj.startswith(("/var/", "/private/", "/tmp/", "/Users/", "/home/")) or any(obj.startswith(r) for r in roots)
-    ):
-        return None
-    return obj
+def feedback_roots(
+    *, program_output_root: pathlib.Path, train_output_root: pathlib.Path | None,
+    val_output_root: pathlib.Path | None,
+) -> tuple[tuple[pathlib.Path, ...], tuple[pathlib.Path, ...]]:
+    """``(train roots, validation roots)`` for the engine's feedback staging, as they stand now.
 
+    The train release points at the mistakes file in the TRAIN output root; that file points at the
+    TRAIN pass's run manifest and the judge's traces, in that pass's folder under the program runner's
+    ``archive/``, beside the VAL passes. So the train roots are the TRAIN output root and each pass whose
+    own record says it ran the train split. Everything else the run wrote is a validation root: the VAL
+    output root, every other pass (VAL, a canary, an unreadable record), the passes still in progress
+    (``live/``), and the gold labels and benchmark wholesale. The engine never copies a file under a
+    validation root, so a pass that can't be read as TRAIN is sealed, not followed.
 
-def copy_feedback_files(files: Sequence[tuple[str, pathlib.Path]], *, feedback_root: pathlib.Path) -> list[str]:
-    """Copy run-level files the optimizer reads (the run summary, the TRAIN draw history) into the
-    feedback folder, host paths stripped. Missing files are skipped: early in a run they do not exist."""
-    copied = []
-    for name, host in files:
-        host = pathlib.Path(host)
-        if not host.is_file():
-            continue
-        try:
-            body = _without_host_paths(json.loads(host.read_text(encoding="utf-8")))
-            (pathlib.Path(feedback_root) / name).write_text(json.dumps(body, indent=2), encoding="utf-8")
-        except ValueError:
-            continue
-        copied.append(name)
-    return copied
-
-
-def prepare_feedback(iter_n: int, *, repo_root: pathlib.Path, feedback_root: pathlib.Path) -> dict:
-    """Copy iteration ``iter_n``'s releases into ``feedback_root/iter/<n>/`` with host paths rewritten.
-
-    The train release's corpus points at the train mistakes file; that file's rows point at the
-    judge's traces. Both are copied beside it and every reference is rewritten to the container path
-    under ``/workspace/ro/in/feedback``. The VAL release carries the scalar only (``_VAL_BREAKDOWN_
-    ALLOWED``) and is copied as it is. Returns what was copied, for the run's record.
+    Re-read before every session (a fresh agent is built each iteration): new passes appear as the run goes.
     """
-    src = pathlib.Path(repo_root) / "iter" / str(iter_n)
-    dest = pathlib.Path(feedback_root) / "iter" / str(iter_n)
-    dest.mkdir(parents=True, exist_ok=True)
-    c_iter = f"{IN}/feedback/iter/{iter_n}"
-    copied: dict[str, Any] = {"iter": iter_n, "releases": [], "mistakes": None, "traces": 0}
-    val = src / "release_val.json"
-    if val.is_file():
-        shutil.copyfile(val, dest / "release_val.json")
-        copied["releases"].append("release_val.json")
-    train = src / "release_train.json"
-    if train.is_file():
-        payload = json.loads(train.read_text(encoding="utf-8"))
-        corpus = payload.get("corpus") or {}
-        mistakes_host = corpus.get("ref")
-        if mistakes_host and pathlib.Path(mistakes_host).suffix == ".json" and "mistakes" in pathlib.Path(mistakes_host).parts:
-            body = json.loads(pathlib.Path(mistakes_host).read_text(encoding="utf-8"))
-            for row in body.get("claims", []):
-                row["trace_ref"] = _copy_into(row.get("trace_ref"), dest / "traces", f"{c_iter}/traces")
-                copied["traces"] += 1 if row["trace_ref"] else 0
-            manifest_host = body.get("run_manifest_ref")
-            body["run_manifest_ref"] = None
-            if manifest_host and pathlib.Path(manifest_host).is_file():
-                # Correct-answer traces (TRAIN only, the open tier): the pass's whole manifest, every
-                # claim's trace copied beside it, call folders dropped (they are host paths).
-                run_manifest = json.loads(pathlib.Path(manifest_host).read_text(encoding="utf-8"))
-                for rec in run_manifest.get("claims", []):
-                    rec["staging_dir"] = None
-                    for st in (rec.get("stages") or {}).values():
-                        st["trace_ref"] = _copy_into(st.get("trace_ref"), dest / "traces", f"{c_iter}/traces")
-                        copied["traces"] += 1 if st["trace_ref"] else 0
-                (dest / "run_manifest.json").write_text(json.dumps(_without_host_paths(run_manifest), indent=2), encoding="utf-8")
-                body["run_manifest_ref"] = f"{c_iter}/run_manifest.json"
-                copied["run_manifest"] = body["run_manifest_ref"]
-            (dest / "mistakes").mkdir(parents=True, exist_ok=True)
-            name = pathlib.Path(mistakes_host).name
-            (dest / "mistakes" / name).write_text(json.dumps(body, indent=2), encoding="utf-8")
-            container_ref = f"{c_iter}/mistakes/{name}"
-            corpus["ref"] = container_ref
-            breakdown = ((corpus.get("metrics") or {}).get("breakdown")) or {}
-            if "mistakes_ref" in breakdown:
-                breakdown["mistakes_ref"] = container_ref
-            copied["mistakes"] = container_ref
-        elif mistakes_host:
-            # Not a mistakes file (a failed or unscored batch points at the run manifest): the path is
-            # meaningless inside the container, so it is dropped rather than handed over.
-            corpus["ref"] = None
-        (dest / "release_train.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        copied["releases"].append("release_train.json")
-    return copied
+    program_output_root = pathlib.Path(program_output_root)
+    archive = program_output_root / "archive"
+    passes = sorted(p for p in archive.iterdir() if p.is_dir()) if archive.is_dir() else []
+    train = tuple(
+        [pathlib.Path(train_output_root)] if train_output_root is not None else []
+    ) + tuple(p for p in passes if _is_train_pass(p))
+    validation = (
+        *([pathlib.Path(val_output_root)] if val_output_root is not None else []),
+        *(p for p in passes if not _is_train_pass(p)),
+        program_output_root / "live",
+        stage_claim.GOLD_ROOT.parent,
+        stage_claim.BENCH_DIR.parent,
+    )
+    return train, tuple(validation)
 
 
 # =================================================================================================
@@ -290,8 +225,10 @@ def sandbox_note(iter_n: int, run_id: str | None = None) -> str:
         "(`<run id>/iter-<n>/findings.md`, `meta-learnings.md`; `iter-<n>-failed` for a session that failed; "
         "`legacy/` for notes from before this layout). Write this iteration's findings to "
         f"`{OUT}/findings.md`.\n"
-        f"- `{IN}/feedback/iter/<n>/`: each iteration's releases (`release_train.json`, `release_val.json`), "
-        "the train mistakes file the train release points at, and the judge traces its rows cite.\n"
+        f"- `{ca.FEEDBACK_PATH}/`: this run's `run_summary.json` and `draw_history.json`, and under "
+        "`iter/<n>/` each iteration's releases (`release_train.json`, `release_val.json`), "
+        "`previous_attempt.json` when the version saved before it failed, and in `files/` the train mistakes "
+        "file the train release points at, the TRAIN pass's run manifest and the judge traces they cite.\n"
         f"- `{ca.VERSIONS_PATH}/`: earlier program versions, materialized. Read an earlier version's file "
         "there; there is no git history in here.\n\n"
         "Not mounted at all: the gold labels, the benchmark (the test split included), the scorer, the run "
@@ -315,8 +252,9 @@ def prompt_builder(iter_n: int, paths, run_id: str | None = None) -> str:
 class SarolOptimizer:
     """The loop's agent: one contained optimizer session per iteration.
 
-    A fresh ``ContainedOptimizerAgent`` is built each iteration because its declared outputs and the
-    feedback it reads are per-iteration; construction is cheap and refuses a bad grant before any spend.
+    A fresh ``ContainedOptimizerAgent`` is built each iteration because the train passes its feedback
+    may be followed into appear as the run goes; construction is cheap and refuses a bad grant before
+    any spend.
     """
 
     def __init__(
@@ -325,7 +263,6 @@ class SarolOptimizer:
         store: "adapter.SarolProgramStore",
         materialize_root: pathlib.Path,
         program_output_root: pathlib.Path,
-        run_root: pathlib.Path,
         image: str,
         expected_fingerprint: str,
         model: str = "opus",
@@ -334,7 +271,14 @@ class SarolOptimizer:
         profile=None,
         scorer_roots: Sequence[pathlib.Path] = (),
         transcript_dir: pathlib.Path | None = None,
+        #: The scorer's TRAIN and VAL roots, named apart: the feedback may be followed into the first and
+        #: never into the second (:func:`feedback_roots`).
+        train_output_root: pathlib.Path | None = None,
+        val_output_root: pathlib.Path | None = None,
+        #: Run-level files the engine stages beside the iterations, host paths stripped: the TRAIN draw
+        #: history. The run summary goes separately, as ``run_summary_path``.
         feedback_files: Sequence[tuple[str, pathlib.Path]] = (),
+        run_summary_path: pathlib.Path | None = None,
         notebook: pathlib.Path = NOTEBOOK,
         context_dir: pathlib.Path = CONTEXT_DIR,
         #: The notes history (B4) and the run it is keyed by. Both or neither.
@@ -343,6 +287,9 @@ class SarolOptimizer:
         _agent_factory=None,
     ) -> None:
         self.feedback_files = tuple((n, pathlib.Path(p)) for n, p in feedback_files)
+        self.run_summary_path = pathlib.Path(run_summary_path) if run_summary_path is not None else None
+        self.train_output_root = pathlib.Path(train_output_root) if train_output_root is not None else None
+        self.val_output_root = pathlib.Path(val_output_root) if val_output_root is not None else None
         self.notebook = pathlib.Path(notebook)
         self.notes_root = pathlib.Path(notes_root) if notes_root is not None else None
         self.run_id = run_id
@@ -350,8 +297,6 @@ class SarolOptimizer:
         self.store = store
         self.repo_root = pathlib.Path(store.repo_root)
         self.materialize_root = pathlib.Path(materialize_root)
-        self.run_root = pathlib.Path(run_root)
-        self.feedback_root = self.run_root / "optimizer-feedback"
         self.program_output_root = pathlib.Path(program_output_root)
         self.image = image
         self.expected_fingerprint = expected_fingerprint
@@ -364,10 +309,8 @@ class SarolOptimizer:
         )
         self.transcript_dir = transcript_dir
         self._agent_factory = _agent_factory or ca.ContainedOptimizerAgent
-        self.feedback_records: list[dict] = []
         if not self.notebook.exists():
             self.notebook.write_text("", encoding="utf-8")
-        self.feedback_root.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def agent_instructions() -> str:
@@ -375,6 +318,10 @@ class SarolOptimizer:
         return PROMPT_PATH.read_text(encoding="utf-8")
 
     def agent(self, iter_n: int):
+        train_roots, validation_roots = feedback_roots(
+            program_output_root=self.program_output_root, train_output_root=self.train_output_root,
+            val_output_root=self.val_output_root,
+        )
         return self._agent_factory(
             model=self.model,
             system_prompt=self.agent_instructions(),
@@ -399,8 +346,13 @@ class SarolOptimizer:
             readable_inputs=(
                 ("context", self.context_dir),
                 ("meta-learnings.md", self.notebook),
-                ("feedback", self.feedback_root),
             ),
+            # B9: the engine stages /workspace/ro/feedback from the loop's iter/ folder.
+            iter_root=self.repo_root / "iter",
+            train_feedback_roots=train_roots,
+            validation_roots=validation_roots,
+            feedback_files=self.feedback_files,
+            run_summary_path=self.run_summary_path,
             notes_root=self.notes_root,
             run_id=self.run_id,
             max_budget_usd=self.max_budget_usd,
@@ -420,9 +372,6 @@ class SarolOptimizer:
         return {TOKEN_ENV_NAME: value} if value else {}
 
     def run(self, *, iter_n: int, materialized_path=None):  # keyword-only, the loop's agent seam
-        record = prepare_feedback(iter_n, repo_root=self.repo_root, feedback_root=self.feedback_root)
-        record["run_files"] = copy_feedback_files(self.feedback_files, feedback_root=self.feedback_root)
-        self.feedback_records.append(record)
         return self.agent(iter_n).run(iter_n=iter_n, materialized_path=materialized_path)
 
 
@@ -443,91 +392,49 @@ def _selftest() -> int:
         root = pathlib.Path(td)
         repo = root / "repo"
         run_root = root / "run"
-        traces = run_root / "program-out" / "archive" / "pass-1" / "transcripts"
-        traces.mkdir(parents=True)
-        trace = traces / "events.jsonl"
-        trace.write_text('{"type": "result"}\n', encoding="utf-8")
-        mistakes = run_root / "scorer" / "mistakes" / "run-train-i1.json"
+        # A run laid out as the engine runner and the scorer lay it out (see a real run's folders): the
+        # TRAIN and VAL scorer roots side by side, and one folder per program pass under archive/, the
+        # TRAIN pass beside the VAL pass. A marker in each validation-side file must never reach the
+        # optimizer; the TRAIN pass's marker must (the positive control).
+        archive = run_root / "program-out" / "archive"
+        train_pass, val_pass, odd_pass = archive / "iter-1-train-aaa", archive / "iter-1-val-bbb", archive / "iter-1-odd-ccc"
+        for p, split in ((train_pass, "train"), (val_pass, "val"), (odd_pass, None)):
+            (p / "transcripts").mkdir(parents=True)
+            if split is not None:
+                (p / "pass.json").write_text(json.dumps({"key": {"split": split}}), encoding="utf-8")
+        trace = train_pass / "transcripts" / "events.jsonl"
+        trace.write_text('{"type": "result", "note": "TRAIN-TRACE-MARKER"}\n', encoding="utf-8")
+        val_trace = val_pass / "transcripts" / "events.jsonl"
+        val_trace.write_text('{"type": "result", "note": "VAL-PASS-MARKER"}\n', encoding="utf-8")
+        odd_trace = odd_pass / "transcripts" / "events.jsonl"
+        odd_trace.write_text('{"note": "ODD-PASS-MARKER"}\n', encoding="utf-8")
+        pass_manifest = train_pass / "run_manifest.json"
+        pass_manifest.write_text(json.dumps({"split": "train", "claims": [
+            {"claim_id": "C1", "staging_dir": str(train_pass / "calls" / "C1"),
+             "stages": {"adjudicator": {"trace_ref": str(trace)}}}]}), encoding="utf-8")
+        val_mistakes = run_root / "val" / "mistakes" / "run-val.json"
+        val_mistakes.parent.mkdir(parents=True)
+        val_mistakes.write_text(json.dumps({"note": "VAL-ROOT-MARKER"}), encoding="utf-8")
+        mistakes = run_root / "train" / "mistakes" / "run-train-i1.json"
         mistakes.parent.mkdir(parents=True)
-        trace_ok = traces / "events-ok.jsonl"
-        trace_ok.write_text('{"type": "result", "ok": true}\n', encoding="utf-8")
-        pass_manifest = run_root / "program-out" / "archive" / "pass-1" / "run_manifest.json"
-        pass_manifest.write_text(json.dumps({"claims": [
-            {"claim_id": "C1", "staging_dir": str(run_root / "program-out" / "archive" / "pass-1" / "calls" / "C1"),
-             "stages": {"adjudicator": {"trace_ref": str(trace)}}},
-            {"claim_id": "C3", "staging_dir": str(run_root / "program-out" / "archive" / "pass-1" / "calls" / "C3"),
-             "stages": {"adjudicator": {"trace_ref": str(trace_ok)}}}]}), encoding="utf-8")
-        mistakes.write_text(json.dumps({"claims": [{"claim_id": "C1", "trace_ref": str(trace)},
-                                                   {"claim_id": "C2", "trace_ref": None}],
-                                        "run_manifest_ref": str(pass_manifest)}), encoding="utf-8")
+        mistakes.write_text(json.dumps({"claims": [
+            {"claim_id": "C1", "trace_ref": str(trace)},
+            # Wiring bugs the seal must survive: train rows naming validation-side files.
+            {"claim_id": "C2", "trace_ref": str(val_trace)},
+            {"claim_id": "C3", "trace_ref": str(odd_trace)},
+            {"claim_id": "C4", "trace_ref": str(val_mistakes)}],
+            "run_manifest_ref": str(pass_manifest)}), encoding="utf-8")
+        (run_root / "train" / "draw_history.json").write_text(json.dumps({"draws": [["C1"]]}), encoding="utf-8")
+        summary = run_root / "run_summary.json"
+        summary.write_text(json.dumps({"iterations": [{"val": 0.4, "manifest": str(pass_manifest)}]}), encoding="utf-8")
         it = repo / "iter" / "1"
         it.mkdir(parents=True)
         (it / "release_train.json").write_text(json.dumps({
             "phase": "train", "corpus": {"ref": str(mistakes), "metrics": {"breakdown": {"mistakes_ref": str(mistakes)}}}}))
-        (it / "release_val.json").write_text(json.dumps({"phase": "val", "metrics": {"primary_metric": 0.4}}))
-        feedback = run_root / "optimizer-feedback"
-        copied = prepare_feedback(1, repo_root=repo, feedback_root=feedback)
-        written = "".join(p.read_text(encoding="utf-8") for p in feedback.rglob("*") if p.is_file())
-        train = json.loads((feedback / "iter" / "1" / "release_train.json").read_text())
-        rows = json.loads((feedback / "iter" / "1" / "mistakes" / "run-train-i1.json").read_text())["claims"]
-        checks += [
-            ("both releases are copied into the feedback folder", sorted(copied["releases"]) == ["release_train.json", "release_val.json"]),
-            ("the train release points at its mistakes file by container path",
-             train["corpus"]["ref"] == f"{IN}/feedback/iter/1/mistakes/run-train-i1.json"
-             and train["corpus"]["metrics"]["breakdown"]["mistakes_ref"] == train["corpus"]["ref"]),
-            ("...and each cited judge trace is copied beside it and re-pointed",
-             rows[0]["trace_ref"] == f"{IN}/feedback/iter/1/traces/events.jsonl"
-             and (feedback / "iter" / "1" / "traces" / "events.jsonl").is_file() and rows[1]["trace_ref"] is None),
-            ("no host path is left in anything the optimizer reads", str(root) not in written),
-            ("the TRAIN pass's manifest is copied for correct-answer traces, call folders dropped",
-             copied.get("run_manifest") == f"{IN}/feedback/iter/1/run_manifest.json"
-             and all(c["staging_dir"] is None for c in json.loads((feedback / "iter" / "1" / "run_manifest.json").read_text())["claims"])),
-            ("...with a correct claim's trace copied and re-pointed too",
-             json.loads((feedback / "iter" / "1" / "run_manifest.json").read_text())["claims"][1]["stages"]["adjudicator"]["trace_ref"]
-             == f"{IN}/feedback/iter/1/traces/events-ok.jsonl"),
-        ]
-        # Two traces with one file name in two call folders (the engine names every transcript
-        # events.jsonl): both kept, re-pointed to two different container paths.
-        twin_a, twin_b = run_root / "t" / "a" / "events.jsonl", run_root / "t" / "b" / "events.jsonl"
-        for twin, body_ in ((twin_a, "A\n"), (twin_b, "B\n")):
-            twin.parent.mkdir(parents=True)
-            twin.write_text(body_, encoding="utf-8")
-        it3 = repo / "iter" / "3"
-        it3.mkdir()
-        m3 = run_root / "scorer" / "mistakes" / "run-train-i3.json"
-        m3.write_text(json.dumps({"claims": [{"claim_id": "X1", "trace_ref": str(twin_a)},
-                                             {"claim_id": "X2", "trace_ref": str(twin_b)}]}), encoding="utf-8")
-        (it3 / "release_train.json").write_text(json.dumps({"corpus": {"ref": str(m3)}}))
-        prepare_feedback(3, repo_root=repo, feedback_root=feedback)
-        rows3 = json.loads((feedback / "iter" / "3" / "mistakes" / "run-train-i3.json").read_text())["claims"]
-        ref_a, ref_b = rows3[0]["trace_ref"], rows3[1]["trace_ref"]
-        host_a = feedback / "iter" / "3" / "traces" / pathlib.Path(ref_a).name
-        host_b = feedback / "iter" / "3" / "traces" / pathlib.Path(ref_b).name
-        checks.append(("two traces sharing a file name are both kept, at two different container paths",
-                       ref_a != ref_b and host_a.read_text() == "A\n" and host_b.read_text() == "B\n"))
-        broken = run_root / "broken.json"
-        broken.write_text("{not json", encoding="utf-8")
-        checks.append(("a malformed run-level file is skipped, not copied",
-                       copy_feedback_files([("broken.json", broken)], feedback_root=feedback) == []
-                       and not (feedback / "broken.json").exists()))
-        checks.append(("host paths are stripped and container paths kept, including a stated extra root",
-                       _without_host_paths({"a": "/workspace/ro/in/x", "b": "/Users/someone/x", "c": "/private/var/x",
-                                            "d": "/srv/run/x", "e": "plain text"}, roots=("/srv/run",))
-                       == {"a": "/workspace/ro/in/x", "b": None, "c": None, "d": None, "e": "plain text"}))
-        summary = run_root / "run_summary.json"
-        summary.write_text(json.dumps({"iterations": [{"val": 0.4, "manifest": str(pass_manifest)}]}), encoding="utf-8")
-        files = copy_feedback_files([("run_summary.json", summary), ("draw_history.json", run_root / "absent.json")],
-                                    feedback_root=feedback)
-        body = json.loads((feedback / "run_summary.json").read_text())
-        checks.append(("run-level files are copied with host paths stripped, and a missing one is skipped",
-                       files == ["run_summary.json"] and body["iterations"][0] == {"val": 0.4, "manifest": None}))
-        # A failed batch's release points at the run manifest, not a mistakes file: dropped, not handed over.
-        it2 = repo / "iter" / "2"
-        it2.mkdir()
-        (it2 / "release_train.json").write_text(json.dumps({"corpus": {"ref": str(run_root / "program-out" / "x" / "run_manifest.json")}}))
-        prepare_feedback(2, repo_root=repo, feedback_root=feedback)
-        checks.append(("a release pointing anywhere but a mistakes file has the path dropped",
-                       json.loads((feedback / "iter" / "2" / "release_train.json").read_text())["corpus"]["ref"] is None))
+        (it / "release_val.json").write_text(json.dumps({"phase": "val", "metrics": {"primary_metric": 0.4},
+                                                        "ref": str(val_trace)}))
+        (repo / "iter" / "2").mkdir()
+        (repo / "iter" / "2" / "previous_attempt.json").write_text(json.dumps({"tag": "program-v12", "stage": "validation_pass"}))
 
         # -- the agent, built for real (no session), with the engine filing its notes (B4) ----------
         notebook = root / "notes" / "meta-learnings.md"
@@ -553,8 +460,12 @@ def _selftest() -> int:
 
         def _optimizer(**overrides):
             kw = dict(
-                store=store, materialize_root=mat_root, program_output_root=run_root / "program-out", run_root=run_root,
-                image=fake_image, expected_fingerprint=ss.UNPINNED, scorer_roots=(run_root / "scorer",),
+                store=store, materialize_root=mat_root, program_output_root=run_root / "program-out",
+                image=fake_image, expected_fingerprint=ss.UNPINNED,
+                scorer_roots=(run_root / "train", run_root / "val"),
+                train_output_root=run_root / "train", val_output_root=run_root / "val",
+                feedback_files=(("draw_history.json", run_root / "train" / "draw_history.json"),),
+                run_summary_path=summary,
                 notebook=notebook, context_dir=context, notes_root=notes_root, run_id="selftest-run",
                 _agent_factory=_FakeAgent,
             )
@@ -562,7 +473,7 @@ def _selftest() -> int:
             return SarolOptimizer(**kw)
 
         opt = _optimizer()
-        outcome = opt.run(iter_n=1, materialized_path=mat_root / "iter1-current")
+        outcome = opt.run(iter_n=2, materialized_path=mat_root / "iter2-current")
         kw = built[-1].kw
         outs = {o.name: o.destination for o in kw["declared_outputs"]}
         inputs = dict(kw["readable_inputs"])
@@ -573,11 +484,60 @@ def _selftest() -> int:
              kw["notes_root"] == notes_root and kw["run_id"] == "selftest-run"),
             ("findings.md is a per-iteration note (no destination); the notebook is a running file onto the real one",
              outs == {"findings.md": None, "meta-learnings.md": notebook}),
-            ("the old findings folder is no longer an input; the notebook, context and feedback still are",
-             set(inputs) == {"context", "meta-learnings.md", "feedback"} and inputs["meta-learnings.md"] == notebook),
-            ("paper-trail no longer files outputs itself (the holding folder is gone)",
-             not (run_root / "optimizer-outputs").exists() and not hasattr(opt, "_file_outputs")),
+            ("the inputs are the notebook and context only: the feedback is the engine's to stage (B9)",
+             set(inputs) == {"context", "meta-learnings.md"} and inputs["meta-learnings.md"] == notebook),
+            ("paper-trail no longer files outputs or copies feedback itself",
+             not (run_root / "optimizer-outputs").exists() and not (run_root / "optimizer-feedback").exists()
+             and not hasattr(opt, "_file_outputs") and "prepare_feedback" not in globals()),
+            ("the engine reads the loop's iter/ folder in the checkout",
+             kw["iter_root"] == store.repo_root / "iter"),
+            ("the train roots are the TRAIN scorer root and the TRAIN pass, nothing else",
+             set(kw["train_feedback_roots"]) == {run_root / "train", train_pass}),
+            ("the validation roots hold the VAL root, the VAL pass, a pass with no record, live/, gold and benchmark",
+             {run_root / "val", val_pass, odd_pass, run_root / "program-out" / "live",
+              stage_claim.GOLD_ROOT.parent, stage_claim.BENCH_DIR.parent} == set(kw["validation_roots"])),
+            ("the run summary and the draw history are handed over as run-level files",
+             kw["run_summary_path"] == summary
+             and tuple(kw["feedback_files"]) == (("draw_history.json", run_root / "train" / "draw_history.json"),)),
         ]
+        # The engine's real staging, given exactly what paper-trail hands the agent, over this run's
+        # iter/ (the fixture repo's; the agent itself names the real checkout's).
+        from isolation.feedback import FEEDBACK_PATH, stage_feedback  # noqa: PLC0415
+
+        def _stage(dest, train_roots, validation_roots):
+            stage_feedback(dest, iter_root=repo / "iter", iter_n=2, train_roots=train_roots,
+                           validation_roots=validation_roots,
+                           run_files=(("run_summary.json", kw["run_summary_path"]), *kw["feedback_files"]),
+                           host_roots=(repo,))
+            return "".join(p.read_text(encoding="utf-8") for p in dest.rglob("*") if p.is_file())
+
+        staged = root / "staged"
+        text = _stage(staged, kw["train_feedback_roots"], kw["validation_roots"])
+        files = sorted(str(p.relative_to(staged)) for p in staged.rglob("*") if p.is_file())
+        release = json.loads((staged / "iter" / "1" / "release_train.json").read_text())
+        rows = json.loads((staged / "iter" / "1" / "files" / "run-train-i1.json").read_text())["claims"]
+        checks += [
+            (f"the staged folder: summary, draw history, both releases, the failure record, the train files [{files}]",
+             {"run_summary.json", "draw_history.json", "iter/1/release_train.json", "iter/1/release_val.json",
+              "iter/2/previous_attempt.json", "iter/1/files/run-train-i1.json", "iter/1/files/run_manifest.json",
+              "iter/1/files/events.jsonl"} == set(files)),
+            ("the train release points at its mistakes file by container path",
+             release["corpus"]["ref"] == f"{FEEDBACK_PATH}/iter/1/files/run-train-i1.json"
+             and release["corpus"]["metrics"]["breakdown"]["mistakes_ref"] == release["corpus"]["ref"]),
+            ("the TRAIN pass's trace reaches the optimizer (the positive control)",
+             "TRAIN-TRACE-MARKER" in text and rows[0]["trace_ref"] == f"{FEEDBACK_PATH}/iter/1/files/events.jsonl"),
+            ("nothing from the VAL pass, the VAL root or an unrecorded pass reaches it, even when a train row names it",
+             not any(m in text for m in ("VAL-PASS-MARKER", "VAL-ROOT-MARKER", "ODD-PASS-MARKER"))
+             and rows[1]["trace_ref"] is None and rows[2]["trace_ref"] is None and rows[3]["trace_ref"] is None),
+            ("no host path is left in anything staged", str(root) not in text),
+        ]
+        # Negative control: the whole program-out as one train root (no pass sorting) lets the VAL pass's
+        # trace through, so the check above can fail. The engine would refuse program-out beside a VAL pass
+        # as a validation root (overlap), so the control drops the pass roots, as a careless wiring would.
+        leaky = _stage(root / "staged-leaky", (run_root / "train", run_root / "program-out"),
+                       (run_root / "val", stage_claim.GOLD_ROOT.parent))
+        checks.append(("negative control: following into all of program-out leaks the VAL pass's trace",
+                       "VAL-PASS-MARKER" in leaky))
         # Negative control: a notes root inside the checkout (here, under iter/) is refused at construction.
         try:
             _optimizer(notes_root=store.repo_root / "iter" / "notes").agent(1)

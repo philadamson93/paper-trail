@@ -582,7 +582,7 @@ def _selftest() -> int:
         # optimizer where to look must say the same thing.
         ("release-format points the optimizer at the per-claim corpus, not the run manifest",
          "run manifest, from which" not in docs["release-format.md"]
-         and "mistakes/<batch_id>.json" in docs["release-format.md"]),
+         and "/workspace/ro/feedback/iter/<n>/files/<batch_id>.json" in docs["release-format.md"]),
         ("...and states the schema version the code actually emits",
          "0.2.0" in docs["release-format.md"] and "`0.1.0`." not in docs["release-format.md"]),
         ("...and does not promise verifier output that Phase 1 never produces",

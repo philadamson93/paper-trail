@@ -18,13 +18,12 @@ ITERATIONS="${3:-5}"
 # itself all read this, so they cannot disagree about what is being run -- `retrieval` is the only
 # runnable rung today (`profiles.IMPLEMENTED_STAGES`).
 PROFILE="${PROFILE:-retrieval}"
-# Which program version the working tree already holds, and so the version the run starts from.
-# Default (set below, once the manifest is read): the version the manifest freezes. Set it to continue
-# from a version an earlier run committed. The tree-vs-tag guard checks the tree against whatever this
-# names, so a wrong value refuses before any spend. It also decides what the run keeps: starting from
-# program-v0's content is a fresh start (the notebook and notes are archived), anything later continues
-# the lineage and keeps them (next-run H2, decided by the engine's run-start reset).
-CURRENT_TAG="${CURRENT_TAG:-}"
+# Where the run starts (B8): `newest` (the default here), the newest version no run recorded as failed;
+# `seed`, program-v0; or a version tag. The working tree must already hold that version: the engine
+# refuses one it doesn't, with the `git checkout` that fixes it, and never checks out for you. The start
+# also decides what the run keeps: program-v0's content is a fresh start (the notebook and notes are
+# archived), anything later continues the lineage and keeps them (next-run H2, the engine's run-start reset).
+START="${START:-newest}"
 
 # Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
 # resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
@@ -102,7 +101,7 @@ fi
   || fail "GATE G FAILED: an agent-read prompt carries development history (what it used to say, or a dated edit). State the rule as it stands -- the history belongs in git and docs/."
 # The run-start reset is not a preflight any more (PT-B, 2026-10-05): the engine's shared driver (C-core)
 # runs it under its version lock, so two drivers cannot both archive, and it decides fresh or continuing
-# from CURRENT_TAG's content, with no switch. The driver also checks both sealed setups against their
+# from the start version's content, with no switch. The driver also checks both sealed setups against their
 # committed pins before anything is materialized, and records every refusal in the run summary. It archives (moves, never deletes) into
 # ~/.paper-trail/runs/_archive/<timestamp>-<run id>/ and refuses to start if anything is left behind.
 # The per-ITERATION half of the reset (the graders' answers) is no longer a preflight: since PT-A
@@ -247,8 +246,7 @@ FROZEN_TAG="$("$PY" -c 'import json; print(json.load(open("program-v0/manifest.j
 "$PY" scripts/freeze_program_v0.py --verify --tree "$FROZEN_TAG" >/dev/null 2>&1 \
   || fail "$FROZEN_TAG does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
 echo "  $FROZEN_TAG (the version the manifest freezes) verifies against its tag"
-CURRENT_TAG="${CURRENT_TAG:-$FROZEN_TAG}"
-[ "$CURRENT_TAG" = "$FROZEN_TAG" ] || echo "  starting from $CURRENT_TAG, not the manifest's $FROZEN_TAG (deliberate; the dispatcher checks the tree against it)"
+echo "  start: $START (the dispatcher resolves it and checks the tree against the version it names)"
 
 # ---------------------------------------------------------------- container images
 # Both principals run as the engine's sealed sessions (PT-A): the graders on the grader image, the
@@ -276,7 +274,7 @@ set +e
   --image "$IMAGE_REF" \
   --optimizer-image "$OPTIMIZER_IMAGE_REF" \
   --profile "$PROFILE" \
-  --current-tag "$CURRENT_TAG" \
+  --start "$START" \
   --iterations "$ITERATIONS" \
   --train-n-schedule 50,50,50,50,50 \
   --draw-mode cumulative \
