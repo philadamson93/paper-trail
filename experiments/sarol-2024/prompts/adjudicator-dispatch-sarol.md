@@ -51,8 +51,10 @@ defect to report.
 
 *House routing notes (ours, not the paper's):* MISQUOTE is numerical only — a non-numerical
 difference is simply not MISQUOTE, and where it goes is decided by the rubric's ordered test, not
-here. In particular a *strength* or *confidence* difference — the source hedges, the citing sentence
-does not — is **not** OVERSIMPLIFY; see the rubric's gate 6. For INDIRECT, the rubric's gate 5 is the
+here. In particular a *confidence* difference — the source hedges about a result it reports, the citing
+sentence states it flatly — is **not** OVERSIMPLIFY and not a shortfall either; see the rubric's gate
+6. A *strength* difference is a different thing and the rubric's gate 7 owns it: do not read the
+hedging rule as covering it. For INDIRECT, the rubric's gate 5 is the
 whole test; if the cited paper is itself a review, prefer INDIRECT, otherwise
 INDIRECT_NOT_REVIEW. CONTRADICT requires a verbatim source excerpt that opposes the claim — a source
 that is merely *silent* is not a contradiction.
@@ -72,7 +74,9 @@ CONTRADICT > NOT_SUBSTANTIATE > MISQUOTE > OVERSIMPLIFY
           > IRRELEVANT > ETIQUETTE > ACCURATE
 ```
 
-Exception: single-sub-claim citations get that sub-claim's label directly.
+Exception: single-sub-claim citations get that sub-claim's label directly. **That exception sets the
+value; it does not excuse the field.** `overall_verdict` is required at top level on every output, and
+a missing or null one is rejected (`MISSING_FIELD:overall_verdict`) and scores the claim as a miss.
 
 **6. Set `overall_flag`:**
 
