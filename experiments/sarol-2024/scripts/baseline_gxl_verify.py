@@ -59,6 +59,31 @@ VERIFIER_CONTEXT = (
     "Verify the `text` field; `claim_id` is a label. A `[CIT]` marker is where this paper is cited."
 )
 
+#: How much guidance gxl gets (Phil 2026-10-08). gxl's docs only show the verifier note naming which
+#: fields to check, and they assume a claim is one statement the user already split out.
+#: - "shipped": the 2026-10-07 VAL run -- which field to check and what [CIT] means, nothing else.
+#: - "taskspec": what paper-trail itself started from (program-v0): what the text is, Sarol's verbatim
+#:   definition of ACCURATE, the hand-written co-citation rule (v0's wording; its trigger never fired
+#:   in v0, the optimizer made it fire), and the co-citation flag paper-trail receives.
+#: Withheld as what the optimization produced: judge only the clause the marker is attached to,
+#: background framing, the gate order, retrieval silence. Line hints stay withheld: only gold has them.
+GUIDANCE = {
+    "shipped": VERIFIER_CONTEXT,
+    "taskspec": (
+        "Each claim is a JSON object. Verify only its `text` field; `claim_id` and `citation_group` are "
+        "labels. `text` is a sentence from another paper that cites this paper: [CIT] marks where this "
+        "paper is cited, and [OTHER_CIT] marks other papers cited in the same sentence. Count the claim as "
+        "supported when, in the benchmark's own words, \"the citation context is consistent with an "
+        "evidence segment in the reference article.\" When `citation_group` is \"grouped\" or the text "
+        "contains [OTHER_CIT], other papers are cited alongside this one: verify only the portion of the "
+        "sentence attributable to this paper; parts that another cited paper may cover do not count "
+        "against it."
+    ),
+}
+
+#: The 2026-10-07 as-shipped VAL verdicts, shown beside a later guidance level on the same 50 claims.
+SHIPPED_VERDICTS = pathlib.Path.home() / ".paper-trail" / "baselines" / "gxl-verify-2026-10-07" / "verdicts.json"
+
 #: The two smoke claims from the 2026-10-06 hands-on demo: one cited paper, two citing sentences.
 SMOKE_PAPER = "PMC3179858"
 SMOKE_FILES = ("PMC3142215_4", "PMC3142215_2")
@@ -168,7 +193,9 @@ def test_claims() -> list[dict[str, Any]]:
             raise SystemExit(f"[claims] no references file for test bucket {bucket}")
         cid = f"{int(row['id'])}-{bucket}"
         claims.append({"claim_id": cid, "tag": _tag(cid), "pmcid": ref.stem.split("_", 1)[1],
-                       "text": stage_claim.normalize_claim_text(row["claim"]), "multi_cit_context": None})
+                       "text": stage_claim.normalize_claim_text(row["claim"]),
+                       # Same rule paper-trail's staging uses (stage_claim.stage): a structural marker, not a label.
+                       "multi_cit_context": "grouped" if "<|multi_cit|>" in row["claim"] else "single"})
     claims.sort(key=lambda c: (c["pmcid"], int(c["claim_id"].split("-")[0])))
     return claims
 
@@ -241,7 +268,7 @@ def _is_quota(exc: Exception) -> bool:
 
 
 def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_size: int, resume: bool,
-           limit: "int | None" = None) -> None:
+           limit: "int | None" = None, guidance: str = "shipped") -> None:
     """Attach the claims and verify them, `batch_size` at a time. Resumable after a cap stop."""
     out.mkdir(parents=True, exist_ok=True)
     progress = _progress(out)
@@ -249,11 +276,14 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
         raise SystemExit(f"[run] {out} already holds a run; pass --resume to continue it")
     if resume and progress.get("repo") not in (None, repo):
         raise SystemExit(f"[run] {out} belongs to repo {progress['repo']!r}, not {repo!r}")
+    if resume and progress.get("guidance", "shipped") != guidance:
+        raise SystemExit(f"[run] {out} was started with guidance {progress.get('guidance', 'shipped')!r}; "
+                         f"a run cannot switch to {guidance!r} part-way")
     session = Session(out, repo)
     (out / "claims.json").write_text(json.dumps(claims, indent=1), encoding="utf-8")
     if not progress:
         session.call("init", "git_init", {"name": repo, "description": "paper-trail baseline: Sarol 2024 VAL claims"})
-        progress = {"repo": repo, "added": [], "commits": 0, "started_at": _now()}
+        progress = {"repo": repo, "added": [], "commits": 0, "started_at": _now(), "guidance": guidance}
         _save_progress(out, progress)
 
     # Number commits after any already on disk, so a resumed run never overwrites an earlier raw file.
@@ -263,7 +293,7 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
         progress["commits"] += 1
         try:
             session.call(f"commit-{progress['commits']:02d}", "git_commit", {
-                "message": f"paper-trail baseline: {note}", "verify": True, "verifier_context": VERIFIER_CONTEXT})
+                "message": f"paper-trail baseline: {note}", "verify": True, "verifier_context": GUIDANCE[guidance]})
         except paperclip_mcp.PaperclipError as exc:
             if _is_quota(exc):
                 raise paperclip_mcp.RateLimited(str(exc)) from None
@@ -300,7 +330,10 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
                 skipped[c["claim_id"]] = f"cited paper {c['pmcid']} not on paperclip"
                 _save_progress(out, progress)
                 continue
-            payload = json.dumps({"type": "sarol_claim", "claim_id": c["tag"], "text": c["text"]})
+            claim_obj = {"type": "sarol_claim", "claim_id": c["tag"], "text": c["text"]}
+            if guidance == "taskspec":
+                claim_obj["citation_group"] = c.get("multi_cit_context") or "single"
+            payload = json.dumps(claim_obj)
             try:
                 session.call(f"add-{c['claim_id']}", "git_add", {"paper_ids": [c["pmcid"], payload], "as_json": True})
             except paperclip_mcp.PaperclipError as exc:
@@ -430,7 +463,8 @@ def write_verdicts(claims: list[dict[str, Any]], out: pathlib.Path, md5: "str | 
         "repo": _progress(out).get("repo"),
         "add_failed": _progress(out).get("add_failed", {}),
         "roster_md5": md5,
-        "verifier_context": VERIFIER_CONTEXT,
+        "guidance": _progress(out).get("guidance", "shipped"),
+        "verifier_context": GUIDANCE[_progress(out).get("guidance", "shipped")],
         "counts": counts,
         "claims": [{**c, **parsed[c["claim_id"]]} for c in claims],
     }
@@ -565,9 +599,14 @@ def score_only(out: pathlib.Path) -> int:
             print(f"[score] {name}: claim set differs from the roster")
             return 2
         systems[name] = preds
+    if verdicts.get("guidance", "shipped") != "shipped" and SHIPPED_VERDICTS.exists():
+        shipped = {c["claim_id"]: GXL_AS_LABEL.get(c["verdict"], MISS)
+                   for c in json.loads(SHIPPED_VERDICTS.read_text(encoding="utf-8"))["claims"]}
+        if set(shipped) == set(ids):
+            systems["gxl, as shipped (10-07)"] = shipped
     systems["always ACCURATE"] = {cid: "ACCURATE" for cid in ids}
     results = {
-        name: views([(p[cid], gold[cid]) for cid in ids], nine_way_is_real=name != "gxl claim checker")
+        name: views([(p[cid], gold[cid]) for cid in ids], nine_way_is_real=not name.startswith("gxl"))
         for name, p in systems.items()
     }
 
@@ -591,7 +630,7 @@ def score_only(out: pathlib.Path) -> int:
         if gap >= noise else
         "paper-trail v8 is ahead of gxl by more than the noise"
         if gap <= -noise else
-        "same ballpark: gxl's shipped checker is the bar paper-trail's hill-climb has to beat"
+        "same ballpark: gxl's checker is the bar paper-trail's hill-climb has to beat"
     )
     disagree = [
         {"claim_id": cid, "gold": gold[cid], "paper-trail v8": systems["paper-trail v8"][cid],
@@ -808,12 +847,12 @@ def card_html(doc: dict[str, Any], verdicts: dict[str, Any], systems: dict[str, 
 <code>{e(str(doc['roster_md5']))}</code>) · scored {e(doc['scored_at'][:10])}</p>
 <div class=answer><b>Optimization lifted paper-trail from {v0[0]:.2f}–{v0[1]:.2f} to {headline(v8):.2f}</b>
 (3-way macro-F1 on the {hd['n_claims']} claims whose gold label every system can give), a gain of {hd['lift_v8_over_best_v0']:.2f}
-over the better original run against {hd['noise']:.2f} run-to-run noise. gxl's shipped checker scores {headline(gxl):.2f}:
+over the better original run against {hd['noise']:.2f} run-to-run noise. gxl's checker ({e(verdicts.get('guidance', 'shipped'))} guidance) scores {headline(gxl):.2f}:
 {e(doc['readout'])}. Answering "accurate" every time scores {headline(res['always ACCURATE']):.2f}.</div>
 <div class=tiles>
 <div class=tile><div class=v>{v0[0]:.2f}–{v0[1]:.2f}</div><div class=k>paper-trail v0 (original), two runs</div></div>
 <div class=tile><div class=v>{headline(v8):.2f}</div><div class=k>paper-trail v8 (best optimized)</div></div>
-<div class=tile><div class=v>{headline(gxl):.2f}</div><div class=k>gxl claim checker, as shipped</div></div>
+<div class=tile><div class=v>{headline(gxl):.2f}</div><div class=k>gxl claim checker, {e(verdicts.get('guidance', 'shipped'))} guidance</div></div>
 <div class=tile><div class=v>{headline(res['always ACCURATE']):.2f}</div><div class=k>always answer "accurate"</div></div>
 </div>
 <h2>The headline measure, by system</h2>
@@ -848,7 +887,8 @@ evidence Sarol's annotators based the gold label on.</p>
 <h2>How this was measured</h2>
 <ul class=note>
 <li>gxl: each claim attached to one paperclip repo (<code>{e(str(verdicts.get('repo')))}</code>) against its cited paper's
-PMC full text, then verified with gxl's checker as shipped. The only guidance: "{e(VERIFIER_CONTEXT)}" No Sarol label definitions.
+PMC full text, then verified with gxl's checker. Guidance level <b>{e(verdicts.get('guidance', 'shipped'))}</b>:
+"{e(verdicts.get('verifier_context', VERIFIER_CONTEXT))}"
 Verdicts: {e(str(doc['gxl_counts']))}.</li>
 <li>No peeking: verdicts were saved at {e(doc['verdicts_written_at'][:19])} UTC, before gold was first read at {e(doc['gold_read_at'][:19])} UTC.</li>
 <li>paper-trail rows are saved runs on the same 50 claims (Haiku, retrieval profile). v8 and v9 ran on the 09-22 harness;
@@ -883,11 +923,15 @@ def main() -> int:
     ap.add_argument("--split", choices=("val50", "test"), default="val50",
                     help="val50: the 50 dev VAL claims (default); test: every unit of the sealed test split, verdicts only")
     ap.add_argument("--limit", type=int, default=None, help="attach at most this many new claims in this invocation")
+    ap.add_argument("--guidance", choices=tuple(GUIDANCE), default=None,
+                    help="default: shipped for val50 (the 2026-10-07 run), taskspec for test (Phil 2026-10-08)")
     args = ap.parse_args()
+    guidance = args.guidance or ("taskspec" if args.split == "test" else "shipped")
 
-    tag = "test" if args.split == "test" else "val50"
+    tag = "test" if args.split == "test" else ("val50" if guidance == "shipped" else f"val50-{guidance}")
     out = args.out or pathlib.Path.home() / ".paper-trail" / "baselines" / (
-        f"gxl-verify-test-{args.date}" if args.split == "test" else f"gxl-verify-{args.date}")
+        f"gxl-verify-test-{args.date}" if args.split == "test"
+        else f"gxl-verify-{args.date}" if guidance == "shipped" else f"gxl-verify-{guidance}-{args.date}")
     repo = args.repo or f"pt-sarol-{tag}-{args.date}"
     if args.score_only:
         return score_only(out)
@@ -899,7 +943,7 @@ def main() -> int:
         if args.reparse:
             return verdict_exit(write_verdicts(claims, out, md5, "test"))
         try:
-            verify(claims, out, repo, args.batch_size, args.resume, args.limit)
+            verify(claims, out, repo, args.batch_size, args.resume, args.limit, guidance)
         except paperclip_mcp.RateLimited as exc:
             n = len(_progress(out).get("added", []))
             print(f"[run] stopped at gxl's limit with {n}/{len(claims)} attached; progress saved: {exc}\n"
@@ -924,7 +968,7 @@ def main() -> int:
         if not (args.no_smoke or args.resume):
             smoke_out = out.with_name(out.name + "-smoke")
             sc = smoke_claims()
-            verify(sc, smoke_out, f"pt-sarol-smoke-{args.date}", batch_size=len(sc), resume=False)
+            verify(sc, smoke_out, f"pt-sarol-smoke-{args.date}", batch_size=len(sc), resume=False, guidance=guidance)
             smoke = write_verdicts(sc, smoke_out, None)
             for c in smoke["claims"]:
                 print(f"[smoke] {c['claim_id']}: {c['verdict']} (from {c.get('source')})")
@@ -933,7 +977,7 @@ def main() -> int:
                 return 4
             if args.smoke_only:
                 return 0
-        verify(claims, out, repo, args.batch_size, args.resume)
+        verify(claims, out, repo, args.batch_size, args.resume, args.limit, guidance)
     except paperclip_mcp.RateLimited as exc:
         print(f"[run] rate-limited, progress saved: {exc}\n[run] resume later with: --date {args.date} --resume")
         return 3
