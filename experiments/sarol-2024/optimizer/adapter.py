@@ -365,7 +365,11 @@ class SarolProgramStore:
 #:
 #: Named here rather than defaulted in two signatures so `dispatcher` and `canary` agree on what
 #: "no --model was given" means without either restating it.
-DEFAULT_JUDGE_MODEL = "haiku"
+#:
+#: A full id, not the `haiku` alias: on 2026-10-08 the alias still resolved to Haiku 4.5 while Phil
+#: moved the judge to Haiku 5.5 (~10x cheaper at list price). Numbers before program-v11's 5.5
+#: re-score were measured on 4.5 and do not compare across the switch.
+DEFAULT_JUDGE_MODEL = "claude-haiku-5-5"
 
 #: The predicted label recorded for a claim whose verdict could not be parsed at all. Deliberately
 #: NOT a member of the Sarol 9-class enum, so it can never accidentally match gold and is counted
