@@ -149,6 +149,30 @@ def build_claims(ids: list[str], staging_root: pathlib.Path) -> list[dict[str, A
     return claims
 
 
+def test_claims() -> list[dict[str, Any]]:
+    """Every claim unit in the sealed TEST split, built from structure only -- never a label.
+
+    Reads each row's citing sentence and its cited paper (``cited_doc_ids // 1000``, the same rule
+    `sampling.claim_pool` uses for evidence-less units); the row's ``evidence`` labels are never
+    touched. Ordered by cited paper so a batch of claims touches as few papers -- and so as few gxl
+    verify requests -- as possible: gxl verifies same-paper claims together, up to 25 per request.
+    """
+    claims = []
+    for row in stage_claim.load_claims("test"):
+        buckets = sorted({int(d) // 1000 for d in (row.get("cited_doc_ids") or [])})
+        if len(buckets) != 1:
+            raise SystemExit(f"[claims] test row {row['id']} cites {len(buckets)} papers, expected 1")
+        bucket = buckets[0]
+        ref = stage_claim.find_references_txt("test", bucket)
+        if ref is None:
+            raise SystemExit(f"[claims] no references file for test bucket {bucket}")
+        cid = f"{int(row['id'])}-{bucket}"
+        claims.append({"claim_id": cid, "tag": _tag(cid), "pmcid": ref.stem.split("_", 1)[1],
+                       "text": stage_claim.normalize_claim_text(row["claim"]), "multi_cit_context": None})
+    claims.sort(key=lambda c: (c["pmcid"], int(c["claim_id"].split("-")[0])))
+    return claims
+
+
 def smoke_claims() -> list[dict[str, Any]]:
     folder = next((stage_claim.BENCH_DIR / "annotations" / "Dev" / "citations").glob(f"*_{SMOKE_PAPER}"))
     out = []
@@ -210,7 +234,14 @@ def _save_progress(out: pathlib.Path, progress: dict[str, Any]) -> None:
     (out / "progress.json").write_text(json.dumps(progress, indent=1), encoding="utf-8")
 
 
-def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_size: int, resume: bool) -> None:
+def _is_quota(exc: Exception) -> bool:
+    """gxl's daily cap may come back as tool text rather than HTTP 429; treat either as a stop."""
+    text = str(exc).lower()
+    return isinstance(exc, paperclip_mcp.RateLimited) or any(w in text for w in ("rate limit", "quota", "daily limit", "429"))
+
+
+def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_size: int, resume: bool,
+           limit: "int | None" = None) -> None:
     """Attach the claims and verify them, `batch_size` at a time. Resumable after a cap stop."""
     out.mkdir(parents=True, exist_ok=True)
     progress = _progress(out)
@@ -233,9 +264,9 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
         try:
             session.call(f"commit-{progress['commits']:02d}", "git_commit", {
                 "message": f"paper-trail baseline: {note}", "verify": True, "verifier_context": VERIFIER_CONTEXT})
-        except paperclip_mcp.RateLimited:
-            raise
         except paperclip_mcp.PaperclipError as exc:
+            if _is_quota(exc):
+                raise paperclip_mcp.RateLimited(str(exc)) from None
             # The hosted server caps a command at 180 s (10 claims hit it on 2026-10-07). A timed-out
             # pass is not fatal: gxl re-verifies only unresolved claims, so `settle` reads the status
             # and commits again for whatever is still unchecked.
@@ -257,15 +288,39 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
 
     if resume and progress["added"]:
         settle([c for c in claims if c["claim_id"] in progress["added"]], "resume: verify claims left unresolved")
-    pending = [c for c in claims if c["claim_id"] not in progress["added"]]
+    skipped = progress.setdefault("add_failed", {})
+    missing_papers = set(progress.get("missing_papers", []))
+    pending = [c for c in claims if c["claim_id"] not in progress["added"] and c["claim_id"] not in skipped]
+    if limit is not None:
+        pending = pending[:limit]
     for start in range(0, len(pending), batch_size):
-        batch = pending[start:start + batch_size]
-        for c in batch:
+        batch = []
+        for c in pending[start:start + batch_size]:
+            if c["pmcid"] in missing_papers:  # its paper already came back "not found": no second call
+                skipped[c["claim_id"]] = f"cited paper {c['pmcid']} not on paperclip"
+                _save_progress(out, progress)
+                continue
             payload = json.dumps({"type": "sarol_claim", "claim_id": c["tag"], "text": c["text"]})
-            session.call(f"add-{c['claim_id']}", "git_add", {"paper_ids": [c["pmcid"], payload], "as_json": True})
+            try:
+                session.call(f"add-{c['claim_id']}", "git_add", {"paper_ids": [c["pmcid"], payload], "as_json": True})
+            except paperclip_mcp.PaperclipError as exc:
+                if _is_quota(exc):
+                    raise paperclip_mcp.RateLimited(str(exc)) from None
+                # A cited paper gxl does not hold: skip and count it, never fall back to other text.
+                skipped[c["claim_id"]] = str(exc)[:300]
+                missing_papers.add(c["pmcid"])
+                progress["missing_papers"] = sorted(missing_papers)
+                _save_progress(out, progress)
+                n_papers = len({x["pmcid"] for x in claims})
+                if len(missing_papers) > 0.05 * n_papers:
+                    raise SystemExit(f"[run] {len(missing_papers)}/{n_papers} cited papers could not be attached "
+                                     f"(over 5%): {sorted(missing_papers)}; see progress.json")
+                continue
             progress["added"].append(c["claim_id"])
             _save_progress(out, progress)
-        settle(batch, f"verify {len(batch)} claims ({len(progress['added'])}/{len(claims)} attached)")
+            batch.append(c)
+        if batch:
+            settle(batch, f"verify {len(batch)} claims ({len(progress['added'])}/{len(claims)} attached)")
         print(f"[run] verified batch: {len(progress['added'])}/{len(claims)} claims attached")
 
     session.call("status-final", "git_status", {})
@@ -361,14 +416,19 @@ def parse_verdicts(claims: list[dict[str, Any]], out: pathlib.Path) -> dict[str,
     return {c["claim_id"]: best[c["tag"]] for c in claims}
 
 
-def write_verdicts(claims: list[dict[str, Any]], out: pathlib.Path, md5: "str | None") -> dict[str, Any]:
+def write_verdicts(claims: list[dict[str, Any]], out: pathlib.Path, md5: "str | None", split: str = SPLIT) -> dict[str, Any]:
     parsed = parse_verdicts(claims, out)
+    for cid, why in _progress(out).get("add_failed", {}).items():
+        if cid in parsed:  # never attached (its cited paper is not on paperclip): counted, not a parse failure
+            parsed[cid] = {"verdict": "SKIPPED", "why": why, "source": None}
     counts: dict[str, int] = {}
     for v in parsed.values():
         counts[v["verdict"]] = counts.get(v["verdict"], 0) + 1
     doc = {
         "written_at": _now(),
+        "split": split,
         "repo": _progress(out).get("repo"),
+        "add_failed": _progress(out).get("add_failed", {}),
         "roster_md5": md5,
         "verifier_context": VERIFIER_CONTEXT,
         "counts": counts,
@@ -486,6 +546,10 @@ def score_only(out: pathlib.Path) -> int:
         print(f"[score] refusing: {vpath} does not exist, so gold would be read before the verdicts are fixed")
         return 2
     verdicts = json.loads(vpath.read_text(encoding="utf-8"))
+    if verdicts.get("split") == "test":
+        print("[score] refusing: test is sealed. Its gxl verdicts are collected now and scored only at the final "
+              "evaluation, beside paper-trail's final program on the same split.")
+        return 2
     gold_read_at = _now()
     import sampling  # noqa: PLC0415
 
@@ -816,12 +880,36 @@ def main() -> int:
     ap.add_argument("--smoke-only", action="store_true")
     ap.add_argument("--reparse", action="store_true", help="rebuild verdicts.json from raw/, no gxl calls")
     ap.add_argument("--score-only", action="store_true")
+    ap.add_argument("--split", choices=("val50", "test"), default="val50",
+                    help="val50: the 50 dev VAL claims (default); test: every unit of the sealed test split, verdicts only")
+    ap.add_argument("--limit", type=int, default=None, help="attach at most this many new claims in this invocation")
     args = ap.parse_args()
 
-    out = args.out or pathlib.Path.home() / ".paper-trail" / "baselines" / f"gxl-verify-{args.date}"
-    repo = args.repo or f"pt-sarol-val50-{args.date}"
+    tag = "test" if args.split == "test" else "val50"
+    out = args.out or pathlib.Path.home() / ".paper-trail" / "baselines" / (
+        f"gxl-verify-test-{args.date}" if args.split == "test" else f"gxl-verify-{args.date}")
+    repo = args.repo or f"pt-sarol-{tag}-{args.date}"
     if args.score_only:
         return score_only(out)
+
+    if args.split == "test":
+        claims = test_claims()
+        md5 = hashlib.md5(",".join(sorted(c["claim_id"] for c in claims)).encode()).hexdigest()[:8]
+        print(f"[test] {len(claims)} claim units over {len({c['pmcid'] for c in claims})} cited papers, md5 {md5}")
+        if args.reparse:
+            return verdict_exit(write_verdicts(claims, out, md5, "test"))
+        try:
+            verify(claims, out, repo, args.batch_size, args.resume, args.limit)
+        except paperclip_mcp.RateLimited as exc:
+            n = len(_progress(out).get("added", []))
+            print(f"[run] stopped at gxl's limit with {n}/{len(claims)} attached; progress saved: {exc}\n"
+                  f"[run] resume after midnight UTC with: --split test --date {args.date} --resume")
+            return 3
+        done = len(_progress(out).get("added", [])) + len(_progress(out).get("add_failed", {}))
+        if done < len(claims):
+            print(f"[run] {done}/{len(claims)} handled (--limit); resume with --split test --date {args.date} --resume")
+            return 0
+        return verdict_exit(write_verdicts(claims, out, md5, "test"))
 
     ids = roster_ids(args.claims_from)
     md5 = check_roster(ids)
