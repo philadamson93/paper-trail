@@ -71,6 +71,11 @@ trigger is a literal `[OTHER_CIT]` in the claim text. With neither, the whole ma
 is this source's burden and no part of it may be handed to a sibling you inferred — see the rubric's
 multi-citation section for why that one error is expensive.
 
+**And even with a trigger, you may not narrow away a referent the clause names in so many words** —
+an item of a list it spells out, a named entity, a named condition — unless that item carries its own
+visible citation marker. Unnamed residue of a breadth word ("diverse cancers") may go to a sibling; a
+printed item ("fevers") may not. The rubric's multi-citation section has the two worked cases.
+
 **5. Compute `overall_verdict` (paper-level) via worst-wins rollup:**
 
 ```

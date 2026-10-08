@@ -240,6 +240,16 @@ them inside every gate rather than after the walk. — house text**
    bar: a passage that merely *carries* the clause's entities is gate 5's test and does not clear
    this one — this one needs the predicate asserted of the clause's own set.
 
+   **Answer the scan against the whole of every sentence you quote, including the one you are
+   quoting for (c). — house text** The commonest way this scan is answered wrongly is by splitting a
+   single passage sentence: taking its second half as the thing that rules (c) out while its first
+   half asserts the clause's predicate at the clause's own scope. "Many commonly utilized drugs have
+   been shown to inhibit mitochondrial function in vitro, though it is not clear whether the in vivo
+   mechanism is through modulating mitochondrial metabolism" is **one** sentence, and its first half
+   asserts the predicate of the clause's own class. **If the sentence you are quoting for (c) also
+   asserts the clause's predicate at the clause's own scope, the scan has answered yes and this gate
+   does not fire** — go to test 7. Quote the sentence whole before you read either half of it.
+
    **What may count as (c), and this is where the gate goes wrong. — house text** (c) must be a
    referent the passage's **own scope expression rules out**: a fifth item against a list of four, a
    disease outside the class the passage names, a condition its wording bounds out. Write the
@@ -247,6 +257,19 @@ them inside every gate rather than after the walk. — house text**
    sentence to exceed. **If the only thing you can say about (c) is that it is not mentioned, not
    found in the evidence, or not covered by your passages, you have named window silence rather than
    an excluded member, and this gate does not fire** — go to test 7.
+
+   **(c) must lie *inside* the citing sentence's own scope expression (b), and you must say why.
+   — house text** The gate requires (c) to be "one specific thing **the citing sentence's scope
+   covers**": a referent that (b) itself excludes is not an excluded member, it is a thing the clause
+   never claimed. Write `gate 6: (c) <x> is inside (b) '<quote>' because <reason>`. **The case this
+   exists to stop is a (b) defined by the very property the clause asserts of it** — "clinical drugs
+   *with ETC-targeting effects*", "patients *who responded*", "the genes *that were upregulated*".
+   Such a (b) admits only referents that already have the property, so a referent lacking it — another
+   clinical drug whose mechanism the passage calls unclear — lies **outside** (b), there is no
+   excluded member, and **this gate answers no: go to test 7.** Contrast a (b) whose class is
+   independent of the predicate asserted: "extracellular protease activity in cancer, linked to
+   patient outcomes" against a passage reporting only LOX — a protease other than LOX is inside (b)
+   and is a valid (c).
 
    **An enumeration or a ranking is a stated scope, not silence. — house text** Where the passage
    closes a list — "four symptoms: A, B, C and D", "in two cancers", "the two most frequently
@@ -314,6 +337,17 @@ them inside every gate rather than after the walk. — house text**
    The write-down therefore decides nothing. **One question decides it: is the group, stage or setting
    the passage reports an *instance of* the one the clause asserts?** Write the answer down as
    `gate 7: passage set <x>; clause set <y>; x is inside/outside y`.
+
+   ⚠ **Before either branch, run gate 6's other-passage scan — this gate needs it more than gate 6
+   does. — house text** Write `gate 7: no other passage asserts <the clause's predicate> of <the
+   clause's own set>`. The containment test is run against **one** passage you picked, and a paper
+   that studied the clause's own group routinely reports it in a passage your pick is not: a vaccine
+   paper's trial-stage line sits beside nothing about emergency-use approval, but a knockout paper's
+   antibody-blockade arm sits beside its own knockout arm. **If another passage does assert the
+   clause's predicate of the clause's own set, these two axes answer no whatever the containment
+   direction says — go to test 8.** The "outside" write-down was producible on all three of this
+   benchmark's claims of that shape; the scan is what separates them, and it comes out empty on
+   exactly the two where NOT_SUBSTANTIATE is right.
 
    - **Inside** — the clause's set contains the passage's: "hospitalized adults with lower
      respiratory tract infection" inside "adults with COVID-19"; "Brca1-null mouse ES cells" inside
@@ -457,15 +491,36 @@ Exception: a single-sub-claim citation gets that sub-claim's label directly (pre
 
 ## Multi-citation handling (critical — 51% of Sarol data) — house text
 
-The dispatch supplies `multi_cit_context`: `"single"` when the evaluated citation stands alone at this position, `"grouped"` when it is one of a `[1,2,3]`-style cluster. **That field is the trigger.** There is no marker in the claim text to look for.
+The dispatch supplies `multi_cit_context`: `"single"` when the evaluated citation stands alone at this position, `"grouped"` when it is one of a `[1,2,3]`-style cluster. **That field is one of the two triggers; a literal `[OTHER_CIT]` in the claim text is the other.**
 
-When `multi_cit_context == "grouped"`, verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
+When `multi_cit_context == "grouped"`, verify only the portion of the claim attributable to *this specific source*. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
 
 ⚠ A sentence can carry sibling citations while `multi_cit_context` is `"single"`. An `[OTHER_CIT]` placeholder in the claim text says so. Narrow this source's burden the same way when you see one.
 
 ⚠ **Those two are the only triggers, and you must quote the one you used. — house text** Before you narrow anything, write `burden narrowed: multi_cit_context=grouped` or `burden narrowed: [OTHER_CIT] visible`. If you can write neither — `multi_cit_context` is `"single"`, is absent from your inputs, or you are unsure what it was, and the claim text contains no literal `[OTHER_CIT]` — then **there is no sibling and you may not narrow.** The whole marker-attached clause is this source's burden, every item in it.
 
 A sibling you have *inferred* from the shape of the sentence is not a sibling. "A sibling citation may cover the remainder", "the rest is presumably cited elsewhere", "this source's portion is the first three items" — written against a lone closed `[CIT]` or `[[CIT]]` — is you supplying the co-citation, and it is wrong in the one place it costs most: **it deletes gate 6's excluded member.** A clause that asserts a four-item list where the passage closes a three-item one is gate 6's own first worked example; handing the fourth item to an imagined sibling turns OVERSIMPLIFY into ACCURATE on exactly the claims this gate exists for. If (c) is an item of a list the clause asserts and you cannot quote a trigger, **gate 6 fires.**
+
+⚠ **The second bound, and it is the one the field trigger cannot supply: you may not narrow away a
+referent the clause names in so many words. — house text** `multi_cit_context` arrives as `"grouped"`
+on about two claims in five of this benchmark, so quoting it licenses narrowing on almost any claim
+and by itself decides nothing — the same defect gates 6 and 7 each had. **One question bounds it: is
+the thing you are handing to the sibling *printed in the marker-attached clause*, or is it unnamed
+residue of a breadth word?**
+
+- **Printed in the clause** — an item of a list the clause spells out, a named entity, a named
+  condition. "fatigue, headaches, muscle pains, and fevers" against a lone closed `[[CIT]]`: *fevers*
+  is on the page, so it is this source's burden and may not be handed to a sibling. Narrowing here
+  deletes gate 6's own first worked example and turns OVERSIMPLIFY into ACCURATE. **Not narrowable.**
+- **Unnamed residue of a breadth word** — the clause says "deregulated in diverse cancers" and the
+  passage names breast, colon and liver. The cancers beyond those three are nowhere named in the
+  clause; you had to supply one in order to object. A sibling may carry that breadth.
+  **Narrowable.**
+
+The one exception: an item that carries **its own** visible citation marker is attached to that
+marker and not to yours — four vaccines each followed by its own `[[OTHER_CIT]]` or `[[CIT]]` is four
+attributions, not one burden. That is the "the clause is what the marker is attached to" rule rather
+than narrowing, and it is why a per-item marker list is not caught by the bound above.
 
 **This section applies only to clusters you can see the end of.** A sentence that breaks off inside an unfinished citation list is gate 2's case, not this one, and gate 2 has already decided it: you cannot narrow a burden against siblings you cannot read. Burden-narrowing is what you do once the cluster is visible and the shared proposition is identifiable.
 
