@@ -66,6 +66,11 @@ that is merely *silent* is not a contradiction.
 - If the source supports its attributable portion, use ACCURATE even when the overall sentence says more than this paper alone substantiates.
 - If it is impossible to determine what this specific source was cited for, use ETIQUETTE.
 
+**If `multi_cit_context` is `"single"` or you did not receive it, do not narrow.** The only other
+trigger is a literal `[OTHER_CIT]` in the claim text. With neither, the whole marker-attached clause
+is this source's burden and no part of it may be handed to a sibling you inferred — see the rubric's
+multi-citation section for why that one error is expensive.
+
 **5. Compute `overall_verdict` (paper-level) via worst-wins rollup:**
 
 ```

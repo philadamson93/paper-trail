@@ -109,18 +109,28 @@ them inside every gate rather than after the walk. — house text**
    **Fill the two `<axis>` slots with the same words, or the gate has not been answered. — house
    text** The left slot is read off the **marker-attached clause**, and once written it is fixed: you
    may not widen it to the paper's topic to make the right slot match. The right slot must be quoted
-   from a passage. If the honest right slot is broader than the left — clause says *paraquat inhibits
-   complex I*, passages say *mitochondrial damage*; clause says *death rate is unaffected by
-   treatment status until suppression*, passages say *mortality of people on ART* — then the axes do
-   **not** match, and what you have is topic overlap, which is the one thing this test exists to
-   reject. Say so and carry the mismatch forward: it is what gates 7 and 8 are deciding about.
+   from a passage. If the honest right slot is broader than the left, or names a different
+   relationship — clause says *death rate is unaffected by treatment status until suppression*,
+   passages say *life expectancy of people on ART*; clause says *risk of stroke*, passages say *risk
+   of coronary heart disease* — then the axes do **not** match, and what you have is topic overlap,
+   which is the one thing this test exists to reject.
 
-   **Same axis, different value, is not this gate — it is gate 7.** A passage that reports the
-   clause's own relationship at a **different stage, population, setting or timepoint** is on the
-   axis and falls short of it: a paper reporting a vaccine in clinical trials where the clause says
-   approved for emergency use, or linkage failing at an earlier stage of care than the clause names,
-   is NOT_SUBSTANTIATE. Do not read the setting into the predicate; the setting belongs to the
-   subject. — house text
+   **An admitted mismatch fires this gate. — house text** Once you have written two slots that do not
+   match, you have answered test 1 **yes** and the label is IRRELEVANT; stop here. Writing "the axes
+   do not match" and then walking on to gates 7 and 8 is not an answer to this gate, it is a refusal
+   to emit the one it produced — and gate 8's naming test will pass on the shared subject every time,
+   so walking on always lands on ACCURATE. The clause's predicate is **the whole relationship it
+   asserts, qualifiers included**: *death rate is unaffected by treatment status until suppression* is
+   not the axis *life expectancy*, and a passage reporting the bare quantity does not assert the
+   clause's relationship about it.
+
+   **Same axis, different value, is not this gate — it may be gate 7.** A passage that reports the
+   clause's own relationship of a **population, stage or setting that the clause's own set does not
+   contain** is on the axis and falls short of it: a paper reporting a vaccine in clinical trials
+   where the clause says approved for emergency use, or linkage failing at an earlier stage of care
+   than the clause names. Route it to gate 7, which decides it by its own containment test — and
+   **that test, not this sentence, is what makes it NOT_SUBSTANTIATE.** Do not read the setting into
+   the predicate; the setting belongs to the subject. — house text
 
    **Silence is not this gate either.** `predicate reported at L=none` is a fact about your window,
    not a finding about the paper, and on its own it cannot fire this gate. — house text
@@ -271,8 +281,10 @@ them inside every gate rather than after the walk. — house text**
      different kind of thing the finding is about — a fifth symptom, a protease other than the one
      measured, a disease outside the class named — gate 6 fires. If (c) is the *same* thing in a
      different population, place, tissue or time, gate 6 answers **no**: that shortfall, if it is
-     real at all, is gate 7's `population` or `stage/setting` axis, and it is real only if gate 7's
-     own write-down can be produced there.
+     real at all, is gate 7's `population` or `stage/setting` axis — and it is real only if gate 7's
+     **containment test** answers *outside*. Producing gate 7's quote-and-axis write-down is not
+     enough: every paper states the population it measured, so that write-down is producible on any
+     claim of this shape and firing on it alone just moves this wrong gate one rung down the ladder.
    - **Direction.** The citing sentence is *narrower* than the passage — it reports one of the source's
      two mechanisms, or drops an intermediate step, or names a subtype where the source named the
      class. Gate 6 fires only on claim-broader-than-passage. Claim-narrower is not this gate.
@@ -294,6 +306,33 @@ them inside every gate rather than after the walk. — house text**
    "recommend in all", "is indicated"), **population**, **stage or setting**, or **class-vs-member**
    (the passage reports it of a whole class where the clause asserts it of one member — interferons
    I and III against IFN-α). — house text
+
+   ⚠ **`population` and `stage/setting` have a containment test, and it is the whole of those two
+   axes. — house text** These two are the commonest wrong fire of this gate, because every paper
+   states the population, cohort, site, stage or setting it measured, so a `shortfall = population`
+   write-down is producible on *any* claim that reports a finding without repeating that qualifier.
+   The write-down therefore decides nothing. **One question decides it: is the group, stage or setting
+   the passage reports an *instance of* the one the clause asserts?** Write the answer down as
+   `gate 7: passage set <x>; clause set <y>; x is inside/outside y`.
+
+   - **Inside** — the clause's set contains the passage's: "hospitalized adults with lower
+     respiratory tract infection" inside "adults with COVID-19"; "Brca1-null mouse ES cells" inside
+     "cells with impaired BRCA1 activity"; "mice" inside "mammals". The passage asserts the clause's
+     own predicate, of a subset of what the clause is about. The clause has merely dropped the
+     source's study qualifier, which is a wording delta and not a shortfall: **this axis does not
+     fire — go to test 8.** Generalising from the sample you measured to the thing you were measuring
+     is what every paper's own discussion does, and this benchmark labels it ACCURATE.
+   - **Outside** — the passage's set lies outside the clause's, or the two are disjoint: a vaccine
+     "currently being evaluated in clinical trials" against a clause saying "approved for emergency
+     use"; "failure to link patients from HIV testing to HIV care" against a clause about "transition
+     from the inpatient setting to self-management at home". The passage is not reporting the clause's
+     proposition about a subset of it — it is reporting a different stage or setting of affairs.
+     **The axis fires: NOT_SUBSTANTIATE.**
+
+   This test binds only `population` and `stage/setting`. `strength` and `class-vs-member` have their
+   own tests below and are unaffected — and note that `class-vs-member` is the *opposite* direction
+   (passage broader than the clause), so a passage set that is **inside** the clause's is never
+   `class-vs-member` either.
 
    **`strength` against the banned hedging bar, and the one question that separates them. — house
    text** The banned bar is about *confidence in a result*: a passage that says "may", "might",
@@ -326,8 +365,10 @@ them inside every gate rather than after the walk. — house text**
    go back and emit its label:
    - it names a particular thing the citing sentence covers and the passage's own scope rules out
      → **gate 6, OVERSIMPLIFY.** Move your two scope expressions into `paper_value` and `claim_value`.
-   - your passages are about a different subject **and** a different predicate → **gate 1,
-     IRRELEVANT.** Silence on the predicate alone does not qualify.
+   - your passages assert a **different predicate** of the clause's subject, rather than a weaker
+     value of the clause's own predicate → **gate 1, IRRELEVANT.** A matching subject does not save
+     it; gate 1 fires on the axis, not the topic. Silence on the predicate alone still does not
+     qualify — a mismatch needs a passage that asserts the *other* axis.
    - a number or percentage in the citing sentence differs from a number in a passage → **gate 4,
      MISQUOTE.**
 
@@ -341,9 +382,18 @@ them inside every gate rather than after the walk. — house text**
    happens to), each with the passage line where it appears **by name**:
    `gate 8: agent <x> at L..; subject <y> at L..`. The same entity under another name, an abbreviation,
    or a close synonym counts as naming it; a broader process or category the entity merely belongs to
-   does not. **Produce both and emit ACCURATE. Fail to produce either and emit NOT_SUBSTANTIATE** — a
-   window that sits on the clause's predicate axis and never names what the clause is about is the
-   paper being *relevant and substantiating nothing*, which is NOT_SUBSTANTIATE's own definition.
+   does not. **Name either one and emit ACCURATE. Emit NOT_SUBSTANTIATE only when you can name
+   *neither*** — a window that sits on the clause's predicate axis and names **nothing** the clause is
+   about is the paper being *relevant and substantiating nothing*, which is NOT_SUBSTANTIATE's own
+   definition.
+   ⚠ **One of the two missing is not that case; it is an ordinary retrieval hole. — house text** The
+   window is a keyword-selected sliver, and the commonest thing a sliver drops is the clause's named
+   agent — a variant, a drug, a molecule — while keeping the general passages about what it does. If
+   you can name the subject and not the agent, or the agent and not the subject, the window **is**
+   partly about the clause's own entities: that is the retrieval silence this gate exists to absorb,
+   and the verdict is **ACCURATE**. Counter-worked: a clause about the N501Y mutation increasing ACE2
+   binding affinity, against a window that reports ACE2-binding affinity for RBD mutations at several
+   lines and never writes "N501Y" — subject named, agent not, so **ACCURATE**, not a shortfall.
    Worked: a clause about bortezomib causing vacuolation in DRG satellite cells, against a window
    where several passages discuss mitochondrial damage and apoptosis and none names bortezomib, DRG
    or satellite cells — the shared axis is why gate 1 did not fire, and the missing agent is why this
@@ -376,12 +426,13 @@ passages in front of you:
   relationship** — the paper studies this and your window did not return the sentence. That is
   retrieval silence: **ACCURATE**. Do not require the citing sentence's wording to appear in the
   window, and do not enumerate the sentence's elements and fail it on the first one you cannot match.
-  **"Plainly about the clause's own entities" is the literal test in gate 8** — the clause's agent and
-  its subject each named in some passage — and not a judgement about topic overlap. If neither can be
-  named, you are on the next bullet but one.
+  **"Plainly about the clause's own entities" is the literal test in gate 8** — the clause's agent
+  **or** its subject named in some passage — and not a judgement about topic overlap. If neither can
+  be named, you are on the next bullet but one.
 - **No passage addresses the clause, some passage is on its predicate axis, and no passage anywhere in
-  your window names the clause's agent or its subject** — relevant paper, nothing substantiated:
-  **NOT_SUBSTANTIATE**, per gate 8's bound. — house text
+  your window names the clause's agent *or* its subject** — relevant paper, nothing substantiated:
+  **NOT_SUBSTANTIATE**, per gate 8's bound. Both missing, not one: one of the two missing is a
+  retrieval hole and stays ACCURATE. — house text
 - **No passage addresses the clause and the passages are about something else** — IRRELEVANT, per
   test 1 above.
 
@@ -411,6 +462,10 @@ The dispatch supplies `multi_cit_context`: `"single"` when the evaluated citatio
 When `multi_cit_context == "grouped"`, verify only the portion of the claim attributable to *this specific source*. Parts of the citing claim that a sibling citation may cover do not count against the current source. If the evidence supports the source-specific portion, label ACCURATE even if the overall sentence says more than this paper alone substantiates.
 
 ⚠ A sentence can carry sibling citations while `multi_cit_context` is `"single"`. An `[OTHER_CIT]` placeholder in the claim text says so. Narrow this source's burden the same way when you see one.
+
+⚠ **Those two are the only triggers, and you must quote the one you used. — house text** Before you narrow anything, write `burden narrowed: multi_cit_context=grouped` or `burden narrowed: [OTHER_CIT] visible`. If you can write neither — `multi_cit_context` is `"single"`, is absent from your inputs, or you are unsure what it was, and the claim text contains no literal `[OTHER_CIT]` — then **there is no sibling and you may not narrow.** The whole marker-attached clause is this source's burden, every item in it.
+
+A sibling you have *inferred* from the shape of the sentence is not a sibling. "A sibling citation may cover the remainder", "the rest is presumably cited elsewhere", "this source's portion is the first three items" — written against a lone closed `[CIT]` or `[[CIT]]` — is you supplying the co-citation, and it is wrong in the one place it costs most: **it deletes gate 6's excluded member.** A clause that asserts a four-item list where the passage closes a three-item one is gate 6's own first worked example; handing the fourth item to an imagined sibling turns OVERSIMPLIFY into ACCURATE on exactly the claims this gate exists for. If (c) is an item of a list the clause asserts and you cannot quote a trigger, **gate 6 fires.**
 
 **This section applies only to clusters you can see the end of.** A sentence that breaks off inside an unfinished citation list is gate 2's case, not this one, and gate 2 has already decided it: you cannot narrow a burden against siblings you cannot read. Burden-narrowing is what you do once the cluster is visible and the shared proposition is identifiable.
 
