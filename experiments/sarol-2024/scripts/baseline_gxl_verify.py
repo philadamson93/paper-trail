@@ -289,8 +289,10 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
     # Number commits after any already on disk, so a resumed run never overwrites an earlier raw file.
     progress["commits"] = max(progress["commits"], len(list(session.raw.glob("commit-*.txt"))))
 
-    def commit(note: str) -> None:
+    def commit(note: str) -> bool:
+        """One verify pass. Returns True if it hit the server's time limit."""
         progress["commits"] += 1
+        timed_out = False
         try:
             session.call(f"commit-{progress['commits']:02d}", "git_commit", {
                 "message": f"paper-trail baseline: {note}", "verify": True, "verifier_context": GUIDANCE[guidance]})
@@ -303,18 +305,34 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
             if "timed out" not in str(exc):
                 raise
             print(f"[run] verify pass {progress['commits']} hit the server's time limit; checking status")
+            timed_out = True
         _save_progress(out, progress)
+        return timed_out
 
     def settle(batch: list[dict[str, Any]], note: str, tries: int = 3) -> None:
-        """Commit until every claim in `batch` shows a verdict marker, or `tries` passes are spent."""
+        """Commit until every claim in `batch` shows a verdict marker, or `tries` passes are spent.
+
+        gxl's daily cap does not always say so: on 2026-10-08 it surfaced as passes that timed out at
+        180 s and checked nothing, while a fresh probe got "over quota". So two timed-out passes in a
+        row that add no verdict anywhere in the repo are treated as the cap: stop, save, resume tomorrow
+        -- rather than attaching more claims that cannot be checked.
+        """
+        stalled = 0
+        before = None
         for attempt in range(1, tries + 1):
-            commit(note if attempt == 1 else f"{note} (pass {attempt})")
+            timed_out = commit(note if attempt == 1 else f"{note} (pass {attempt})")
             status = session.call(f"status-c{progress['commits']:02d}", "git_status", {})
+            n_verdicts = len(MARKER.findall(status))
+            stalled = stalled + 1 if (timed_out and before is not None and n_verdicts <= before) else 0
+            before = n_verdicts
             found = blocks_by_tag(status, [c["tag"] for c in batch])
             unchecked = [t for t, v in found.items() if v["verdict"] in ("NO_MARKER", "MISSING")]
             if not unchecked:
                 return
             print(f"[run] {len(unchecked)}/{len(batch)} claims still unchecked after pass {attempt}")
+            if stalled >= 1:
+                raise paperclip_mcp.RateLimited(
+                    "two timed-out verify passes in a row added no verdict: treating it as gxl's daily cap")
 
     if resume and progress["added"]:
         settle([c for c in claims if c["claim_id"] in progress["added"]], "resume: verify claims left unresolved")
