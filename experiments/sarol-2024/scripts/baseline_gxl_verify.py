@@ -74,7 +74,17 @@ PT_RUNS = {
     "paper-trail v0 (original, 09-20b)": RUNS / "hillclimb-2026-09-20b/val/iter1-current/run_manifest.json",
     "paper-trail v0 (original, 09-20c)": RUNS / "hillclimb-2026-09-20c/val/iter1-current/run_manifest.json",
 }
-NOISE = 0.08  # the two v9 runs differ by this much on the same program and claims
+NOISE = 0.08  # the two v9 runs differ by this much on the same program and claims, in the 2-way view
+
+#: The headline view (Phil 2026-10-07, replacing 2-way accuracy as the go/no-go): 3-way macro-F1 over
+#: the claims whose gold label every system can give, i.e. dropping the irrelevant class, which gxl's
+#: yes/no cannot express. Macro-F1 rather than accuracy because with those claims gone ~80% of gold is
+#: ACCURATE, and answering ACCURATE every time out-scores every real system on accuracy.
+HEADLINE = "3-way macro-F1 on the claims whose gold every system can give"
+
+
+def headline(r: dict[str, Any]) -> float:
+    return r["3way_irrelevant_dropped"]["macro_f1"]
 
 MARKER = re.compile(r"\[(OK|X|!)\]")
 MARKER_NAME = {"OK": "OK", "X": "REJECTED", "!": "ERROR"}
@@ -506,13 +516,18 @@ def score_only(out: pathlib.Path) -> int:
     ]
     for n, ok in sanity:
         print(f"  {'PASS' if ok else 'FAIL'}  {n}")
-    gap = results["gxl claim checker"]["2way_accuracy"] - v8["2way_accuracy"]
+    two_way_gap = results["gxl claim checker"]["2way_accuracy"] - v8["2way_accuracy"]
+    # Noise is the gap between two runs of the same program (v9) on the SAME view it is applied to.
+    noise = abs(headline(results["paper-trail v9"]) - headline(results["paper-trail v9 (re-measure)"]))
+    gap = headline(results["gxl claim checker"]) - headline(v8)
+    v0_runs = [headline(r) for n, r in results.items() if n.startswith("paper-trail v0")]
+    lift = headline(v8) - max(v0_runs)  # against the better original run, so the lift is not flattered
     readout = (
         "gxl is ahead of paper-trail v8 by more than the noise: rethink what paper-trail's optimization is for"
-        if gap >= NOISE else
-        "paper-trail v8 is ahead of gxl by more than the noise: record it; the parked plan stays optional"
-        if gap <= -NOISE else
-        "same ballpark: gxl becomes the bar paper-trail's hill-climb has to beat"
+        if gap >= noise else
+        "paper-trail v8 is ahead of gxl by more than the noise"
+        if gap <= -noise else
+        "same ballpark: gxl's shipped checker is the bar paper-trail's hill-climb has to beat"
     )
     disagree = [
         {"claim_id": cid, "gold": gold[cid], "paper-trail v8": systems["paper-trail v8"][cid],
@@ -521,12 +536,16 @@ def score_only(out: pathlib.Path) -> int:
     ]
     doc = {"scored_at": _now(), "gold_read_at": gold_read_at, "verdicts_written_at": verdicts["written_at"],
            "roster_md5": verdicts.get("roster_md5"), "gxl_counts": verdicts["counts"],
-           "sanity": {n: ok for n, ok in sanity}, "two_way_gap_gxl_minus_v8": gap, "readout": readout,
+           "sanity": {n: ok for n, ok in sanity}, "two_way_gap_gxl_minus_v8": two_way_gap, "readout": readout,
+           "headline": {"metric": HEADLINE, "n_claims": results["gxl claim checker"]["3way_irrelevant_dropped"]["n"],
+                        "gap_gxl_minus_v8": gap, "noise": noise, "lift_v8_over_best_v0": lift,
+                        "v0_range": [min(v0_runs), max(v0_runs)]},
            "results": results, "disagreements": disagree}
     (out / "scores.json").write_text(json.dumps(doc, indent=1), encoding="utf-8")
     (out / "card.md").write_text(card(doc), encoding="utf-8")
     (out / "card.html").write_text(card_html(doc, verdicts, systems, gold, gold_evidence(ids)), encoding="utf-8")
-    print(f"[score] 2-way accuracy: gxl {results['gxl claim checker']['2way_accuracy']:.2f} vs v8 {v8['2way_accuracy']:.2f} -> {readout}")
+    print(f"[score] {HEADLINE}: gxl {headline(results['gxl claim checker']):.3f} vs v8 {headline(v8):.3f} "
+          f"(noise {noise:.3f}) -> {readout}; v8 over best v0 +{lift:.3f}")
     print(f"[score] wrote {out / 'scores.json'}, {out / 'card.md'} and {out / 'card.html'}")
     return 0 if all(ok for _, ok in sanity) else 6
 
@@ -550,8 +569,10 @@ def card(doc: dict[str, Any]) -> str:
 Plan: `planning/paper-trail/2026-10-06-gxl-claim-checker-baseline.md`. Roster md5 `{doc['roster_md5']}`.
 Verdicts written {doc['verdicts_written_at']}; gold first read {doc['gold_read_at']}. gxl verdict counts: {doc['gxl_counts']}.
 
-**Go/no-go (2-way accuracy over all 50, gxl minus v8): {doc['two_way_gap_gxl_minus_v8']:+.3f}.** {doc['readout']}.
-Run-to-run noise on the same program is about {NOISE}.
+**Headline ({doc['headline']['metric']}, {doc['headline']['n_claims']} claims): gxl minus v8 {doc['headline']['gap_gxl_minus_v8']:+.3f}
+against {doc['headline']['noise']:.3f} run-to-run noise -- {doc['readout']}.** Optimization lifted paper-trail by
+{doc['headline']['lift_v8_over_best_v0']:+.3f} over its better original (v0) run. (2-way accuracy over all 50, the earlier
+go/no-go: gxl minus v8 {doc['two_way_gap_gxl_minus_v8']:+.3f}.)
 
 | System | 2-way acc | 3-way acc | 3-way macro-F1 | 3-way acc, irrelevant dropped | macro-F1, irrelevant dropped | 9-way acc | caught flagged | precision | misses |
 |---|---|---|---|---|---|---|---|---|---|
@@ -613,8 +634,8 @@ el.addEventListener('mouseleave',function(){t.style.display='none';});});})();
 """
 
 
-def _bar_chart(results: dict[str, Any], v8_value: float) -> str:
-    """Horizontal bars of 2-way accuracy, one hue, the floor dashed, v8's noise band shaded."""
+def _bar_chart(results: dict[str, Any], metric, label: str, noise: float) -> str:
+    """Horizontal bars of one metric, one hue, the always-ACCURATE floor dashed, v8's noise band shaded."""
     import html  # noqa: PLC0415
 
     names = list(results)
@@ -624,12 +645,13 @@ def _bar_chart(results: dict[str, Any], v8_value: float) -> str:
     def x(v: float) -> float:
         return left + v * width
 
-    floor = results["always ACCURATE"]["2way_accuracy"]
-    lo, hi = max(0.0, v8_value - NOISE), min(1.0, v8_value + NOISE)
+    floor = metric(results["always ACCURATE"])
+    v8_value = metric(results["paper-trail v8"])
+    lo, hi = max(0.0, v8_value - noise), min(1.0, v8_value + noise)
     parts = [f'<svg viewBox="0 0 {left + width + 60} {height}" width="100%" role="img" '
-             f'aria-label="2-way accuracy by system; the table below has every number">']
+             f'aria-label="{html.escape(label)} by system; the table below has every number">']
     parts.append(f'<rect x="{x(lo):.1f}" y="{top - 8}" width="{x(hi) - x(lo):.1f}" height="{row * len(names) + 8}" fill="var(--band)"/>')
-    parts.append(f'<text x="{x(lo) + 4:.1f}" y="{top - 12}" font-size="11" fill="var(--ink2)">within {NOISE:.2f} of v8</text>')
+    parts.append(f'<text x="{x(lo) + 4:.1f}" y="{top - 12}" font-size="11" fill="var(--ink2)">within {noise:.2f} of v8</text>')
     for t in (0, 0.2, 0.4, 0.6, 0.8, 1.0):
         parts.append(f'<line x1="{x(t):.1f}" x2="{x(t):.1f}" y1="{top - 8}" y2="{top + row * len(names)}" stroke="var(--grid)" stroke-width="1"/>')
         parts.append(f'<text x="{x(t):.1f}" y="{top + row * len(names) + 18}" font-size="11" fill="var(--muted)" text-anchor="middle">{t:.1f}</text>')
@@ -637,10 +659,10 @@ def _bar_chart(results: dict[str, Any], v8_value: float) -> str:
                  f'stroke="var(--ink2)" stroke-width="1.5" stroke-dasharray="4 3"/>')
     for i, name in enumerate(names):
         r = results[name]
-        v, y = r["2way_accuracy"], top + i * row + 8
+        v, y = metric(r), top + i * row + 8
         w, h = max(v * width, 4), 18
         path = (f"M{left},{y} h{w - 4:.1f} a4,4 0 0 1 4,4 v{h - 8} a4,4 0 0 1 -4,4 h{-(w - 4):.1f} z")
-        tip = (f"{name}: 2-way accuracy {v:.2f} · caught {r['binary']['caught']}/{r['binary']['n_gold_flagged']} "
+        tip = (f"{name}: {label} {v:.2f} · caught {r['binary']['caught']}/{r['binary']['n_gold_flagged']} "
                f"Sarol-flagged claims")
         parts.append(f'<g data-tip="{html.escape(tip)}"><rect x="0" y="{y - 8}" width="{left + width + 60}" height="{row}" fill="transparent"/>'
                      f'<text x="{left - 10}" y="{y + 13}" font-size="13" fill="var(--ink)" text-anchor="end">{html.escape(name)}</text>'
@@ -660,7 +682,8 @@ def card_html(doc: dict[str, Any], verdicts: dict[str, Any], systems: dict[str, 
     e = html.escape
     res = doc["results"]
     gxl, v8 = res["gxl claim checker"], res["paper-trail v8"]
-    v0 = [res[n]["2way_accuracy"] for n in res if n.startswith("paper-trail v0")]
+    hd = doc["headline"]
+    v0 = hd["v0_range"]
     by_id = {c["claim_id"]: c for c in verdicts["claims"]}
 
     def f(x: "float | None") -> str:
@@ -714,27 +737,31 @@ def card_html(doc: dict[str, Any], verdicts: dict[str, Any], systems: dict[str, 
         + "</tr>"
         for cid in by_id
     )
-    gap = doc["two_way_gap_gxl_minus_v8"]
     v8_right = sum(1 for d in doc["disagreements"] if two_way(d["paper-trail v8"]) == two_way(d["gold"]))
     body = f"""
 <h1>gxl's claim checker vs paper-trail</h1>
 <p class=sub>Sarol 2024 citation-integrity benchmark · the same 50 validation claims paper-trail's hill-climb uses (roster md5
 <code>{e(str(doc['roster_md5']))}</code>) · scored {e(doc['scored_at'][:10])}</p>
-<div class=answer><b>{e(doc['readout'][:1].upper() + doc['readout'][1:])}.</b> On accurate-vs-not, paper-trail v8 scores
-{v8['2way_accuracy']:.2f} and gxl {gxl['2way_accuracy']:.2f}, a gap of {abs(gap):.2f} against {NOISE:.2f} run-to-run noise.
-They disagree on {len(doc['disagreements'])} claims and v8 is right on {v8_right}; had one of those gone the other way, the gap
-would be {abs(abs(gap) - 2 / len(by_id)):.2f}. gxl scores exactly what answering "accurate" every time scores ({res['always ACCURATE']['2way_accuracy']:.2f}).
-The original paper-trail (program-v0, before optimization) scored {min(v0):.2f}–{max(v0):.2f}, below gxl.</div>
+<div class=answer><b>Optimization lifted paper-trail from {v0[0]:.2f}–{v0[1]:.2f} to {headline(v8):.2f}</b>
+(3-way macro-F1 on the {hd['n_claims']} claims whose gold label every system can give), a gain of {hd['lift_v8_over_best_v0']:.2f}
+over the better original run against {hd['noise']:.2f} run-to-run noise. gxl's shipped checker scores {headline(gxl):.2f}:
+{e(doc['readout'])}. Answering "accurate" every time scores {headline(res['always ACCURATE']):.2f}.</div>
 <div class=tiles>
-<div class=tile><div class=v>{gxl['2way_accuracy']:.2f}</div><div class=k>gxl claim checker</div></div>
-<div class=tile><div class=v>{v8['2way_accuracy']:.2f}</div><div class=k>paper-trail v8 (best optimized)</div></div>
-<div class=tile><div class=v>{min(v0):.2f}–{max(v0):.2f}</div><div class=k>paper-trail v0 (original), two runs</div></div>
-<div class=tile><div class=v>{res['always ACCURATE']['2way_accuracy']:.2f}</div><div class=k>always answer "accurate"</div></div>
+<div class=tile><div class=v>{v0[0]:.2f}–{v0[1]:.2f}</div><div class=k>paper-trail v0 (original), two runs</div></div>
+<div class=tile><div class=v>{headline(v8):.2f}</div><div class=k>paper-trail v8 (best optimized)</div></div>
+<div class=tile><div class=v>{headline(gxl):.2f}</div><div class=k>gxl claim checker, as shipped</div></div>
+<div class=tile><div class=v>{headline(res['always ACCURATE']):.2f}</div><div class=k>always answer "accurate"</div></div>
 </div>
-<h2>Accurate vs not accurate, by system</h2>
-<p class=note>The go/no-go view: a claim is right if the system says "accurate" exactly when Sarol's label is ACCURATE.
-Sarol's "unclear what is cited" class counts as not accurate here, for every system. Hover a bar for how many flagged claims it caught.</p>
-<div class=card>{_bar_chart(res, v8['2way_accuracy'])}</div>
+<h2>The headline measure, by system</h2>
+<p class=note>3-way macro-F1 (accurate / not accurate / irrelevant, each class weighted equally) on the {hd['n_claims']} claims
+whose gold is not in Sarol's irrelevant class. Those 7 are left out because gxl can only say supported or not, so it can never
+give that label. Macro-F1 rather than accuracy because, with them gone, {res['always ACCURATE']['3way_irrelevant_dropped']['accuracy']:.0%}
+of the claims are ACCURATE and answering "accurate" every time out-scores every system on accuracy. Hover a bar for how many
+flagged claims it caught.</p>
+<div class=card>{_bar_chart(res, headline, "3-way macro-F1, irrelevant dropped", hd['noise'])}</div>
+<p class=note>On the earlier go/no-go, accurate vs not over all 50: v8 {v8['2way_accuracy']:.2f}, gxl {gxl['2way_accuracy']:.2f},
+always-"accurate" {res['always ACCURATE']['2way_accuracy']:.2f}. That view counts the irrelevant class as "not accurate", which
+credits paper-trail for flagging claims gxl has no way to label.</p>
 <h2>Every view</h2>
 <div class=card><table><thead><tr><th>System</th><th class=n>2-way acc</th><th class=n>3-way acc</th><th class=n>3-way macro-F1</th>
 <th class=n>3-way acc, irrel. dropped</th><th class=n>macro-F1, irrel. dropped</th><th class=n>9-way acc</th>
@@ -748,7 +775,7 @@ Sarol's irrelevant class are always wrong for it. The "irrelevant dropped" colum
 <li>Misses are gxl errors or unreadable verdicts, or paper-trail calls that failed; each is scored wrong.</li>
 </ul>
 <h2>Where gxl and paper-trail v8 disagree</h2>
-<p class=note>{len(doc['disagreements'])} claims. Open one to see the sentence gxl checked, the evidence gxl quoted, and the
+<p class=note>{len(doc['disagreements'])} claims on accurate vs not; v8 matches gold on {v8_right} of them. Open one to see the sentence gxl checked, the evidence gxl quoted, and the
 evidence Sarol's annotators based the gold label on.</p>
 <div class=card>{dis}</div>
 <h2>All 50 claims</h2>
@@ -761,7 +788,8 @@ PMC full text, then verified with gxl's checker as shipped. The only guidance: "
 Verdicts: {e(str(doc['gxl_counts']))}.</li>
 <li>No peeking: verdicts were saved at {e(doc['verdicts_written_at'][:19])} UTC, before gold was first read at {e(doc['gold_read_at'][:19])} UTC.</li>
 <li>paper-trail rows are saved runs on the same 50 claims (Haiku, retrieval profile). v8 and v9 ran on the 09-22 harness;
-v0 on 09-20. The two v9 runs differ by {NOISE:.2f} on the same program, which is the noise figure used above.</li>
+v0 on 09-20, so part of the v0 → v8 gain may come from harness fixes rather than the prompt. The two v9 runs differ by
+{hd['noise']:.2f} on the headline measure ({NOISE:.2f} on accurate-vs-not); that is the noise figure used above.</li>
 <li>Scoring checks passed: {e(', '.join(n for n, ok in doc['sanity'].items() if ok))}.</li>
 <li>Plan: <code>planning/paper-trail/2026-10-06-gxl-claim-checker-baseline.md</code>. Code: paper-trail
 <code>experiments/sarol-2024/scripts/baseline_gxl_verify.py</code>.</li>
