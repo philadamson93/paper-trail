@@ -1,15 +1,15 @@
 {
   "profile": "retrieval",
-  "model_requested": "haiku",
-  "model": "claude-haiku-4-5-20251001",
+  "model_requested": "claude-haiku-5-5",
+  "model": "claude-haiku-5-5",
   "expected_verdict": "ACCURATE",
   "observations": [
     "ACCURATE",
     "ACCURATE",
     "ACCURATE"
   ],
-  "pinned_at_utc": "2026-09-07T22:38:51.469948+00:00",
-  "program_combined_hash": "0a02710cbd884125f801c3120ffd92aef33580edbe102998ee2fd469d64a3ebd",
+  "pinned_at_utc": "2026-10-08T02:06:35.572456+00:00",
+  "program_combined_hash": "bf2e2cb98e9bd942259adbf6845a6be8190f70ceaf68e5ce5b379caf36d0ac45",
   "split": "train",
   "claim": {
     "claim_id": "1969-64",
