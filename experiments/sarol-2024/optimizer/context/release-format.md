@@ -100,7 +100,7 @@ Its shape is an object wrapping the per-claim list:
 
 ```json
 {
-  "batch_id": "run_x-train", "split": "train",
+  "batch_id": "run_x-train-i3-n100", "split": "train",
   "n_scored": 50, "n_correct": 47, "n_mistakes": 3,
   "claims": [
     { "claim_id": "C042", "citekey": "ref_a1b2c3",
@@ -190,11 +190,11 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
   "metrics": {
     "primary_metric": { "name": "sarol_accuracy_9class", "value": 0.61,
                         "higher_is_better": true },
-    "breakdown": { "scored": true, "n_total": 50, "n_invalid": 0,
-                   "requested_count": 50, "split": "val",
+    "breakdown": { "scored": true, "n_total": 150, "n_invalid": 0,
+                   "requested_count": 150, "split": "val",
                    "profile": "retrieval", "retrieval_k": 20,
-                   "model": "claude-haiku-4-5",
-                   "do_nothing_floor": 0.60,
+                   "model": "claude-haiku-5-5",
+                   "do_nothing_floor": 0.62,
                    "n_objective_classes_present": 6,
                    "objective_class_set": ["ACCURATE","OVERSIMPLIFY","NOT_SUBSTANTIATE",
                                            "CONTRADICT","MISQUOTE","INDIRECT",
@@ -205,7 +205,12 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
 
 That is the entire VAL surface. **No per-class F1, no confusion matrix, no error-class counts, no
 per-example anything.** The scalar plus enough metadata to distinguish a real score from a partial
-batch.
+batch, and `do_nothing_floor`: one number per VAL size, the score of answering `ACCURATE` every time.
+
+**VAL grows during a run, so `n_total` changes between iterations.** Each VAL batch holds the one
+before it plus new claims; its id names its size (`<run>-val-n<k>`). Two VAL scores are comparable only
+at the same size, and the engine re-grades the best version whenever VAL grows, so the best-so-far in
+`run_summary.json` is always a score on the current VAL.
 
 `profile`, `retrieval_k` and `model` are **run identity**, not signal: they say which pipeline, how
 much evidence, and which judge produced the number. An accuracy quoted without them is not a

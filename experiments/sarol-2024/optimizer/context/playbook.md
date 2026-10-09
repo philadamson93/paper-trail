@@ -91,29 +91,26 @@ has. Run the discovery fan-out (step 3) against it and let the modes come from t
 nothing to check on iteration 1; say so and move on. From iteration 2 onward you have a
 real prior and the normal loop applies.
 
-## VAL is fixed — and so, in practice, is TRAIN
+## TRAIN and VAL change on a schedule
 
-The VAL draw is seeded once and stays the same across iterations, so the VAL curve is a comparison of
-programs.
+Both are drawn by the engine each iteration, on a schedule fixed before the run starts (the
+instructions' *How TRAIN and VAL change during a run* has the rules).
 
-⚠ **TRAIN has been identical too.**
-Measured over the 2026-09-09 run's `/workspace/ro/feedback/draw_history.json`: all five iterations drew the **same 50
-claims**, pairwise Jaccard **1.000** on every pair. The draw is keyed on the iteration number, so a
-*different* roster is possible in principle, but do not assume it happened — **read
-`/workspace/ro/feedback/draw_history.json` for this run and check.**
-
-The consequences flip with the fact, so hold the right ones:
-
-- **The real hazard is overfitting a fixed 50, not incomparability.** When the roster does not
-  change, every iteration is tuning against the same examples, and TRAIN gains stop generalizing long
-  before they stop appearing. Weigh VAL accordingly.
-- **On an identical roster, two TRAIN numbers ARE a paired comparison** — same claims, different
-  program — which makes them more informative than the old text allowed, not less.
-- **Absence is still not proof of a fix**, but for a different reason: on a fixed roster a failure
-  that has disappeared has genuinely been fixed *on these examples*, which is weaker evidence than it
-  looks. Confirm by predicted per-class movement.
-- If `draw_history.json` shows the roster *did* change between the iterations you are comparing, the
-  old caution applies again: say which draw you are quoting.
+- **VAL grows, and only grows.** Each VAL holds the previous one plus new claims, so the VAL curve is a
+  comparison of programs *within* one VAL size. A score on a bigger VAL is a new measurement, not a
+  step on the old curve. When VAL grows the engine re-grades the best version on it before your session,
+  so the best-so-far is always measured on the current VAL; `run_summary.json` records each score with
+  its VAL batch id (`<run>-val-n<k>`).
+- **TRAIN is not the same claims each iteration.** Claims answered right twice running retire and new
+  ones are drawn, so TRAIN leans towards what the program still gets wrong. Two TRAIN numbers from
+  different iterations are therefore **not** a paired comparison, and a TRAIN accuracy that holds flat
+  while claims retire means the program is now getting harder claims right.
+- **Absence is not proof of a fix.** A failure can disappear from TRAIN because its claims retired (you
+  fixed them) or because none was drawn. `/workspace/ro/feedback/iter/<n>/train_schedule.json` says which:
+  it lists what was drawn, spot-checked and retired. Confirm a fix by predicted per-class movement.
+- **Overfitting is less likely than with a fixed batch, not impossible.** Retired claims are only
+  re-checked if the run asks for a spot-check, so a fix can quietly regress on claims that left the
+  batch. VAL is the check on that.
 
 ## Continuity
 

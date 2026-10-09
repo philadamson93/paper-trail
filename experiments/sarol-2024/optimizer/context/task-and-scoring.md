@@ -38,9 +38,9 @@ Reported as `primary_metric`, under the name `sarol_accuracy_9class`.
 
 **Compare it against the release's `do_nothing_floor`, never against zero — and never against a
 remembered number.** ⚠ *The one table* below reports **0.595**, which is the floor over the whole
-311-claim dev *pool*; on the 50-claim VAL batch actually scored it is **0.70** (gold ACCURATE 35/50).
-Read `do_nothing_floor` from your release, which is computed from your own batch's gold. What the
-table shows is what a program
+311-claim dev *pool*; on the first 50 VAL claims it is **0.70** (gold ACCURATE 35/50), and VAL grows
+during a run, so the floor moves with it. Read `do_nothing_floor` from your release, which is computed
+from your own batch's gold. What the table shows is what a program
 scores by answering `ACCURATE` every time and doing no work at all. The release computes the floor
 from each batch's own gold and reports it as `do_nothing_floor`, so it is always beside the number
 it calibrates.
@@ -110,8 +110,8 @@ unmatched rows stay excluded. Pools are now **2076 TRAIN / 311 dev**.
 ### The one table: what a do-nothing program scores, on every axis
 
 ⚠ **Read the warning under this table before you use any number in it.** The table is computed over
-the whole **drawable dev pool, n=311** — roughly six times the batch you are actually scored on — and
-the do-nothing floor on your real batch is materially *higher* than the 0.595 below.
+the whole **drawable dev pool, n=311**. VAL starts smaller than that and grows towards it during a run,
+and the do-nothing floor on the smaller VAL batches is materially *higher* than the 0.595 below.
 
 One fixture, one pool, every number in one place — the **repaired drawable dev pool, n=311**. The
 program is "emit `ACCURATE` for every claim and do no work". All measured, not estimated, and pinned
@@ -119,7 +119,7 @@ by `score_sarol3.py --selftest`.
 
 | Axis | Do-nothing scores | What it is |
 |---|---:|---|
-| **`primary_metric`** (accuracy, 9-class) | **0.595** | **The objective.** ⚠ Pool figure — NOT your floor; read `do_nothing_floor` (0.70 on the VAL 50). |
+| **`primary_metric`** (accuracy, 9-class) | **0.595** | **The objective.** ⚠ Pool figure — your floor only once VAL is all 311; read `do_nothing_floor` (0.70 on the first 50). |
 | `micro_f1` (accuracy, after the 3-way collapse) | 0.595 | Diagnostic. Equal to the objective *only* for this program |
 | `macro_f1_renormalised` (9-way, classes present) | 0.093 | Diagnostic. The collapse detector |
 | `macro_f1_3way` | 0.249 | Comparability with the published baselines |
@@ -130,17 +130,17 @@ The 3-way gold distribution underlying it — `ACCURATE` **185 (59.5%)**, `NOT_A
 defective pool build, not the benchmark: `ETIQUETTE` and `IRRELEVANT` both collapse into that row,
 and an evidence-annotation filter removes both.
 
-⚠ **This pool is not your eval set, and the difference is the whole ballgame.** You are scored on a
-**50-claim VAL batch drawn from this pool**, and the draw is not distribution-preserving. Measured on
-the 2026-09-09 VAL roster: gold is `ACCURATE` **35 of 50**, so the always-`ACCURATE` do-nothing floor
-on that batch is **0.70**, not 0.595.
+⚠ **This pool is not your eval set until VAL reaches all of it.** You are scored on a VAL batch that
+starts as **the first 50 claims drawn from this pool** and grows (nested) towards all 311. A small
+batch is not distribution-preserving: on those first 50, gold is `ACCURATE` **35 of 50**, so the
+always-`ACCURATE` floor there is **0.70**, not 0.595.
 
-**The best program this loop has produced scored 0.62 — below its own do-nothing floor.** Treating
-0.595 as the bar makes a 0.62 look like eleven points of work when it is in fact eight points
+**In September the best program then scored 0.62 on those 50 — below its own do-nothing floor.**
+Treating 0.595 as the bar made a 0.62 look like eleven points of work when it was eight points
 *behind* answering `ACCURATE` every time. Do not quote 0.595 as your floor.
 
 **Always read `do_nothing_floor` from the release instead.** It is computed from *your batch's own
-gold*, so it is right by construction and it moves when the draw moves. The number in the table above
+gold*, so it is right by construction and it moves when VAL grows. The number in the table above
 is a property of the pool, useful for understanding the task's shape and useless as a target.
 
 **Why `micro_f1` reads the same as the objective here, and will not once you do any work.** Both are

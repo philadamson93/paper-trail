@@ -563,9 +563,14 @@ def _selftest() -> int:
         # names the wrong objective sends the agent to hill-climb a number nothing computes.
         ("the standing prompt states the objective as ACCURACY over the nine classes",
          "Maximize accuracy over the nine classes" in docs["optimizer-instructions.md"]),
-        ("...and quotes the do-nothing floor beside it, since accuracy against zero is meaningless",
-         "0.595" in docs["optimizer-instructions.md"]
-         and "do_nothing_floor" in docs["optimizer-instructions.md"]),
+        ("...and points at the do-nothing floor beside it, read from the release, since accuracy against "
+         "zero is meaningless and the floor moves as VAL grows (plan 2026-10-08)",
+         "do_nothing_floor" in docs["optimizer-instructions.md"]
+         and "Read `do_nothing_floor` from the VAL release" in " ".join(docs["optimizer-instructions.md"].split())
+         and "VAL grows" in docs["optimizer-instructions.md"]),
+        ("...and no optimizer-facing doc sends the agent to the draw history the data schedule replaced",
+         not [name for name, text in docs.items() if "draw_history.json" in text]
+         and "train_schedule.json" in docs["optimizer-instructions.md"]),
         ("...and no optimizer-facing doc still tells the agent to maximize a macro-F1",
          not [name for name, text in docs.items()
               if re.search(r"maximiz\w*\s+(?:\S+\s+){0,3}macro[- ]?F1", text, re.I)]),

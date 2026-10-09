@@ -71,12 +71,31 @@ emits, so it is the key you read.
 number.** A program that answers ACCURATE every time and does no work scores the floor. The release
 computes it from *your batch's own gold*, so it is right for the batch you are actually on.
 
-⚠ **Do not carry forward 0.595.** That is the floor over the whole 311-claim dev *pool*; your 50-claim
-VAL batch is drawn from it and is not distribution-preserving. On the 2026-09-09 VAL roster gold is
-ACCURATE 35 of 50, so the floor there is **0.70**. The best program this loop has produced scored
-**0.62** — *below its own floor*. An accuracy of 0.62 is not "62% right" and it is not eleven points
-of work; on that batch it is eight points behind doing nothing. Read `do_nothing_floor` every
-iteration and state the gap against it, signed.
+⚠ **Do not carry a floor forward from memory.** The floor depends on which claims VAL holds, and VAL
+grows during the run (below), so it moves with it: on the first 50 VAL claims gold is ACCURATE 35 of 50
+(floor 0.70), over all 311 Dev claims it is about 0.6. In September the best program then scored 0.62
+on those 50 claims, *eight points below its own floor*; in October program-v13 scored 0.76 on them. Read
+`do_nothing_floor` from the VAL release every iteration and state the gap against it, signed.
+
+## How TRAIN and VAL change during a run
+
+The engine draws both each iteration, on a schedule fixed before the run starts.
+
+- **TRAIN grows, and claims you have got right leave it.** A TRAIN claim answered right two iterations
+  in a row is *retired*: it drops out of the batch and new claims are drawn in its place, up to that
+  iteration's TRAIN size. A claim answered wrong stays. A call that failed or a verdict that could not
+  be read counts as wrong. So TRAIN is weighted towards what the program still gets wrong, and a class
+  can vanish from TRAIN because you fixed it. A run may also re-check a few retired claims each
+  iteration (a *spot-check*); one answered wrong comes back into the batch.
+  `/workspace/ro/feedback/iter/<n>/train_schedule.json` says which claims were drawn, spot-checked and
+  retired, and each claim's streak.
+- **VAL grows, nested.** Each iteration's VAL contains the previous one plus new claims, up to all of
+  Dev. Its size is in the VAL batch id (`<run>-val-n<k>`). The first 50 are the claims every earlier
+  run was scored on, so a size-50 score compares with them.
+- **Compare scores only on the same VAL.** A score on 100 claims and a score on 150 are two
+  measurements. When VAL grows, the engine re-grades the best version so far on the new VAL before
+  your session starts, and "best" means best on the current VAL. `run_summary.json` lists every score
+  with its VAL batch id.
 
 **The cost of this objective, stated plainly so you can plan around it.** Accuracy is dominated by
 the common classes. MISQUOTE and INDIRECT have six dev instances each, so getting both perfectly
@@ -154,12 +173,13 @@ collapsed buckets and cannot answer a nine-class prediction.)
 Write down, for each prediction: **held / did not hold / could not tell.** The third answer is real
 and is not a cop-out — use it when the class had too little support to say (check `support_9way`), or
 when the move was inside the instrument's own scatter. ⚠ Do **not** reach for it on the assumption
-that the class "was not drawn": TRAIN has in practice been the *same* 50 claims every iteration
-(pairwise Jaccard 1.000 across the 2026-09-09 run), so absence is usually a real absence. Read
-`/workspace/ro/feedback/draw_history.json` rather than assuming either way.
+that the class "was not drawn" — and do not assume it was, either. TRAIN changes between iterations
+(claims you got right twice retire, new ones come in), so read
+`/workspace/ro/feedback/iter/<n>/train_schedule.json` and `support_9way` to see what was actually there.
 
 This is the step that makes the loop a loop. Skip it and you are running the first iteration again
-with more history. On iteration 1 there is no predecessor: say so and go to step 2.
+with more history. Only when no earlier notes folder exists at all (a fresh lineage) is there no
+predecessor: say so and go to step 2.
 
 ### Step 2 — establish this iteration's numbers
 
@@ -345,7 +365,8 @@ harness belong in this iteration's findings entry and are **never** promoted.
 - `/workspace/ro/feedback/iter/<n>/files/run_manifest.json` — the TRAIN pass's per-claim cost, duration,
   status, and the verdict for **all** claims in the batch, not just the misses, with each claim's trace
   copied beside it. This is the only source of correct-answer traces.
-- `/workspace/ro/feedback/draw_history.json` — which TRAIN claims each iteration actually drew.
+- `/workspace/ro/feedback/iter/<n>/train_schedule.json` — which TRAIN claims iteration `<n>` drew,
+  spot-checked and retired, and each claim's streak of right answers.
 - `/workspace/ro/feedback/iter/<n>/previous_attempt.json` — present only when the version saved before
   iteration `<n>` failed: the failure record, typed fields only.
 - `trace_ref`, per record in the mistake corpus — the judge's full session for that claim.
@@ -355,11 +376,11 @@ harness belong in this iteration's findings entry and are **never** promoted.
 Prefer the simpler program when two versions score the same. Prompt length is a cost: it raises
 per-claim tokens, slows every run, and makes the next failure harder to localize.
 
-**The noise floor is measured, not derived.** It has now been measured directly, so do not estimate
-it from a sampling formula. Re-scoring a **byte-identical** program on the **same 50 VAL claims**
-produced **0.48 and 0.42** — the two `iter1-current` snapshots hash the same over all eight program
-files, drew the same roster, and still disagreed on **16 of 50 labels** (32% churn). A single
-iteration's move is usually smaller than the instrument's own scatter.
+**The noise floor is measured, not derived.** It has been measured directly, so do not estimate it
+from a sampling formula. Re-scoring a **byte-identical** program on the same 50 VAL claims produced
+**0.48 and 0.42**, disagreeing on **16 of 50 labels** (32% churn). That was at 50 claims; the scatter
+shrinks as VAL grows, but a single iteration's move is still often smaller than the instrument's own
+scatter.
 
 **This does not make the metric useless.** A trend across several iterations is real signal even when
 no single step is: v0→v5 is significant at p=0.021 while every individual step is not. So read
@@ -371,7 +392,7 @@ a class had enough instances to say anything).
 the scatter, you have **no information** about that edit — not evidence against it. Do not undo an
 edit on a sub-band dip; the loop is forward-only and the undo is itself an untested change.
 
-This loosens as TRAIN and VAL grow — check the current `n_total` rather than assuming n=50 forever.
+This loosens as TRAIN and VAL grow — check the current VAL size (in its batch id) and `n_total`.
 And an edit that adds thirty lines of guidance for a gain inside the scatter is not an improvement,
 it is a cost you have not noticed paying.
 
