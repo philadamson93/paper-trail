@@ -51,6 +51,7 @@ import inspect
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -87,7 +88,13 @@ TEST_SIZE = 606
 #: forecast by ~20x, which is the dangerous direction: it would have cleared a "$32/iteration" run
 #: that actually costs ~$647. One sample, so treat this as order-of-magnitude rather than precise,
 #: and re-measure when the profile, model or claim mix changes.
-DEFAULT_PER_SESSION_USD = 1.00
+#:
+#: RE-SET 2026-10-08 for the Haiku 5.5 judge on Claude Code 2.1.295 (plan
+#: `2026-10-08-paper-trail-adopts-data-schedule`). Real Haiku 5.5 grading is ~$0.015 a session (prompts
+#: ~89k tokens); 0.03 is that with 2x headroom, because a prompt over 100k tokens is billed at 5x. The
+#: images before 2.1.295 had no Haiku 5.5 price and reported ~$0.30, so this figure only holds on the
+#: rebuilt images. Re-measured at the plan's image check; replace it with that number.
+DEFAULT_PER_SESSION_USD = 0.03
 
 
 # =================================================================================================
@@ -129,11 +136,12 @@ class CostModel:
     def batch_cost(self, n_claims: int) -> float:
         return n_claims * self.claim_cost()
 
-    def runner_calls(self, *, probe_cached: bool = False) -> int:
-        """TRAIN + current-VAL + probe-VAL. A cached probe is served without calling the Runner."""
-        return 2 if probe_cached else 3
+    def runner_calls(self, *, probe_cached: bool = False, regrade: bool = False) -> int:
+        """TRAIN + current-VAL + probe-VAL, plus the re-grade of the best on a grown VAL (data
+        schedule). A cached probe is served without calling the Runner."""
+        return (2 if probe_cached else 3) + (1 if regrade else 0)
 
-    def canary_sessions(self, *, probe_cached: bool = False) -> int:
+    def canary_sessions(self, *, probe_cached: bool = False, regrade: bool = False) -> int:
         """Sessions the canary itself costs per iteration.
 
         One canary claim costs a full ``stages_per_claim`` -- it goes through the same dispatch
@@ -141,24 +149,44 @@ class CostModel:
         """
         if not self.canary_enabled:
             return 0
-        calls = self.runner_calls(probe_cached=probe_cached) if self.canary_per_runner_call else 1
+        calls = self.runner_calls(probe_cached=probe_cached, regrade=regrade) if self.canary_per_runner_call else 1
         return calls * self.stages_per_claim
 
-    def iteration_cost(self, train_n: int, *, probe_cached: bool = False) -> float:
-        """TRAIN + current-VAL + probe-VAL, plus the canary.
+    def iteration_cost(self, train_n: int, *, probe_cached: bool = False, val_n: int | None = None,
+                       regrade_n: int = 0) -> float:
+        """TRAIN + current-VAL + probe-VAL (+ the re-grade on a grown VAL), plus the canary.
 
         ``probe_cached=True`` prices an iteration whose probe is reused by the engine's run_loop
-        (B6) -- one VAL call instead of two.
+        (B6) -- one VAL call instead of two. ``val_n`` and ``regrade_n`` are a scheduled
+        iteration's own sizes (``ScheduleConfig.sizes``); without them VAL is ``val_size``.
         """
-        return self.sessions_per_iteration(train_n, probe_cached=probe_cached) * self.per_session_usd
+        return self.sessions_per_iteration(
+            train_n, probe_cached=probe_cached, val_n=val_n, regrade_n=regrade_n) * self.per_session_usd
 
-    def sessions_per_iteration(self, train_n: int, *, probe_cached: bool = False) -> int:
+    def sessions_per_iteration(self, train_n: int, *, probe_cached: bool = False, val_n: int | None = None,
+                               regrade_n: int = 0) -> int:
         val_calls = 1 if probe_cached else 2
-        scored = (train_n + val_calls * self.val_size) * self.stages_per_claim
-        return scored + self.canary_sessions(probe_cached=probe_cached)
+        val = self.val_size if val_n is None else val_n
+        scored = (train_n + val_calls * val + regrade_n) * self.stages_per_claim
+        return scored + self.canary_sessions(probe_cached=probe_cached, regrade=bool(regrade_n))
+
+    def schedule_cost(self, sizes: "list[dict]") -> dict:
+        """A scheduled run, priced from the engine's sizes up front (``ScheduleConfig.sizes``): every
+        iteration at its own TRAIN, VAL and re-grade size, the probe never assumed cached. One
+        function for the preflight and the per-pass guard (they drifted once). ``graded`` counts
+        claims graded, before canaries and retries."""
+        rows = []
+        for r in sizes:
+            graded = r["train_n"] + 2 * r["val_n"] + r["regrade_val_n"] + r.get("noise_val_n", 0)
+            sessions = self.sessions_per_iteration(r["train_n"], val_n=r["val_n"],
+                                                   regrade_n=r["regrade_val_n"] + r.get("noise_val_n", 0))
+            rows.append({**r, "graded": graded, "sessions": sessions, "usd": sessions * self.per_session_usd})
+        return {"iters": rows, "graded": sum(r["graded"] for r in rows),
+                "sessions": sum(r["sessions"] for r in rows), "usd": sum(r["usd"] for r in rows)}
 
     def remaining_iteration_cost(
-        self, split: str, *, train_n: int, probe_cached: bool = False
+        self, split: str, *, train_n: int, probe_cached: bool = False, val_n: int | None = None,
+        regrade_n: int = 0,
     ) -> float:
         """Cost still owed to FINISH the current iteration, counted from ``split``'s call.
 
@@ -175,9 +203,15 @@ class CostModel:
         source is what stops them drifting a third time.
         """
         remaining_val_calls = 1 if probe_cached else 2
-        val_sessions = self.val_size * self.stages_per_claim
+        val_sessions = (self.val_size if val_n is None else val_n) * self.stages_per_claim
         scored = remaining_val_calls * val_sessions
         runner_calls = remaining_val_calls
+        if regrade_n:
+            # A scheduled iteration whose VAL grew also re-grades the best on it. Counted from any
+            # VAL call, since the guard cannot tell which of the iteration's VAL calls this is:
+            # over-reserving refuses a run that could not finish, under-reserving strands one.
+            scored += regrade_n * self.stages_per_claim
+            runner_calls += 1
         if split == "train":
             scored += train_n * self.stages_per_claim
             runner_calls += 1
@@ -258,6 +292,23 @@ class BudgetGuard:
     cost_model: CostModel = field(default_factory=CostModel)
     train_n: int = TRAIN_LADDER[0]
     spent_usd: float = 0.0
+    #: A scheduled run's sizes per iteration (``ScheduleConfig.sizes``). With them, each check prices
+    #: the iteration the run is in: read from the TRAIN batch's engine label (``...-train-i<n>-n<k>``),
+    #: and the costliest iteration until a TRAIN pass has said which one (a resumed re-entry).
+    sizes: "list[dict] | None" = None
+    current_iter: int | None = None
+
+    def note_batch(self, batch_id: str | None) -> None:
+        m = re.search(r"-train-i(\d+)-n\d+$", batch_id or "")
+        if m:
+            self.current_iter = int(m.group(1))
+
+    def _iteration_sizes(self) -> dict:
+        rows = {r["iter"]: r for r in self.sizes}
+        if self.current_iter in rows:
+            return rows[self.current_iter]
+        return max(self.sizes, key=lambda r: self.cost_model.iteration_cost(
+            r["train_n"], val_n=r["val_n"], regrade_n=r["regrade_val_n"]))
 
     @property
     def remaining_usd(self) -> float:
@@ -273,6 +324,12 @@ class BudgetGuard:
         arithmetic here. The guard used to compute its own TRAIN+VAL total and silently omit the
         canary the preflight charged for -- see that method's docstring; the delegation is the fix.
         """
+        if self.sizes:
+            r = self._iteration_sizes()
+            return self.cost_model.remaining_iteration_cost(
+                split, train_n=r["train_n"], val_n=r["val_n"], regrade_n=r["regrade_val_n"],
+                probe_cached=probe_cached,
+            )
         return self.cost_model.remaining_iteration_cost(
             split, train_n=self.train_n, probe_cached=probe_cached
         )
@@ -423,6 +480,9 @@ def build_components(
     train_output_root: pathlib.Path | None = None,
     val_output_root: pathlib.Path | None = None,
     val_n: int | None = None,
+    #: A scheduled run's per-iteration sizes (``ScheduleConfig.sizes``), which the budget guard prices
+    #: each pass against. ``None`` for a fixed-batch run.
+    schedule_sizes: "list[dict] | None" = None,
     #: The JUDGE's model, not the optimizer's.
     model: str | None = None,
     #: How many claims run at once: the engine runner's ``max_concurrent``. Claims are independent
@@ -445,7 +505,9 @@ def build_components(
     #: committed in the manifest for this platform; ``ss.UNPINNED`` only when said explicitly.
     expected_fingerprints: "dict | None" = None,
     #: Run-level files the engine stages in the optimizer's feedback folder each iteration, host paths
-    #: stripped (B9): the TRAIN draw history. The run summary is ``optimizer_run_summary_path``.
+    #: stripped (B9). The data schedule's TRAIN-only view is staged by the engine itself
+    #: (``iter/<n>/train_schedule.json``), so a scheduled run needs none here. The run summary is
+    #: ``optimizer_run_summary_path``.
     optimizer_feedback_files: "tuple | list" = (),
     optimizer_run_summary_path: pathlib.Path | None = None,
     #: The run's lasting state (:func:`state_paths`). Default: ``~/.paper-trail``.
@@ -493,7 +555,8 @@ def build_components(
             f"({sarol_program.platform_key()}): run `sarol_program.py --print-pins` and commit the block "
             f"under runtime_pins.{sarol_program.PIN_KEY} in the manifest, or pass ss.UNPINNED explicitly"
         )
-    budget = BudgetGuard(max_budget_usd=max_budget_usd, cost_model=cost_model, train_n=train_n)
+    budget = BudgetGuard(max_budget_usd=max_budget_usd, cost_model=cost_model, train_n=train_n,
+                         sizes=list(schedule_sizes) if schedule_sizes else None)
     program = sarol_program.SarolProgram(
         profile=prof,
         model=model or adapter.DEFAULT_JUDGE_MODEL,
@@ -576,10 +639,12 @@ def run_optimization(
     #: hill-climb and resumed lineages; ``"seed"`` program-v0; anything else a version tag.
     start: str | None = None,
     components: dict | None = None,
-    train_schedule: "list[int] | None" = None,
-    draw_mode: str = "cumulative",
-    val_n: int | None = None,
-    sampling_root: pathlib.Path | None = None,
+    #: The data schedule's settings (``engine.schedule.ScheduleConfig`` fields: ``train_size``,
+    #: ``val_size``, ``retire_after``, ``retired_policy``, ``spot_check_n``, ``failed_counts_as_wrong``).
+    #: ``None`` runs the caller's fixed TRAIN and VAL batches.
+    schedule: "dict | None" = None,
+    #: Selftests only: a source standing in for :class:`sampling.SarolScheduleSource`.
+    _schedule_source=None,
     require_canary: bool = True,
     run_summary_path: pathlib.Path | None = None,
     resume: bool = False,
@@ -599,14 +664,13 @@ def run_optimization(
     Two refusals stay ahead of the build, because the build needs what they check: a profile that can't
     run, and the canary a run must pin. They are stops recorded the same way, with the driver's helper.
 
-    **Graduated N.** Pass ``train_schedule`` (e.g. ``[5, 10, 20]``) to grow the TRAIN batch across
-    iterations instead of running a fixed cohort every time; ``draw_mode`` selects `sampling`'s
-    cumulative / fresh / reproduce semantics. Omit it and the batch is fixed.
-
-    ⚠ **The ramp is not the cost fix on its own.** An iteration is three Runner calls, two of them
-    VAL at a fixed size, so at TRAIN=10 roughly 98% of the bill is VAL. ``val_n`` is the knob that
-    actually moves the number; ``train_schedule`` controls what the optimizer learns from. Both are
-    priced, and the budget check uses the ramp's TOP rung, the most expensive iteration the run can reach.
+    **The data schedule** (plan ``2026-10-08-paper-trail-adopts-data-schedule``). Pass ``schedule`` and
+    the engine draws TRAIN and VAL each iteration (``engine.schedule``): TRAIN grows on a size curve and
+    retires claims answered right ``retire_after`` times running; VAL grows nested inside Dev, with the
+    legacy 50 claims first (``sampling.legacy_val50_roster``), and the best version is re-graded when it
+    grows. paper-trail supplies the pools and staging (``sampling.SarolScheduleSource``) and the
+    per-claim right/wrong (``SarolScorer.per_example_correct``). Every iteration is priced at its own
+    sizes, before the run and before each pass. Omit ``schedule`` and the caller's batches are fixed.
     """
     # The engine is checked (pin, import origin, what paper-trail builds on) before its code is trusted
     # to run anything, including the driver that records stops: an engine too old to have the driver
@@ -696,12 +760,31 @@ def run_optimization(
         if drift:
             refuse_before_build(drift, "before_run")
 
-    peak_train_n = max(train_schedule) if train_schedule else train_n
+    # The data schedule: settings checked by the engine's own parser, the source over Sarol's pools, and
+    # every iteration's sizes up front for the budget. A bad setting is a recorded stop, like a refusal.
+    data_schedule = None
+    sizes = None
+    if schedule is not None:
+        from engine.schedule import DataSchedule, ScheduleConfig, ScheduleError  # noqa: PLC0415
+
+        if components is None and (train_output_root is None or val_output_root is None):
+            raise ValueError("a scheduled run stages TRAIN and VAL beside their output roots; give both")
+        source = _schedule_source or sampling.SarolScheduleSource(roots={
+            "train": pathlib.Path(train_output_root) / "schedule",
+            "val": pathlib.Path(val_output_root) / "schedule",
+        })
+        try:
+            settings = dict(schedule)
+            if "val_first" not in settings:
+                settings["val_first"] = tuple(sampling.legacy_val50_roster())
+            cfg = ScheduleConfig(seed=sampling.SEED, name=run_id, **settings)
+            sizes = cfg.sizes(iterations, train_pool=len(source.pool("train")), val_pool=len(source.pool("val")))
+        except (ScheduleError, TypeError, ValueError) as exc:
+            refuse_before_build(f"data schedule: {exc}", "before_run")
+        data_schedule = DataSchedule(config=cfg, source=source)
+    peak_train_n = max(r["train_n"] for r in sizes) if sizes else train_n
     if components is None and "optimizer_feedback_files" not in component_kwargs:
-        feedback_files = []
-        if sampling_root or train_output_root:
-            feedback_files.append(("draw_history.json", pathlib.Path(sampling_root or train_output_root) / "draw_history.json"))
-        component_kwargs["optimizer_feedback_files"] = feedback_files
+        component_kwargs["optimizer_feedback_files"] = []
     if components is None and "optimizer_run_summary_path" not in component_kwargs:
         component_kwargs["optimizer_run_summary_path"] = effective_run_summary
 
@@ -712,10 +795,10 @@ def run_optimization(
         profile=profile,
         train_output_root=train_output_root,
         val_output_root=val_output_root,
-        val_n=val_n,
         run_id=run_id,
         materialize_root=pathlib.Path(materialize_root),
         state_root=state_root,
+        schedule_sizes=sizes,
         **component_kwargs,
     )
 
@@ -739,34 +822,16 @@ def run_optimization(
         # The engine runner, entered and bound to the run id by the driver (one network for the whole
         # run, closed on every exit path); a selftest's own runner otherwise.
         runner=program_runner if program_runner is not None else parts["runner"],
-        # A factory when a ramp was asked for, a fixed batch otherwise.
+        # The engine's data schedule draws both, or the caller's fixed batches are used as they are.
         train_inputs=(
-            sampling.train_inputs_factory(
-                schedule=train_schedule,
-                mode=draw_mode,
-                split="train",
-                run_id=run_id,
-                staging_root=pathlib.Path(sampling_root or train_output_root) / "staging",
-                batch_root=pathlib.Path(sampling_root or train_output_root) / "batches",
-                history_path=pathlib.Path(sampling_root or train_output_root) / "draw_history.json",
-            )
-            if train_schedule
+            None if data_schedule is not None
             else _static_train_inputs(RunInputs, train_input_ref, run_id=run_id, train_n=train_n)
         ),
-        # A sampled VAL when one was asked for, the caller's fixed batch otherwise, drawn once and held
-        # for the run.
         val_inputs=(
-            sampling.val_inputs_for(
-                n=val_n,
-                split="dev",
-                run_id=run_id,
-                staging_root=pathlib.Path(sampling_root or val_output_root) / "val-staging",
-                batch_root=pathlib.Path(sampling_root or val_output_root) / "val-batches",
-                history_path=pathlib.Path(sampling_root or val_output_root) / "val_draw.json",
-            )
-            if val_n
+            None if data_schedule is not None
             else RunInputs(input_ref=val_input_ref, batch_id=f"{run_id}-val", split="val")
         ),
+        schedule=data_schedule,
         materialize_root=pathlib.Path(materialize_root),
         start=start_tag,
         manifest_for_version=sarol_optimizer.earlier_version_view(store),
@@ -787,6 +852,7 @@ def run_optimization(
         before_run=run_refusals(
             parts, start_tag=start_tag, val_output_root=val_output_root,
             peak_train_n=peak_train_n, iterations=iterations, max_budget_usd=max_budget_usd,
+            sizes=sizes,
         ),
         **budget_hooks(parts.get("budget")),
         loop_options=dict(
@@ -900,7 +966,7 @@ def _engine_refused(exc: RuntimeError, *, run_summary_path, val_output_root, run
 
 
 def run_refusals(parts: dict, *, start_tag: str, val_output_root, peak_train_n: int, iterations: int,
-                 max_budget_usd: float) -> tuple:
+                 max_budget_usd: float, sizes: "list[dict] | None" = None) -> tuple:
     """paper-trail's refusals the driver runs first, before the lock, on every run: built components
     and a selftest's injected ones alike (isolation OQ10: no switch skips them). Each returns a message
     or ``None``; the driver turns a message into a stop recorded in the run summary."""
@@ -917,9 +983,9 @@ def run_refusals(parts: dict, *, start_tag: str, val_output_root, peak_train_n: 
         return start_version_problem(store, start_tag)
 
     def affordable(config) -> str | None:
-        # The ramp's top rung: the check describes the most expensive iteration the run can reach.
+        # A schedule is priced iteration by iteration; a fixed batch at its one size.
         ok, message = preflight(parts["cost_model"], train_n=peak_train_n, iterations=iterations,
-                                max_budget_usd=max_budget_usd)
+                                max_budget_usd=max_budget_usd, sizes=sizes)
         return None if ok else f"budget: {message}"
 
     return (profile_runnable, val_isolation, tree_is_the_start_version, affordable)
@@ -935,6 +1001,7 @@ def budget_hooks(budget: "BudgetGuard | None") -> dict:
     from engine.loop import LoopStop  # noqa: PLC0415
 
     def within_budget(inputs) -> None:
+        budget.note_batch(getattr(inputs, "batch_id", None))
         # The engine reuses a pass before this is ever called, so this cannot know whether the
         # iteration's next validation pass will be reused: it prices the worst case. Near the cap a
         # run may stop one iteration early; it never starts what it cannot finish.
@@ -967,8 +1034,18 @@ def _static_train_inputs(RunInputs, train_input_ref, *, run_id: str, train_n: in
     return RunInputs(input_ref=train_input_ref, batch_id=f"{run_id}-train", split="train")
 
 
-def preflight(cost_model: CostModel, *, train_n: int, iterations: int, max_budget_usd: float):
-    """Whole-run affordability check. Returns (ok, message)."""
+def preflight(cost_model: CostModel, *, train_n: int, iterations: int, max_budget_usd: float,
+              sizes: "list[dict] | None" = None):
+    """Whole-run affordability check. Returns (ok, message). With a schedule's ``sizes``, every
+    iteration is priced at its own sizes (:meth:`CostModel.schedule_cost`)."""
+    if sizes:
+        cost = cost_model.schedule_cost(sizes)
+        ok = cost["usd"] <= max_budget_usd
+        per = ", ".join(f"i{r['iter']} T{r['train_n']}/V{r['val_n']}"
+                        + (f"+R{r['regrade_val_n']}" if r["regrade_val_n"] else "") for r in cost["iters"])
+        return ok, (f"{len(sizes)} scheduled iteration(s) ({per}): {cost['graded']:,} claims graded, "
+                    f"{cost['sessions']:,} sessions with canaries, ~${cost['usd']:,.2f} against a "
+                    f"${max_budget_usd:,.2f} budget at ${cost_model.per_session_usd:.4f}/session")
     per_iter = cost_model.iteration_cost(train_n)
     per_iter_cached = cost_model.iteration_cost(train_n, probe_cached=True)
     # Iteration 1 cannot hit the probe cache; every later one can.
@@ -1013,8 +1090,8 @@ def _seed_repo(dest: pathlib.Path, store: SarolProgramStore) -> str:
 
 
 _TEST_ROOTS: list = []
-_FAKE_GRADER_IMAGE = "paper-trail-isolation:2.1.277@sha256:" + "0" * 64
-_FAKE_OPTIMIZER_IMAGE = "paper-trail-optimizer:2.1.277@sha256:" + "0" * 64
+_FAKE_GRADER_IMAGE = "paper-trail-isolation:2.1.295@sha256:" + "0" * 64
+_FAKE_OPTIMIZER_IMAGE = "paper-trail-optimizer:2.1.295@sha256:" + "0" * 64
 
 
 def _test_components(**kw):
@@ -1163,10 +1240,8 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         guarded2 = adapter.ContractGuardedAgent(_CleanAgent(repo2), store2, tree_root=repo2)
 
         # Record the iteration numbers the engine ACTUALLY hands the train_inputs factory. This is
-        # the cross-repo contract Bug 2 got wrong: `sampling.ramp_for` assumed a 0-based counter,
-        # `engine/loop.py` counts from 1, and the requested 10 -> 25 -> 50 ramp ran 25 -> 50 -> 50
-        # with the cheap rung never firing. `sampling.py`'s own gates could not catch it -- they
-        # asserted that module's convention against itself. Only the real engine can settle it.
+        # the cross-repo contract Bug 2 got wrong (a 0-based ramp against an engine counting from 1,
+        # 2026-09-02). Only the real engine can settle it.
         seen_iter_ns: list[int] = []
 
         def _recording_train_inputs(iter_n: int):
@@ -1214,13 +1289,9 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             ("an edit inside the EDIT scope is allowed through", completed),
             ("...and does get committed and tagged as a new version", len(tags2) > 1),
 
-            # Bug 2 -- the engine's counting base, read from the engine rather than assumed.
-            ("the engine's FIRST iteration number is what sampling.ENGINE_FIRST_ITER_N claims",
-             seen_iter_ns[:1] == [sampling.ENGINE_FIRST_ITER_N]),
-            ("...so the ramp's first rung is the one that actually runs",
-             bool(seen_iter_ns)
-             and sampling.ramp_for(
-                 sampling.rung_index(seen_iter_ns[0]), [10, 25, 50]) == 10),
+            # The engine counts iterations from 1 (Bug 2, 2026-09-02). The schedule's sizes are the
+            # engine's own now, so only the fixed-batch factory seam is left to pin here.
+            ("the engine's first iteration number is 1, read from the engine", seen_iter_ns[:1] == [1]),
             ("...and the factory is called exactly once per iteration",
              len(seen_iter_ns) == 1),
 
@@ -1347,6 +1418,83 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
              "evidence of a written file and not of an early abort",
              entrypoint_error is None),
         ]
+
+        # The data schedule through the entrypoint that ships (plan 2026-10-08): run_optimization hands
+        # the engine a schedule, the real run_loop draws from paper-trail's source, and the optimizer's
+        # view and the ledger land where they must. A stand-in source keeps it offline.
+        repo4 = pathlib.Path(tmp) / "repo4"
+        repo4.mkdir()
+        _seed_repo(repo4, real_store)
+        store4 = SarolProgramStore(repo_root=repo4)
+        _train_ids = [f"trainclaim{i}" for i in range(6)]
+        _val_ids = [f"heldoutclaim{i}" for i in range(6)]
+
+        class _Source:
+            def pool(self, split):
+                return list(_train_ids if split == "train" else _val_ids)
+
+            def stage(self, ids, split, label):
+                return schemas.RunInputs(input_ref="unused", batch_id=label, split=split)
+
+        class _ScheduledScorer(_Scorer):
+            def __init__(self):
+                self.per_example_calls = []
+
+            def per_example_correct(self, artifacts, split):
+                self.per_example_calls.append(split)
+                return {i: True for i in _train_ids}
+
+        _sched_scorer = _ScheduledScorer()
+        _parts4 = {**_parts3, "program_store": store4, "scorer": _sched_scorer,
+                   "agent": adapter.ContractGuardedAgent(_CleanAgent(repo4), store4, tree_root=repo4)}
+        _summary4 = pathlib.Path(tmp) / "out4" / "run_summary.json"
+        sched_error = None
+        try:
+            run_optimization(
+                iterations=2, run_id="selftest4", train_input_ref=None, val_input_ref=None,
+                max_budget_usd=1e9, train_n=None, materialize_root=pathlib.Path(tmp) / "materialized4",
+                start="program-v0", components=_parts4, run_summary_path=_summary4,
+                schedule={"train_size": "explicit(2, 3)", "val_size": "explicit(2, 3)", "retire_after": 1,
+                          "val_first": ()},
+                _schedule_source=_Source(),
+            )
+        except Exception as exc:  # noqa: BLE001 -- the files on disk are what is asserted
+            sched_error = exc
+        _ledger = _summary4.parent / "schedule_state.json"
+        _view = repo4 / "iter" / "1" / "train_schedule.json"
+        _sum4 = json.loads(_summary4.read_text(encoding="utf-8")) if _summary4.exists() else {}
+        _view_text = _view.read_text(encoding="utf-8") if _view.exists() else ""
+        checks += [
+            ("a scheduled run completes through run_optimization and the real engine loop",
+             sched_error is None),
+            ("...with the engine's ledger beside the run summary", _ledger.exists()),
+            ("...the optimizer's TRAIN-only view written where the engine's stager copies it from",
+             _view.exists() and '"drawn"' in _view_text),
+            ("...which names no VAL claim", _view.exists() and not any(v in _view_text for v in _val_ids)),
+            ("...the run summary carrying the sizes, with size-named VAL batch ids and no claim id",
+             [r.get("val_batch_id") for r in (_sum4.get("schedule") or {}).get("per_iter", [])]
+             == ["selftest4-val-n2", "selftest4-val-n3"]
+             and not any(v in json.dumps(_sum4) for v in _val_ids)),
+            ("...and the scorer's per-claim right/wrong asked for on TRAIN passes only",
+             _sched_scorer.per_example_calls == ["train", "train"]),
+            ("...a claim answered right once with retire_after 1 retired in the ledger",
+             _ledger.exists() and bool(json.loads(_ledger.read_text(encoding="utf-8"))["iters"][0]
+                                       ["result"]["state_after"]["retired"])),
+        ]
+        _bad_error = None
+        try:
+            run_optimization(
+                iterations=1, run_id="selftest5", train_input_ref=None, val_input_ref=None,
+                max_budget_usd=1e9, train_n=None, materialize_root=pathlib.Path(tmp) / "materialized5",
+                start="program-v0", components=_parts4, run_summary_path=pathlib.Path(tmp) / "out5" / "rs.json",
+                schedule={"train_size": "explicit(3, 2)", "val_size": "explicit(2)", "val_first": ()},
+                _schedule_source=_Source(),
+            )
+        except LoopStop as exc:
+            _bad_error = exc
+        checks.append(("a schedule the engine refuses (a shrinking TRAIN) is a recorded stop before the run",
+                       _bad_error is not None and "data schedule" in str(_bad_error)
+                       and (pathlib.Path(tmp) / "out5" / "rs.json").exists()))
 
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
     parts = _test_components(max_budget_usd=1000.0, train_n=10, require_command=False)
@@ -1984,7 +2132,9 @@ def _selftest() -> int:
     full = cm.iteration_cost(50)
     # The scored-claim arithmetic is stated against a canary-free model so these keep testing the
     # TRAIN/VAL call structure rather than silently absorbing the canary term added for OQ12.
-    bare = CostModel(canary_enabled=False)
+    # Same price as `cm`, so a difference between the two is the canary and nothing else (with the
+    # module default here, the canary check below once passed only because the prices differed).
+    bare = CostModel(per_session_usd=cm.per_session_usd, canary_enabled=False)
     checks += [
         ("an iteration prices THREE runner calls, not one",
          bare.iteration_cost(50) == bare.batch_cost(50) + 2 * bare.batch_cost(VAL_SIZE)),
@@ -2038,10 +2188,10 @@ def _selftest() -> int:
          .iteration_cost(10, probe_cached=True) < 18),
         ("agentic still prices at the ~$96 floor, at that same assumed price",
          94 < CostModel.for_profile("agentic", per_session_usd=0.05).iteration_cost(10) < 99),
-        # And the measured reality, pinned so a regression back to a toy default is visible: at the
-        # calibrated price a Phase 1 iteration is a ~$650 decision, not a ~$32 one.
-        ("at the calibrated price, a retrieval iteration is a several-hundred-dollar decision",
-         600 < CostModel.for_profile("retrieval").iteration_cost(10) < 700),
+        # And the calibrated price, pinned so a silent change is visible: on the Haiku 5.5 judge
+        # (Claude Code 2.1.295) a full-VAL retrieval iteration is ~$19, not the ~$650 of the Opus era.
+        ("at the calibrated Haiku 5.5 price, a full-VAL retrieval iteration is tens of dollars",
+         10 < CostModel.for_profile("retrieval").iteration_cost(10) < 30),
         ("the cost table says which rung it is describing",
          "retrieval" in CostModel.for_profile("retrieval").render_table()),
         # -- the graduated cohort (Phil, 2026-09-02), and which knob actually moves the bill -----
@@ -2060,6 +2210,68 @@ def _selftest() -> int:
         ("...while halving VAL changes it by ~half, which is",
          CostModel.for_profile("retrieval", val_size=158).iteration_cost(10)
          < 0.6 * CostModel.for_profile("retrieval").iteration_cost(10)),
+    ]
+
+    # -- the data schedule's price (plan 2026-10-08) --------------------------------------------
+    # Sizes from the engine's own up-front list, at the real pool sizes (TRAIN 2,076, VAL 311), so this
+    # is the arithmetic the run is gated on, not a restatement of it. Expected numbers worked by hand:
+    # TRAIN 25+50+100+150+200 = 525; VAL 2 x (50+100+150+250+311) = 1,722; re-grades 100+150+250+311 = 811.
+    isolation_mod.engine_on_path()
+    from engine.schedule import ScheduleConfig  # noqa: PLC0415
+
+    _default = ScheduleConfig(train_size="explicit(25, 50, 100, 150, 200)", val_size="explicit(50, 100, 150, 250, 311)")
+    _sizes = _default.sizes(5, train_pool=2076, val_pool=311)
+    _cost = CostModel.for_profile("retrieval", canary_enabled=False).schedule_cost(_sizes)
+    _canaried = CostModel.for_profile("retrieval").schedule_cost(_sizes)
+    checks += [
+        ("the default schedule grades 3,058 claims before canaries and retries",
+         _cost["graded"] == 3058 and _cost["sessions"] == 3058),
+        ("...1,133 of them in the last iteration", _cost["iters"][-1]["graded"] == 1133),
+        ("...the re-grade priced only where VAL grew (iterations 2-5, 811 claims)",
+         [r["regrade_val_n"] for r in _sizes] == [0, 100, 150, 250, 311]),
+        ("...and a canary per Runner call on top: 3 a plain iteration, 4 one that re-grades (19 in all)",
+         _canaried["sessions"] - _cost["sessions"] == 3 + 4 * 4),
+        ("...priced under the $150 cap at the calibrated per-session price",
+         _canaried["usd"] < 150),
+        ("the preflight prices a schedule from the same function",
+         preflight(CostModel.for_profile("retrieval"), train_n=0, iterations=5, max_budget_usd=150,
+                   sizes=_sizes)[0]
+         and not preflight(CostModel.for_profile("retrieval"), train_n=0, iterations=5, max_budget_usd=50,
+                           sizes=_sizes)[0]),
+    ]
+    _g = BudgetGuard(max_budget_usd=1e9, cost_model=CostModel.for_profile("retrieval", canary_enabled=False),
+                     sizes=_sizes)
+    _before = _g.worst_case_to_finish_iteration("train")
+    _g.note_batch("run-train-i1-n25")
+    _i1 = _g.worst_case_to_finish_iteration("train")
+    _g.note_batch("run-val-n311")  # a VAL label names no iteration, so it leaves the guard where it was
+    checks += [
+        ("the per-pass guard prices the iteration the run is in, read from the TRAIN batch's label",
+         round(_i1, 6) == round((25 + 2 * 50) * 0.03, 6)),
+        ("...the costliest iteration before any TRAIN pass has said which (a resumed re-entry)",
+         round(_before, 6) == round((200 + 2 * 311 + 311) * 0.03, 6)),
+        ("...and a VAL label does not move it", _g.current_iter == 1),
+    ]
+    _p = _parser()
+    _bad = _p.parse_args(["--train-sizes", "explicit(5)", "--val-sizes", "50,100"])
+    try:
+        schedule_settings(_bad)
+        _comma_msg = ""
+    except ValueError as exc:
+        _comma_msg = str(exc)
+    _ok = schedule_settings(_p.parse_args(["--train-sizes", "linear(25, 200, over=5)", "--val-sizes", "explicit(50,311)",
+                                           "--spot-check-n", "3", "--no-failed-counts-as-wrong"]))
+    checks += [
+        ("a comma list in --val-sizes is refused, with the curve syntax in the message",
+         "explicit(" in _comma_msg),
+        ("the size flags reach the settings through the engine's parser, every curve accepted",
+         _ok["train_size"] == "linear(25, 200, over=5)" and _ok["val_size"] == "explicit(50, 311)"
+         and _ok["spot_check_n"] == 3 and _ok["failed_counts_as_wrong"] is False and _ok["retire_after"] == 2),
+        ("no size flags is a fixed-batch run", schedule_settings(_p.parse_args([])) is None),
+        ("each removed draw flag is refused with an exit code, naming what replaced it",
+         all(main(["--run", flag, "x"]) == 2 for flag in ("--train-n-schedule", "--draw-mode", "--val-n", "--sampling-root"))),
+        ("...a bare one too, with the replacement message rather than argparse's own error",
+         _parser().parse_args(["--val-n"]).val_n == "" and main(["--run", "--val-n"]) == 2),
     ]
 
     # -- C6.9: the VAL boundary is a filesystem fact, not a payload convention ------------------
@@ -2500,6 +2712,70 @@ def _run_summary_json(run, budget, *, stopped: bool) -> dict:
     }
 
 
+def schedule_settings(args) -> "dict | None":
+    """The data schedule's settings from the CLI, or ``None`` for a fixed-batch run. The size curves are
+    handed to the engine's one parser (``parse_size_schedule``) unchanged; a comma list is refused there
+    with the curve syntax in the message."""
+    if args.train_sizes is None and args.val_sizes is None:
+        return None
+    if args.train_sizes is None or args.val_sizes is None:
+        raise ValueError("give both --train-sizes and --val-sizes")
+    _eng = engine_pin.engine_path()
+    if str(_eng) not in sys.path:
+        sys.path.append(str(_eng))  # appended, never in front: see sarol_isolation.engine_on_path
+    from engine.schedule import ScheduleError, parse_size_schedule  # noqa: PLC0415
+
+    try:
+        train, val = parse_size_schedule(args.train_sizes), parse_size_schedule(args.val_sizes)
+    except ScheduleError as exc:
+        raise ValueError(str(exc)) from exc
+    return {"train_size": train.text, "val_size": val.text, "retire_after": args.retire_after,
+            "retired_policy": args.retired_policy, "spot_check_n": args.spot_check_n,
+            "failed_counts_as_wrong": not args.no_failed_counts_as_wrong}
+
+
+def print_schedule(args, schedule: "dict | None") -> int:
+    """``--print-schedule``: the sizes and price of a scheduled run, without spending anything. Checks
+    what can be checked before a draw: the first VAL rung is the legacy 50, every VAL contains the one
+    before, and the TRAIN and VAL pools share no claim (so no VAL claim can be drawn into TRAIN)."""
+    if schedule is None:
+        print("--print-schedule needs --train-sizes and --val-sizes", file=sys.stderr)
+        return 2
+    isolation_mod.engine_on_path()
+    from engine.schedule import ScheduleConfig, val_order  # noqa: PLC0415
+
+    import tempfile  # noqa: PLC0415
+
+    source = sampling.SarolScheduleSource(roots={"train": pathlib.Path(tempfile.gettempdir()) / "unused-train",
+                                                 "val": pathlib.Path(tempfile.gettempdir()) / "unused-val"})
+    train_pool, val_pool = source.pool("train"), source.pool("val")
+    legacy = sampling.legacy_val50_roster()
+    cfg = ScheduleConfig(seed=sampling.SEED, name=args.run_id or "schedule", val_first=tuple(legacy), **schedule)
+    sizes = cfg.sizes(args.iterations, train_pool=len(train_pool), val_pool=len(val_pool))
+    order = val_order(val_pool, seed=cfg.seed, val_first=cfg.val_first)
+    vals = [r["val_n"] for r in sizes]
+    first = order[:min(50, vals[0])]
+    model = CostModel.for_profile(args.profile, per_session_usd=args.per_session_usd,
+                                  canary_enabled=not args.no_canary)
+    cost = model.schedule_cost(sizes)
+    print(f"settings: {json.dumps(cfg.describe())}")
+    print(f"pools: TRAIN {len(train_pool)}, VAL (Dev) {len(val_pool)}")
+    for r in cost["iters"]:
+        print(f"  iter {r['iter']}: TRAIN {r['train_n']:>4}  VAL {r['val_n']:>3}  re-grade {r['regrade_val_n']:>3}  "
+              f"graded {r['graded']:>5,}  ~${r['usd']:,.2f}")
+    print(f"total: {cost['graded']:,} claims graded ({cost['sessions']:,} sessions with canaries), "
+          f"~${cost['usd']:,.2f} at ${model.per_session_usd:.4f}/session")
+    checks = [
+        ("the first VAL rung is the legacy roster (md5 " + sampling.LEGACY_VAL50_MD5 + ")",
+         sorted(order[:50]) == legacy if vals[0] >= 50 else set(first) <= set(legacy)),
+        ("every VAL contains the one before", all(set(order[:a]) <= set(order[:b]) for a, b in zip(vals, vals[1:]))),
+        ("no VAL claim can appear in any TRAIN draw (the pools are disjoint)", not set(train_pool) & set(val_pool)),
+    ]
+    for name, ok in checks:
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}")
+    return 0 if all(ok for _n, ok in checks) else 1
+
+
 def _parser() -> "argparse.ArgumentParser":
     """The CLI, built separately from `main` so the selftests can gate flags by PARSING them.
 
@@ -2580,34 +2856,37 @@ def _parser() -> "argparse.ArgumentParser":
         help="where VAL run outputs land (C6.9). Must lie OUTSIDE the optimizer's readable tree, "
              "or the held-out set's per-claim outputs are directly readable.",
     )
+    # -- the data schedule (plan 2026-10-08-paper-trail-adopts-data-schedule) -----------------------
     ap.add_argument(
-        "--train-n-schedule",
+        "--train-sizes",
         default=None,
-        help="graduated TRAIN cohort, e.g. '5,10,20': iteration i uses rung i, holding at the top "
-             "rung thereafter. Replaces --train-inputs, which stages a fixed batch. Non-decreasing.",
+        help="the TRAIN size per iteration as one of the engine's size curves, e.g. "
+             "'explicit(25,50,100,150,200)' or 'linear(25,200,over=5)' (also constant, step, geometric; "
+             "each takes max=). Turns the data schedule on, with --val-sizes; replaces --train-inputs.",
     )
     ap.add_argument(
-        "--draw-mode",
-        default="cumulative",
-        choices=sorted(sampling.DRAW_MODES),
-        help="how each rung is drawn. 'cumulative' grows the batch without dropping anything the "
-             "optimizer already saw; 'fresh' redraws independently; 'reproduce' repeats the "
-             "previous iteration's exact set.",
-    )
-    ap.add_argument(
-        "--val-n",
-        type=int,
+        "--val-sizes",
         default=None,
-        help="subsample VAL to this many claims (default: all 316). THIS is the cost lever -- VAL "
-             "is charged twice per iteration at a fixed size, so at TRAIN=10 it is ~98%% of the "
-             "bill and ramping TRAIN alone barely changes the total.",
+        help="the VAL size per iteration as a size curve, e.g. 'explicit(50,100,150,250,311)'. VAL grows "
+             "nested inside Dev (311 usable claims), the legacy 50 first, and never shrinks; the best "
+             "version is re-graded when it grows. Replaces --val-inputs.",
     )
-    ap.add_argument(
-        "--sampling-root",
-        default=None,
-        help="where drawn batches, their staging trees and draw_history.json land "
-             "(default: --train-output-root).",
-    )
+    ap.add_argument("--retire-after", type=int, default=2,
+                    help="a TRAIN claim answered right this many iterations running leaves the batch (0 = never)")
+    ap.add_argument("--retired-policy", default="spot_check", choices=("spot_check", "back_to_pool", "retired_for_good"),
+                    help="what happens to retired claims (engine default spot_check)")
+    ap.add_argument("--spot-check-n", type=int, default=0,
+                    help="retired claims re-checked each iteration, counted inside the TRAIN size (default 0)")
+    ap.add_argument("--no-failed-counts-as-wrong", action="store_true",
+                    help="leave a claim's streak alone when its call failed or its verdict was unreadable "
+                         "(default: it counts as wrong)")
+    ap.add_argument("--print-schedule", action="store_true",
+                    help="print each iteration's TRAIN, VAL and re-grade sizes, the first VAL rung and the "
+                         "price, then exit. Spends nothing.")
+    # Removed with the old draw code (plan 2026-10-08). Kept only so using one says what replaced it.
+    for _old in ("--train-n-schedule", "--draw-mode", "--val-n", "--sampling-root"):
+        # nargs="?" so a bare `--val-n` reaches the replacement message too, not argparse's own error.
+        ap.add_argument(_old, nargs="?", const="", default=None, help=argparse.SUPPRESS)
     ap.add_argument(
         "--no-canary",
         action="store_true",
@@ -2667,13 +2946,25 @@ def main(argv: "list[str] | None" = None) -> int:
     if args.selftest:
         return _selftest()
 
+    removed = [f for f, v in (("--train-n-schedule", args.train_n_schedule), ("--draw-mode", args.draw_mode),
+                              ("--val-n", args.val_n), ("--sampling-root", args.sampling_root)) if v is not None]
+    if removed:
+        print(f"{', '.join(removed)}: removed with the old draw (plan 2026-10-08). Use the engine's data "
+              "schedule: --train-sizes 'explicit(25,50,100,150,200)' --val-sizes 'explicit(50,100,150,250,311)' "
+              "(size curves: constant, linear, step, geometric, explicit), with --retire-after, "
+              "--retired-policy and --spot-check-n. Staging goes beside the TRAIN and VAL output roots.",
+              file=sys.stderr)
+        return 2
+    try:
+        schedule = schedule_settings(args)
+    except ValueError as exc:
+        print(f"data schedule: {exc}", file=sys.stderr)
+        return 2
+
+    if args.print_schedule:
+        return print_schedule(args, schedule)
+
     if args.run:
-        # A ramp supplies its own TRAIN batches per iteration, so --train-inputs/--train-n are
-        # exactly what it replaces. Requiring both would force the caller to hand over a fixed
-        # batch that is then ignored -- the kind of dead argument that later reads as a bug.
-        schedule = (
-            sampling.parse_schedule(args.train_n_schedule) if args.train_n_schedule else None
-        )
         required = {
             "--max-budget-usd": args.max_budget_usd,
             "--run-id": args.run_id,
@@ -2681,12 +2972,15 @@ def main(argv: "list[str] | None" = None) -> int:
             "--train-output-root": args.train_output_root,
             "--val-output-root": args.val_output_root,
         }
+        # A schedule draws and stages its own TRAIN and VAL, so supplied batches would be ignored.
         if schedule is None:
             required["--train-n"] = args.train_n
             required["--train-inputs"] = args.train_inputs
-        # --val-n draws and stages its own VAL batch, so a supplied one would be ignored.
-        if not args.val_n:
             required["--val-inputs"] = args.val_inputs
+        elif args.train_inputs or args.val_inputs or args.train_n is not None:
+            print("--train-inputs/--val-inputs/--train-n are for a fixed-batch run; the data schedule "
+                  "(--train-sizes/--val-sizes) draws its own", file=sys.stderr)
+            return 2
         missing = [flag for flag, value in required.items() if value is None]
         if missing:
             print(f"--run requires: {', '.join(missing)}", file=sys.stderr)
@@ -2720,12 +3014,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 val_output_root=pathlib.Path(args.val_output_root),
                 per_session_usd=args.per_session_usd,
                 per_call_max_budget_usd=args.per_call_max_budget_usd,
-                train_schedule=schedule,
-                draw_mode=args.draw_mode,
-                val_n=args.val_n,
-                sampling_root=(
-                    pathlib.Path(args.sampling_root) if args.sampling_root else None
-                ),
+                schedule=schedule,
                 require_canary=not args.no_canary,
                 # Same lesson as --profile and --model: a flag that reaches the estimate and not
                 # the run is worse than no flag. Gated in `_selftest`.
@@ -2765,7 +3054,7 @@ def main(argv: "list[str] | None" = None) -> int:
     cost_model = CostModel.for_profile(
         args.profile,
         per_session_usd=args.per_session_usd,
-        val_size=args.val_n or VAL_SIZE,
+        val_size=VAL_SIZE,
         canary_enabled=(
             not args.no_canary
             and canary_mod.load(profiles_mod.get(args.profile).name) is not None

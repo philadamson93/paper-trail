@@ -225,8 +225,9 @@ def sandbox_note(iter_n: int, run_id: str | None = None) -> str:
         "(`<run id>/iter-<n>/findings.md`, `meta-learnings.md`; `iter-<n>-failed` for a session that failed; "
         "`legacy/` for notes from before this layout). Write this iteration's findings to "
         f"`{OUT}/findings.md`.\n"
-        f"- `{ca.FEEDBACK_PATH}/`: this run's `run_summary.json` and `draw_history.json`, and under "
+        f"- `{ca.FEEDBACK_PATH}/`: this run's `run_summary.json`, and under "
         "`iter/<n>/` each iteration's releases (`release_train.json`, `release_val.json`), "
+        "`train_schedule.json` (which TRAIN claims were drawn, re-checked and retired, and each claim's streak), "
         "`previous_attempt.json` when the version saved before it failed, and in `files/` the train mistakes "
         "file the train release points at, the TRAIN pass's run manifest and the judge traces they cite.\n"
         f"- `{ca.VERSIONS_PATH}/`: earlier program versions, materialized. Read an earlier version's file "
@@ -424,8 +425,11 @@ def _selftest() -> int:
             {"claim_id": "C3", "trace_ref": str(odd_trace)},
             {"claim_id": "C4", "trace_ref": str(val_mistakes)}],
             "run_manifest_ref": str(pass_manifest)}), encoding="utf-8")
-        (run_root / "train" / "draw_history.json").write_text(json.dumps({"draws": [["C1"]]}), encoding="utf-8")
         summary = run_root / "run_summary.json"
+        # The data schedule's ledger sits beside the run summary and holds VAL claim ids; nothing hands
+        # it to the optimizer (the engine also refuses the name).
+        (run_root / "schedule_state.json").write_text(json.dumps({"iters": [{"draw": {"val": ["VAL-LEDGER-MARKER"]}}]}),
+                                                      encoding="utf-8")
         summary.write_text(json.dumps({"iterations": [{"val": 0.4, "manifest": str(pass_manifest)}]}), encoding="utf-8")
         it = repo / "iter" / "1"
         it.mkdir(parents=True)
@@ -433,6 +437,8 @@ def _selftest() -> int:
             "phase": "train", "corpus": {"ref": str(mistakes), "metrics": {"breakdown": {"mistakes_ref": str(mistakes)}}}}))
         (it / "release_val.json").write_text(json.dumps({"phase": "val", "metrics": {"primary_metric": 0.4},
                                                         "ref": str(val_trace)}))
+        # The engine writes the schedule's TRAIN-only view here; its stager copies it with the releases.
+        (it / "train_schedule.json").write_text(json.dumps({"iter": 1, "drawn": ["C1"], "retired": {}}))
         (repo / "iter" / "2").mkdir()
         (repo / "iter" / "2" / "previous_attempt.json").write_text(json.dumps({"tag": "program-v12", "stage": "validation_pass"}))
 
@@ -464,7 +470,7 @@ def _selftest() -> int:
                 image=fake_image, expected_fingerprint=ss.UNPINNED,
                 scorer_roots=(run_root / "train", run_root / "val"),
                 train_output_root=run_root / "train", val_output_root=run_root / "val",
-                feedback_files=(("draw_history.json", run_root / "train" / "draw_history.json"),),
+                feedback_files=(),
                 run_summary_path=summary,
                 notebook=notebook, context_dir=context, notes_root=notes_root, run_id="selftest-run",
                 _agent_factory=_FakeAgent,
@@ -496,9 +502,8 @@ def _selftest() -> int:
             ("the validation roots hold the VAL root, the VAL pass, a pass with no record, live/, gold and benchmark",
              {run_root / "val", val_pass, odd_pass, run_root / "program-out" / "live",
               stage_claim.GOLD_ROOT.parent, stage_claim.BENCH_DIR.parent} == set(kw["validation_roots"])),
-            ("the run summary and the draw history are handed over as run-level files",
-             kw["run_summary_path"] == summary
-             and tuple(kw["feedback_files"]) == (("draw_history.json", run_root / "train" / "draw_history.json"),)),
+            ("the run summary is the one run-level file; the schedule's TRAIN view comes through iter/",
+             kw["run_summary_path"] == summary and tuple(kw["feedback_files"]) == ()),
         ]
         # The engine's real staging, given exactly what paper-trail hands the agent, over this run's
         # iter/ (the fixture repo's; the agent itself names the real checkout's).
@@ -517,8 +522,8 @@ def _selftest() -> int:
         release = json.loads((staged / "iter" / "1" / "release_train.json").read_text())
         rows = json.loads((staged / "iter" / "1" / "files" / "run-train-i1.json").read_text())["claims"]
         checks += [
-            (f"the staged folder: summary, draw history, both releases, the failure record, the train files [{files}]",
-             {"run_summary.json", "draw_history.json", "iter/1/release_train.json", "iter/1/release_val.json",
+            (f"the staged folder: summary, both releases, the schedule's TRAIN view, the failure record, the train files [{files}]",
+             {"run_summary.json", "iter/1/release_train.json", "iter/1/release_val.json", "iter/1/train_schedule.json",
               "iter/2/previous_attempt.json", "iter/1/files/run-train-i1.json", "iter/1/files/run_manifest.json",
               "iter/1/files/events.jsonl"} == set(files)),
             ("the train release points at its mistakes file by container path",
@@ -527,7 +532,7 @@ def _selftest() -> int:
             ("the TRAIN pass's trace reaches the optimizer (the positive control)",
              "TRAIN-TRACE-MARKER" in text and rows[0]["trace_ref"] == f"{FEEDBACK_PATH}/iter/1/files/events.jsonl"),
             ("nothing from the VAL pass, the VAL root or an unrecorded pass reaches it, even when a train row names it",
-             not any(m in text for m in ("VAL-PASS-MARKER", "VAL-ROOT-MARKER", "ODD-PASS-MARKER"))
+             not any(m in text for m in ("VAL-PASS-MARKER", "VAL-ROOT-MARKER", "ODD-PASS-MARKER", "VAL-LEDGER-MARKER"))
              and rows[1]["trace_ref"] is None and rows[2]["trace_ref"] is None and rows[3]["trace_ref"] is None),
             ("no host path is left in anything staged", str(root) not in text),
         ]

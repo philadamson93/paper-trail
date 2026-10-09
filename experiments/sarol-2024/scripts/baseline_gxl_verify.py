@@ -36,7 +36,6 @@ import os
 import pathlib
 import re
 import sys
-import tempfile
 import time
 from typing import Any
 
@@ -49,7 +48,7 @@ import stage_claim  # noqa: E402
 
 RUNS = pathlib.Path.home() / ".paper-trail" / "runs"
 DEFAULT_ROSTER = RUNS / "hillclimb-2026-09-22c" / "val" / "val_draw.json"
-ROSTER_MD5 = "8e73ac3e"  # md5 of ",".join(sorted(claim_ids)), first 8 hex -- the plan's fingerprint
+ROSTER_MD5 = "8e73ac3e"  # md5 of ",".join(sorted(claim_ids)), first 8 hex; equals sampling.LEGACY_VAL50_MD5
 VAL_N = 50
 SPLIT = "dev"
 
@@ -111,14 +110,10 @@ def roster_ids(path: pathlib.Path) -> list[str]:
 
 
 def check_roster(ids: list[str]) -> str:
-    """Recompute the seeded draw (`sampling.val_inputs_for` draws iteration 0, `fresh`) and compare."""
+    """Recompute the legacy roster (`sampling.legacy_val50_roster`, which refuses a drifted pool) and compare."""
     import sampling  # noqa: PLC0415
 
-    with tempfile.TemporaryDirectory() as tmp:
-        drawn = sampling.resolve_batch(
-            0, n=VAL_N, mode="fresh", split=SPLIT, history_path=pathlib.Path(tmp) / "h.json"
-        )
-    recomputed = sorted(u.claim_id for u in drawn)
+    recomputed = sampling.legacy_val50_roster()
     md5 = hashlib.md5(",".join(sorted(ids)).encode()).hexdigest()[:8]
     if recomputed != sorted(ids):
         raise SystemExit(f"[roster] recomputed draw differs from the roster file (md5 {md5})")

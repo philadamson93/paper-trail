@@ -8,6 +8,9 @@
 #   ./run_hillclimb_vm.sh [RUN_ID] [MAX_WORKERS] [ITERATIONS]
 #
 # Defaults: RUN_ID=hillclimb-$(date +%F), MAX_WORKERS=4, ITERATIONS=5.
+# The data schedule and the cap are environment settings (plan 2026-10-08-paper-trail-adopts-data-schedule):
+#   TRAIN_SIZES='explicit(25,50,100,150,200)' VAL_SIZES='explicit(50,100,150,250,311)' MAX_BUDGET_USD=150
+# Runs on the Mac as well as a VM: set AGENTIC_LABEL_OPT to the engine checkout on either.
 
 set -euo pipefail
 
@@ -24,6 +27,12 @@ PROFILE="${PROFILE:-retrieval}"
 # also decides what the run keeps: program-v0's content is a fresh start (the notebook and notes are
 # archived), anything later continues the lineage and keeps them (next-run H2, the engine's run-start reset).
 START="${START:-newest}"
+# The engine's data schedule: size curves handed to its parser unchanged. TRAIN retires a claim answered
+# right twice running; VAL grows nested inside Dev, the legacy 50 first. The cap counts real spend on the
+# 2.1.295 images (the earlier ones overstated Haiku 5.5 about 20x).
+TRAIN_SIZES="${TRAIN_SIZES:-explicit(25,50,100,150,200)}"
+VAL_SIZES="${VAL_SIZES:-explicit(50,100,150,250,311)}"
+MAX_BUDGET_USD="${MAX_BUDGET_USD:-150}"
 
 # Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
 # resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
@@ -276,12 +285,11 @@ set +e
   --profile "$PROFILE" \
   --start "$START" \
   --iterations "$ITERATIONS" \
-  --train-n-schedule 50,50,50,50,50 \
-  --draw-mode cumulative \
-  --val-n 50 \
+  --train-sizes "$TRAIN_SIZES" \
+  --val-sizes "$VAL_SIZES" \
   --max-workers "$MAX_WORKERS" \
   --run-id "$RUN_ID" \
-  --max-budget-usd 1000 \
+  --max-budget-usd "$MAX_BUDGET_USD" \
   --materialize-root "$RUNS/materialized" \
   --train-output-root "$RUNS/train" \
   --val-output-root  "$RUNS/val" \

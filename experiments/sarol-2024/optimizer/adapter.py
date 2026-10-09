@@ -875,6 +875,75 @@ class SarolScorer:
             ],
         }
 
+    def _judge_records(self, run_manifest: dict) -> dict[str, Any]:
+        """One pass over a run manifest's claims: the (pred, gold) pairs the score is built from, and
+        each claim's right/wrong for the data schedule (``per_example_correct``). One loop, so the two
+        can never disagree about a claim."""
+        pairs: list[tuple[str, str]] = []
+        #: claim_id -> True (9-way label matches gold) / False / None (failed call, unreadable verdict).
+        per_claim: dict[str, bool | None] = {}
+        unresolved = 0
+        joined: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        failed_calls = {"count": 0, "by_reason": {"crash": 0, "timeout": 0}}
+        for record in run_manifest["claims"]:
+            # A call that crashed or timed out is a MISS, clearly marked (Phil 2026-09-25; plan PR):
+            # scored against gold under a sentinel that is not in the 9-class enum, and counted in
+            # `failed_calls` so the optimizer is told those calls failed, not that it answered wrong.
+            # Before PT-A a single failed call made the whole batch unscoreable.
+            if record.get("status") == "failed":
+                gold_only = self._resolve_gold_only(pathlib.Path(record["staging_dir"]))
+                # A gold label equal to the sentinel would score a failed call as correct; such a
+                # resolver is broken, so the claim is unresolved (the batch is then unscored).
+                if gold_only is None or gold_only == FAILED_CALL_LABEL:
+                    unresolved += 1
+                    continue
+                pairs.append((FAILED_CALL_LABEL, gold_only))
+                per_claim[record.get("claim_id")] = None
+                failed_calls["count"] += 1
+                why = record.get("failed")
+                if why in failed_calls["by_reason"]:
+                    failed_calls["by_reason"][why] += 1
+                continue
+            # `invalid_output` is SCORED, not skipped. The program emitted something the contract
+            # rejects, which is a result about the program -- and skipping it is not neutral here,
+            # because the coverage rule below demands n_total == requested, so a skip zeroes the
+            # whole batch exactly as the old `program_error` escalation did. Only a genuine
+            # infrastructure status (timeout, program_error) is still dropped.
+            if record.get("status") not in ("ok", "invalid_output"):
+                continue
+            try:
+                resolved = self._resolve(pathlib.Path(record["staging_dir"]))
+            except (OSError, KeyError, RuntimeError, json.JSONDecodeError):
+                # Unparseable verdict. Gold does NOT depend on the verdict -- it resolves from
+                # `staging_info.json`'s citekey -- so this claim is still scoreable, as a miss
+                # against a sentinel that is not in the 9-class enum and so can never match.
+                gold_only = self._resolve_gold_only(pathlib.Path(record["staging_dir"]))
+                if gold_only is None:
+                    unresolved += 1
+                    continue
+                pairs.append((INVALID_OUTPUT_LABEL, gold_only))
+                per_claim[record.get("claim_id")] = None
+                continue
+            pairs.append((resolved["pred_label"], resolved["gold_label"]))
+            per_claim[record.get("claim_id")] = resolved["pred_label"] == resolved["gold_label"]
+            # Kept, not discarded. Discarding it is what left the optimizer with counts only.
+            joined.append((record, resolved))
+
+        return {"pairs": pairs, "unresolved": unresolved, "joined": joined,
+                "failed_calls": failed_calls, "per_claim": per_claim}
+
+    def per_example_correct(self, artifacts, split: str) -> "dict[str, bool | None]":
+        """The engine's data-schedule hook: right/wrong per claim on a TRAIN pass (plan 2026-10-08).
+
+        Right when the 9-way label equals gold. A failed call or an unreadable verdict is ``None``
+        (the engine's ``failed_counts_as_wrong`` setting decides what that means). Built from the
+        run manifest, which lists every requested claim -- **never** from the mistakes file, which
+        leaves failed and unreadable calls out and so would count them right."""
+        if artifacts.status != "ok" or not artifacts.artifact_refs:
+            return {}
+        run_manifest = json.loads(pathlib.Path(artifacts.artifact_refs[0].path).read_text(encoding="utf-8"))
+        return self._judge_records(run_manifest)["per_claim"]
+
     def score(self, artifacts, split, task_config):  # positional -- loop.py:336/:337
         """The ``Scorer`` protocol. ``(artifacts, split, task_config) -> ScoreResult``."""
         schemas = _import_engine()
@@ -933,50 +1002,9 @@ class SarolScorer:
         )
         requested = int(run_manifest.get("requested_count", 0))
 
-        pairs: list[tuple[str, str]] = []
-        unresolved = 0
-        joined: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        failed_calls = {"count": 0, "by_reason": {"crash": 0, "timeout": 0}}
-        for record in run_manifest["claims"]:
-            # A call that crashed or timed out is a MISS, clearly marked (Phil 2026-09-25; plan PR):
-            # scored against gold under a sentinel that is not in the 9-class enum, and counted in
-            # `failed_calls` so the optimizer is told those calls failed, not that it answered wrong.
-            # Before PT-A a single failed call made the whole batch unscoreable.
-            if record.get("status") == "failed":
-                gold_only = self._resolve_gold_only(pathlib.Path(record["staging_dir"]))
-                # A gold label equal to the sentinel would score a failed call as correct; such a
-                # resolver is broken, so the claim is unresolved (the batch is then unscored).
-                if gold_only is None or gold_only == FAILED_CALL_LABEL:
-                    unresolved += 1
-                    continue
-                pairs.append((FAILED_CALL_LABEL, gold_only))
-                failed_calls["count"] += 1
-                why = record.get("failed")
-                if why in failed_calls["by_reason"]:
-                    failed_calls["by_reason"][why] += 1
-                continue
-            # `invalid_output` is SCORED, not skipped. The program emitted something the contract
-            # rejects, which is a result about the program -- and skipping it is not neutral here,
-            # because the coverage rule below demands n_total == requested, so a skip zeroes the
-            # whole batch exactly as the old `program_error` escalation did. Only a genuine
-            # infrastructure status (timeout, program_error) is still dropped.
-            if record.get("status") not in ("ok", "invalid_output"):
-                continue
-            try:
-                resolved = self._resolve(pathlib.Path(record["staging_dir"]))
-            except (OSError, KeyError, RuntimeError, json.JSONDecodeError):
-                # Unparseable verdict. Gold does NOT depend on the verdict -- it resolves from
-                # `staging_info.json`'s citekey -- so this claim is still scoreable, as a miss
-                # against a sentinel that is not in the 9-class enum and so can never match.
-                gold_only = self._resolve_gold_only(pathlib.Path(record["staging_dir"]))
-                if gold_only is None:
-                    unresolved += 1
-                    continue
-                pairs.append((INVALID_OUTPUT_LABEL, gold_only))
-                continue
-            pairs.append((resolved["pred_label"], resolved["gold_label"]))
-            # Kept, not discarded. Discarding it is what left the optimizer with counts only.
-            joined.append((record, resolved))
+        judged = self._judge_records(run_manifest)
+        pairs, unresolved, joined = judged["pairs"], judged["unresolved"], judged["joined"]
+        failed_calls = judged["failed_calls"]
 
         scored = score_sarol3.score(pairs)
 
@@ -1079,6 +1107,11 @@ _VAL_BREAKDOWN_ALLOWED = (
     # the optimizer nothing it should have. `objective_class_set` is the fixed configured set,
     # identical every run and independent of the draw, so it leaks nothing at all.
     "n_objective_classes_present", "objective_class_set",
+    # H4 (09-22 next-run list; plan 2026-10-08): the always-ACCURATE score on this VAL batch, which the
+    # optimizer's instructions tell it to compare against. One number per VAL size. Under a growing VAL
+    # it discloses VAL's ACCURATE share at each size, so the share among the newly added claims can be
+    # worked out (Phil accepted this, 2026-10-08).
+    "do_nothing_floor",
 )
 
 
@@ -1672,6 +1705,63 @@ def _selftest() -> int:
                  "profile" in _VAL_BREAKDOWN_ALLOWED),
                 ("the schema version was bumped when the profile key landed",
                  SCHEMA_VERSION == "0.2.0" and train_payload.schema_version == "0.2.0"),
+            ]
+            # H4 (plan 2026-10-08): the always-ACCURATE score crosses into the VAL release, so the
+            # optimizer can read the floor its instructions tell it to compare against.
+            checks += [
+                ("the VAL release carries do_nothing_floor (H4), the same number the scorer computed",
+                 "do_nothing_floor" in score.breakdown
+                 and val_breakdown.get("do_nothing_floor") == score.breakdown["do_nothing_floor"]),
+            ]
+
+        # Per-claim right/wrong for the engine's data schedule (plan 2026-10-08). Four claims: one
+        # right, one wrong, one failed call, one unreadable verdict. Only the first is right; the last
+        # two are unknown (None), which the engine's failed_counts_as_wrong setting turns into wrong.
+        with tempfile.TemporaryDirectory() as tmp:
+            _dirs = {c: pathlib.Path(tmp) / c for c in ("R", "W", "F", "U")}
+            for d in _dirs.values():
+                d.mkdir()
+            _pm = pathlib.Path(tmp) / "run_manifest.json"
+            _pm.write_text(json.dumps({
+                "batch_id": "pe", "split": "train", "requested_count": 4, "profile": "retrieval",
+                "retrieval_k": 20,
+                "claims": [
+                    {"claim_id": "R", "citekey": "k", "staging_dir": str(_dirs["R"]), "status": "ok"},
+                    {"claim_id": "W", "citekey": "k", "staging_dir": str(_dirs["W"]), "status": "ok"},
+                    {"claim_id": "F", "citekey": "k", "staging_dir": str(_dirs["F"]), "status": "failed",
+                     "failed": "timeout"},
+                    {"claim_id": "U", "citekey": "k", "staging_dir": str(_dirs["U"]), "status": "ok"},
+                ],
+            }), encoding="utf-8")
+            _seen_u: list[int] = []
+
+            def _pe_resolver(path):
+                name = pathlib.Path(path).name
+                if name == "U" and not _seen_u:
+                    _seen_u.append(1)  # the verdict is unreadable; gold alone still resolves after
+                    raise RuntimeError("unparseable verdict")
+                pred = {"R": "ACCURATE", "W": "CONTRADICT", "F": "ACCURATE", "U": "ACCURATE"}[name]
+                return {"pred_label": pred, "gold_label": "ACCURATE", "pred_3way": "ACCURATE",
+                        "gold_3way": "ACCURATE", "citekey": "k", "split": "train",
+                        "claim_row_id": 1, "cited_paper_bucket": 1}
+
+            _pe_art = schemas.RunArtifacts(batch_id="pe", status="ok", artifact_refs=(schemas.ArtifactRef(
+                path=str(_pm), sha256=hashlib.sha256(_pm.read_bytes()).hexdigest()),))
+            _pe = SarolScorer(gold_resolver=_pe_resolver).per_example_correct(_pe_art, "train")
+            _seen_u.clear()
+            _pe_score = SarolScorer(gold_resolver=_pe_resolver, mistakes_root=pathlib.Path(tmp) / "m").score(
+                _pe_art, "train", {"_iter": 1})
+            _listed = {r["claim_id"] for r in json.loads(pathlib.Path(
+                _pe_score.breakdown["mistakes_ref"]).read_text(encoding="utf-8"))["claims"]}
+            checks += [
+                ("per-claim right/wrong: right, wrong, failed, unreadable -> True, False, None, None",
+                 _pe == {"R": True, "W": False, "F": None, "U": None}),
+                ("...negative control: the mistakes file lists only the wrong answer, so 'not listed' "
+                 "would have counted the failed and unreadable calls right",
+                 _listed == {"W"}),
+                ("...and a failed pass reports no claims rather than guessing",
+                 SarolScorer().per_example_correct(schemas.RunArtifacts(
+                     batch_id="x", status="timeout", artifact_refs=()), "train") == {}),
             ]
 
     else:

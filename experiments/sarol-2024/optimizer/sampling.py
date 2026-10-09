@@ -1,22 +1,13 @@
-"""Growing-batch sampling for the Sarol consumer: draw a batch per iteration, stage it, price it.
+"""Sarol's claim pool, gold and staging, as the engine's data-schedule source.
 
-This is paper-trail's analog of crc-extraction-agent's `agent/optimizer/split.py` §6 (see
-`resolve_train_batch` there). Same three draw modes, same per-iteration draw-history bookkeeping,
-same seeded determinism, and the same engine seam: `agentic-label-opt`'s
-``run_loop(train_inputs=Callable[[int], RunInputs])`` accepts a *factory*, so TRAIN can grow across
-iterations without the consumer re-entering the loop.
-
-**Why this exists, and why it is not only about TRAIN.** Phil's ask was a graduated `N` over the
-TRAIN cohort rather than a full epoch. That is implemented here -- but on its own it would barely
-move paper-trail's bill, and saying so is the point of this docstring. An iteration is *three*
-Runner calls (TRAIN + current-VAL + post-commit probe-VAL), so VAL is charged **twice per
-iteration at a fixed size** while TRAIN is charged once at size `N`. At the measured
-$1.00/session (see ``dispatcher.DEFAULT_PER_SESSION_USD``), a `retrieval` iteration at TRAIN=10
-costs ~$647, of which ~$636 is VAL. Ramping TRAIN 10 -> 5 saves $5 of $647.
-
-So this module makes **both** cohorts drawable. `val_n` is the real cost lever; `train_n` is the
-one that controls what the optimizer learns from. Two different knobs for two different jobs, and
-conflating them is how a "cheap" ramp turns out to cost the same as the full run.
+**The draw lives in the engine now** (`agentic-label-opt` `engine.schedule`, plan
+`planning/paper-trail/2026-10-08-paper-trail-adopts-data-schedule.md`): TRAIN grows on a size curve and
+retires claims answered right twice in a row, VAL grows nested inside Dev, and the best version is
+re-graded when VAL grows. This module keeps only what is Sarol-specific -- which `(claim, cited paper)`
+units exist, their gold, and staging a set of them into the batch file the Runner reads -- and hands the
+first two to the engine as :class:`SarolScheduleSource` (``pool``, ``stage``). The old graduated-N draw
+(cumulative / fresh / reproduce, ``draw_history.json``) was deleted with it; the engine's ledger
+(``schedule_state.json``) replaces the history.
 
 **What the pool is, exactly.** A claim is drawable only if `stage_claim.stage()` can stage it.
 That is **2,076 of 2,141 TRAIN rows and 311 of 316 dev rows**. It read 1,699 / 255 until
@@ -43,7 +34,6 @@ writes one; gold resolution stays where `parse_verdict.py` puts it.
 from __future__ import annotations
 
 import argparse
-import inspect
 import functools
 import json
 import os
@@ -61,41 +51,10 @@ if str(_SCRIPTS) not in sys.path:
 
 import stage_claim  # noqa: E402
 
-#: Base seed. The effective seed is ``SEED + iteration`` so each iteration draws reproducibly but
-#: differently -- the same convention crc uses, and the reason a re-run of iteration 3 redraws
-#: iteration 3's batch rather than iteration 0's.
+#: The seed the pre-schedule draws used (``random.Random(SEED + iteration)``). Kept because the legacy
+#: 50-claim VAL roster (:func:`legacy_val50_roster`) is that draw's iteration 0, and because the engine's
+#: schedule takes this as its seed too, so one number names every paper-trail draw.
 SEED = 20260902
-
-DRAW_MODES = ("cumulative", "fresh", "reproduce")
-
-#: The engine's first ``iter_n``. ``engine/loop.py`` iterates ``for n in range(resume_from + 1,
-#: iterations + 1)``, so on a fresh run the first iteration it hands this module is **1**, not 0.
-#:
-#: This is a cross-repo contract, not a detail. The first optimization run (2026-09-02) ramped
-#: 25 -> 50 -> 50 instead of the requested 10 -> 25 -> 50 because `ramp_for` assumed a 0-based
-#: counter, so the cheap 10-claim rung -- the one whose entire purpose is to fail early -- never
-#: ran. It is stated once here, and `dispatcher._integration_checks` pins it by driving the REAL
-#: ``run_loop`` and recording the values the factory is actually called with. That is deliberate:
-#: this module's own selftests previously asserted the convention against itself, which is how a
-#: wrong base passed 296 green gates.
-ENGINE_FIRST_ITER_N = 1
-
-
-def rung_index(iter_n: int, *, first_iter_n: int = ENGINE_FIRST_ITER_N) -> int:
-    """The engine's ``iter_n`` -> a 0-based ramp rung.
-
-    Deliberately separate from :func:`ramp_for`, which stays a pure 0-based lookup the offline
-    gates can exercise directly. One function knows the engine's counting base; everything else
-    is expressed in rungs.
-    """
-    rung = iter_n - first_iter_n
-    if rung < 0:
-        raise ValueError(
-            f"iter_n={iter_n} is below the engine's first iteration ({first_iter_n}); "
-            "the ramp has no rung for it"
-        )
-    return rung
-
 
 @dataclass(frozen=True)
 class ClaimUnit:
@@ -327,123 +286,6 @@ def stratified_draw(
     return taken
 
 
-def ramp_for(rung: int, schedule: "list[int]") -> int:
-    """The graduated `N` for a 0-based ramp **rung**: schedule[rung], clamped at the last one.
-
-    Takes a rung, not the engine's ``iter_n`` -- convert with :func:`rung_index` first. Keeping
-    this function 0-based and base-agnostic is what lets the gates below test the ramp itself
-    without also encoding an assumption about who calls it.
-
-    A ramp shorter than the run does not fall off the end -- it holds at its top rung, so
-    `--iterations 10` against a 3-rung ramp runs seven iterations at full size rather than
-    crashing or silently resetting to the first rung.
-    """
-    if not schedule:
-        raise ValueError("ramp schedule is empty")
-    if rung < 0:
-        raise ValueError(f"rung must be >= 0, got {rung}")
-    return schedule[min(rung, len(schedule) - 1)]
-
-
-def parse_schedule(text: str) -> list[int]:
-    """`"5,10,20"` -> `[5, 10, 20]`, rejecting a ramp that shrinks."""
-    rungs = [int(part.strip()) for part in text.split(",") if part.strip()]
-    if not rungs:
-        raise ValueError(f"empty ramp schedule: {text!r}")
-    if any(n <= 0 for n in rungs):
-        raise ValueError(f"ramp rungs must be positive: {rungs}")
-    if any(b < a for a, b in zip(rungs, rungs[1:])):
-        # A ramp that shrinks is nearly always a typo, and under `cumulative` it is also
-        # incoherent: the batch can never get smaller than what has already been drawn.
-        raise ValueError(f"ramp schedule must be non-decreasing: {rungs}")
-    return rungs
-
-
-# -------------------------------------------------------------------------------------------------
-# Draw history -- the bookkeeping `cumulative` and `reproduce` read back
-# -------------------------------------------------------------------------------------------------
-
-
-def load_draw_history(path: pathlib.Path) -> dict[int, list[str]]:
-    """iteration -> the claim_ids drawn that iteration. Empty dict if there is no history yet."""
-    path = pathlib.Path(path)
-    if not path.exists():
-        return {}
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    return {int(k): list(v) for k, v in raw.items()}
-
-
-def record_draw(iteration: int, claim_ids: "list[str]", path: pathlib.Path) -> None:
-    history = load_draw_history(path)
-    history[iteration] = sorted(claim_ids)
-    path = pathlib.Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({str(k): v for k, v in sorted(history.items())}, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-
-def resolve_batch(
-    iteration: int,
-    *,
-    n: int,
-    mode: str,
-    split: str,
-    history_path: pathlib.Path,
-    seed: int | None = None,
-    pool: "list[ClaimUnit] | None" = None,
-) -> list[ClaimUnit]:
-    """Resolve this iteration's batch and record the draw. Mirrors crc's `resolve_train_batch`.
-
-    - ``cumulative`` -- the union of every prior draw plus enough fresh units to reach `n`. Never
-      drops a unit the optimizer has already seen, which is what makes a growing batch a *growing*
-      one rather than a sequence of unrelated samples.
-    - ``fresh`` -- an independent draw of size `n`, unconstrained by history.
-    - ``reproduce`` -- re-run the immediately preceding iteration's exact set. `n` must match it,
-      so a ramp that moved cannot silently reproduce a different-sized batch.
-    """
-    if mode not in DRAW_MODES:
-        raise ValueError(f"mode must be one of {DRAW_MODES}, got {mode!r}")
-    units = list(pool) if pool is not None else claim_pool(split)
-    by_id = {u.claim_id: u for u in units}
-    history = load_draw_history(history_path)
-    rng = random.Random(SEED + iteration if seed is None else seed)
-
-    if mode == "reproduce":
-        prior = history.get(iteration - 1)
-        if not prior:
-            raise ValueError(
-                f"mode='reproduce' needs a recorded draw for iteration {iteration - 1}, found none"
-            )
-        if n != len(prior):
-            raise ValueError(
-                f"mode='reproduce' needs n == len(prior draw) ({len(prior)}), got n={n}"
-            )
-        drawn = [by_id[cid] for cid in prior if cid in by_id]
-        if len(drawn) != len(prior):
-            raise ValueError("prior draw references claim_ids absent from the pool")
-    elif mode == "cumulative":
-        already: set[str] = set()
-        for prior_iter, prior_batch in history.items():
-            if prior_iter < iteration:
-                already.update(prior_batch)
-        if n > len(units):
-            raise ValueError(f"n={n} exceeds the {split} pool size {len(units)}")
-        remaining = [u for u in units if u.claim_id not in already]
-        rng.shuffle(remaining)
-        needed = max(0, n - len(already))
-        keep = sorted(already | {u.claim_id for u in remaining[:needed]})
-        drawn = [by_id[cid] for cid in keep if cid in by_id]
-    else:  # fresh
-        if n > len(units):
-            raise ValueError(f"n={n} exceeds the {split} pool size {len(units)}")
-        drawn = sorted(rng.sample(units, n), key=lambda u: (u.claim_row_id, u.paper_bucket))
-
-    record_draw(iteration, [u.claim_id for u in drawn], history_path)
-    return drawn
-
-
 # -------------------------------------------------------------------------------------------------
 # Staging -- turn drawn units into the batch file the Runner reads
 # -------------------------------------------------------------------------------------------------
@@ -535,131 +377,76 @@ def assert_staged_size(batch_path: pathlib.Path, expected_n: int, *, label: str)
         )
 
 
-def val_inputs_for(
-    *,
-    n: int,
-    split: str,
-    run_id: str,
-    staging_root: pathlib.Path,
-    batch_root: pathlib.Path,
-    history_path: pathlib.Path,
-    source_mode: str = "corpus",
-    stratify: bool = False,
-) -> Any:
-    """A **fixed** VAL subsample, drawn once and reused by every iteration of the run.
-
-    Fixed is the whole point, and it is not a convenience. The engine's frontier is a bare scalar:
-    it compares iteration *i*'s VAL score against the best so far and steps back when the score
-    drops. Redrawing VAL each iteration would make that comparison span two different claim sets,
-    so ordinary sampling noise would read as a regression and trigger step-backs that have nothing
-    to do with the program. One draw per run, held constant.
-
-    The draw is seeded and iteration-independent (`SEED + 0`), so a resumed run reconstructs the
-    same set without needing to persist it — and `history_path` still records the exact claim_ids,
-    which is the audit trail for "which 50 claims is this number over?".
-
-    ⚠ Two VAL sizes are two different measurements. A score over a 50-claim VAL is not comparable
-    to one over the full pool, and neither is comparable to a published baseline computed over the
-    whole dev set. `--val-n` buys a real number sooner; it does not buy a comparable one.
-    """
-    from adapter import _import_engine  # noqa: PLC0415
-
-    schemas = _import_engine()
-    # OFF by default since the objective became accuracy (2026-09-07). Accuracy is a population
-    # quantity: it asks what fraction of the split's claims the program gets right, so the draw has
-    # to look like the split. A stratified VAL over-samples the rare classes and the resulting
-    # number is not the population accuracy of anything -- it is accuracy on a population that does
-    # not exist. `stratified_draw`'s own docstring said as much while the default still stratified.
-    #
-    # Kept as an opt-in because it is still the right draw for a per-class question (rare-class F1
-    # at n=50 swings on a single claim, and dev holds only 6 MISQUOTE and 6 INDIRECT). Ask for it
-    # when you want per-class resolution; do not ask for it when you want the frontier number.
-    #
-    # Narrowed as a POOL rather than drawn directly, so `resolve_batch` still owns the draw, the
-    # seeding and the `draw_history.json` audit trail. Two mechanisms writing that history would
-    # be one too many.
-    pool = None
-    if stratify:
-        pool = stratified_draw(claim_pool(split), gold_labels(split), n, seed=SEED)
-        if len(pool) < n:
-            raise ValueError(
-                f"stratified VAL draw could only fill {len(pool)} of {n} requested claims from "
-                f"split {split!r}: the objective's classes do not hold that many. Lower --val-n, "
-                "or pass stratify=False to draw from the raw pool."
-            )
-    units = resolve_batch(
-        0, n=n, mode="fresh", split=split, history_path=history_path, pool=pool
-    )
-    batch_path = pathlib.Path(batch_root) / f"{run_id}-val.json"
-    stage_batch(
-        units,
-        split=split,
-        staging_root=staging_root,
-        batch_path=batch_path,
-        source_mode=source_mode,
-    )
-    assert_staged_size(batch_path, n, label=f"VAL batch for run {run_id}")
-    return schemas.RunInputs(
-        input_ref=str(batch_path), batch_id=f"{run_id}-val", split="val"
-    )
+#: The legacy VAL roster's fingerprint: md5 of ``",".join(sorted(claim_ids))``, first 8 hex. The roster is
+#: the 50 Dev claims every run before the schedule scored (v8, v13, the gxl card); `baseline_gxl_verify`
+#: carries the same value.
+LEGACY_VAL50_MD5 = "8e73ac3e"
 
 
-def train_inputs_factory(
-    *,
-    schedule: "list[int]",
-    mode: str,
-    split: str,
-    run_id: str,
-    staging_root: pathlib.Path,
-    batch_root: pathlib.Path,
-    history_path: pathlib.Path,
-    source_mode: str = "corpus",
-    first_iter_n: int = ENGINE_FIRST_ITER_N,
-) -> Callable[[int], Any]:
-    """The engine's `train_inputs` hook: ``iter_n`` -> `RunInputs` over that iteration's batch.
+def legacy_val50_roster() -> list[str]:
+    """The 50 Dev claim ids every pre-schedule run scored, sorted.
 
-    The engine calls this with **its** iteration counter, which starts at
-    :data:`ENGINE_FIRST_ITER_N` (1), not at 0. `first_iter_n` states that base explicitly rather
-    than letting the ramp infer it -- inferring it is what skipped the cheapest rung on the first
-    real run. Draw bookkeeping (the seed and `draw_history.json` keys) stays keyed on the engine's
-    own ``iter_n`` so a history file reads the same way the run log does; only the *ramp rung* is
-    rebased.
+    Recomputed rather than read from a run folder, so it exists on every machine: it was the old draw's
+    iteration 0 in ``fresh`` mode, ``random.Random(SEED).sample(claim_pool("dev"), 50)``. The schedule
+    puts these first (``val_first``), so size-50 scores stay comparable with v8, v13 and the gxl card.
+    Refuses if the pool has moved and the recomputation no longer matches the fingerprint."""
+    import hashlib  # noqa: PLC0415
 
-    Imported lazily so this module stays importable (and selftestable) without the engine present.
-    """
+    ids = sorted(u.claim_id for u in random.Random(SEED).sample(claim_pool("dev"), 50))
+    md5 = hashlib.md5(",".join(ids).encode()).hexdigest()[:8]
+    if md5 != LEGACY_VAL50_MD5:
+        raise ValueError(
+            f"the legacy 50-claim VAL roster no longer recomputes (md5 {md5}, expected {LEGACY_VAL50_MD5}): "
+            "the Dev pool changed, so the first VAL rung would not be the claims v8, v13 and gxl were scored on"
+        )
+    return ids
 
-    def factory(iter_n: int):
+
+#: The benchmark split behind each engine split. VAL is drawn from Dev; Test stays sealed.
+SCHEDULE_SPLITS = {"train": "train", "val": "dev"}
+
+
+class SarolScheduleSource:
+    """The engine's ``ScheduleSource`` (``pool``, ``stage``) for Sarol.
+
+    Ids are ``ClaimUnit.claim_id`` (``"<row>-<bucket>"``): structure, not verdicts. Each split stages
+    under its **own** root -- ``roots["train"]`` beside the TRAIN outputs the optimizer may read,
+    ``roots["val"]`` beside the VAL outputs it may not (C6.9) -- as ``<root>/staging/<claim_id>`` and
+    ``<root>/batches/<label>.json``. ``stage`` checks the batch file holds exactly the claims asked for,
+    reading it back through the Runner's own reader (:func:`assert_staged_size`)."""
+
+    def __init__(self, *, roots: "dict[str, pathlib.Path]", source_mode: str = "corpus") -> None:
+        if set(roots) != set(SCHEDULE_SPLITS):
+            raise ValueError(f"roots must name exactly {sorted(SCHEDULE_SPLITS)}, got {sorted(roots)}")
+        self.roots = {k: pathlib.Path(v) for k, v in roots.items()}
+        self.source_mode = source_mode
+        self._units: dict[str, dict[str, ClaimUnit]] = {}
+
+    def _by_id(self, split: str) -> "dict[str, ClaimUnit]":
+        if split not in SCHEDULE_SPLITS:
+            raise ValueError(f"split must be one of {sorted(SCHEDULE_SPLITS)}, got {split!r}")
+        if split not in self._units:
+            self._units[split] = {u.claim_id: u for u in claim_pool(SCHEDULE_SPLITS[split])}
+        return self._units[split]
+
+    def pool(self, split: str) -> list[str]:
+        return sorted(self._by_id(split))
+
+    def stage(self, ids, split: str, label: str):
         from adapter import _import_engine  # noqa: PLC0415 -- engine is optional at import time
 
         schemas = _import_engine()
-        rung = rung_index(iter_n, first_iter_n=first_iter_n)
-        n = ramp_for(rung, schedule)
-        units = resolve_batch(
-            iter_n, n=n, mode=mode, split=split, history_path=history_path
-        )
-        batch_path = pathlib.Path(batch_root) / f"{run_id}-train-i{iter_n}.json"
-        stage_batch(
-            units,
-            split=split,
-            staging_root=staging_root,
-            batch_path=batch_path,
-            source_mode=source_mode,
-        )
-        assert_staged_size(
-            batch_path, n, label=f"TRAIN batch for iter {iter_n} (ramp rung {rung})"
-        )
-        return schemas.RunInputs(
-            input_ref=str(batch_path),
-            batch_id=f"{run_id}-train-i{iter_n}",
-            split="train",
-        )
-
-    return factory
-
-
-# =================================================================================================
-# Offline gates
-# =================================================================================================
+        by_id = self._by_id(split)
+        missing = [i for i in ids if i not in by_id]
+        if missing:
+            raise ValueError(f"{len(missing)} {split} id(s) are not in the {SCHEDULE_SPLITS[split]} pool")
+        units = sorted((by_id[i] for i in ids), key=lambda u: (u.claim_row_id, u.paper_bucket))
+        root = self.roots[split]
+        batch_path = root / "batches" / f"{label}.json"
+        stage_batch(units, split=SCHEDULE_SPLITS[split], staging_root=root / "staging",
+                    batch_path=batch_path, source_mode=self.source_mode)
+        assert_staged_size(batch_path, len(units), label=f"{split} batch {label}")
+        return schemas.RunInputs(input_ref=str(batch_path), batch_id=label, split=split)
 
 
 def _selftest() -> int:
@@ -749,100 +536,68 @@ def _selftest() -> int:
         ValueError,
     )
 
-    # -- the ramp ---------------------------------------------------------------------------------
-    checks += [
-        ("a ramp returns its rung for each iteration", ramp_for(0, [5, 10, 20]) == 5),
-        ("...and the next rung next", ramp_for(1, [5, 10, 20]) == 10),
-        ("...and HOLDS at the top rather than falling off the end",
-         ramp_for(9, [5, 10, 20]) == 20),
-        ("a single-rung ramp is a constant N", ramp_for(7, [25]) == 25),
-        ("'5,10,20' parses to its rungs", parse_schedule("5, 10,20") == [5, 10, 20]),
-        ("a shrinking ramp is refused, since cumulative cannot honour it",
-         _raises(lambda: parse_schedule("20,10"), ValueError)),
-        ("a zero rung is refused", _raises(lambda: parse_schedule("0,5"), ValueError)),
-        ("an empty schedule is refused", _raises(lambda: ramp_for(0, []), ValueError)),
-    ]
+    # -- the engine's schedule source (plan 2026-10-08) ------------------------------------------
+    # The draw itself is the engine's and is tested there; what crosses the seam is tested here: the
+    # pools the engine is handed, the batch files it gets back, and where each split is staged.
+    from adapter import _import_engine  # noqa: PLC0415
 
-    # -- the engine's counting base (Bug 2) -------------------------------------------------------
-    # These test the CONVERSION only. That the base really is 1 is pinned in
-    # `dispatcher._integration_checks`, against the real `run_loop` -- asserting it here too would
-    # repeat the original mistake of testing this module's assumption against itself.
-    checks += [
-        ("the engine's first iteration maps to the FIRST rung, not the second -- the whole of "
-         "Bug 2", ramp_for(rung_index(ENGINE_FIRST_ITER_N), [10, 25, 50]) == 10),
-        ("...and the second engine iteration to the second rung",
-         ramp_for(rung_index(ENGINE_FIRST_ITER_N + 1), [10, 25, 50]) == 25),
-        ("...and the third to the third, so a 3-rung ramp over 3 iterations runs all three",
-         ramp_for(rung_index(ENGINE_FIRST_ITER_N + 2), [10, 25, 50]) == 50),
-        ("a 0-based caller under the engine's base is refused rather than silently clamped -- "
-         "the failure Bug 2 wanted",
-         _raises(lambda: rung_index(0, first_iter_n=1), ValueError)),
-        ("the base is a parameter, so a caller that counts from 0 says so",
-         rung_index(0, first_iter_n=0) == 0),
-    ]
-
-    # -- draws, against a synthetic pool so the gates need no benchmark ---------------------------
-    pool = [ClaimUnit(claim_row_id=i, paper_bucket=1) for i in range(50)]
-    with tempfile.TemporaryDirectory() as tmp:
-        hist = pathlib.Path(tmp) / "draws.json"
-
-        i0 = resolve_batch(0, n=5, mode="fresh", split="dev", history_path=hist, pool=pool)
-        checks.append(("a fresh draw returns exactly n units", len(i0) == 5))
-        checks.append(("...and records the draw", set(load_draw_history(hist)) == {0}))
-
-        again = resolve_batch(0, n=5, mode="fresh", split="dev", history_path=hist, pool=pool)
-        checks.append(("the same iteration redraws identically -- the seed is iteration-keyed",
-                       [u.claim_id for u in again] == [u.claim_id for u in i0]))
-
-        i1 = resolve_batch(1, n=5, mode="fresh", split="dev", history_path=hist, pool=pool)
-        checks.append(("a different iteration draws a different sample",
-                       [u.claim_id for u in i1] != [u.claim_id for u in i0]))
+    _import_engine()
+    from engine.schedule import ScheduleError, check_example_ids, val_order  # noqa: PLC0415
 
     with tempfile.TemporaryDirectory() as tmp:
-        hist = pathlib.Path(tmp) / "draws.json"
-        c0 = resolve_batch(0, n=5, mode="cumulative", split="dev", history_path=hist, pool=pool)
-        c1 = resolve_batch(1, n=12, mode="cumulative", split="dev", history_path=hist, pool=pool)
+        _roots = {"train": pathlib.Path(tmp) / "train-side", "val": pathlib.Path(tmp) / "val-side"}
+        _src = SarolScheduleSource(roots=_roots)
+        _tp, _vp = _src.pool("train"), _src.pool("val")
+        try:
+            check_example_ids(_tp + _vp)
+            _ids_safe = True
+        except ScheduleError:
+            _ids_safe = False
+        _pick = _vp[:3]
+        _inputs = _src.stage(_pick, "val", "probe-val-n3")
+        _staged = json.loads(pathlib.Path(_inputs.input_ref).read_text(encoding="utf-8"))["claims"]
         checks += [
-            ("a cumulative batch grows to the new n", len(c1) == 12),
-            ("...and KEEPS every unit the optimizer already saw",
-             set(u.claim_id for u in c0) <= set(u.claim_id for u in c1)),
-            ("...with no duplicates", len({u.claim_id for u in c1}) == len(c1)),
+            ("the schedule source's TRAIN pool is the stageable TRAIN units, sorted and unique",
+             _tp == sorted(set(_tp)) and len(_tp) == len(claim_pool("train"))),
+            ("...its VAL pool is Dev's (311 usable), never Test's",
+             _vp == sorted(u.claim_id for u in claim_pool("dev"))),
+            ("...the two pools share no claim, which the engine also refuses",
+             not set(_tp) & set(_vp)),
+            ("...and every id is one the engine accepts (a safe path segment)", _ids_safe),
+            ("stage() hands back RunInputs with the split and the engine's label, as the engine checks",
+             _inputs.split == "val" and _inputs.batch_id == "probe-val-n3"),
+            ("...over exactly the claims asked for, read back from the batch file",
+             sorted(c["claim_id"] for c in _staged) == sorted(_pick)),
+            ("...staged under the VAL root, never beside TRAIN (C6.9)",
+             all(pathlib.Path(c["staging_dir"]).is_relative_to(_roots["val"]) for c in _staged)
+             and not _roots["train"].exists()),
+            ("stage() refuses an id that is not in the pool rather than staging a stranger",
+             _raises(lambda: _src.stage(["999999-1"], "val", "x"), ValueError)),
+            ("a source with no VAL root is refused at construction",
+             _raises(lambda: SarolScheduleSource(roots={"train": pathlib.Path(tmp)}), ValueError)),
         ]
-        c2 = resolve_batch(2, n=12, mode="cumulative", split="dev", history_path=hist, pool=pool)
-        checks.append(("a cumulative batch at an unchanged n draws nothing new",
-                       {u.claim_id for u in c2} == {u.claim_id for u in c1}))
 
-        r3 = resolve_batch(3, n=12, mode="reproduce", split="dev", history_path=hist, pool=pool)
-        checks.append(("reproduce re-runs the previous iteration's exact set",
-                       {u.claim_id for u in r3} == {u.claim_id for u in c2}))
-        checks.append(("...and refuses a mismatched n rather than silently resizing",
-                       _raises(lambda: resolve_batch(4, n=7, mode="reproduce", split="dev",
-                                                     history_path=hist, pool=pool), ValueError)))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        hist = pathlib.Path(tmp) / "draws.json"
-        checks.append(("a draw larger than the pool is refused, not silently truncated",
-                       _raises(lambda: resolve_batch(0, n=999, mode="fresh", split="dev",
-                                                     history_path=hist, pool=pool), ValueError)))
-        checks.append(("an unknown mode is refused",
-                       _raises(lambda: resolve_batch(0, n=1, mode="random", split="dev",
-                                                     history_path=hist, pool=pool), ValueError)))
-
-    # -- VAL must be ONE draw held constant, or the frontier compares two different sets ----------
-    with tempfile.TemporaryDirectory() as tmp:
-        hist = pathlib.Path(tmp) / "val_draw.json"
-        v_a = resolve_batch(0, n=10, mode="fresh", split="dev", history_path=hist, pool=pool)
-        v_b = resolve_batch(0, n=10, mode="fresh", split="dev", history_path=hist, pool=pool)
-        checks.append((
-            "a VAL draw is reproducible across calls, so every iteration scores the same claims "
-            "and a step-back means the program moved, not the sample",
-            [u.claim_id for u in v_a] == [u.claim_id for u in v_b],
-        ))
-        v_c = resolve_batch(0, n=20, mode="fresh", split="dev", history_path=hist, pool=pool)
-        checks.append((
-            "...but a different VAL size is a different measurement, not a superset",
-            [u.claim_id for u in v_c] != [u.claim_id for u in v_a],
-        ))
+    # -- the legacy 50-claim VAL roster is the first rung ----------------------------------------
+    _legacy = legacy_val50_roster()
+    # The recomputation against the file the old code wrote at the time (09-22), where this machine has
+    # it: independent of this module's own arithmetic. Absent (a VM), the md5 gate inside the helper stands.
+    _hist = pathlib.Path.home() / ".paper-trail" / "runs" / "hillclimb-2026-09-22c" / "val" / "val_draw.json"
+    _hist_ok = (sorted(json.loads(_hist.read_text(encoding="utf-8"))["0"]) == _legacy) if _hist.exists() else None
+    _order = val_order(_src.pool("val"), seed=SEED, val_first=_legacy)
+    _sizes = (50, 100, 150, 250, 311)
+    checks += [
+        ("the legacy roster recomputes to the 50 claims v8, v13 and gxl were scored on (md5 8e73ac3e)",
+         len(_legacy) == 50 and len(set(_legacy)) == 50),
+        ("...every one of them a Dev pool claim", set(_legacy) <= set(_src.pool("val"))),
+        ("...and equal to the roster file the old draw wrote on 2026-09-22"
+         + (" (file absent here: checked by md5 only)" if _hist_ok is None else ""),
+         _hist_ok is not False),
+        ("with it as val_first, the engine's VAL at size 50 IS the legacy roster",
+         sorted(_order[:50]) == _legacy),
+        ("...and each larger VAL contains the one before (nested, never a fresh sample)",
+         all(set(_order[:a]) <= set(_order[:b]) for a, b in zip(_sizes, _sizes[1:]))),
+        ("...reaching the whole Dev pool at 311", sorted(_order[:311]) == _src.pool("val")),
+    ]
 
     # -- the draw unit ----------------------------------------------------------------------------
     # -- stratified draw: rare-class support is what the macro objective actually needs ----------
@@ -970,17 +725,11 @@ def _selftest() -> int:
          _disagree == 0),
         ("...and it matches often enough to be worth having (>200 of the 255 known-gold rows)",
          _agree > 200),
-        # The default is the decision, and it INVERTED on 2026-09-07 when the objective became
-        # accuracy. Accuracy is a population quantity, so the draw has to look like the population;
-        # a stratified VAL measures accuracy on a population that does not exist and is not
-        # comparable to the 0.595 do-nothing floor. Stratifying stays available for per-class work.
-        ("VAL does NOT stratify by default -- accuracy is a population quantity",
-         inspect.signature(val_inputs_for).parameters["stratify"].default is False),
     ]
 
     # -- S24: the default reproduces the population, and the alternative demonstrably does not ----
-    # Run against the REAL dev pool and the REAL draw path (`resolve_batch(pool=None)`, which is
-    # exactly what `val_inputs_for(stratify=False)` calls), not a re-implementation of the sample.
+    # Run against the REAL dev pool and the REAL draw path (the engine's `val_order`, which is how the
+    # schedule orders VAL), not a re-implementation of the sample.
     # The stratified draw is the negative control: if both draws tracked the population, the
     # default would be cosmetic and this gate would be worth nothing.
     _dev_gold = gold_labels("dev")
@@ -993,11 +742,9 @@ def _selftest() -> int:
         return sum(1 for g in got if g == "ACCURATE") / len(got) if got else 0.0
 
     _population_share = _accurate_share(_dev_pool)
-    with tempfile.TemporaryDirectory() as tmp:
-        _unstrat = resolve_batch(
-            0, n=_n_val, mode="fresh", split="dev",
-            history_path=pathlib.Path(tmp) / "draws.json", pool=None,
-        )
+    # The engine's VAL order with no val_first: the random part of every VAL beyond the legacy 50.
+    _by_cid = {u.claim_id: u for u in _dev_pool}
+    _unstrat = [_by_cid[c] for c in val_order(sorted(_by_cid), seed=SEED)[:_n_val]]
     _strat = stratified_draw(_dev_pool, _dev_gold, _n_val, seed=SEED)
 
     # +/- 0.08 is ~2 standard errors of a p=0.6 share at n=140 (se = 0.041), so this is "within
@@ -1006,7 +753,7 @@ def _selftest() -> int:
     checks += [
         ("the dev pool really is ~59.5% ACCURATE -- the do-nothing floor the objective quotes",
          abs(_population_share - 0.595) < 0.01),
-        ("the DEFAULT (unstratified) VAL draw reproduces the population's ACCURATE share",
+        ("the schedule's VAL order (unstratified) reproduces the population's ACCURATE share",
          abs(_accurate_share(_unstrat) - _population_share) < _tol),
         ("...while the stratified draw does NOT -- which is why it is no longer the default",
          abs(_accurate_share(_strat) - _population_share) >= _tol),
@@ -1014,6 +761,20 @@ def _selftest() -> int:
 
     checks.append(("a unit's claim_id carries both row and bucket, so two buckets of one claim "
                    "never collide", ClaimUnit(7, 31).claim_id == "7-31"))
+
+    # Every remaining importer of this module still loads now that the old draw is gone (plan
+    # 2026-10-08). In a fresh interpreter, so a name deleted here can't hide behind one this process
+    # already imported.
+    import subprocess  # noqa: PLC0415
+
+    _importers = ("canary", "run_baseline", "baseline_gxl_verify", "parse_verdict", "dispatcher")
+    _probe = subprocess.run(
+        [sys.executable, "-c", "import sys; sys.path[:0] = sys.argv[1:3]; "
+         + "; ".join(f"import {m}" for m in _importers), str(_HERE), str(_SCRIPTS)],
+        capture_output=True, text=True,
+    )
+    checks.append((f"every remaining importer of sampling.py still loads ({', '.join(_importers)})",
+                   _probe.returncode == 0))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

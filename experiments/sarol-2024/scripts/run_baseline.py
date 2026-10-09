@@ -4,11 +4,12 @@ This is deliberately NOT the optimizer loop. It answers one question: what does 
 starting-point program actually score against Sarol, where no real number existed before. No
 program edits, no frontier, no iterations — materialize the freeze, dispatch the judge, score.
 
-**Sizing.** `--n` draws from the split's stageable pool via `optimizer/sampling.py`, so the draw is
-seeded, recorded, and reproducible. The full dev pool is 255 (not 316: a row with no evidence
-annotation on its cited bucket has no gold label to score against — see `sampling.py`'s docstring).
-At the measured ~$1.00/session a full-pool baseline is ~$255 and ~7 hours, so `--n` exists to buy a
-real number sooner.
+**Sizing.** `--n` draws from the split's stageable pool (`optimizer/sampling.py`) with the engine's
+seeded one-off draw (`engine.schedule.fresh_sample`, seed `sampling.SEED`), so the draw is seeded,
+recorded in `draw_history.json` beside the outputs, and reproducible. The full Dev pool is 311 usable
+claims (of 316; the other 5 cannot be staged — see `sampling.py`'s docstring). A full-pool baseline is
+311 grading sessions: on the Haiku 5.5 judge and the 2.1.295 images about $0.015 each, so a few dollars,
+and about 50 seconds a session per worker, so `--n` still buys a real number sooner.
 
 ⚠ **A small `--n` is not comparable to the published baselines.** `IRRELEVANT` is ~1.8% of gold, so
 a 25-claim draw is expected to contain zero of them; macro-F1 over three classes then divides by
@@ -123,16 +124,18 @@ def main(argv: "list[str] | None" = None) -> int:
         return 2
 
     # -- draw + stage ----------------------------------------------------------------------------
+    # Puts the engine on sys.path (and fails with the adapter's own message if it is absent).
+    adapter._import_engine()
+    from engine.schedule import fresh_sample  # noqa: PLC0415 -- the engine's one-off seeded draw
+
     pool = sampling.claim_pool(args.split)
     print(f"pool({args.split}) = {len(pool)} stageable claims")
-    units = sampling.resolve_batch(
-        0,
-        n=args.n,
-        mode="fresh",
-        split=args.split,
-        history_path=out_root / "draw_history.json",
-        pool=pool,
-    )
+    by_id = {u.claim_id: u for u in pool}
+    if args.n > len(by_id):
+        raise SystemExit(f"--n {args.n} exceeds the {args.split} pool size {len(by_id)}")
+    drawn_ids = fresh_sample(sorted(by_id), args.n, seed=sampling.SEED, iteration=0)
+    (out_root / "draw_history.json").write_text(json.dumps({"0": drawn_ids}, indent=2) + "\n", encoding="utf-8")
+    units = sorted((by_id[i] for i in drawn_ids), key=lambda u: (u.claim_row_id, u.paper_bucket))
     batch = sampling.stage_batch(
         units,
         split=args.split,
@@ -142,8 +145,6 @@ def main(argv: "list[str] | None" = None) -> int:
     print(f"drew and staged {len(units)} claims -> {batch}")
 
     # -- materialize the freeze ------------------------------------------------------------------
-    # Puts the engine on sys.path (and fails with the adapter's own message if it is absent).
-    adapter._import_engine()
     from engine.materialize import materialize  # noqa: PLC0415
     from engine.schemas import ManifestEntry, ProgramManifest, RunInputs  # noqa: PLC0415
 

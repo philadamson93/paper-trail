@@ -63,7 +63,11 @@ __all__ = [
 #: The `agentic-label-opt` commit this experiment requires, in full — short SHAs are ambiguous
 #: across repos and `cat-file -e` will happily resolve a prefix to the wrong object in a big one.
 #:
-#: Bumped 2026-10-07 to `993dda1` (B8 + B9, stage 14): a run's start chosen by the engine's rule
+#: Bumped 2026-10-08 to `ac7296e` (stage 15): the engine's deterministic data schedule (`engine.schedule`:
+#: TRAIN grows and retires claims answered right twice running, VAL grows nested, the best is re-graded when
+#: VAL grows; `DriverConfig.schedule`). Pinned on the engine's `feat/engine-data-schedule` branch before it
+#: landed (Phil, 2026-10-08: build against the built engine); re-pin if the landing rewrites the commit.
+#: Earlier: 2026-10-07 to `993dda1` (B8 + B9, stage 14): a run's start chosen by the engine's rule
 #: (`engine.run_start.resolve_start`: newest good, seed or a tag; HEAD must hold it), the sealed optimizer's
 #: feedback staged by the engine at `/workspace/ro/feedback` (`ContainedOptimizerAgent(iter_root)`), and
 #: `bb018e5`, which puts HEAD back on the last good version after a failed one.
@@ -78,7 +82,7 @@ __all__ = [
 #: setup fingerprint (S2), contained optimizer (A), program runner (PR), the IPv4-only proxy (A13), and
 #: the contract-file copy-back rule plus paper-trail's seal replay on both grants (PT-A D12, D7).
 #: Earlier: 2026-09-18 from `82f547d`.
-ENGINE_PIN = "993dda11328236182b48050ecfcedcb69e5f7470"
+ENGINE_PIN = "ac7296eab46887816b2aec5c782469b86159dff2"
 
 #: What the pin buys, in one line, so the next person to bump it knows what they must not drop.
 ENGINE_PIN_REASON = (
@@ -87,7 +91,8 @@ ENGINE_PIN_REASON = (
     "IPv4-only allowlist proxy (A13), the copy-back refusal of a contract-file edit (PT-A D12), and the run "
     "bookkeeping: version lock, run-start reset, notes history, failed-version records (B), and the shared driver "
     "with the setup check at run start and the engine-version check (C0, C-core), and the run's start "
-    "chosen by the engine's rule plus the optimizer's feedback staged by the engine (B8, B9)"
+    "chosen by the engine's rule plus the optimizer's feedback staged by the engine (B8, B9), and the "
+    "deterministic TRAIN/VAL data schedule (stage 15)"
 )
 
 #: Set to "1" to run against an engine that does not contain the pin. Same switch the shell uses.
@@ -154,6 +159,12 @@ CAPABILITIES = (
     "isolation.contained_agent:ContainedOptimizerAgent(validation_roots)",
     "isolation.contained_agent:ContainedOptimizerAgent(run_summary_path)",
     "isolation.contained_agent:FEEDBACK_PATH", "isolation.feedback:stage_feedback",
+    # Stage 15 (2026-10-08): the data schedule. The first three are the engine's own list for a consumer
+    # re-pinning (`engine.schedule.DATA_SCHEDULE_CAPABILITIES`), written out so an engine that lacks the
+    # module fails this check rather than an import; the rest are what the dispatcher and run_baseline call.
+    "engine.schedule:DataSchedule", "engine.loop:run_loop(schedule)", "engine.driver:DriverConfig.schedule",
+    "engine.schedule:ScheduleConfig", "engine.schedule:NoiseCheck", "engine.schedule:parse_size_schedule",
+    "engine.schedule:ScheduleError", "engine.schedule:fresh_sample", "engine.schedule:val_order",
 )
 
 
