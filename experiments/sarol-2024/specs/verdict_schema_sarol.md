@@ -83,8 +83,8 @@ answers **no** and you walk on. The write-down licenses the label, not the refus
 A gate disposed of in prose — "not applicable", "relevant to the paper", "no scope difference" — has
 not been answered in either direction, and prose can never fire one.
 
-**Fourth, three rules from further down this file decide more claims than any gate does, so apply
-them inside every gate rather than after the walk. — house text**
+**Fourth, four rules decide more claims than any gate does, so apply them inside every gate rather
+than after the walk. — house text**
 
 - **The clause is what the marker is attached to** — not the sentence around it. Background framing
   (what the literature holds, how many studies exist, what a field focuses on, how broad a problem
@@ -96,6 +96,12 @@ them inside every gate rather than after the walk. — house text**
 - **Three bars are not in the scheme and may not be applied under any gate:** that the source must use
   the citing sentence's causal framing; that it must show a particular method before a claim counts as
   supported; and that a hedged source sentence cannot support a citing clause.
+- **The citing authors' own study is not this source's content.** When the clause reports what the
+  citing authors themselves did — first person, "we used", "we drew", "our cohort", "here we" —
+  the source is cited for the method, dataset, tool or definition they borrowed. That is the whole
+  burden: does a passage show the source is, or describes, that method or dataset? The citing
+  study's own counts, subjects, cell types and settings are not charged to the source at any gate.
+  They are not a differing number at gate 4 and not a `population` shortfall at gate 7.
 
 1. **IRRELEVANT** — no passage you were given addresses the subject the citation is attached to.
 
@@ -179,6 +185,15 @@ them inside every gate rather than after the walk. — house text**
    reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
    true. Silence never contradicts.
 
+   **One case where a different value always opposes: the cited study's own design. — house text**
+   Sometimes the clause describes how the cited study itself was run: the subjects it used (species,
+   strain, age, sex), its sample, dose, duration or site. If a passage states that same attribute of
+   the source's own study with a value that excludes the clause's, the passage contradicts the
+   clause. "Eight to nine-week-old mice" against "the 6–11-month-old mice" is an example, because the
+   paper's account of its own design is the fact. Quote both values. This covers design attributes
+   only. A clause about the study's *results* is tested as above. A clause about the citing authors'
+   own study is not this source's content (see the preamble).
+
    **Write the clash down with the clause quoted verbatim, not restated. — house text**
    `gate 3: passage '<quote>'; clause '<verbatim quote of the marker-attached clause>'; both cannot
    be true because <reason>`. If you had to strengthen the clause to make it clash — adding *all*,
@@ -186,12 +201,23 @@ them inside every gate rather than after the walk. — house text**
    subgroup — you are contradicting your restatement, not the clause, and this gate answers **no**.
    A passage reporting that a quantity differs across subgroups does not oppose a clause that never
    denied it.
-4. **MISQUOTE** — a number or percentage in the citing sentence differs from the number in a passage.
-   Once you have identified a numeric mismatch, the label is MISQUOTE; do not re-describe a numeric
-   mismatch as a scope or emphasis problem and route it to OVERSIMPLIFY. **This gate does not ask
-   *why* the figures differ.** Rounding, a different cut of the data, a figure the citing authors
-   re-estimated, a disagreement about the right number rather than a copying slip — all of them are
-   MISQUOTE. "At least 50%" against a source's "at least 41%" is MISQUOTE, not a support gap.
+4. **MISQUOTE** — a number or percentage the citing sentence attributes to this source differs from
+   the source's number for **the same quantity**. Once you have such a mismatch, the label is
+   MISQUOTE; do not re-describe it as a scope or emphasis problem and route it to OVERSIMPLIFY.
+   "At least 50%" against a source's "at least 41%" for the same measure is MISQUOTE, not a support gap.
+
+   **The write-down is the test. — house text** `gate 4: clause '<number> <the words it measures>';
+   passage '<number> <the words it measures>' at L..`. The two "words it measures" must name the same
+   outcome, endpoint, subgroup and unit. Three things answer **no**:
+   - **A passage prints the clause's figure.** If any passage gives the clause's number for the
+     clause's quantity, the source states it. A different figure elsewhere in the window belongs to
+     another endpoint, subgroup or timepoint, and that is not a misquote of this one.
+   - **The number belongs to the citing study.** A count of what the citing authors did themselves,
+     such as "we drew data from eight cohorts" or "we enrolled 40 mice", is not a figure quoted from
+     this source. That holds even where the source's own count differs.
+   - **Approximation.** When either figure is marked approximate (`∼`, about, approximately, around,
+     nearly, roughly), a difference of one unit in the last printed digit is that approximation, not
+     a misquote: "∼11%" against "∼10%".
 5. **INDIRECT / INDIRECT_NOT_REVIEW** — the passage that supports the clause carries its own citation
    marker for the fact — `(12)`, `5-8`, `(Ota et al., 2009)` — so this source is relaying the fact
    rather than reporting it. INDIRECT if the cited paper is itself a review, INDIRECT_NOT_REVIEW
@@ -218,8 +244,7 @@ them inside every gate rather than after the walk. — house text**
    (c) **one specific thing the citing sentence's scope covers and the passage's scope excludes.** All
    three, in `paper_value`, `claim_value` and `nuance`. **If you cannot name (c), this gate does not
    fire — go to test 7.** Worked: source lists four symptoms, citing sentence adds "fevers" → (c) is
-   *fevers*. Source says "a range of age-related processes", citing sentence says "age-related
-   processes" → (c) is *an age-related process outside the range the source lists*. Source reports one
+   *fevers*. Source reports one
    enzyme in two cancers, citing sentence says "protease activity and patient outcomes" → (c) is
    *a protease other than that enzyme*.
 
@@ -246,11 +271,21 @@ them inside every gate rather than after the walk. — house text**
    an excluded member, and this gate does not fire** — go to test 7.
 
    **An enumeration or a ranking is a stated scope, not silence. — house text** Where the passage
-   closes a list — "four symptoms: A, B, C and D", "in two cancers", "the two most frequently
-   reported were A and B" — a member the enumeration leaves out is ruled out *by the enumeration*,
-   and it is a valid (c). Quote the enumeration verbatim and name the member it closes out. This is
-   the one case where "the passage does not list it" is a finding rather than window silence, and it
-   is what the first worked example above is.
+   closes a list — "four symptoms: A, B, C and D", "the two most frequently reported were A and B"
+   — a member the enumeration leaves out is ruled out *by the enumeration*, and it is a valid (c)
+   **when the citing sentence prints that member by name**. Quote the enumeration verbatim and name
+   the member it closes out. This is the one case where "the passage does not list it" is a finding
+   rather than window silence, and it is what the first worked example above is.
+
+   **A plural is satisfied by two. — house text** When (b) is a plural or carries a generality word
+   ("diverse", "various", "several", "multiple", "many", "a range of", "cancers", "studies") and
+   does not itself print the thing you would name as (c), count the members of (b) your passages
+   assert the predicate of. Write `gate 6: (b) '<plural>'; passages assert it of <m1> at L.., <m2>
+   at L..`. **Two or more members means this gate answers no.** The clause's plural summarises
+   those members and does not widen them. A passage's list is the list your window returned, not
+   the paper's. Go to test 7. An unprinted (c) may be named only when your passages assert the
+   predicate of exactly **one** member, as in "one enzyme" or "a single infusion of one antibody". A
+   member the citing sentence prints by name is unaffected by this count.
 
    **Five things that are not this gate, because none of them widens a set.** Do not fire OVERSIMPLIFY
    on any of them.
@@ -263,9 +298,9 @@ them inside every gate rather than after the walk. — house text**
      referents are meant. If (c) would be a thing that does not exist or that the sentence is not
      talking about, you have found a wording delta, not a widening. **ACCURATE.**
      ⚠ **This exclusion does not cover a dropped quantifier over the finding's own referents.
-     — house text** Where the passage bounded *what the finding is about* — "a range of", "some",
-     "in two cancers", "four of the studies", "one enzyme" — and the citing sentence drops that
-     bound, the set of referents is genuinely wider and gate 6 fires.
+     — house text** Where the passage bounded *what the finding is about* to a single referent, as in
+     "one enzyme" or "in one patient", and the citing sentence drops that bound, the set of referents
+     is genuinely wider and gate 6 fires. A bound of two or more is the plural rule above.
    - **A bound on whom, where or when the source measured. — house text** This is the commonest
      wrong gate-6 fire this program makes, and it is not a widened referent set. A study population,
      a cohort, enrolment criteria, a clinical setting, a geography, an anatomical subregion, a
@@ -366,8 +401,8 @@ them inside every gate rather than after the walk. — house text**
      value of the clause's own predicate → **gate 1, IRRELEVANT.** A matching subject does not save
      it; gate 1 fires on the axis, not the topic. Silence on the predicate alone still does not
      qualify — a mismatch needs a passage that asserts the *other* axis.
-   - a number or percentage in the citing sentence differs from a number in a passage → **gate 4,
-     MISQUOTE.**
+   - a number or percentage in the citing sentence differs from the passage's number for the same
+     quantity, and gate 4's write-down holds → **gate 4, MISQUOTE.**
 
 8. **ACCURATE** — none of the above fires. A passage is consistent with the clause, or the passages
    are plainly about the clause's own entities and relationship and the window simply did not return
