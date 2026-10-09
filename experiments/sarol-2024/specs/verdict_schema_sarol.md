@@ -71,12 +71,15 @@ gate that produced it was not chosen by this order.
 
 **Third, a gate fires on a finding you can quote, and silence is not a finding. — house text** Your
 passages are a keyword-selected sliver of the article (the subset section below has the numbers), so
-*my passages do not mention X* is a fact about the window and never about the paper. Gates 1, 6 and 7
+*my passages do not mention X* is a fact about the window and never about the paper. Gates 1, 2, 6 and 7
 each name a label on the strength of a positive finding, so each one has a write-down you must be able
 to produce **in order to fire it**. Produce it and the gate fires; fail to produce it and the gate
 answers **no** and you walk on. The write-down licenses the label, not the refusal.
 
 - **Gate 1** needs a predicate axis written down and no passage found on it — see test 1.
+- **Gate 2** needs a list the clause prints, one member carried at a quoted line and another named
+  nowhere in the window — see test 2. That one absence is a finding, because the member's name was
+  in the search.
 - **Gate 6** needs a passage's own restriction word and a referent the clause prints that it excludes — see test 6.
 - **Gate 7** needs a quoted passage sentence that asserts something weaker — see test 7.
 
@@ -92,7 +95,8 @@ than after the walk. — house text**
   source, and its scope words are not this source's scope. Quote the clause before any gate.
 - **You may not fail a clause element-by-element.** Splitting the clause into assertions and charging
   the source for the ones your window does not match is the single commonest way this program
-  produces a wrong label.
+  produces a wrong label. The one exception is gate 2's list test: a printed list member that no
+  passage names is decided there, as ETIQUETTE, before any silence rule applies.
 - **Three bars are not in the scheme and may not be applied under any gate:** that the source must use
   the citing sentence's causal framing; that it must show a particular method before a claim counts as
   supported; and that a hedged source sentence cannot support a citing clause.
@@ -149,28 +153,29 @@ than after the walk. — house text**
    exists to catch. Shared vocabulary is not relevance.
 2. **ETIQUETTE** — you cannot tell which part of the citing sentence this source is being cited for.
 
-   **The bound test — house text, and it is two questions in order.**
+   **The bound test — house text, and it is one question: does the marker-attached clause name
+   parallel items that your passages carry only some of?** It applies to every marker — a lone
+   `[CIT]` or `[[CIT]]` as much as one in a cluster. The commonest ETIQUETTE on this benchmark is a
+   single marker closing a list of several named things, of which the cited paper is about one.
 
-   **(i) Does this marker share its position with a sibling?** Yes when you can quote one of:
-   `multi_cit_context=grouped`; a sibling inside the same bracket or parenthesis as the marker
-   (`[10,[CIT]]`, `(Koch et al., [OTHER_CIT]; Linterman et al., [CIT])`); a range tail (`[[CIT]–1`);
-   or an author-year list the text never closes (`(Inden et al., [CIT];`). **No** when the only
-   siblings are `[OTHER_CIT]` markers standing at a *different* position, each closing its own clause
-   (`... in the Lusaka programme,[OTHER_CIT] as in other programmes.[CIT]`) — the marker-attached
-   clause rule already gives this source only its own clause — and no when the text merely ends in a
-   clip (`[[CIT],`, `[CIT];`) with nothing else quotable. If (i) is no, gate 2 answers no.
+   **Items** are the members of a list the clause prints — two or more coordinated noun phrases
+   that each name a *different* thing: genes or proteins (`NLRP3, NLRP6, and NLRP12`, `BRCA2 and
+   DSS1`), drugs or vaccines, diseases or outcomes (`anxiety, depression and mortality`), species,
+   loci, assays, or two figures for two different products. Two words for one thing are one item
+   (`overweight and obesity`, `EMT/MET`), and a modifier, a mechanism or a detail of how is not an
+   item. If the clause prints no such list, gate 2 answers **no**.
 
-   **(ii) Do your passages carry the whole marker-attached clause?** List the clause's items — each
-   member of a list it asserts, each conjunct (`B-cell and T-cell`, `T-bet, IRF4, Bcl6 and PPARγ`,
-   `breast, lung, liver and colon`) — and the passage line that carries each. Write
-   `gate 2: sibling <quote>; items <...>; carried <items at L..>; not carried <items>`.
-   - **Every item carried** → gate 2 answers **no**. The whole clause is this source's burden; walk on.
-     A grouped citation whose source backs the entire clause is ordinary joint citation, and this
-     benchmark labels it by the later gates (usually ACCURATE).
-   - **Some items carried and some not** → **ETIQUETTE; stop here.** The clause is shared with
-     co-cited sources and nothing in the sentence says which part is this one's — that is exactly
-     "unclear what is being cited from the reference article". Do **not** hand the uncarried items
-     to the siblings and emit ACCURATE for the remainder; that carve-out is this gate's own finding
+   An item is **carried** when some passage names it — by name, abbreviation or close synonym — and
+   asserts the clause's predicate of it or reports on it. It is **not carried** when no passage in
+   your window names it at all. A list member is a printed name the keyword search was looking for,
+   so its total absence from the window is a finding about which part the paper covers, not the
+   retrieval silence gate 8 absorbs. Write
+   `gate 2: items <...>; carried <items at L..>; not carried <items>`.
+   - **Every item carried** → gate 2 answers **no**; walk on.
+   - **Some items carried and some not named anywhere** → **ETIQUETTE; stop here.** The marker
+     closes a list and the paper is about only part of it — that is exactly "unclear what is being
+     cited from the reference article". Do **not** call the uncarried items retrieval silence or hand
+     them to siblings and emit ACCURATE for the remainder; that carve-out is this gate's own finding
      written under the wrong label.
    - **No item carried** → gate 2 answers no; walk on and let gates 7 and 8 decide.
 
@@ -208,7 +213,7 @@ than after the walk. — house text**
 
    **The write-down is the test. — house text** `gate 4: clause '<number> <the words it measures>';
    passage '<number> <the words it measures>' at L..`. The two "words it measures" must name the same
-   outcome, endpoint, subgroup and unit. Three things answer **no**:
+   outcome, endpoint, subgroup and unit. Four things answer **no**:
    - **A passage prints the clause's figure.** If any passage gives the clause's number for the
      clause's quantity, the source states it. A different figure elsewhere in the window belongs to
      another endpoint, subgroup or timepoint, and that is not a misquote of this one.
@@ -218,6 +223,9 @@ than after the walk. — house text**
    - **Approximation.** When either figure is marked approximate (`∼`, about, approximately, around,
      nearly, roughly), a difference of one unit in the last printed digit is that approximation, not
      a misquote: "∼11%" against "∼10%".
+   - **Rounding.** Round the passage's figure to the precision the clause prints (whole units, or
+     tens when the clause's figure is marked approximate and ends in 0). If that gives the clause's
+     figure, it is a rounding, not a misquote: "53%" or "∼50%" against "52.5%".
 5. **INDIRECT / INDIRECT_NOT_REVIEW** — the passage that supports the clause carries its own citation
    marker for the fact — `(12)`, `5-8`, `(Ota et al., 2009)` — so this source is relaying the fact
    rather than reporting it. INDIRECT if the cited paper is itself a review, INDIRECT_NOT_REVIEW
@@ -355,6 +363,8 @@ than after the walk. — house text**
    and the verdict is **ACCURATE**. Counter-worked: a clause about the N501Y mutation increasing ACE2
    binding affinity, against a window that reports ACE2-binding affinity for RBD mutations at several
    lines and never writes "N501Y" — subject named, agent not, so **ACCURATE**, not a shortfall.
+   (When the clause lists several agents or subjects and the window names some of them and not the
+   others, gate 2 has already answered ETIQUETTE; this paragraph does not reach it.)
    Worked: a clause about bortezomib causing vacuolation in DRG satellite cells, against a window
    where several passages discuss mitochondrial damage and apoptosis and none names bortezomib, DRG
    or satellite cells — the shared axis is why gate 1 did not fire, and the missing agent is why this
@@ -428,7 +438,7 @@ When `multi_cit_context == "grouped"`, the sentence's *other* clauses — the on
 
 A sibling you have *inferred* from the shape of the sentence is not a sibling. "A sibling citation may cover the remainder", "the rest is presumably cited elsewhere", "this source's portion is the first three items" — written against a lone closed `[CIT]` or `[[CIT]]` — is you supplying the co-citation. Without a quotable trigger the whole marker-attached clause goes down the ladder as this source's burden.
 
-**This section narrows across clauses, never inside one. — house text** A clause shared with co-cited sources whose items your passages carry only in part is gate 2's case (ETIQUETTE), not a burden to narrow here.
+**This section narrows across clauses, never inside one. — house text** A clause whose list items your passages carry only in part is gate 2's case (ETIQUETTE) whether or not it is shared with co-cited sources, not a burden to narrow here.
 
 ## 3-way collapse
 
