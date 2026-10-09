@@ -52,7 +52,7 @@ EGRESS_ALLOWED_HOSTS: tuple[str, ...] = ("api.anthropic.com",)
 
 #: The grader image, built from the engine's isolation Dockerfile. The tag names the Claude Code version
 #: inside it; the engine resolves it to ``name:version@sha256:…`` and checks the claim.
-SHIPPING_IMAGE_TAG = "paper-trail-isolation:2.1.277"
+SHIPPING_IMAGE_TAG = "paper-trail-isolation:2.1.295"
 
 #: A digest-form stand-in for selftests that never start a container.
 FAKE_IMAGE = SHIPPING_IMAGE_TAG + "@sha256:" + "0" * 64

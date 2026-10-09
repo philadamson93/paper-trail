@@ -135,14 +135,14 @@
       "why": "Setup pins (engine S2, adopted by PT-A 2026-10-01), one per sealed-session kind and platform: the fingerprint of what each session runs on (image digest and claimed version, identity rule, mounts by container path and role, profile and hosts, env names, posture, tools, model, option names, and for the optimizer its allowed-edit patterns). A session refuses to start unless its fingerprint equals this pin. Computed with `sarol_program.py --print-pins` under the retrieval profile. The linux-x86_64 pins (the VM) are owed: the image digest differs per platform.",
       "program": {
         "darwin-arm64": {
-          "hash": "fcc75fddd10f310b5691251f44d8f9b648b7fa8c801673a13d1103dde354a4d5",
-          "computed": "2026-10-08 (judge model claude-haiku-5-5, replacing the haiku alias that resolved to Haiku 4.5), darwin-arm64 Mac, images paper-trail-isolation:2.1.277 and paper-trail-optimizer:2.1.277"
+          "hash": "4fc6447833a4070e26ef749ac7cf003b0c5fdee704efeeeaa8833ac88dc96c24",
+          "computed": "2026-10-08 (images rebuilt on Claude Code 2.1.295, which prices Haiku 5.5; the data schedule: the optimizer told of train_schedule.json; plan 2026-10-08-paper-trail-adopts-data-schedule), darwin-arm64 Mac, images paper-trail-isolation:2.1.295 and paper-trail-optimizer:2.1.295. Was fcc75fdd"
         }
       },
       "optimizer": {
         "darwin-arm64": {
-          "hash": "4330c23ad481dcec197ef39cf3302156c9aec32e2f4d1af55cf97818c98cdda8",
-          "computed": "2026-10-07 (B9: the engine stages the feedback at /workspace/ro/feedback, replacing the /workspace/ro/in/feedback input), darwin-arm64 Mac, images paper-trail-isolation:2.1.277 and paper-trail-optimizer:2.1.277"
+          "hash": "53635b2cd5abed8ba13a79c10bb910ff880f05b0c99d53adbb605824eb711c5e",
+          "computed": "2026-10-08 (images rebuilt on Claude Code 2.1.295; the optimizer prompt names train_schedule.json in its feedback folder; plan 2026-10-08-paper-trail-adopts-data-schedule), darwin-arm64 Mac, images paper-trail-isolation:2.1.295 and paper-trail-optimizer:2.1.295. Was 4330c23a"
         }
       }
     }

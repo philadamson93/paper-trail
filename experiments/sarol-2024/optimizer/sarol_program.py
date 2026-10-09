@@ -646,7 +646,7 @@ def _selftest() -> int:
     import tempfile as _tempfile  # noqa: PLC0415
 
     os.environ.setdefault(TOKEN_ENV_NAME, "selftest-token")
-    fake_image = "paper-trail-isolation:2.1.277@sha256:" + "0" * 64
+    fake_image = "paper-trail-isolation:2.1.295@sha256:" + "0" * 64
     checks: list[tuple[str, bool]] = []
 
     with _tempfile.TemporaryDirectory(dir=pathlib.Path.home() / ".cache") as td:

@@ -514,7 +514,7 @@ def _selftest() -> int:
             os.environ.setdefault(sarol_program.TOKEN_ENV_NAME, "selftest-token")
             real_payload = pin(
                 profile="retrieval", repeat=1, claim=real_pin_claim, program_store=adapter.SarolProgramStore(),
-                image="paper-trail-isolation:2.1.277@sha256:" + "0" * 64,
+                image="paper-trail-isolation:2.1.295@sha256:" + "0" * 64,
                 _program_runner_private={"_session_factory": world.session, "_stack_factory": world.stack,
                                          "_docker": world},
             )
