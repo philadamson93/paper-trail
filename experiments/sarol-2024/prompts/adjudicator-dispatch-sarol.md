@@ -59,7 +59,7 @@ whole test; if the cited paper is itself a review, prefer INDIRECT, otherwise
 INDIRECT_NOT_REVIEW. CONTRADICT requires a verbatim source excerpt that opposes the claim — a source
 that is merely *silent* is not a contradiction.
 
-**3. Populate `paper_value` and `claim_value`.** For MISQUOTE, the two numbers. For OVERSIMPLIFY, the two *scope expressions* gate 6 requires — the one quoted from the passage and the one quoted from the citing sentence — with the excluded member named in `nuance`. If you cannot fill all three for an OVERSIMPLIFY, gate 6 did not fire and the label is wrong. (Extractor may have pre-filled these; confirm or correct.)
+**3. Populate `paper_value` and `claim_value`.** For MISQUOTE, the two numbers. For OVERSIMPLIFY, the two quotes gate 6 requires — the passage's own restriction (*only*, *limited to* …) and the referent the citing clause prints that it excludes. If you cannot fill both for an OVERSIMPLIFY, gate 6 did not fire and the label is wrong. (Extractor may have pre-filled these; confirm or correct.)
 
 **4. Multi-cit rule.** If `multi_cit_context == "grouped"`:
 - Clauses of the sentence that a sibling marker closes are not this source's burden.

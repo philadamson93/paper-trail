@@ -77,7 +77,7 @@ to produce **in order to fire it**. Produce it and the gate fires; fail to produ
 answers **no** and you walk on. The write-down licenses the label, not the refusal.
 
 - **Gate 1** needs a predicate axis written down and no passage found on it — see test 1.
-- **Gate 6** needs a named excluded member the passage's own scope rules out — see (c) in test 6.
+- **Gate 6** needs a passage's own restriction word and a referent the clause prints that it excludes — see test 6.
 - **Gate 7** needs a quoted passage sentence that asserts something weaker — see test 7.
 
 A gate disposed of in prose — "not applicable", "relevant to the paper", "no scope difference" — has
@@ -235,96 +235,25 @@ than after the walk. — house text**
    window is a sentence crediting someone else. **Name the unmarked passages you checked and the
    entities each carries, and read each passage's own markers off that passage** — a marker list
    belonging to a neighbouring line is not evidence about this one.
-6. **OVERSIMPLIFY** — a passage supports the clause, but the citing sentence asserts the finding
-   over a **larger set of things** than the passage does. The set is of real-world referents —
-   populations, conditions, diseases, analytes, timepoints, list items — not of words.
+6. **OVERSIMPLIFY** — a passage itself restricts the finding, in its own words, and the citing
+   clause asserts the finding of something that restriction rules out.
 
-   **The bound test, and it is the whole gate: name the excluded member.** Write down (a) the scope
-   expression quoted from the passage, (b) the scope expression quoted from the citing sentence, and
-   (c) **one specific thing the citing sentence's scope covers and the passage's scope excludes.** All
-   three, in `paper_value`, `claim_value` and `nuance`. **If you cannot name (c), this gate does not
-   fire — go to test 7.** Worked: source lists four symptoms, citing sentence adds "fevers" → (c) is
-   *fevers*. Source reports one
-   enzyme in two cancers, citing sentence says "protease activity and patient outcomes" → (c) is
-   *a protease other than that enzyme*.
+   **The bound test, and it is the whole gate: two quotes. — house text** Write
+   `gate 6: passage '<restriction>' at L..; clause names '<referent>'`. The left quote must contain
+   one of the passage's own restriction words governing the finding the clause cites — *only*,
+   *exclusively*, *limited to*, *restricted to*, *specific to* — and the right quote must be a
+   referent the **citing clause prints by name** that this restriction excludes. Both quotes, or the
+   gate answers **no** and you go to test 7. Put the two quotes in `paper_value` and `claim_value`.
 
-   **If you have already named a candidate (c) anywhere — in an earlier gate's reason, in `nuance`,
-   in `paper_value`, in `claim_value` — then this gate answered yes**, and writing it under a later
-   heading does not move it there. — house text
+   **A clause broader than your passages is not this gate. — house text** A plural or generality
+   word ("diverse cancers", "various bNAbs", "stem cell therapies"), a list item your passages do not
+   carry, a dropped study population, cohort, setting or timepoint, a confident summary of a hedged
+   finding, or the same finding in other words: none of these is a restriction the passage states,
+   and none of them fires gate 6. When a passage asserts the clause's predicate of any member of the
+   clause's set, the clause is summarising that finding, and this benchmark labels it ACCURATE.
+   It is not a gate 7 shortfall either — gate 7's containment test calls a passage set inside the
+   clause's set ACCURATE.
 
-   **Gate 6 does not fire while another passage asserts the clause's predicate at the clause's own
-   scope. — house text** Before firing, scan your other passages and write
-   `gate 6: no other passage asserts <predicate> of <the clause's own set>`. If one does — the clause
-   says "the hippocampus" and a passage says "hippocampal negative control of the HPA axis"; the
-   clause says "prior coronavirus outbreaks" and a passage asserts the predisposition without naming
-   a subtype — then the narrow bound you found belongs to *that other passage's* experiment, the
-   paper is not asserting less than the clause, and gate 6 answers **no**. Go to test 7. Note the
-   bar: a passage that merely *carries* the clause's entities is gate 5's test and does not clear
-   this one — this one needs the predicate asserted of the clause's own set.
-
-   **What may count as (c), and this is where the gate goes wrong. — house text** (c) must be a
-   referent the passage's **own scope expression rules out**: a fifth item against a list of four, a
-   disease outside the class the passage names, a condition its wording bounds out. Write the
-   passage's scope expression down first — if the passage states no scope, there is nothing for the
-   sentence to exceed. **If the only thing you can say about (c) is that it is not mentioned, not
-   found in the evidence, or not covered by your passages, you have named window silence rather than
-   an excluded member, and this gate does not fire** — go to test 7.
-
-   **An enumeration or a ranking is a stated scope, not silence. — house text** Where the passage
-   closes a list — "four symptoms: A, B, C and D", "the two most frequently reported were A and B"
-   — a member the enumeration leaves out is ruled out *by the enumeration*, and it is a valid (c)
-   **when the citing sentence prints that member by name**. Quote the enumeration verbatim and name
-   the member it closes out. This is the one case where "the passage does not list it" is a finding
-   rather than window silence, and it is what the first worked example above is.
-
-   **A plural is satisfied by two. — house text** When (b) is a plural or carries a generality word
-   ("diverse", "various", "several", "multiple", "many", "a range of", "cancers", "studies") and
-   does not itself print the thing you would name as (c), count the members of (b) your passages
-   assert the predicate of. Write `gate 6: (b) '<plural>'; passages assert it of <m1> at L.., <m2>
-   at L..`. **Two or more members means this gate answers no.** The clause's plural summarises
-   those members and does not widen them. A passage's list is the list your window returned, not
-   the paper's. Go to test 7. An unprinted (c) may be named only when your passages assert the
-   predicate of exactly **one** member, as in "one enzyme" or "a single infusion of one antibody". A
-   member the citing sentence prints by name is unaffected by this count.
-
-   **Five things that are not this gate, because none of them widens a set.** Do not fire OVERSIMPLIFY
-   on any of them.
-   - **Confidence.** The citing sentence is more assertive than the passage — the passage says "may",
-     "might", "will need to be confirmed", "consistent with", and the citing sentence simply states the
-     finding. That is not a widened set. A confident summary of a hedged finding is **ACCURATE**. This
-     is the same rule as the banned bar in the preamble: a hedged source supports a citing clause.
-   - **Wording and mechanistic detail.** The citing sentence describes the same referents in different
-     words, or with more or less mechanism spelled out, or omits adjectives that do not change which
-     referents are meant. If (c) would be a thing that does not exist or that the sentence is not
-     talking about, you have found a wording delta, not a widening. **ACCURATE.**
-     ⚠ **This exclusion does not cover a dropped quantifier over the finding's own referents.
-     — house text** Where the passage bounded *what the finding is about* to a single referent, as in
-     "one enzyme" or "in one patient", and the citing sentence drops that bound, the set of referents
-     is genuinely wider and gate 6 fires. A bound of two or more is the plural rule above.
-   - **A bound on whom, where or when the source measured. — house text** This is the commonest
-     wrong gate-6 fire this program makes, and it is not a widened referent set. A study population,
-     a cohort, enrolment criteria, a clinical setting, a geography, an anatomical subregion, a
-     timepoint or a disease stage is the source's **own experimental scope**, not the set its finding
-     is asserted of: "hospitalized adults with lower respiratory tract infection", "HIV-positive
-     adults in the U.S. and Canada", "a subset of neurons within the dentate gyrus", "virulent
-     zoonotic outbreaks", "at 4 weeks". A citing sentence that states the finding without repeating
-     one of those is **not** gate 6.
-     **The test, and it decides the gate: ask what (c) is a different *kind* of.** If (c) is a
-     different kind of thing the finding is about — a fifth symptom, a protease other than the one
-     measured, a disease outside the class named — gate 6 fires. If (c) is the *same* thing in a
-     different population, place, tissue or time, gate 6 answers **no**: that shortfall, if it is
-     real at all, is gate 7's `population` or `stage/setting` axis — and it is real only if gate 7's
-     **containment test** answers *outside*. Producing gate 7's quote-and-axis write-down is not
-     enough: every paper states the population it measured, so that write-down is producible on any
-     claim of this shape and firing on it alone just moves this wrong gate one rung down the ladder.
-   - **Direction.** The citing sentence is *narrower* than the passage — it reports one of the source's
-     two mechanisms, or drops an intermediate step, or names a subtype where the source named the
-     class. Gate 6 fires only on claim-broader-than-passage. Claim-narrower is not this gate.
-   - **A clause the citation is not attached to.** Scope words in the sentence's background framing are
-     not this source's scope. See the preamble above.
-
-   *House note on calibration:* a lexical difference between the citing sentence and a passage is the
-   ordinary case, not this gate; almost every correctly-ACCURATE citation has one.
 7. **NOT_SUBSTANTIATE** — none of the above fires, and a passage that *does* address the clause stops
    short of it. What "stops short" requires is the next section.
 
@@ -332,12 +261,10 @@ than after the walk. — house text**
    NOT_SUBSTANTIATE's reason has exactly one admissible shape: *a passage asserts something of its
    own about this clause's predicate, and what it asserts falls short of the clause.* Write it as
    `gate 7: passage says '<quote>', clause says '<quote>', shortfall = <axis>`, and the axis must be
-   one of exactly four: **strength** (the passage recommends where the clause reports a finding, *or*
+   one of exactly three: **strength** (the passage recommends where the clause reports a finding, *or*
    the passage's recommendation is permissive — "reasonable to consider", "may be considered", "could
    be used" — where the clause reports a strong or universal directive — "strongly recommend",
-   "recommend in all", "is indicated"), **population**, **stage or setting**, or **class-vs-member**
-   (the passage reports it of a whole class where the clause asserts it of one member — interferons
-   I and III against IFN-α). — house text
+   "recommend in all", "is indicated"), **population**, or **stage or setting**. — house text
 
    ⚠ **`population` and `stage/setting` have a containment test, and it is the whole of those two
    axes. — house text** These two are the commonest wrong fire of this gate, because every paper
@@ -345,7 +272,7 @@ than after the walk. — house text**
    write-down is producible on *any* claim that reports a finding without repeating that qualifier.
    The write-down therefore decides nothing. **One question decides it: is the group, stage or setting
    the passage reports an *instance of* the one the clause asserts?** Write the answer down as
-   `gate 7: passage set <x>; clause set <y>; x is inside/outside y`.
+   `gate 7: passage set <x>; clause set <y>; x is inside/outside/contains y`.
 
    - **Inside** — the clause's set contains the passage's: "hospitalized adults with lower
      respiratory tract infection" inside "adults with COVID-19"; "Brca1-null mouse ES cells" inside
@@ -359,12 +286,14 @@ than after the walk. — house text**
      use"; "failure to link patients from HIV testing to HIV care" against a clause about "transition
      from the inpatient setting to self-management at home". The passage is not reporting the clause's
      proposition about a subset of it — it is reporting a different stage or setting of affairs.
-     **The axis fires: NOT_SUBSTANTIATE.**
+     **The axis fires: NOT_SUBSTANTIATE** — but only on a passage that reports the source's own
+     finding. A passage carrying its own citation marker (`(12)`, `5-8`, `(Ota et al., 2009)`) is the
+     source relaying someone else, not stating what it measured, and cannot fire this axis.
+   - **Contains** — the passage's set contains the clause's: "COVID-19 patients" against a clause
+     about "severe COVID-19"; "interferons I and III" against "IFN-α". A finding reported of the
+     whole set is reported of the member the clause names. **This axis does not fire — go to test 8.**
 
-   This test binds only `population` and `stage/setting`. `strength` and `class-vs-member` have their
-   own tests below and are unaffected — and note that `class-vs-member` is the *opposite* direction
-   (passage broader than the clause), so a passage set that is **inside** the clause's is never
-   `class-vs-member` either.
+   This test binds only `population` and `stage/setting`. `strength` has its own test below.
 
    **`strength` against the banned hedging bar, and the one question that separates them. — house
    text** The banned bar is about *confidence in a result*: a passage that says "may", "might",
@@ -376,8 +305,7 @@ than after the walk. — house text**
    something is advised → `strength`, and the verdict is NOT_SUBSTANTIATE.
 
    **The axis is a closed list, and the check is literal. — house text** The word after
-   `shortfall =` must be exactly one of `strength`, `population`, `stage/setting` or
-   `class-vs-member`. If the word you would write is anything else — *scope*, *specificity*,
+   `shortfall =` must be exactly one of `strength`, `population` or `stage/setting`. If the word you would write is anything else — *scope*, *specificity*,
    *numerical specificity*, *detail*, *mechanism*, *attribution*, *field-wide*, *prevalence*,
    *this paper's own work* — gate 7 did not fire: emit **ACCURATE**. Three shortfalls this rule
    exists to stop, each of which is ACCURATE: a count or number the passages simply do not state
@@ -395,8 +323,9 @@ than after the walk. — house text**
 
    If what you have written is one of the three below instead, an earlier gate answered yes and you
    go back and emit its label:
-   - it names a particular thing the citing sentence covers and the passage's own scope rules out
-     → **gate 6, OVERSIMPLIFY.** Move your two scope expressions into `paper_value` and `claim_value`.
+   - it quotes a passage's own restriction word (*only*, *limited to* …) excluding a referent the
+     clause prints by name → **gate 6, OVERSIMPLIFY.** Move the two quotes into `paper_value` and
+     `claim_value`.
    - your passages assert a **different predicate** of the clause's subject, rather than a weaker
      value of the clause's own predicate → **gate 1, IRRELEVANT.** A matching subject does not save
      it; gate 1 fires on the axis, not the topic. Silence on the predicate alone still does not
@@ -451,8 +380,8 @@ The test that separates a real shortfall from retrieval silence, and it is check
 passages in front of you:
 
 - **A passage addresses the clause and stops short of it** — it reports the same relationship more
-  weakly, for a different population, only as a recommendation rather than a finding, or for a whole
-  class where the clause asserts it of one member. That is a real shortfall: **NOT_SUBSTANTIATE**.
+  weakly, for a population or setting outside the clause's, or only as a recommendation rather than
+  a finding. That is a real shortfall: **NOT_SUBSTANTIATE**.
   (Not OVERSIMPLIFY. Gate 6 is decided by its own named test and nothing here routes into it.)
 - **No passage addresses the clause, but the passages are plainly about the clause's own entities and
   relationship** — the paper studies this and your window did not return the sentence. That is
@@ -497,7 +426,7 @@ When `multi_cit_context == "grouped"`, the sentence's *other* clauses — the on
 
 ⚠ **Those two are the only triggers, and you must quote the one you used. — house text** Before you narrow anything, write `burden narrowed: multi_cit_context=grouped` or `burden narrowed: [OTHER_CIT] visible`. If you can write neither — `multi_cit_context` is `"single"`, is absent from your inputs, or you are unsure what it was, and the claim text contains no literal `[OTHER_CIT]` — then **there is no sibling and you may not narrow.** The whole marker-attached clause is this source's burden, every item in it.
 
-A sibling you have *inferred* from the shape of the sentence is not a sibling. "A sibling citation may cover the remainder", "the rest is presumably cited elsewhere", "this source's portion is the first three items" — written against a lone closed `[CIT]` or `[[CIT]]` — is you supplying the co-citation, and it is wrong in the one place it costs most: **it deletes gate 6's excluded member.** A clause that asserts a four-item list where the passage closes a three-item one is gate 6's own first worked example; handing the fourth item to an imagined sibling turns OVERSIMPLIFY into ACCURATE on exactly the claims this gate exists for. If (c) is an item of a list the clause asserts and you cannot quote a trigger, **gate 6 fires.**
+A sibling you have *inferred* from the shape of the sentence is not a sibling. "A sibling citation may cover the remainder", "the rest is presumably cited elsewhere", "this source's portion is the first three items" — written against a lone closed `[CIT]` or `[[CIT]]` — is you supplying the co-citation. Without a quotable trigger the whole marker-attached clause goes down the ladder as this source's burden.
 
 **This section narrows across clauses, never inside one. — house text** A clause shared with co-cited sources whose items your passages carry only in part is gate 2's case (ETIQUETTE), not a burden to narrow here.
 
