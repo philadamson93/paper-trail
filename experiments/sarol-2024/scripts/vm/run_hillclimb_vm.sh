@@ -293,7 +293,9 @@ set +e
   --materialize-root "$RUNS/materialized" \
   --train-output-root "$RUNS/train" \
   --val-output-root  "$RUNS/val" \
-  2>&1 | tee "$RUNS/run.log" || true
+  2>&1 | tee "$RUNS/run.log"
+# No `|| true` here: it would replace PIPESTATUS with true's, so RC read 0 for every run, a stopped one
+# included (found 2026-10-09: a run that stopped on agent_session_failed printed OK). errexit is off.
 RC=${PIPESTATUS[0]}
 set -e
 
