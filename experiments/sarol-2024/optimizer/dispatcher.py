@@ -89,12 +89,13 @@ TEST_SIZE = 606
 #: that actually costs ~$647. One sample, so treat this as order-of-magnitude rather than precise,
 #: and re-measure when the profile, model or claim mix changes.
 #:
-#: RE-SET 2026-10-08 for the Haiku 5.5 judge on Claude Code 2.1.295 (plan
-#: `2026-10-08-paper-trail-adopts-data-schedule`). Real Haiku 5.5 grading is ~$0.015 a session (prompts
-#: ~89k tokens); 0.03 is that with 2x headroom, because a prompt over 100k tokens is billed at 5x. The
-#: images before 2.1.295 had no Haiku 5.5 price and reported ~$0.30, so this figure only holds on the
-#: rebuilt images. Re-measured at the plan's image check; replace it with that number.
-DEFAULT_PER_SESSION_USD = 0.03
+#: RE-MEASURED 2026-10-08 for the Haiku 5.5 judge on Claude Code 2.1.295 (plan
+#: `2026-10-08-paper-trail-adopts-data-schedule`, image check): three canary sessions reported $0.0113,
+#: $0.0118 and $0.0104, each equal to its token counts priced by hand at Haiku 5.5 list rates. Scored
+#: claims carry bigger prompts (~$0.015 measured on the 10-08 run, ~89k tokens), so 0.02 keeps headroom;
+#: a prompt over 100k tokens is billed at 5x. The images before 2.1.295 had no Haiku 5.5 price and
+#: reported ~$0.30, so this figure only holds on the rebuilt images.
+DEFAULT_PER_SESSION_USD = 0.02
 
 
 # =================================================================================================
@@ -2189,7 +2190,7 @@ def _selftest() -> int:
         ("agentic still prices at the ~$96 floor, at that same assumed price",
          94 < CostModel.for_profile("agentic", per_session_usd=0.05).iteration_cost(10) < 99),
         # And the calibrated price, pinned so a silent change is visible: on the Haiku 5.5 judge
-        # (Claude Code 2.1.295) a full-VAL retrieval iteration is ~$19, not the ~$650 of the Opus era.
+        # (Claude Code 2.1.295) a full-VAL retrieval iteration is ~$13, not the ~$650 of the Opus era.
         ("at the calibrated Haiku 5.5 price, a full-VAL retrieval iteration is tens of dollars",
          10 < CostModel.for_profile("retrieval").iteration_cost(10) < 30),
         ("the cost table says which rung it is describing",
@@ -2247,9 +2248,9 @@ def _selftest() -> int:
     _g.note_batch("run-val-n311")  # a VAL label names no iteration, so it leaves the guard where it was
     checks += [
         ("the per-pass guard prices the iteration the run is in, read from the TRAIN batch's label",
-         round(_i1, 6) == round((25 + 2 * 50) * 0.03, 6)),
+         round(_i1, 6) == round((25 + 2 * 50) * DEFAULT_PER_SESSION_USD, 6)),
         ("...the costliest iteration before any TRAIN pass has said which (a resumed re-entry)",
-         round(_before, 6) == round((200 + 2 * 311 + 311) * 0.03, 6)),
+         round(_before, 6) == round((200 + 2 * 311 + 311) * DEFAULT_PER_SESSION_USD, 6)),
         ("...and a VAL label does not move it", _g.current_iter == 1),
     ]
     _p = _parser()
