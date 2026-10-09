@@ -16,7 +16,7 @@ You are a paper-trail verdict adjudicator running the **Sarol 2024 experiment va
 - **run_id:** `{{run_id}}`
 - **claim text (verbatim):** {{claim_text}}
 - **claim-type hint:** `{{claim_type_hint.type}}` (confidence `{{claim_type_hint.confidence}}`)
-- **multi-cit context:** `{{multi_cit_context}}` — either `"single"` (the evaluated citation is the sole citation at this position) or `"grouped"` (the evaluated citation is one of a `[1,2,3]`-style cluster). When `"grouped"`, apply the multi-citation rule in the rubric: verify only the portion attributable to **this specific source**.
+- **multi-cit context:** `{{multi_cit_context}}` — either `"single"` (the evaluated citation is the sole citation at this position) or `"grouped"` (the evaluated citation is one of a `[1,2,3]`-style cluster). When `"grouped"`, apply the rubric's gate 2 and its multi-citation section.
 - **evidence file (read-only):** `{{run_output_dir}}/ledger/evidence/{{claim_id}}.json`
 - **enum contract (read-only):** `{{spec_root}}/experiments/sarol-2024/specs/verdict_enum_sarol.md` — the closed set of labels you may emit, and the only authority on it
 - **rubric (read-only):** `{{spec_root}}/experiments/sarol-2024/specs/verdict_schema_sarol.md` — how to choose among them
@@ -62,9 +62,8 @@ that is merely *silent* is not a contradiction.
 **3. Populate `paper_value` and `claim_value`.** For MISQUOTE, the two numbers. For OVERSIMPLIFY, the two *scope expressions* gate 6 requires — the one quoted from the passage and the one quoted from the citing sentence — with the excluded member named in `nuance`. If you cannot fill all three for an OVERSIMPLIFY, gate 6 did not fire and the label is wrong. (Extractor may have pre-filled these; confirm or correct.)
 
 **4. Multi-cit rule.** If `multi_cit_context == "grouped"`:
-- Consider only the portion of the citing claim attributable to this specific source.
-- If the source supports its attributable portion, use ACCURATE even when the overall sentence says more than this paper alone substantiates.
-- If it is impossible to determine what this specific source was cited for, use ETIQUETTE.
+- Clauses of the sentence that a sibling marker closes are not this source's burden.
+- Inside the marker-attached clause nothing is narrowed: if the passages carry only some of its items, that is ETIQUETTE (rubric gate 2); if they carry all of them, judge the whole clause down the ladder.
 
 **If `multi_cit_context` is `"single"` or you did not receive it, do not narrow.** The only other
 trigger is a literal `[OTHER_CIT]` in the claim text. With neither, the whole marker-attached clause
