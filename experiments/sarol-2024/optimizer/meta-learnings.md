@@ -18,6 +18,8 @@ carry a second copy of the rule in your head from here.
 
 ## Status
 
+⚠ **(2026-10-14) Entries dated before 2026-10-09 were measured pre-reset of the data schedule, on one fixed 50-claim roster; entries since compare versions on VAL batches that grow between iterations. Moves inside the instrument's scatter are not results.** Since 2026-10-09 TRAIN rotates (a claim retires after it is answered right twice in a row) and VAL grows nested, so every "the roster is fixed" line below is history, not the current draw: read this iteration's `train_schedule.json` instead. Compare two versions only on the same VAL claims.
+
 **Reset-state text was inherited, but the program was NOT fresh.** The paragraph that used to sit here
 said this lineage had established nothing and that the sheet is reset only "when a run starts fresh
 from program-v0's content". On `hillclimb-2026-10-08b` iteration 1 that was false in its premise:
@@ -75,7 +77,7 @@ of 49 both times, 34 of VAL both times, zero net movement. **Two standing proced
 bare lowercase word, re-check every count phrase ("Five things…", "exactly four axes") against the
 items that actually follow, and re-resolve every cross-reference ("see the next section", "per the
 rule above") — iteration 4's pass left **three** truncations, **two** stale counts, **two** dead
-section pointers and **one dangling cross-file reference** from `adjudicator-dispatch-sarol.md` into a
+section pointers and **one dangling cross-file reference** from `experiments/sarol-2024/prompts/adjudicator-dispatch-sarol.md` into a
 rubric rule it had deleted. (ii) **Never grade a deletion on an aggregate alone.** Diff the per-claim
 label table against the previous iteration and name the claims that moved in each direction; an
 aggregate that holds while two claims regress and two improve is the normal case, not a rare one.
@@ -95,7 +97,7 @@ judge to compare two expressions, make the rule be about the sub-string that dif
 part of speech. That is a question with a wrong answer.**
 
 **2026-10-08 (iter 5) — the frozen definitions file is a *source of edits*, not only a check, and
-nobody had mined it that way.** `verdict_definitions_sarol.md` records three divergences *we* once
+nobody had mined it that way.** `experiments/sarol-2024/specs/verdict_definitions_sarol.md` records three divergences *we* once
 introduced and removed. One of them — OVERSIMPLIFY's appended "qualified-in-source but unqualified in
 claim" — turned out to be **exactly what gate 6's house machinery had quietly re-implemented**, and
 gate 6 is the gate firing 3.9× its dev rate. **Standing check: for any class whose firing rate is far
@@ -118,7 +120,7 @@ this remedy at two gates at once.
 prompt is pure cost.** Two iteration-4 additions explained what *used to* stand in their place ("What
 used to stand here voided both by requiring…", "the previous test here — whether (c) lies 'inside' (b)
 — did not break it"). Those sentences are addressed to the optimizer and they ride in the judge's
-context on every claim. **Write the rationale for an edit in `findings.md`, never in the rubric.**
+context on every claim. **Write the rationale for an edit in your findings note, never in the rubric.**
 
 **2026-10-08 — `nuance` is the trace. Read it before you spend anything on transcripts.** Under
 `retrieval` on `claude-haiku-5-5` the adjudicator emits one or two sentences of visible text — it reads
@@ -331,7 +333,7 @@ the clause's own content in the same iteration.**
 Ask for the class's dev *rate*, not merely whether it exists. Iter 4 found CONTRADICT at 22 in dev,
 1 in 14, the fourth commonest of nine, being written off as support-1 noise on exactly this
 reasoning for three iterations.)** ⚠ TRAIN carries classes that cannot appear on VAL, so some TRAIN misses are
-worth exactly zero against the objective. Check before you spend an edit.** `verdict_definitions_sarol.md`
+worth exactly zero against the objective. Check before you spend an edit.** `experiments/sarol-2024/specs/verdict_definitions_sarol.md`
 records INDIRECT_NOT_REVIEW as **25 occurrences in `claims-train.jsonl` and 0 in dev** — and VAL is
 drawn from the dev pool. Our TRAIN roster carries one (`330-15`), which three iterations have now
 chewed on. **A gate-5 widening to reach it can gain at most 1 TRAIN point and exactly 0 VAL points,
@@ -512,7 +514,7 @@ forward-only means nobody else will make it.**
 - `micro_f1` − `primary_metric` = **0.0204** (2nd of 5 identical readings — see the v15 entry).
 - Error mass after v12: **NOT_SUBSTANTIATE precision 0.56** (9 predicted, 7 gold) — 4 of 8 misses.
   OVERSIMPLIFY precision is repaired (0.67). IRRELEVANT and OVERSIMPLIFY recall both 0.67.
-- **The roster is fixed:** `draw_history.json` iterations 1 and 2 are the same 50 ids, pairwise
+- **The roster is fixed:** the pre-schedule draw history (that file no longer exists; see the 2026-10-14 caveat under Status) iterations 1 and 2 are the same 50 ids, pairwise
   Jaccard **1.000**. Verified, not assumed. An absent claim is a real absence.
 
 **2026-10-08 — `program-v13`, run `hillclimb-2026-10-08b`, same profile/model/roster.**
@@ -525,7 +527,7 @@ forward-only means nobody else will make it.**
 - Error mass after v13: **OVERSIMPLIFY precision 0.40** (5 predicted, 3 gold) — 3 of 7 misses.
   NOT_SUBSTANTIATE precision repaired to 0.83; IRRELEVANT now 1.00 (precision and recall).
   CONTRADICT and INDIRECT_NOT_REVIEW both 0.000 at support 1 each.
-- **The roster is fixed through three iterations** — but *verify* it in `draw_history.json` rather
+- **The roster is fixed through three iterations** — but *verify* it in the pre-schedule draw history (that file no longer exists; see the 2026-10-14 caveat under Status) rather
   than inheriting this line.
 
 
@@ -547,7 +549,7 @@ forward-only means nobody else will make it.**
 - Per-class: OVERSIMPLIFY precision **0.60** (5 predicted, 3 gold), NOT_SUBSTANTIATE precision
   **1.00**, ACCURATE precision 0.91 / recall 0.97, ETIQUETTE recall **0.67**, IRRELEVANT and MISQUOTE
   1.00, **CONTRADICT and INDIRECT_NOT_REVIEW both 0.000**.
-- **The roster is fixed through four iterations** - `draw_history.json`, pairwise Jaccard **1.000** on
+- **The roster is fixed through four iterations** - the pre-schedule draw history (that file no longer exists; see the 2026-10-14 caveat under Status), pairwise Jaccard **1.000** on
   all six pairs. Verified, not inherited. An absent claim is a real absence.
 - **Canary healthy**: top-level `canary` in `run_manifest.json`, claim `1969-64`, `status: "ok"`, not
   among the 50 scored claims. These numbers carry a round-trip guarantee and are comparable to
@@ -577,7 +579,7 @@ forward-only means nobody else will make it.**
   INDIRECT_NOT_REVIEW 0.000.
 - Firing rate vs the **dev** priors VAL is drawn from: OVERSIMPLIFY **3.9× over** (10.2% vs 2.6%),
   ETIQUETTE **0.33×**, IRRELEVANT 0.60× (down from 0.91×), CONTRADICT 0.57× (up from 0).
-- **The roster is fixed through five iterations** - `draw_history.json`, pairwise Jaccard **1.000** on
+- **The roster is fixed through five iterations** - the pre-schedule draw history (that file no longer exists; see the 2026-10-14 caveat under Status), pairwise Jaccard **1.000** on
   all ten pairs. Verified, not inherited.
 - **Canary healthy**: top-level `canary` in `run_manifest.json`, claim `1969-64`, `status: "ok"`.
   These numbers carry a round-trip guarantee and are comparable to iterations 1-4.
