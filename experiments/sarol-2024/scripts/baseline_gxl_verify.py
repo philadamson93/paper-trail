@@ -174,7 +174,7 @@ def build_claims(ids: list[str], staging_root: pathlib.Path) -> list[dict[str, A
     return claims
 
 
-def test_claims() -> list[dict[str, Any]]:
+def test_claims(split: str = "test", only: "set[str] | None" = None) -> list[dict[str, Any]]:
     """Every claim unit in the sealed TEST split, built from structure only -- never a label.
 
     Reads each row's citing sentence and its cited paper (``cited_doc_ids // 1000``, the same rule
@@ -183,21 +183,40 @@ def test_claims() -> list[dict[str, Any]]:
     verify requests -- as possible: gxl verifies same-paper claims together, up to 25 per request.
     """
     claims = []
-    for row in stage_claim.load_claims("test"):
+    for row in stage_claim.load_claims(split):
         buckets = sorted({int(d) // 1000 for d in (row.get("cited_doc_ids") or [])})
         if len(buckets) != 1:
-            raise SystemExit(f"[claims] test row {row['id']} cites {len(buckets)} papers, expected 1")
+            raise SystemExit(f"[claims] {split} row {row['id']} cites {len(buckets)} papers, expected 1")
         bucket = buckets[0]
-        ref = stage_claim.find_references_txt("test", bucket)
-        if ref is None:
-            raise SystemExit(f"[claims] no references file for test bucket {bucket}")
         cid = f"{int(row['id'])}-{bucket}"
+        if only is not None and cid not in only:
+            continue
+        ref = stage_claim.find_references_txt(split, bucket)
+        if ref is None:
+            raise SystemExit(f"[claims] no references file for {split} bucket {bucket}")
         claims.append({"claim_id": cid, "tag": _tag(cid), "pmcid": ref.stem.split("_", 1)[1],
                        "text": stage_claim.normalize_claim_text(row["claim"]),
                        # Same rule paper-trail's staging uses (stage_claim.stage): a structural marker, not a label.
                        "multi_cit_context": "grouped" if "<|multi_cit|>" in row["claim"] else "single"})
     claims.sort(key=lambda c: (c["pmcid"], int(c["claim_id"].split("-")[0])))
     return claims
+
+
+def dev_claims() -> list[dict[str, Any]]:
+    """The Dev claims paper-trail scores (its VAL pool, 311 units) that gxl has not checked yet.
+
+    The pool comes from `sampling.claim_pool`, so it is exactly the set paper-trail's VAL grows
+    to; the 50 already checked at task-spec guidance (`gxl-verify-taskspec-2026-10-08`) are left
+    out, so the two folders together cover the pool once (Phil 2026-10-14).
+    """
+    import sampling  # noqa: PLC0415
+
+    pool = {u.claim_id for u in sampling.claim_pool("dev")}
+    done = pathlib.Path.home() / ".paper-trail" / "baselines" / "gxl-verify-taskspec-2026-10-08" / "verdicts.json"
+    checked = {c["claim_id"] for c in json.loads(done.read_text(encoding="utf-8"))["claims"]}
+    if not checked <= pool:
+        raise SystemExit(f"[dev] {len(checked - pool)} of the 50 checked claims are not in the Dev pool")
+    return test_claims("dev", pool - checked)
 
 
 def smoke_claims() -> list[dict[str, Any]]:
@@ -268,7 +287,7 @@ def _is_quota(exc: Exception) -> bool:
 
 
 def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_size: int, resume: bool,
-           limit: "int | None" = None, guidance: str = "shipped") -> None:
+           limit: "int | None" = None, guidance: str = "shipped", jobs: "int | None" = None) -> None:
     """Attach the claims and verify them, `batch_size` at a time. Resumable after a cap stop."""
     out.mkdir(parents=True, exist_ok=True)
     progress = _progress(out)
@@ -289,13 +308,14 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
     # Number commits after any already on disk, so a resumed run never overwrites an earlier raw file.
     progress["commits"] = max(progress["commits"], len(list(session.raw.glob("commit-*.txt"))))
 
-    def commit(note: str) -> bool:
-        """One verify pass. Returns True if it hit the server's time limit."""
+    def commit(note: str) -> "tuple[bool, str]":
+        """One verify pass. Returns (hit the server's time limit, gxl's output)."""
         progress["commits"] += 1
-        timed_out = False
+        timed_out, text = False, ""
         try:
-            session.call(f"commit-{progress['commits']:02d}", "git_commit", {
-                "message": f"paper-trail baseline: {note}", "verify": True, "verifier_context": GUIDANCE[guidance]})
+            text = session.call(f"commit-{progress['commits']:02d}", "git_commit", {
+                "message": f"paper-trail baseline: {note}", "verify": True, "verifier_context": GUIDANCE[guidance],
+                **({"jobs": jobs} if jobs else {})})
         except paperclip_mcp.PaperclipError as exc:
             if _is_quota(exc):
                 raise paperclip_mcp.RateLimited(str(exc)) from None
@@ -307,7 +327,7 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
             print(f"[run] verify pass {progress['commits']} hit the server's time limit; checking status")
             timed_out = True
         _save_progress(out, progress)
-        return timed_out
+        return timed_out, text
 
     def settle(batch: list[dict[str, Any]], note: str, tries: int = 3) -> None:
         """Commit until every claim in `batch` shows a verdict marker, or `tries` passes are spent.
@@ -317,16 +337,20 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
         row that add no verdict anywhere in the repo are treated as the cap: stop, save, resume tomorrow
         -- rather than attaching more claims that cannot be checked.
         """
+        # A claim counts as checked once either the verify output or the status shows its verdict:
+        # gxl cuts `git_status` off at 50,000 characters, so past ~80 claims the newest ones are
+        # missing from it (2026-10-09) even though the verify output just gave their verdicts.
+        tags = [c["tag"] for c in batch]
+        checked: set[str] = set()
         stalled = 0
-        before = None
         for attempt in range(1, tries + 1):
-            timed_out = commit(note if attempt == 1 else f"{note} (pass {attempt})")
+            timed_out, text = commit(note if attempt == 1 else f"{note} (pass {attempt})")
             status = session.call(f"status-c{progress['commits']:02d}", "git_status", {})
-            n_verdicts = len(MARKER.findall(status))
-            stalled = stalled + 1 if (timed_out and before is not None and n_verdicts <= before) else 0
-            before = n_verdicts
-            found = blocks_by_tag(status, [c["tag"] for c in batch])
-            unchecked = [t for t, v in found.items() if v["verdict"] in ("NO_MARKER", "MISSING")]
+            before = len(checked)
+            for reading in (text, status):
+                checked |= {t for t, v in blocks_by_tag(reading, tags).items() if v["verdict"] not in ("NO_MARKER", "MISSING")}
+            stalled = stalled + 1 if (timed_out and attempt > 1 and len(checked) <= before) else 0
+            unchecked = [t for t in tags if t not in checked]
             if not unchecked:
                 return
             print(f"[run] {len(unchecked)}/{len(batch)} claims still unchecked after pass {attempt}")
@@ -335,7 +359,16 @@ def verify(claims: list[dict[str, Any]], out: pathlib.Path, repo: str, batch_siz
                     "two timed-out verify passes in a row added no verdict: treating it as gxl's daily cap")
 
     if resume and progress["added"]:
-        settle([c for c in claims if c["claim_id"] in progress["added"]], "resume: verify claims left unresolved")
+        # Read what raw/ already holds before spending a pass: the status check alone misses claims
+        # gxl's 50,000-character `git_status` cut off, and on 2026-10-13 that re-verified 156 claims
+        # that already had verdicts, spending the day's allowance on nothing.
+        known = parse_verdicts([c for c in claims if c["claim_id"] in progress["added"]], out)
+        left = [c for c in claims if c["claim_id"] in progress["added"]
+                and known[c["claim_id"]]["verdict"] not in ("OK", "REJECTED")]
+        print(f"[run] resume: {len(progress['added']) - len(left)} attached claims already have a verdict in raw/; "
+              f"{len(left)} to settle")
+        if left:
+            settle(left, "resume: verify claims left unresolved")
     skipped = progress.setdefault("add_failed", {})
     missing_papers = set(progress.get("missing_papers", []))
     pending = [c for c in claims if c["claim_id"] not in progress["added"] and c["claim_id"] not in skipped]
@@ -938,40 +971,43 @@ def main() -> int:
     ap.add_argument("--smoke-only", action="store_true")
     ap.add_argument("--reparse", action="store_true", help="rebuild verdicts.json from raw/, no gxl calls")
     ap.add_argument("--score-only", action="store_true")
-    ap.add_argument("--split", choices=("val50", "test"), default="val50",
-                    help="val50: the 50 dev VAL claims (default); test: every unit of the sealed test split, verdicts only")
+    ap.add_argument("--split", choices=("val50", "test", "dev"), default="val50",
+                    help="val50: the 50 dev VAL claims (default); test: every unit of the sealed test split, verdicts only; "
+                         "dev: the rest of paper-trail's 311 Dev claims")
+    ap.add_argument("--jobs", type=int, default=None,
+                    help="claims gxl verifies at once per pass (gxl default 8); raise it when unresolved claims outrun the 180 s limit")
     ap.add_argument("--limit", type=int, default=None, help="attach at most this many new claims in this invocation")
     ap.add_argument("--guidance", choices=tuple(GUIDANCE), default=None,
                     help="default: shipped for val50 (the 2026-10-07 run), taskspec for test (Phil 2026-10-08)")
     args = ap.parse_args()
-    guidance = args.guidance or ("taskspec" if args.split == "test" else "shipped")
+    guidance = args.guidance or ("taskspec" if args.split in ("test", "dev") else "shipped")
 
-    tag = "test" if args.split == "test" else ("val50" if guidance == "shipped" else f"val50-{guidance}")
+    tag = args.split if args.split in ("test", "dev") else ("val50" if guidance == "shipped" else f"val50-{guidance}")
     out = args.out or pathlib.Path.home() / ".paper-trail" / "baselines" / (
-        f"gxl-verify-test-{args.date}" if args.split == "test"
+        f"gxl-verify-{args.split}-{args.date}" if args.split in ("test", "dev")
         else f"gxl-verify-{args.date}" if guidance == "shipped" else f"gxl-verify-{guidance}-{args.date}")
     repo = args.repo or f"pt-sarol-{tag}-{args.date}"
     if args.score_only:
         return score_only(out)
 
-    if args.split == "test":
-        claims = test_claims()
+    if args.split in ("test", "dev"):
+        claims = test_claims() if args.split == "test" else dev_claims()
         md5 = hashlib.md5(",".join(sorted(c["claim_id"] for c in claims)).encode()).hexdigest()[:8]
-        print(f"[test] {len(claims)} claim units over {len({c['pmcid'] for c in claims})} cited papers, md5 {md5}")
+        print(f"[{args.split}] {len(claims)} claim units over {len({c['pmcid'] for c in claims})} cited papers, md5 {md5}")
         if args.reparse:
-            return verdict_exit(write_verdicts(claims, out, md5, "test"))
+            return verdict_exit(write_verdicts(claims, out, md5, args.split))
         try:
-            verify(claims, out, repo, args.batch_size, args.resume, args.limit, guidance)
+            verify(claims, out, repo, args.batch_size, args.resume, args.limit, guidance, args.jobs)
         except paperclip_mcp.RateLimited as exc:
             n = len(_progress(out).get("added", []))
             print(f"[run] stopped at gxl's limit with {n}/{len(claims)} attached; progress saved: {exc}\n"
-                  f"[run] resume after midnight UTC with: --split test --date {args.date} --resume")
+                  f"[run] resume after midnight UTC with: --split {args.split} --date {args.date} --resume")
             return 3
         done = len(_progress(out).get("added", [])) + len(_progress(out).get("add_failed", {}))
         if done < len(claims):
-            print(f"[run] {done}/{len(claims)} handled (--limit); resume with --split test --date {args.date} --resume")
+            print(f"[run] {done}/{len(claims)} handled (--limit); resume with --split {args.split} --date {args.date} --resume")
             return 0
-        return verdict_exit(write_verdicts(claims, out, md5, "test"))
+        return verdict_exit(write_verdicts(claims, out, md5, args.split))
 
     ids = roster_ids(args.claims_from)
     md5 = check_roster(ids)
@@ -995,7 +1031,7 @@ def main() -> int:
                 return 4
             if args.smoke_only:
                 return 0
-        verify(claims, out, repo, args.batch_size, args.resume, args.limit, guidance)
+        verify(claims, out, repo, args.batch_size, args.resume, args.limit, guidance, args.jobs)
     except paperclip_mcp.RateLimited as exc:
         print(f"[run] rate-limited, progress saved: {exc}\n[run] resume later with: --date {args.date} --resume")
         return 3
