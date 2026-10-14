@@ -71,7 +71,7 @@ gate that produced it was not chosen by this order.
 
 **Third, a gate fires on a finding you can quote, and silence is not a finding. — house text** Your
 passages are a keyword-selected sliver of the article (the subset section below has the numbers), so
-*my passages do not mention X* is a fact about the window and never about the paper. Gates 1, 2, 6 and 7
+*my passages do not mention X* is a fact about the window and never about the paper. Gates 1, 2, 3, 6 and 7
 each name a label on the strength of a positive finding, so each one has a write-down you must be able
 to produce **in order to fire it**. Produce it and the gate fires; fail to produce it and the gate
 answers **no** and you walk on. The write-down licenses the label, not the refusal.
@@ -80,6 +80,8 @@ answers **no** and you walk on. The write-down licenses the label, not the refus
 - **Gate 2** needs a list the clause prints, one member carried at a quoted line and another named
   nowhere in the window — see test 2. That one absence is a finding, because the member's name was
   in the search.
+- **Gate 3** needs a quoted passage pointing the opposite way on the clause's own axis — see test 3.
+  It is the one gate whose refusal is written down too.
 - **Gate 6** needs a passage's own restriction word and a referent the clause prints that it excludes — see test 6.
 - **Gate 7** needs a quoted passage sentence that asserts something weaker — see test 7.
 
@@ -175,7 +177,9 @@ than after the walk. — house text**
      closes a list and the paper is about only part of it — that is exactly "unclear what is being
      cited from the reference article". Do **not** call the uncarried items retrieval silence or hand
      them to siblings and emit ACCURATE for the remainder; that carve-out is this gate's own finding
-     written under the wrong label.
+     written under the wrong label. **One exception — house text:** if a passage states the opposite
+     of what the clause asserts about a carried item, answer gate 3 on that item first; an opposed
+     finding is CONTRADICT whatever else the list holds.
    - **No item carried** → gate 2 answers no; walk on and let gates 7 and 8 decide.
 
    **Ask the attributability question here, not later.** If you find yourself writing "this source's
@@ -185,9 +189,20 @@ than after the walk. — house text**
 3. **CONTRADICT** — a passage you were given states the opposite of the citing clause. **Quote it.**
    The requirement is that you produce the excerpt verbatim, *not* that the excerpt contain a denial:
    a source need never write "X does not happen" for this gate to fire. — house text It must
-   oppose, not merely differ: a source that assigns the claimed property to a *different* agent, or
-   reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
-   true. Silence never contradicts.
+   oppose, not merely differ, and silence never contradicts.
+
+   **The test is direction on the clause's own axis. — house text** A passage opposes when, about the
+   clause's own subject and predicate, it reports the predicate **absent**, **reversed**, or held by
+   the alternative the clause rules out: clause *the causes of the disorder are largely unknown*,
+   passage *most of the risk is explained by inherited common variants*; clause *the drug improved
+   survival*, passage *no survival benefit*. The same direction but not as far — weaker, narrower,
+   of a subset, of one part — is gate 7, not this gate. A passage about a different subject, subgroup or setting is not opposition.
+
+   **Answer this gate in writing either way. — house text** Before you leave it, quote the passage
+   that comes closest to disagreeing with the clause and say which way it points:
+   `gate 3: nearest passage '<quote>' at L..; same direction | opposite`. If no passage is on the
+   clause's predicate axis at all, write `gate 3: no passage on the axis`. "No passage states the
+   opposite", with nothing quoted, has not answered it.
 
    **How the citing authors name or frame the source is not a statement the source makes. — house
    text** "A meta-analysis by Tanner et al.", "our previous reports", "a trial of …" describe the
@@ -196,8 +211,8 @@ than after the walk. — house text**
    not this source's content (see the preamble).
 
    **Write the clash down with the clause quoted verbatim, not restated. — house text**
-   `gate 3: passage '<quote>'; clause '<verbatim quote of the marker-attached clause>'; both cannot
-   be true because <reason>`. If you had to strengthen the clause to make it clash — adding *all*,
+   `gate 3: passage '<quote>'; clause '<verbatim quote of the marker-attached clause>'; opposite
+   because <reason>`. If you had to strengthen the clause to make it clash — adding *all*,
    *only*, *identical*, *always*, or turning a modelling assumption into a claim about every
    subgroup — you are contradicting your restatement, not the clause, and this gate answers **no**.
    A passage reporting that a quantity differs across subgroups does not oppose a clause that never
