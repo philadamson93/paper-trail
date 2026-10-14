@@ -36,7 +36,7 @@ mark it as house text so a future reader can always tell the scheme from our rea
 verbatim source excerpt that opposes the claim — a source that is merely *silent* is not a
 contradiction. MISQUOTE is numerical only — a non-numerical difference is simply not MISQUOTE, and
 where it goes is decided by the ordered test below, not here.
-INDIRECT vs INDIRECT_NOT_REVIEW turns on whether the reference article is itself a review.
+Gate 5 fires only when the reference article is itself a review; see test 5.
 
 ## Choosing one label when several definitions fit — house text
 
@@ -258,6 +258,13 @@ than after the walk. — house text**
    window is a sentence crediting someone else. **Name the unmarked passages you checked and the
    entities each carries, and read each passage's own markers off that passage** — a marker list
    belonging to a neighbouring line is not evidence about this one.
+
+   **Gate 5 fires only on a review. — house text** A primary study that relays a fact in its
+   introduction or discussion is, on this benchmark, cited for that fact correctly: when the paper is
+   not a review, a relayed fact does not fire this gate — go to test 6. The test for "review" is in
+   the window: if any passage reports the paper's own study — its own participants, cohort, methods
+   or results ("we recruited", "we measured", "in this study", a Results line) — it is not a review.
+   So the label this gate emits is INDIRECT; INDIRECT_NOT_REVIEW is not reached by this ladder.
 6. **OVERSIMPLIFY** — a passage itself restricts the finding, in its own words, and the citing
    clause asserts the finding of something that restriction rules out.
 
