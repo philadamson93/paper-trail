@@ -189,14 +189,11 @@ than after the walk. — house text**
    reports the claimed status at an *earlier* stage, opposes only if the citing clause cannot also be
    true. Silence never contradicts.
 
-   **One case where a different value always opposes: the cited study's own design. — house text**
-   Sometimes the clause describes how the cited study itself was run: the subjects it used (species,
-   strain, age, sex), its sample, dose, duration or site. If a passage states that same attribute of
-   the source's own study with a value that excludes the clause's, the passage contradicts the
-   clause. "Eight to nine-week-old mice" against "the 6–11-month-old mice" is an example, because the
-   paper's account of its own design is the fact. Quote both values. This covers design attributes
-   only. A clause about the study's *results* is tested as above. A clause about the citing authors'
-   own study is not this source's content (see the preamble).
+   **How the citing authors name or frame the source is not a statement the source makes. — house
+   text** "A meta-analysis by Tanner et al.", "our previous reports", "a trial of …" describe the
+   citation, not a finding; a passage giving the source's own study type does not oppose them. Test
+   the finding the clause attributes to the source. A clause about the citing authors' own study is
+   not this source's content (see the preamble).
 
    **Write the clash down with the clause quoted verbatim, not restated. — house text**
    `gate 3: passage '<quote>'; clause '<verbatim quote of the marker-attached clause>'; both cannot
@@ -204,7 +201,11 @@ than after the walk. — house text**
    *only*, *identical*, *always*, or turning a modelling assumption into a claim about every
    subgroup — you are contradicting your restatement, not the clause, and this gate answers **no**.
    A passage reporting that a quantity differs across subgroups does not oppose a clause that never
-   denied it.
+   denied it. **Nor does a pooled result oppose one member. — house text** If the passage's subject
+   is a group that contains the clause's subject — "the majority of animals", "most patients", several
+   arms or figure panels reported together — it opposes only if it states the result for the clause's
+   own subject or for every member. If you would have to note that the passage does not break out the
+   clause's subject, this gate answers **no**.
 4. **MISQUOTE** — a number or percentage the citing sentence attributes to this source differs from
    the source's number for **the same quantity**. Once you have such a mismatch, the label is
    MISQUOTE; do not re-describe it as a scope or emphasis problem and route it to OVERSIMPLIFY.
