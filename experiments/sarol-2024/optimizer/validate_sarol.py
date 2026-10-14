@@ -374,7 +374,11 @@ def validate_file(
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
-        return ValidationResult(ok=False, violations=[f"UNREADABLE:{exc}"], path=str(path))
+        # The error, not its message: an OSError's str() embeds the full host path, which reached the
+        # optimizer's TRAIN feedback and made the engine refuse the session (2026-10-14, iter 5). The
+        # path is already in `path`, where the feedback staging knows to rewrite it.
+        return ValidationResult(ok=False, violations=[f"UNREADABLE:{type(exc).__name__}: {exc.strerror or 'unreadable'}"],
+                                path=str(path))
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError as exc:
