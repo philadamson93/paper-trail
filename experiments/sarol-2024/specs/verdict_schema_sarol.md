@@ -137,8 +137,7 @@ than after the walk. — house text**
    **Same axis, different value, is not this gate — it may be gate 7.** A passage that reports the
    clause's own relationship of a **population, stage or setting that the clause's own set does not
    contain** is on the axis and falls short of it: a paper reporting a vaccine in clinical trials
-   where the clause says approved for emergency use, or linkage failing at an earlier stage of care
-   than the clause names. Route it to gate 7, which decides it by its own containment test — and
+   where the clause says approved for emergency use. Route it to gate 7, which decides it by its own containment test — and
    **that test, not this sentence, is what makes it NOT_SUBSTANTIATE.** Do not read the setting into
    the predicate; the setting belongs to the subject. — house text
 
@@ -289,6 +288,12 @@ than after the walk. — house text**
      source's study qualifier, which is a wording delta and not a shortfall: **this axis does not
      fire — go to test 8.** Generalising from the sample you measured to the thing you were measuring
      is what every paper's own discussion does, and this benchmark labels it ACCURATE.
+     **A stage of the programme, pathway or process the clause names is inside it. — house text** If
+     the clause asserts something of a programme or process as a whole (attrition in treatment
+     programmes, losses along a care pathway) and the passage asserts it of one stage of that same
+     programme, the passage set is inside. "Earlier stage" makes a set outside only when the clause
+     prints a status word (*approved*, *licensed*, *initiated*, *completed*) that the passage's
+     subject has not reached.
    - **Outside** — the passage's set lies outside the clause's, or the two are disjoint: a vaccine
      "currently being evaluated in clinical trials" against a clause saying "approved for emergency
      use"; "failure to link patients from HIV testing to HIV care" against a clause about "transition
