@@ -258,6 +258,11 @@ than after the walk. — house text**
    window is a sentence crediting someone else. **Name the unmarked passages you checked and the
    entities each carries, and read each passage's own markers off that passage** — a marker list
    belonging to a neighbouring line is not evidence about this one.
+   **An unmarked passage defeats this bound only if it carries the clause's fact. — house text** It
+   must name the clause's entities as gate 8 names them (the entity, an abbreviation or a close
+   synonym; a broader category the entity belongs to does not count: *mucus* does not name *MUC2
+   oligosaccharides*) **and** assert the clause's predicate of them. A heading or line that names the
+   entities while asserting something else does not defeat it.
 
    **Gate 5 fires only on a review. — house text** A primary study that relays a fact in its
    introduction or discussion is, on this benchmark, cited for that fact correctly: when the paper is
