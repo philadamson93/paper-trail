@@ -671,6 +671,7 @@ class SarolScorer:
         mistakes_root: pathlib.Path | None = None,
     ) -> None:
         self._gold_resolver = gold_resolver
+        self._corpus = None  # Sarol corpus.jsonl, read once on the first TRAIN mistake row
         # Where the per-claim TRAIN mistake corpus is written (C6.8). None disables it, which is
         # what every VAL call does implicitly -- see `_write_mistakes`.
         self.mistakes_root = pathlib.Path(mistakes_root) if mistakes_root else None
@@ -712,6 +713,31 @@ class SarolScorer:
         import parse_verdict  # noqa: PLC0415 -- imported late; it reads gold
 
         return parse_verdict.parse(staging_dir)
+
+    def _gold_evidence(self, citekey: "str | None") -> "list[dict[str, str]] | None":
+        """The annotators' marked passages for one TRAIN claim, as ``[{label, text}]``; None if unreadable.
+
+        None under the injected gold resolver (the offline selftests have no gold tree) and on any read
+        failure: a missing passage must never stop the corpus being written.
+        """
+        if self._gold_resolver is not None or not citekey:
+            return None
+        import parse_verdict  # noqa: PLC0415 -- imported late; it reads gold
+        import stage_claim  # noqa: PLC0415
+
+        try:
+            gold = json.loads(parse_verdict.find_gold_file(citekey).read_text(encoding="utf-8"))
+            if self._corpus is None:
+                self._corpus = stage_claim.load_corpus()
+            out = []
+            for doc_id, anns in sorted((gold.get("gold_evidence") or {}).items(), key=lambda kv: int(kv[0])):
+                sentences = (self._corpus.get(int(doc_id)) or {}).get("abstract") or []
+                for ann in anns:
+                    text = " ".join(sentences[i] for i in ann.get("sentences") or [] if 0 <= i < len(sentences))
+                    out.append({"label": ann.get("label"), "text": text})
+            return out
+        except (OSError, KeyError, ValueError, RuntimeError, json.JSONDecodeError):
+            return None
 
     def _write_mistakes(self, split, batch_id, joined, run_manifest_ref: str | None = None) -> str | None:
         """Persist the per-claim TRAIN mistake corpus (C6.8). Returns its path, or None.
@@ -770,6 +796,14 @@ class SarolScorer:
                 "trace_ref": ((record.get("stages") or {}).get("adjudicator") or {}).get(
                     "trace_ref"
                 ),
+                # The passages Sarol's annotators marked in the cited paper, with their labels: the
+                # reason gold says what it says. TRAIN gold is fully open (D24, Phil 2026-04-21), but
+                # the gold and benchmark folders are sealed whole because they also hold Dev, so this
+                # row is the only route to it; until 2026-10-14 it carried the label alone, and the
+                # optimizer could see THAT a verdict was wrong but not which passage made it wrong.
+                # Text and label only -- no doc id or sentence index (provenance, as above). Empty
+                # for ETIQUETTE / IRRELEVANT, whose definition is that no passage supports the claim.
+                "gold_evidence": self._gold_evidence(resolved.get("citekey")),
             })
         out = self.mistakes_root / "mistakes" / f"{batch_id}.json"
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -1529,12 +1563,12 @@ def _selftest() -> int:
                  corpus_file["n_mistakes"] == 1 and corpus_file["n_correct"] == 1
                  and corpus_file["n_scored"] == 2),
                 ("...and `claims` carrying C6.8's nine fields plus the three that carry the "
-                 "judge's working rather than only its conclusion",
+                 "judge's working rather than only its conclusion, and gold's marked passages (D24)",
                  set(corpus_file["claims"][0]) == {
                      "claim_id", "citekey", "claim_text", "evidence_snippets",
                      "pred_label", "gold_label", "pred_3way", "gold_3way",
                      "adjudicator_reasoning", "claim_type", "rubric_variant",
-                     "sub_claims", "trace_ref"}),
+                     "sub_claims", "trace_ref", "gold_evidence"}),
                 ("...naming which claim failed", row["claim_id"] == "C2"),
                 # S13. The brief tells a blame subagent to open the judge's trace when the
                 # structured fields cannot explain the verdict. That instruction was unfollowable:

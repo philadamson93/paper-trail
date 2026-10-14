@@ -370,6 +370,9 @@ harness belong in this iteration's findings entry and are **never** promoted.
 - `/workspace/ro/feedback/iter/<n>/previous_attempt.json` — present only when the version saved before
   iteration `<n>` failed: the failure record, typed fields only.
 - `trace_ref`, per record in the mistake corpus — the judge's full session for that claim.
+- `gold_evidence`, per record in the mistake corpus — the passages Sarol's annotators marked in the
+  cited paper, with their labels: the reason for the gold label. Check whether the judge was given
+  them (`evidence_snippets`) before blaming the rubric.
 
 ## Simplicity criterion
 

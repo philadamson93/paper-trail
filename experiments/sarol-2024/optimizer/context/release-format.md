@@ -107,6 +107,7 @@ Its shape is an object wrapping the per-claim list:
       "claim_text": "<the citing sentence>",
       "evidence_snippets": ["<each passage the judge was given>"],
       "pred_label": "ACCURATE",  "gold_label": "CONTRADICT",
+      "gold_evidence": [{ "label": "CONTRADICT", "text": "<the passage the annotators marked>" }],
       "pred_3way": "ACCURATE",   "gold_3way": "NOT_ACCURATE",
       "adjudicator_reasoning": {
         "sub_claim_verdicts": ["ACCURATE"], "nuance": ["..."],

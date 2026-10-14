@@ -45,6 +45,7 @@ fields that matter to you:
 | `claim_text` | the citing sentence being judged |
 | `gold_label` / `pred_label` | the 9-way verdict, correct and predicted |
 | `gold_3way` / `pred_3way` | the collapsed verdict — tells you whether the miss crossed a bucket |
+| `gold_evidence` | the passages of the cited paper Sarol's annotators marked, each with the label they gave it: **why gold says what it says**. Compare them with `evidence_snippets` — a marked passage the judge was never given is a retrieval miss, not a rubric one. Empty for ETIQUETTE and IRRELEVANT, whose definition is that no passage supports the claim |
 | `sub_claims[]` | the proposition the judge actually evaluated, its verdict, and **the evidence mapped to it** |
 | `sub_claims[].evidence[].locator` | `pdfs/<citekey>/content.txt#L22` — where in the cited paper that passage came from |
 | `evidence_snippets` | every passage the judge was given, as a flat union across sub-claims |
