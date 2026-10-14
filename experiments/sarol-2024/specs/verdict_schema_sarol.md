@@ -60,9 +60,9 @@ answer. A later test passing as well is expected and means nothing; that is what
 
 *House note on base rates, from this benchmark's own class distribution — house text:* roughly
 **three citations in five are ACCURATE**. ETIQUETTE is about one in eight, NOT_SUBSTANTIATE one in
-eleven, IRRELEVANT one in eighteen, and CONTRADICT, OVERSIMPLIFY, MISQUOTE and the two INDIRECT
-classes are each under one in thirty. A gate that fires more often than its label occurs is
-miscalibrated however good its individual reasons looked, and gates 3, 5 and 6 are the ones with the
+twelve, CONTRADICT and IRRELEVANT each about one in fourteen, and OVERSIMPLIFY, MISQUOTE and the two
+INDIRECT classes are each under one in thirty. A gate that fires more often than its label occurs is
+miscalibrated however good its individual reasons looked, and gates 5 and 6 are the ones with the
 least room.
 
 To make the stop auditable, **begin each sub-claim's `nuance` with `gate N:`** — the number of the
@@ -269,10 +269,23 @@ than after the walk. — house text**
    NOT_SUBSTANTIATE's reason has exactly one admissible shape: *a passage asserts something of its
    own about this clause's predicate, and what it asserts falls short of the clause.* Write it as
    `gate 7: passage says '<quote>', clause says '<quote>', shortfall = <axis>`, and the axis must be
-   one of exactly three: **strength** (the passage recommends where the clause reports a finding, *or*
+   one of exactly four: **strength** (the passage recommends where the clause reports a finding, *or*
    the passage's recommendation is permissive — "reasonable to consider", "may be considered", "could
    be used" — where the clause reports a strong or universal directive — "strongly recommend",
-   "recommend in all", "is indicated"), **population**, or **stage or setting**. — house text
+   "recommend in all", "is indicated"), **population**, **stage or setting**, or **null part**. — house text
+
+   **`null part` is a result, not a hedge, and it has a literal test. — house text** It fires when a
+   passage reports, of the clause's own subject and predicate, that the effect is **absent** or
+   **smaller** for some outcome, item or comparison the clause asserts — the passage prints *no
+   difference*, *no effect*, *did not*, *was not associated*, or *smaller / less than* about that
+   part — while the clause asserts the effect present, or equal, across it. Clause *lower rates of
+   microvascular complications*, passage *no difference in peripheral neuropathy by onset age*;
+   clause *no different from other risk factors*, passage *a much smaller effect than tackling
+   standard risk factors*. Quote the negating or comparative word in the `passage says` slot. Two
+   things do not fire it: a passage describing the *literature* as conflicting, inconsistent or
+   unclear (that is a statement about other studies, not this source's result), and a null result
+   about a different predicate than the clause's. If the passage's result denies the clause outright,
+   so that no part of it can be true, that was gate 3.
 
    ⚠ **`population` and `stage/setting` have a containment test, and it is the whole of those two
    axes. — house text** These two are the commonest wrong fire of this gate, because every paper
@@ -319,7 +332,7 @@ than after the walk. — house text**
    something is advised → `strength`, and the verdict is NOT_SUBSTANTIATE.
 
    **The axis is a closed list, and the check is literal. — house text** The word after
-   `shortfall =` must be exactly one of `strength`, `population` or `stage/setting`. If the word you would write is anything else — *scope*, *specificity*,
+   `shortfall =` must be exactly one of `strength`, `population`, `stage/setting` or `null part`. If the word you would write is anything else — *scope*, *specificity*,
    *numerical specificity*, *detail*, *mechanism*, *attribution*, *field-wide*, *prevalence*,
    *this paper's own work* — gate 7 did not fire: emit **ACCURATE**. Three shortfalls this rule
    exists to stop, each of which is ACCURATE: a count or number the passages simply do not state
