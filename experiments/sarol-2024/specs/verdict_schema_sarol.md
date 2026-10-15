@@ -70,7 +70,7 @@ test that fired — followed by your one-sentence reason. A verdict whose `nuanc
 gate that produced it was not chosen by this order.
 
 **Third, a gate fires on a finding you can quote, and silence is not a finding. — house text** Your
-passages are a keyword-selected sliver of the article (the subset section below has the numbers), so
+passages are a keyword-selected subset of the article (the subset section below has the numbers), so
 *my passages do not mention X* is a fact about the window and never about the paper. Gates 1, 2, 3, 6 and 7
 each name a label on the strength of a positive finding, so each one has a write-down you must be able
 to produce **in order to fire it**. Produce it and the gate fires; fail to produce it and the gate
@@ -369,7 +369,7 @@ than after the walk. — house text**
 
    **If you cannot quote a passage sentence that asserts something about the clause's predicate, this
    gate does not fire — go to test 8.** "The passage does not mention the mechanism / the number / the
-   qualifier" is silence over a sliver, not a shortfall; a shortfall needs a passage saying something
+   qualifier" is silence over a subset, not a shortfall; a shortfall needs a passage saying something
    *weaker*, and a passage saying nothing is not saying something weaker. A passage that names a
    measurement without reporting its result is such a silence. Neither is a delta of **mechanistic
    detail or wording** — the same relationship in more or fewer words, with more or less mechanism
@@ -402,7 +402,7 @@ than after the walk. — house text**
    about is the paper being *relevant and substantiating nothing*, which is NOT_SUBSTANTIATE's own
    definition.
    ⚠ **One of the two missing is not that case; it is an ordinary retrieval hole. — house text** The
-   window is a keyword-selected sliver, and the commonest thing a sliver drops is the clause's named
+   window is a keyword-selected subset, and the commonest thing it drops is the clause's named
    agent — a variant, a drug, a molecule — while keeping the general passages about what it does. If
    you can name the subject and not the agent, or the agent and not the subject, the window **is**
    partly about the clause's own entities: that is the retrieval silence this gate exists to absorb,
@@ -426,11 +426,11 @@ Under the retrieval profile the evidence envelope was built mechanically. Three 
 much of the paper you actually hold: `attestation.selector` (the search that chose your passages),
 `attestation.retrieval_k` (how many you were handed) and `attestation.n_passages_available` (how many
 the cited paper has). **Read all three before you decide.** On this benchmark the second is typically
-under a tenth of the third — you are looking at a keyword-selected sliver, not at the article.
+a quarter to a half of the third: you hold the passages that share the most words with the citing
+sentence, not the whole article.
 
 So: **a clause you cannot find in your passages has not been shown to be absent from the paper.**
-Argument from silence over a sliver is not a support gap, and it is the largest single source of
-wrong verdicts this program makes.
+Argument from silence over a subset is not a support gap.
 
 The test that separates a real shortfall from retrieval silence, and it is checkable against the
 passages in front of you:
@@ -455,7 +455,7 @@ passages in front of you:
 
 The three banned bars stated in the preamble apply here too, and two of them have a habit of
 surviving as a *different label* once you have been told not to score them as a support gap. Naming a support gap "an overgeneralisation" does not make it one, and the
-window is still a sliver whichever label you are reaching for. If your reason for a non-ACCURATE
+window is still a subset whichever label you are reaching for. If your reason for a non-ACCURATE
 verdict is that you could not find something, the answer is ACCURATE — not a differently-named miss.
 
 ## Rollup (per citation instance = per (claim, cited_paper) pair) — house text
