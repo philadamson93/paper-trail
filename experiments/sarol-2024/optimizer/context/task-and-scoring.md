@@ -30,7 +30,20 @@ editable clarifications layer, and it is the only thing the judge reads besides 
 `ACCURATE` · `OVERSIMPLIFY` · `NOT_SUBSTANTIATE` · `CONTRADICT` · `MISQUOTE` · `INDIRECT` ·
 `INDIRECT_NOT_REVIEW` · `ETIQUETTE` · `IRRELEVANT`
 
-## The objective: accuracy over the nine classes
+## The objective: the metric your release names, against its floor
+
+**Each run climbs one objective, fixed when the run starts.** The release names it
+(`primary_metric_name` on TRAIN, `primary_metric.name` on VAL) and reports its value as
+`primary_metric`, with that objective's `do_nothing_floor` beside it; your standing instructions say
+which one this run is. Maximize the metric your release names, against its floor. There are two:
+
+- `sarol_accuracy_9class` — accuracy over the nine labels. The default, and the objective of every
+  run before 2026-10-15. Described in the rest of this section.
+- `sarol_macro_f1_2way` — macro-F1 of ACCURATE versus NOT. Described at the end of this section.
+
+You emit the same nine labels under either; only the scoring differs.
+
+### 9-class accuracy (`sarol_accuracy_9class`)
 
 **The number being optimized is accuracy** — the fraction of claims whose predicted label equals the
 gold label, over the nine emittable labels. Nothing is collapsed and nothing is renormalised.
@@ -62,7 +75,22 @@ with different denominators are not comparable, and accuracy has no such caveat.
 *(Macro-F1 is the tempting alternative and it is worse here: its renormalising denominator moves
 with the batch's class mix, which can manufacture a −0.15 TRAIN "decline" across three iterations
 for a program that never changed. Accuracy has no denominator to wobble, and that is most of why it
-wins.)*
+won for the 9-class lineage.)*
+
+### 2-way macro-F1 (`sarol_macro_f1_2way`)
+
+Both your label and gold are collapsed to `ACCURATE` or NOT, where NOT is every other label —
+`ETIQUETTE`, `IRRELEVANT` and `INDIRECT_NOT_REVIEW` included. The score is the mean of the two
+classes' F1, always over both classes. A label outside the nine is a miss for its gold side.
+`CONTRADICT` answered `NOT_SUBSTANTIATE` is right; `ACCURATE` answered `OVERSIMPLIFY`, or `ETIQUETTE`
+answered `ACCURATE`, is wrong. On TRAIN the same collapse decides which claims count as right, which
+the mistakes file lists, and which are retired.
+
+Its `do_nothing_floor` is the 2-way macro-F1 of answering `ACCURATE` every time: NOT's F1 is 0, so
+the floor is ACCURATE's F1 halved, about **0.37** over all 311 Dev claims and **0.41** on the first 50
+VAL claims. Unlike accuracy, it does not reward defaulting to `ACCURATE`; it charges for it. The
+denominator does not wobble either: it is always two classes. The 9-class `accuracy_9class`, its floor
+and every per-class field stay in the TRAIN breakdown as diagnostics.
 
 Drawable gold, after the pool repair described below:
 

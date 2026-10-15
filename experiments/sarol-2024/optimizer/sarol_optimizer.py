@@ -238,6 +238,27 @@ def sandbox_note(iter_n: int, run_id: str | None = None) -> str:
     )
 
 
+#: The slot in the standing instructions that carries this run's objective paragraph.
+OBJECTIVE_SLOT = "{{objective}}"
+
+
+def render_instructions(objective: str | None = None, text: str | None = None) -> str:
+    """The standing instructions with this run's objective filled in (plan 2026-10-15).
+
+    The file says "maximize the metric your release names, against its floor"; the one paragraph
+    describing *which* metric comes from ``score_sarol3.OBJECTIVE_DESCRIPTIONS``, the same module that
+    computes it. Raises if the file has lost its slot, so a run can never start with no objective named.
+    """
+    import score_sarol3  # noqa: PLC0415
+
+    objective = score_sarol3.check_objective(objective or score_sarol3.DEFAULT_OBJECTIVE)
+    text = PROMPT_PATH.read_text(encoding="utf-8") if text is None else text
+    if text.count(OBJECTIVE_SLOT) != 1:
+        raise ValueError(f"the optimizer instructions must carry {OBJECTIVE_SLOT} exactly once "
+                         f"(found {text.count(OBJECTIVE_SLOT)})")
+    return text.replace(OBJECTIVE_SLOT, score_sarol3.OBJECTIVE_DESCRIPTIONS[objective])
+
+
 def prompt_builder(iter_n: int, paths, run_id: str | None = None) -> str:
     return (
         f"Iteration {iter_n}" + (f" of run `{run_id}`" if run_id else "") + f". The program to improve is the "
@@ -285,8 +306,13 @@ class SarolOptimizer:
         #: The notes history (B4) and the run it is keyed by. Both or neither.
         notes_root: pathlib.Path | None = None,
         run_id: str | None = None,
+        #: The run's objective (``score_sarol3.OBJECTIVES``): its paragraph goes into the instructions.
+        objective: str | None = None,
         _agent_factory=None,
     ) -> None:
+        import score_sarol3  # noqa: PLC0415
+
+        self.objective = score_sarol3.check_objective(objective or score_sarol3.DEFAULT_OBJECTIVE)
         self.feedback_files = tuple((n, pathlib.Path(p)) for n, p in feedback_files)
         self.run_summary_path = pathlib.Path(run_summary_path) if run_summary_path is not None else None
         self.train_output_root = pathlib.Path(train_output_root) if train_output_root is not None else None
@@ -313,10 +339,10 @@ class SarolOptimizer:
         if not self.notebook.exists():
             self.notebook.write_text("", encoding="utf-8")
 
-    @staticmethod
-    def agent_instructions() -> str:
-        """The optimizer's standing instructions: the head of every prompt it is given."""
-        return PROMPT_PATH.read_text(encoding="utf-8")
+    def agent_instructions(self) -> str:
+        """The optimizer's standing instructions, this run's objective filled in: the head of every
+        prompt it is given."""
+        return render_instructions(self.objective)
 
     def agent(self, iter_n: int):
         train_roots, validation_roots = feedback_roots(
@@ -379,6 +405,14 @@ class SarolOptimizer:
 # =================================================================================================
 # Selftest
 # =================================================================================================
+
+
+def _raises(fn) -> bool:
+    try:
+        fn()
+    except ValueError:
+        return True
+    return False
 
 
 def _selftest() -> int:
@@ -477,6 +511,28 @@ def _selftest() -> int:
             )
             kw.update(overrides)
             return SarolOptimizer(**kw)
+
+        # The objective paragraph (plan 2026-10-15): each objective's instructions name its own metric
+        # and not the other's, the default's are the default description, and the slot is gone.
+        import score_sarol3  # noqa: PLC0415
+
+        _rendered = {o: _optimizer(objective=o).agent_instructions() for o in score_sarol3.OBJECTIVES}
+        _rendered[None] = _optimizer().agent_instructions()
+        _bare = PROMPT_PATH.read_text(encoding="utf-8")
+        checks += [
+            ("the instructions are rendered per objective: each names its own metric and paragraph, and not "
+             "the other objective's metric",
+             all(score_sarol3.METRIC_NAMES[o] in _rendered[o]
+                 and score_sarol3.OBJECTIVE_DESCRIPTIONS[o] in _rendered[o]
+                 and not any(score_sarol3.METRIC_NAMES[x] in score_sarol3.OBJECTIVE_DESCRIPTIONS[o]
+                             for x in score_sarol3.OBJECTIVES if x != o)
+                 and OBJECTIVE_SLOT not in _rendered[o]
+                 for o in score_sarol3.OBJECTIVES)),
+            ("...no objective given renders the default's", _rendered[None] == _rendered[score_sarol3.DEFAULT_OBJECTIVE]),
+            ("...negative control: instructions that lost the slot are refused, not sent with no objective named",
+             _raises(lambda: render_instructions(text=_bare.replace(OBJECTIVE_SLOT, "")))
+             and _raises(lambda: render_instructions("macro_f1_3way"))),
+        ]
 
         opt = _optimizer()
         outcome = opt.run(iter_n=2, materialized_path=mat_root / "iter2-current")

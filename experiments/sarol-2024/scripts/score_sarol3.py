@@ -18,6 +18,9 @@ Two design points worth not re-deriving (see the plan's Part A2):
   defines it and this scorer consumes it. A label outside `SAROL_9` is an ordinary invalid output:
   scored as a miss and counted in `error_class_counts`. It never crashes the run and is never
   silently re-bucketed, so a bad edit simply scores worse and the loop rejects it on its own.
+* **The objective is a run setting** (`OBJECTIVES`, 2026-10-15): accuracy over the nine labels by
+  default, or 2-way macro-F1 (ACCURATE vs NOT). Either is quoted against its own do-nothing floor.
+  The rest of this point describes the default.
 * **The objective is accuracy over the nine labels, and it is quoted against a floor.** A claim
   counts only if the predicted label equals the gold label; `micro_f1` is the same quantity
   computed AFTER the 3-way collapse, so it forgives every confusion inside NOT_ACCURATE and is a
@@ -111,6 +114,114 @@ OBJECTIVE_CLASSES = SAROL_9_ORDER
 #: drawn once and held for a run, so its denominator is stable across the frontier being compared.
 
 
+#: The objectives a run can climb (plan 2026-10-15-paper-trail-2way-objective-fork). A run setting,
+#: chosen once per run (`dispatcher.py --objective`, `OBJECTIVE=` in the launcher) and recorded in the
+#: run's identity, so a resume can never splice two objectives into one curve.
+#:
+#: * ``accuracy_9class`` -- the default, and the objective since 2026-09-07: a claim counts only if the
+#:   predicted label equals the gold label. Floor: the always-ACCURATE accuracy.
+#: * ``macro_f1_2way`` -- both sides collapsed to ACCURATE vs NOT (every other label, ETIQUETTE /
+#:   IRRELEVANT / INDIRECT_NOT_REVIEW included, is NOT); the score is macro-F1 over those two classes.
+#:   Added because accuracy rewards defaulting to ACCURATE (always-ACCURATE = 0.60 on Dev) and the
+#:   9-class lineage plateaued at ~0.72; an always-ACCURATE program scores ~0.37 here. The judge keeps
+#:   its nine labels; only the scoring collapses.
+DEFAULT_OBJECTIVE = "accuracy_9class"
+OBJECTIVES: tuple[str, ...] = ("accuracy_9class", "macro_f1_2way")
+
+#: The frontier metric's name per objective -- the name the release carries and the run-summary key
+#: each version's VAL score is stored under. `adapter.PRIMARY_METRIC_NAME` is the default's.
+METRIC_NAMES: dict[str, str] = {
+    "accuracy_9class": "sarol_accuracy_9class",
+    "macro_f1_2way": "sarol_macro_f1_2way",
+}
+
+#: The one paragraph the optimizer's standing instructions carry about the run's objective, filled
+#: in per run (`sarol_optimizer.SarolOptimizer.agent_instructions`). The instructions themselves stay
+#: neutral: "maximize the metric your release names, against its floor".
+OBJECTIVE_DESCRIPTIONS: dict[str, str] = {
+    "accuracy_9class": (
+        "**This run's objective: maximize accuracy over the nine classes** -- the fraction of claims whose "
+        "predicted label equals the gold label exactly, reported as `primary_metric` under the name "
+        "`sarol_accuracy_9class`. A `CONTRADICT` answered for an `OVERSIMPLIFY` is a miss, though both "
+        "collapse to NOT_ACCURATE. `do_nothing_floor` is the accuracy of a program that answers "
+        "`ACCURATE` every time on the same batch (about 0.6 on Dev). Accuracy rewards defaulting to "
+        "`ACCURATE`, so read `macro_f1_renormalised` beside it: accuracy up and macro down means the gain "
+        "came from answering `ACCURATE` more often."
+    ),
+    "macro_f1_2way": (
+        "**This run's objective: 2-way macro-F1, ACCURATE versus NOT** -- both your label and gold are "
+        "collapsed to `ACCURATE` or NOT (every other label, `ETIQUETTE`, `IRRELEVANT` and "
+        "`INDIRECT_NOT_REVIEW` included), and the score is the mean of the two classes' F1, reported as "
+        "`primary_metric` under the name `sarol_macro_f1_2way`. A `CONTRADICT` answered "
+        "`NOT_SUBSTANTIATE` is right; an `ACCURATE` answered `OVERSIMPLIFY` is wrong. A label outside "
+        "the nine is a miss. `do_nothing_floor` is the 2-way macro-F1 of a program that answers "
+        "`ACCURATE` every time on the same batch (about 0.37 on Dev), so defaulting to `ACCURATE` is "
+        "punished here, not rewarded. You still emit the nine labels; right and wrong on TRAIN, the "
+        "mistakes file and retirement all follow the 2-way collapse."
+    ),
+}
+
+#: The 2-way classes, in report order.
+TWO_WAY: tuple[str, str] = ("ACCURATE", "NOT")
+
+
+def check_objective(objective: str) -> str:
+    """Return ``objective`` if it is one of :data:`OBJECTIVES`; raise ``ValueError`` otherwise."""
+    if objective not in OBJECTIVES:
+        raise ValueError(f"unknown objective {objective!r}; choose one of {', '.join(OBJECTIVES)}")
+    return objective
+
+
+def to_2way(label: str) -> str:
+    """ACCURATE stays ACCURATE; every other Sarol label is NOT. Not defined for a non-Sarol label --
+    callers treat an invalid prediction as a miss for its gold side before collapsing."""
+    if label not in SAROL_9:
+        raise ValueError(f"label {label!r} is not in the Sarol 9-class enum")
+    return "ACCURATE" if label == "ACCURATE" else "NOT"
+
+
+def is_correct(predicted_label: str, gold_label: str, objective: str = DEFAULT_OBJECTIVE) -> bool:
+    """One claim's right/wrong under ``objective`` -- the single definition the score, the data
+    schedule's retirement and the mistakes file all use. A prediction outside the nine is never right."""
+    check_objective(objective)
+    if objective == "accuracy_9class":
+        return predicted_label == gold_label
+    return predicted_label in SAROL_9 and to_2way(predicted_label) == to_2way(gold_label)
+
+
+def _two_way(pairs: list[tuple[str, str]]) -> dict[str, Any]:
+    """Macro-F1 over {ACCURATE, NOT}, its always-ACCURATE floor, and the 2x2 table.
+
+    An invalid predicted label is a false negative for its gold side and a false positive for
+    neither, matching the 3-way and 9-way treatment. The macro always divides by two: a batch with
+    no gold NOT caps NOT's F1 at 0, which is a property of the sample (VAL is drawn to hold both).
+    """
+    confusion = {g: {p: 0 for p in TWO_WAY} for g in TWO_WAY}
+    invalid = {g: 0 for g in TWO_WAY}
+    for predicted_label, gold_label in pairs:
+        gold = to_2way(gold_label)
+        if predicted_label not in SAROL_9:
+            invalid[gold] += 1
+        else:
+            confusion[gold][to_2way(predicted_label)] += 1
+    per_class = {}
+    for c in TWO_WAY:
+        other = "NOT" if c == "ACCURATE" else "ACCURATE"
+        per_class[c] = _f1(confusion[c][c], confusion[other][c], confusion[c][other] + invalid[c])
+    n_acc = sum(confusion["ACCURATE"].values()) + invalid["ACCURATE"]
+    n_not = sum(confusion["NOT"].values()) + invalid["NOT"]
+    # Always-ACCURATE: tp = n_acc, fp = n_not, fn = 0 for ACCURATE; NOT has tp = 0, so F1 0.
+    floor = (_f1(n_acc, n_not, 0) + 0.0) / 2
+    return {
+        "macro_f1_2way": sum(per_class.values()) / 2,
+        "do_nothing_floor_2way": floor,
+        "per_class_f1_2way": per_class,
+        "confusion_matrix_2way": {g: dict(confusion[g]) for g in TWO_WAY},
+        "n_correct_2way": confusion["ACCURATE"]["ACCURATE"] + confusion["NOT"]["NOT"],
+        "support_2way": {"ACCURATE": n_acc, "NOT": n_not},
+    }
+
+
 def _f1(tp: int, fp: int, fn: int) -> float:
     if tp == 0:
         return 0.0
@@ -148,13 +259,19 @@ def _nine_way(pairs: list[tuple[str, str]]) -> tuple[dict[str, float], dict[str,
     return per_class, support
 
 
-def score(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
+def score(pairs: Iterable[tuple[str, str]], objective: str = DEFAULT_OBJECTIVE) -> dict[str, Any]:
     """Score ``(predicted_9class_label, gold_9class_label)`` pairs.
+
+    ``objective`` picks what ``primary_metric`` and ``do_nothing_floor`` are (:data:`OBJECTIVES`).
+    Under the default the returned dict is exactly what it was before objectives existed; under
+    ``macro_f1_2way`` every diagnostic is still there, the two headline keys carry the 2-way numbers,
+    and ``objective``, ``accuracy_9class`` and the 2-way breakdown are added.
 
     Both sides are collapsed with `parse_verdict.to_3way`. A predicted label outside `SAROL_9`
     collapses to ``UNKNOWN`` and is charged as a false negative against its gold class -- a miss,
     not an error, so an optimizer edit that invents a label just scores worse.
     """
+    check_objective(objective)
     pairs = list(pairs)  # consumed twice: once for the 3-way collapse, once for the 9-way breakdown
     confusion = {g: {p: 0 for p in BUCKETS} for g in BUCKETS}
     invalid_by_gold = {g: 0 for g in BUCKETS}
@@ -206,7 +323,7 @@ def score(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
         else 0.0
     )
 
-    return {
+    result = {
         # The frontier scalar: overall 9-class accuracy on this batch.
         "primary_metric": correct_9 / scored if scored else 0.0,
         # Quoted BESIDE it, always. Accuracy is dominated by the ACCURATE base rate, so the
@@ -241,6 +358,22 @@ def score(pairs: Iterable[tuple[str, str]]) -> dict[str, Any]:
         "n_scored": scored,
         "n_invalid": total - scored,
     }
+    if objective == "accuracy_9class":
+        return result
+    two = _two_way(pairs)
+    return {
+        **result,
+        "objective": objective,
+        # The headline pair, now 2-way. The 9-class accuracy and its floor stay readable beside them.
+        "primary_metric": two["macro_f1_2way"],
+        "do_nothing_floor": two["do_nothing_floor_2way"],
+        "accuracy_9class": result["primary_metric"],
+        "accuracy_9class_floor": result["do_nothing_floor"],
+        "per_class_f1_2way": two["per_class_f1_2way"],
+        "confusion_matrix_2way": two["confusion_matrix_2way"],
+        "support_2way": two["support_2way"],
+        "n_correct_2way": two["n_correct_2way"],
+    }
 
 
 def _selftest() -> int:
@@ -270,7 +403,54 @@ def _selftest() -> int:
     # the two labels the mainline-plus-collapse path could not tell apart
     split = score([("INDIRECT", "INDIRECT"), ("INDIRECT_NOT_REVIEW", "INDIRECT_NOT_REVIEW")])
 
+    # -- the 2-way objective (2026-10-15). Expected numbers worked out by hand, not by the code:
+    # Dev has 185 ACCURATE of 311, so always-ACCURATE scores F1(ACC) = 2*185/(185+311) = 0.746 and
+    # F1(NOT) = 0, macro 0.373.
+    _dev_nothing_2 = score([("ACCURATE", g) for g, n in _DEV_GOLD.items() for _ in range(n)],
+                           objective="macro_f1_2way")
+    # gold ACC x2, NOT x2. pred: ACC (hit), INVALID (miss, ACC side), NOT_SUBSTANTIATE for a CONTRADICT
+    # (hit: both NOT), ACCURATE for an ETIQUETTE (miss). ACC: tp1 fp1 fn1 -> 0.5; NOT: tp1 fp0 fn1 -> 0.667.
+    _mixed = [("ACCURATE", "ACCURATE"), ("NOT_A_LABEL", "ACCURATE"),
+              ("NOT_SUBSTANTIATE", "CONTRADICT"), ("ACCURATE", "ETIQUETTE")]
+    _mixed_2 = score(_mixed, objective="macro_f1_2way")
+    _mixed_9 = score(_mixed)
+
     checks = [
+        # -- the objective setting (2026-10-15) ---------------------------------------------------
+        ("the default objective adds no key and changes no value: the 9-class dict is what it was",
+         score(_mixed, objective="accuracy_9class") == _mixed_9 and "objective" not in _mixed_9),
+        ("an unknown objective is refused, not silently scored as the default",
+         _raises(lambda: score(_mixed, objective="macro_f1_3way"))),
+        ("2-way: always-ACCURATE on real Dev scores the floor, 185/496 = 0.373",
+         round(_dev_nothing_2["primary_metric"], 3) == 0.373
+         and round(_dev_nothing_2["do_nothing_floor"], 6) == round(185 / 496, 6)),
+        ("2-way: the hand-worked mixed batch scores (0.5 + 2/3) / 2",
+         round(_mixed_2["primary_metric"], 6) == round((0.5 + 2 / 3) / 2, 6)
+         and _mixed_2["n_correct_2way"] == 2),
+        ("2-way: an invalid label is a miss for its gold side, never a hit and never a crash",
+         _mixed_2["n_invalid"] == 1 and _mixed_2["support_2way"] == {"ACCURATE": 2, "NOT": 2}
+         and _mixed_2["per_class_f1_2way"]["ACCURATE"] == 0.5),
+        ("2-way keeps every 9-class diagnostic, and the 9-class accuracy and floor beside it",
+         set(_mixed_9) <= set(_mixed_2) and _mixed_2["accuracy_9class"] == _mixed_9["primary_metric"]
+         and _mixed_2["accuracy_9class_floor"] == _mixed_9["do_nothing_floor"]
+         and _mixed_2["objective"] == "macro_f1_2way"),
+        ("per-claim right/wrong: a CONTRADICT answered NOT_SUBSTANTIATE is right under 2-way, wrong "
+         "under 9-class",
+         is_correct("NOT_SUBSTANTIATE", "CONTRADICT", "macro_f1_2way")
+         and not is_correct("NOT_SUBSTANTIATE", "CONTRADICT", "accuracy_9class")),
+        ("...ETIQUETTE / IRRELEVANT / INDIRECT_NOT_REVIEW are NOT, so ACCURATE for them is wrong and any "
+         "other label is right",
+         all(not is_correct("ACCURATE", g, "macro_f1_2way") and is_correct("MISQUOTE", g, "macro_f1_2way")
+             for g in ("ETIQUETTE", "IRRELEVANT", "INDIRECT_NOT_REVIEW"))),
+        ("...and an invalid label is never right under either objective",
+         not any(is_correct(bad, "ACCURATE", o) for bad in ("INVALID_OUTPUT", "FAILED_CALL") for o in OBJECTIVES)),
+        ("...and the right/wrong count agrees with the score's own count",
+         sum(is_correct(p, g, "macro_f1_2way") for p, g in _mixed) == _mixed_2["n_correct_2way"]
+         and sum(is_correct(p, g) for p, g in _mixed) == _mixed_9["n_correct_9way"]),
+        ("every objective has a metric name and a description naming that metric",
+         all(METRIC_NAMES[o] in OBJECTIVE_DESCRIPTIONS[o] for o in OBJECTIVES)
+         and METRIC_NAMES[DEFAULT_OBJECTIVE] == "sarol_accuracy_9class"),
+
         # -- the objective is ACCURACY (2026-09-07). These four replace the four that asserted
         # the opposite; each is written so that switching the objective back turns it RED.
         ("a do-nothing program scores exactly the do-nothing floor -- that is what makes the "
@@ -356,17 +536,27 @@ def _selftest() -> int:
     return 1 if failed else 0
 
 
+def _raises(fn) -> bool:
+    try:
+        fn()
+    except ValueError:
+        return True
+    return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true", help="run the metric regression guards")
     ap.add_argument("--pairs", type=str, default=None,
                     help='JSON file of [[predicted_label, gold_label], ...] to score')
+    ap.add_argument("--objective", choices=OBJECTIVES, default=DEFAULT_OBJECTIVE,
+                    help="what primary_metric and do_nothing_floor are (default: %(default)s)")
     args = ap.parse_args()
     if args.selftest:
         return _selftest()
     if args.pairs:
         with open(args.pairs, encoding="utf-8") as fh:
-            print(json.dumps(score([(a, b) for a, b in json.load(fh)]), indent=2))
+            print(json.dumps(score([(a, b) for a, b in json.load(fh)], objective=args.objective), indent=2))
         return 0
     ap.print_help()
     return 2

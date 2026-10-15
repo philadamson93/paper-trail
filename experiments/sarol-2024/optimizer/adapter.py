@@ -389,7 +389,18 @@ FAILED_CALL_LABEL = "FAILED_CALL"
 #: Renamed 2026-09-07 from `sarol_macro_f1_6class`, which was wrong twice over by the end: the
 #: objective had stopped being six-class (the "6" was an artifact of the pool-filter bug) and then
 #: stopped being macro-F1 at all. It is overall accuracy over the nine emittable labels.
+#:
+#: Since 2026-10-15 the objective is a run setting (`score_sarol3.OBJECTIVES`) and this is the DEFAULT
+#: objective's name; :func:`metric_name` gives any objective's. `score_sarol3.METRIC_NAMES` owns them
+#: and the adapter selftest pins this literal to its default entry.
 PRIMARY_METRIC_NAME = "sarol_accuracy_9class"
+
+
+def metric_name(objective: str | None = None) -> str:
+    """The frontier metric's name under ``objective`` (default: the default objective's)."""
+    import score_sarol3  # noqa: PLC0415 -- imported late; it imports parse_verdict
+
+    return score_sarol3.METRIC_NAMES[score_sarol3.check_objective(objective or score_sarol3.DEFAULT_OBJECTIVE)]
 
 
 #: Judge transcripts: the engine runner writes each call's session events to its pass folder and
@@ -669,7 +680,13 @@ class SarolScorer:
         *,
         gold_resolver: Callable[[pathlib.Path], dict[str, Any]] | None = None,
         mistakes_root: pathlib.Path | None = None,
+        #: The run's objective (`score_sarol3.OBJECTIVES`). It decides the frontier number, its name,
+        #: each claim's right/wrong for the data schedule, and which claims the mistakes file lists.
+        objective: str | None = None,
     ) -> None:
+        import score_sarol3  # noqa: PLC0415 -- imported late; it imports parse_verdict
+
+        self.objective = score_sarol3.check_objective(objective or score_sarol3.DEFAULT_OBJECTIVE)
         self._gold_resolver = gold_resolver
         self._corpus = None  # Sarol corpus.jsonl, read once on the first TRAIN mistake row
         # Where the per-claim TRAIN mistake corpus is written (C6.8). None disables it, which is
@@ -767,6 +784,8 @@ class SarolScorer:
         """
         if split != "train" or self.mistakes_root is None:
             return None
+        import score_sarol3  # noqa: PLC0415
+
         rows = []
         n_correct = 0
         for record, resolved in joined:
@@ -777,7 +796,11 @@ class SarolScorer:
             # discrimination was invisible in the corpus AND added to the `n_correct` the agent is
             # told to read first. Under an accuracy objective those are plainly errors, and the
             # optimizer cannot fix what it is never shown.
-            if resolved.get("pred_label") == resolved.get("gold_label"):
+            #
+            # Since 2026-10-15 "right" follows the run's objective (`score_sarol3.is_correct`): under the
+            # default it is the same 9-way equality; under 2-way a CONTRADICT answered NOT_SUBSTANTIATE
+            # is right and is not listed. The row still carries both 9-class labels.
+            if score_sarol3.is_correct(resolved.get("pred_label"), resolved.get("gold_label"), self.objective):
                 n_correct += 1
                 continue
             rows.append({
@@ -819,6 +842,9 @@ class SarolScorer:
                     # The pass's run manifest, for the correct-answer traces this corpus does not
                     # list. The optimizer's feedback copy brings it in with paths rewritten (D6).
                     "run_manifest_ref": run_manifest_ref,
+                    # Named only off the default, so a default run's file is unchanged.
+                    **({"objective": self.objective}
+                       if self.objective != score_sarol3.DEFAULT_OBJECTIVE else {}),
                 },
                 indent=2,
             ),
@@ -913,8 +939,10 @@ class SarolScorer:
         """One pass over a run manifest's claims: the (pred, gold) pairs the score is built from, and
         each claim's right/wrong for the data schedule (``per_example_correct``). One loop, so the two
         can never disagree about a claim."""
+        import score_sarol3  # noqa: PLC0415
+
         pairs: list[tuple[str, str]] = []
-        #: claim_id -> True (9-way label matches gold) / False / None (failed call, unreadable verdict).
+        #: claim_id -> True (right under the run's objective) / False / None (failed call, unreadable verdict).
         per_claim: dict[str, bool | None] = {}
         unresolved = 0
         joined: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -959,7 +987,8 @@ class SarolScorer:
                 per_claim[record.get("claim_id")] = None
                 continue
             pairs.append((resolved["pred_label"], resolved["gold_label"]))
-            per_claim[record.get("claim_id")] = resolved["pred_label"] == resolved["gold_label"]
+            per_claim[record.get("claim_id")] = score_sarol3.is_correct(
+                resolved["pred_label"], resolved["gold_label"], self.objective)
             # Kept, not discarded. Discarding it is what left the optimizer with counts only.
             joined.append((record, resolved))
 
@@ -969,7 +998,8 @@ class SarolScorer:
     def per_example_correct(self, artifacts, split: str) -> "dict[str, bool | None]":
         """The engine's data-schedule hook: right/wrong per claim on a TRAIN pass (plan 2026-10-08).
 
-        Right when the 9-way label equals gold. A failed call or an unreadable verdict is ``None``
+        Right under the run's objective (`score_sarol3.is_correct`: the 9-way label equals gold by
+        default; under 2-way, both sides collapse to the same of ACCURATE / NOT). A failed call or an unreadable verdict is ``None``
         (the engine's ``failed_counts_as_wrong`` setting decides what that means). Built from the
         run manifest, which lists every requested claim -- **never** from the mistakes file, which
         leaves failed and unreadable calls out and so would count them right."""
@@ -990,7 +1020,7 @@ class SarolScorer:
 
         def result(metric_value: float, breakdown: dict[str, Any]):
             metric = schemas.PrimaryMetric(
-                name=PRIMARY_METRIC_NAME, value=metric_value, higher_is_better=True
+                name=metric_name(self.objective), value=metric_value, higher_is_better=True
             )
             return schemas.ScoreResult(
                 primary_metric=metric, breakdown=breakdown, task_config=config
@@ -1040,7 +1070,7 @@ class SarolScorer:
         pairs, unresolved, joined = judged["pairs"], judged["unresolved"], judged["joined"]
         failed_calls = judged["failed_calls"]
 
-        scored = score_sarol3.score(pairs)
+        scored = score_sarol3.score(pairs, objective=self.objective)
 
         # Merge the validator's per-file invalid-label counts on top of the scorer's own. The
         # scorer only ever sees the OVERALL predicted label (that is what `parse_verdict` returns),
@@ -1146,6 +1176,9 @@ _VAL_BREAKDOWN_ALLOWED = (
     # it discloses VAL's ACCURATE share at each size, so the share among the newly added claims can be
     # worked out (Phil accepted this, 2026-10-08).
     "do_nothing_floor",
+    # The run's objective (2026-10-15), present only off the default. A fixed run setting, identical for
+    # every claim and every iteration: it says which number `primary_metric` is, never anything about VAL.
+    "objective",
 )
 
 
@@ -1796,6 +1829,72 @@ def _selftest() -> int:
                 ("...and a failed pass reports no claims rather than guessing",
                  SarolScorer().per_example_correct(schemas.RunArtifacts(
                      batch_id="x", status="timeout", artifact_refs=()), "train") == {}),
+            ]
+
+            # -- the objective setting (plan 2026-10-15): right/wrong, the mistakes file and the
+            # metric name all follow the run's objective. Three claims: a CONTRADICT answered
+            # NOT_SUBSTANTIATE (right under 2-way, wrong under 9-class), an ETIQUETTE answered ACCURATE
+            # (wrong under both), and an exact hit.
+            _ow_pm = pathlib.Path(tmp) / "ow_manifest.json"
+            _ow_gold = {"C": ("NOT_SUBSTANTIATE", "CONTRADICT"), "E": ("ACCURATE", "ETIQUETTE"),
+                        "A": ("ACCURATE", "ACCURATE")}
+            for c in _ow_gold:
+                (pathlib.Path(tmp) / f"ow{c}").mkdir()
+            _ow_pm.write_text(json.dumps({
+                "batch_id": "ow", "split": "train", "requested_count": 3, "profile": "retrieval",
+                "retrieval_k": 20,
+                "claims": [{"claim_id": c, "citekey": "k", "staging_dir": str(pathlib.Path(tmp) / f"ow{c}"),
+                            "status": "ok"} for c in _ow_gold],
+            }), encoding="utf-8")
+
+            def _ow_resolver(path):
+                pred, gold = _ow_gold[pathlib.Path(path).name[2:]]
+                return {"pred_label": pred, "gold_label": gold, "pred_3way": "x", "gold_3way": "y",
+                        "citekey": "k", "split": "train", "claim_row_id": 1, "cited_paper_bucket": 1}
+
+            _ow_art = schemas.RunArtifacts(batch_id="ow", status="ok", artifact_refs=(schemas.ArtifactRef(
+                path=str(_ow_pm), sha256=hashlib.sha256(_ow_pm.read_bytes()).hexdigest()),))
+
+            def _ow(objective, root):
+                sc = SarolScorer(gold_resolver=_ow_resolver, mistakes_root=pathlib.Path(tmp) / root,
+                                 objective=objective)
+                res = sc.score(_ow_art, "train", {"_iter": 1})
+                mist = json.loads(pathlib.Path(res.breakdown["mistakes_ref"]).read_text(encoding="utf-8"))
+                return sc.per_example_correct(_ow_art, "train"), res, mist
+
+            _pe2, _res2, _mist2 = _ow("macro_f1_2way", "m2")
+            _pe9, _res9, _mist9 = _ow(None, "m9")
+            _row2 = (_mist2["claims"] or [{}])[0]
+            _val2 = SarolReleaseBuilder(setup_value="setup-v1:selftest").build_release(
+                schemas.ScoreResult(primary_metric=_res2.primary_metric, breakdown=dict(_res2.breakdown),
+                                    task_config={"_split": "val", "_iter": 1}),
+                schemas.MistakeCorpus(ref="", counts={}), frontier={}, budget={}).metrics.breakdown
+            checks += [
+                ("PRIMARY_METRIC_NAME is the default objective's name, as score_sarol3 defines it",
+                 PRIMARY_METRIC_NAME == metric_name() == metric_name("accuracy_9class")),
+                ("an unknown objective is refused when the scorer is built, before any pass is paid for",
+                 _raises_valueerror(lambda: SarolScorer(objective="macro_f1_3way"))),
+                ("under 2-way, per-claim right/wrong follows the collapse: CONTRADICT->NOT_SUBSTANTIATE "
+                 "right, ETIQUETTE->ACCURATE wrong",
+                 _pe2 == {"C": True, "E": False, "A": True}),
+                ("...negative control: the same claims under the default are 9-way (C is wrong)",
+                 _pe9 == {"C": False, "E": False, "A": True}),
+                ("under 2-way the mistakes file lists only E, and keeps both 9-class labels on the row",
+                 [r["claim_id"] for r in _mist2["claims"]] == ["E"] and _mist2["n_correct"] == 2
+                 and _row2.get("pred_label") == "ACCURATE" and _row2.get("gold_label") == "ETIQUETTE"
+                 and "gold_evidence" in _row2 and _mist2.get("objective") == "macro_f1_2way"),
+                ("...while the default lists C and E and names no objective (its file is unchanged)",
+                 sorted(r["claim_id"] for r in _mist9["claims"]) == ["C", "E"] and "objective" not in _mist9),
+                ("the 2-way score carries the 2-way metric name and value; the default the 9-class",
+                 _res2.primary_metric.name == "sarol_macro_f1_2way"
+                 and _res9.primary_metric.name == PRIMARY_METRIC_NAME
+                 # gold ACC 1, NOT 2; pred ACC 2 (A hit, E miss), NOT 1 (C hit). ACC: tp1 fp1 fn0 = 2/3;
+                 # NOT: tp1 fp0 fn1 = 2/3. Worked by hand.
+                 and abs(_res2.primary_metric.value - 2 / 3) < 1e-12
+                 and abs(_res9.primary_metric.value - 1 / 3) < 1e-12),
+                ("the 2-way VAL release says which objective its scalar is, and still no per-class structure",
+                 _val2.get("objective") == "macro_f1_2way" and "per_class_f1_2way" not in _val2
+                 and "accuracy_9class" not in _val2),
             ]
 
     else:

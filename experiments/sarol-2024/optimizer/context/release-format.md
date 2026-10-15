@@ -56,15 +56,22 @@ shape, and the difference is the whole leakage design.
 }
 ```
 
-**Reading the objective.** `primary_metric` is **accuracy over the nine labels** — the fraction of
-claims whose predicted label equals the gold label. Nothing collapsed, nothing renormalised, so it
-needs no companion field to be comparable between batches.
+**Reading the objective.** `primary_metric` is the run's objective, named by
+`primary_metric_name` (on VAL, `primary_metric.name`). The example above is the default,
+`sarol_accuracy_9class`: **accuracy over the nine labels** — the fraction of claims whose predicted
+label equals the gold label. Nothing collapsed, nothing renormalised, so it needs no companion field
+to be comparable between batches. Under `sarol_macro_f1_2way` it is macro-F1 of ACCURATE versus NOT,
+the breakdown also carries `objective: "macro_f1_2way"`, and on TRAIN `accuracy_9class`,
+`accuracy_9class_floor`, `per_class_f1_2way`, `confusion_matrix_2way`, `support_2way` and
+`n_correct_2way`; every other field is the same. `/workspace/ro/in/context/task-and-scoring.md`
+defines both.
 
 **Read it against `do_nothing_floor`, which sits beside it.** That is what a program scores by
-answering `ACCURATE` every time, computed from this batch's own gold (≈0.595 on full dev). An
-accuracy of 0.63 is 3.5 points of work, not 63% of a job done.
+answering `ACCURATE` every time, under the same objective, computed from this batch's own gold
+(≈0.595 accuracy, ≈0.37 2-way macro-F1, on full dev). An accuracy of 0.63 is 3.5 points of work, not
+63% of a job done.
 
-`macro_f1_renormalised` is the **diagnostic**, not the objective: macro-F1 over
+`macro_f1_renormalised` is a **diagnostic**, not the objective: macro-F1 over
 `objective_class_set` renormalised over the members present. Read it to check *how* an accuracy gain
 was bought — collapsing toward `ACCURATE` raises accuracy and craters macro, and that is the one
 degenerate strategy accuracy admits. `n_objective_classes_present` is part of **that** number, not
@@ -76,7 +83,7 @@ only the count, because the presence vector is VAL gold structure.
 classes caps at 5/9 = 0.556 however perfect the predictions. **Always read `support_9way` and
 `n_classes_present_9way` before reading the F1s** — a low 9-way macro on a small batch usually means
 the batch was small, not that the program got worse. That fixed denominator is why `macro_f1_9way`
-is a descriptive breakdown and not a frontier; the frontier is **accuracy**, and `macro_f1_3way`
+is a descriptive breakdown and not a frontier; the frontier is **the run's objective**, and `macro_f1_3way`
 exists for comparability with the published baselines. The full calibration table — every axis, one
 pool, one do-nothing program — is in
 `/workspace/ro/in/context/task-and-scoring.md`; do not carry a second copy of those
@@ -207,6 +214,7 @@ you here, deliberately, because that is the mechanism by which you learn. Raw be
 That is the entire VAL surface. **No per-class F1, no confusion matrix, no error-class counts, no
 per-example anything.** The scalar plus enough metadata to distinguish a real score from a partial
 batch, and `do_nothing_floor`: one number per VAL size, the score of answering `ACCURATE` every time.
+Under the 2-way objective the breakdown also says `"objective": "macro_f1_2way"`, and nothing more.
 
 **VAL grows during a run, so `n_total` changes between iterations.** Each VAL batch holds the one
 before it plus new claims; its id names its size (`<run>-val-n<k>`). Two VAL scores are comparable only

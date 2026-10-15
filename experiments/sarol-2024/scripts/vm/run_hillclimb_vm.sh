@@ -10,6 +10,7 @@
 # Defaults: RUN_ID=hillclimb-$(date +%F), MAX_WORKERS=4, ITERATIONS=5.
 # The data schedule and the cap are environment settings (plan 2026-10-08-paper-trail-adopts-data-schedule):
 #   TRAIN_SIZES='explicit(25,50,100,150,200)' VAL_SIZES='explicit(50,100,150,250,311)' MAX_BUDGET_USD=150
+# So is what the run climbs: OBJECTIVE=accuracy_9class (default) or OBJECTIVE=macro_f1_2way.
 # Runs on the Mac as well as a VM: set AGENTIC_LABEL_OPT to the engine checkout on either.
 
 set -euo pipefail
@@ -33,6 +34,11 @@ START="${START:-newest}"
 TRAIN_SIZES="${TRAIN_SIZES:-explicit(25,50,100,150,200)}"
 VAL_SIZES="${VAL_SIZES:-explicit(50,100,150,250,311)}"
 MAX_BUDGET_USD="${MAX_BUDGET_USD:-150}"
+# What the run climbs (plan 2026-10-15): `accuracy_9class`, 9-class accuracy (the default), or
+# `macro_f1_2way`, macro-F1 of ACCURATE versus NOT. Recorded in the run's identity: a --resume of the same
+# run under the other objective is refused.
+OBJECTIVE="${OBJECTIVE:-accuracy_9class}"
+case "$OBJECTIVE" in accuracy_9class|macro_f1_2way) : ;; *) echo "FAIL: OBJECTIVE=$OBJECTIVE is not accuracy_9class or macro_f1_2way" >&2; exit 1;; esac
 
 # Deterministic interpreter: name the exact executable rather than trusting whatever `python3`
 # resolves to on a fresh box (the engine + optimizer are pinned to 3.13). Override with
@@ -256,6 +262,7 @@ FROZEN_TAG="$("$PY" -c 'import json; print(json.load(open("program-v0/manifest.j
   || fail "$FROZEN_TAG does not verify against its tag -- the tree and the tag disagree, so numbers would be filed under the wrong program"
 echo "  $FROZEN_TAG (the version the manifest freezes) verifies against its tag"
 echo "  start: $START (the dispatcher resolves it and checks the tree against the version it names)"
+echo "  objective: $OBJECTIVE"
 
 # ---------------------------------------------------------------- container images
 # Both principals run as the engine's sealed sessions (PT-A): the graders on the grader image, the
@@ -284,6 +291,7 @@ set +e
   --optimizer-image "$OPTIMIZER_IMAGE_REF" \
   --profile "$PROFILE" \
   --start "$START" \
+  --objective "$OBJECTIVE" \
   --iterations "$ITERATIONS" \
   --train-sizes "$TRAIN_SIZES" \
   --val-sizes "$VAL_SIZES" \

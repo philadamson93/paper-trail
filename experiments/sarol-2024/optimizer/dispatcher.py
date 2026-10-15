@@ -48,6 +48,7 @@ import contextlib
 import hashlib
 import importlib
 import inspect
+import io
 import json
 import os
 import pathlib
@@ -513,6 +514,9 @@ def build_components(
     optimizer_run_summary_path: pathlib.Path | None = None,
     #: The run's lasting state (:func:`state_paths`). Default: ``~/.paper-trail``.
     state_root: pathlib.Path | None = None,
+    #: What the run climbs (``score_sarol3.OBJECTIVES``; default 9-class accuracy). The scorer and the
+    #: optimizer's instructions are built from it, so the two cannot name different numbers.
+    objective: str | None = None,
     _program_runner_private: "dict | None" = None,
     _agent_factory=None,
 ):
@@ -533,6 +537,7 @@ def build_components(
 
     store = program_store or SarolProgramStore()
     prof = profiles_mod.get(profile)
+    scorer = adapter.SarolScorer(gold_resolver=gold_resolver, mistakes_root=train_output_root, objective=objective)
     cost_model = CostModel.for_profile(
         prof,
         per_session_usd=per_session_usd,
@@ -601,6 +606,7 @@ def build_components(
         # a placeholder: the run id names a folder inside the notes history, not a mount, so the
         # session's description and its setup pin are the same either way (checked in the selftest).
         run_id=run_id or "unnamed-run",
+        objective=scorer.objective,
         **({"_agent_factory": _agent_factory} if _agent_factory is not None else {}),
     )
     setup_value = sarol_program.setup_value(program_runner, optimizer, materialize_root=pathlib.Path(materialize_root))
@@ -611,7 +617,8 @@ def build_components(
         "program_runner": program_runner,
         "optimizer": optimizer,
         "setup_value": setup_value,
-        "scorer": adapter.SarolScorer(gold_resolver=gold_resolver, mistakes_root=train_output_root),
+        "scorer": scorer,
+        "objective": scorer.objective,
         "profile": prof,
         "release_builder": adapter.SarolReleaseBuilder(setup_value=setup_value),
         "build_mistake_corpus": adapter.build_mistake_corpus,
@@ -653,6 +660,9 @@ def run_optimization(
     #: scratch folder. Components handed in by a selftest bring their own (``parts["state_root"]``) or
     #: none, and with none there is no run store and nothing carried across the reset.
     state_root: pathlib.Path | None = None,
+    #: What the run climbs (``score_sarol3.OBJECTIVES``); ``None`` is the default, 9-class accuracy.
+    #: Part of the run's identity: a ``--resume`` under a different objective is refused.
+    objective: str | None = None,
     **component_kwargs,
 ):
     """Run the optimization through the engine's shared driver (``engine.driver.run_driver``, C-core).
@@ -698,6 +708,15 @@ def run_optimization(
         record_pre_loop_stop(effective_run_summary, run_id=run_id, stop=stop, step=step)
         raise stop
 
+    # The objective is checked first, by the scorer's own list: an unknown one is an argument error.
+    import score_sarol3  # noqa: PLC0415
+
+    objective = score_sarol3.check_objective(
+        objective or (components or {}).get("objective") or score_sarol3.DEFAULT_OBJECTIVE)
+    if components is not None and components.get("objective", score_sarol3.DEFAULT_OBJECTIVE) != objective:
+        raise ValueError(f"the components were built for objective {components.get('objective')!r}, "
+                         f"not {objective!r}")
+
     # The run's lasting state. Components handed in by a selftest bring their own or none, and with none
     # there is no run store and nothing carried across the reset.
     state = components.get("state_root") if components is not None else pathlib.Path(state_root or STATE_ROOT)
@@ -715,6 +734,14 @@ def run_optimization(
     except LoopStop as exc:
         record_pre_loop_stop(effective_run_summary, run_id=run_id, stop=exc, step="before_run")
         raise
+
+    # A resume continues ONE curve, so it must climb the objective the run started with. The engine's
+    # hard-field check covers a recorded objective; this also covers a run summary written before the
+    # setting existed (or by a default run, which records none), which reads as the default.
+    if resume:
+        problem = resume_objective_problem(effective_run_summary, objective)
+        if problem:
+            refuse_before_build(problem, "before_run")
 
     # A real run must SAY where its outputs go. `train_output_root` is where the per-claim mistake
     # corpus lands (C6.8) and `val_output_root` must lie outside the optimizer's readable tree (C6.9);
@@ -800,6 +827,7 @@ def run_optimization(
         materialize_root=pathlib.Path(materialize_root),
         state_root=state_root,
         schedule_sizes=sizes,
+        objective=objective,
         **component_kwargs,
     )
 
@@ -863,15 +891,12 @@ def run_optimization(
             },
             # C6.5: a resume whose profile differs from the recorded one must STOP, not silently
             # continue a curve built from two different systems.
-            hard_fields={
-                "profile": parts["profile"].name,
-                "retrieval_k": parts["profile"].retrieval_k,
-                "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
-            },
+            hard_fields=run_identity(parts["profile"], objective),
             # Provenance-only drift (warns, never STOPs).
             soft_fields={"model": model},
             # The ledger key each frozen version's VAL scalar is stored under and `--resume` reads back.
-            metric_field="sarol_accuracy_9class",
+            # Per objective since 2026-10-15; the default's is the literal it always was.
+            metric_field=adapter.metric_name(objective),
             build_mistake_corpus=parts["build_mistake_corpus"],
             # ⚠ THIS ARGUMENT IS THE FEEDBACK LOOP. `run_loop` writes `iter/<n>/release_train.json` and
             # `release_val.json` (the only channel by which the held-out VAL scalar reaches the
@@ -887,6 +912,43 @@ def run_optimization(
         exc.budget = parts.get("budget")
         raise
     return run, parts.get("budget")
+
+
+def run_identity(profile, objective: str | None = None) -> dict:
+    """The run's hard identity fields (``hard_fields``): a ``--resume`` whose values differ is refused.
+
+    The objective is recorded only off the default, so a default run's identity -- and its run summary
+    -- is exactly what it was before the setting existed, and a run started before it still resumes.
+    :func:`resume_objective_problem` reads an absent objective as the default, which closes the other
+    direction (a default resume of a 2-way run).
+    """
+    import score_sarol3  # noqa: PLC0415
+
+    objective = score_sarol3.check_objective(objective or score_sarol3.DEFAULT_OBJECTIVE)
+    return {
+        "profile": profile.name,
+        "retrieval_k": profile.retrieval_k,
+        "rubric_variant": adapter.validate_sarol.SAROL_VARIANT,
+        **({"objective": objective} if objective != score_sarol3.DEFAULT_OBJECTIVE else {}),
+    }
+
+
+def resume_objective_problem(run_summary_path, objective: str | None) -> str | None:
+    """Why a resume under ``objective`` must not continue the run summary at ``run_summary_path``, or
+    None. A missing or unreadable summary is left to the engine, which refuses it on its own."""
+    import score_sarol3  # noqa: PLC0415
+
+    objective = score_sarol3.check_objective(objective or score_sarol3.DEFAULT_OBJECTIVE)
+    try:
+        config = json.loads(pathlib.Path(run_summary_path).read_text(encoding="utf-8")).get("config") or {}
+    except (OSError, TypeError, ValueError, AttributeError):
+        return None
+    recorded = config.get("objective") or score_sarol3.DEFAULT_OBJECTIVE
+    if recorded != objective:
+        return (f"resume: the run climbed objective {recorded!r} and this resume asks for {objective!r}; "
+                "one curve cannot mix two objectives. Resume with the run's own objective, or start a new "
+                "run id for the other.")
+    return None
 
 
 #: ``--start``'s two named choices; anything else is a version tag.
@@ -1499,6 +1561,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
 
     # The wiring itself: you cannot build these components with a bare, unguarded agent.
     parts = _test_components(max_budget_usd=1000.0, train_n=10, require_command=False)
+    two_way = _test_components(max_budget_usd=1000.0, train_n=10, require_command=False, objective="macro_f1_2way")
 
     # PT-B: what the run-start reset is handed comes from the optimizer build_components really builds.
     import sarol_optimizer  # noqa: PLC0415
@@ -1537,6 +1600,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         nonlocal_holder["mw"] = kwargs.get("max_workers")
         nonlocal_holder["state_root"] = kwargs.get("state_root")
         nonlocal_holder["opt_budget"] = kwargs.get("optimizer_max_budget_usd")
+        nonlocal_holder["objective"] = kwargs.get("objective", "<absent>")
         raise _StopCapture()
 
     class _StopCapture(Exception):
@@ -1555,6 +1619,7 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
             "--train-inputs", "/tmp/pt-gate-train.json",
             "--val-inputs", "/tmp/pt-gate-val.json",
             "--state-root", "/tmp/pt-gate-state", "--optimizer-max-budget-usd", "1.5",
+            "--objective", "macro_f1_2way",
         ])
     except _StopCapture:
         pass
@@ -1567,6 +1632,9 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
                    "its scratch folder; its optimizer session keeps to its cap)",
                    nonlocal_holder.get("state_root") == pathlib.Path("/tmp/pt-gate-state")
                    and nonlocal_holder.get("opt_budget") == 1.5))
+    checks.append(("--objective reaches the run, and an unknown objective is refused by the parser",
+                   nonlocal_holder.get("objective") == "macro_f1_2way"
+                   and _stops_parser(["--run", "--objective", "macro_f1_3way"])))
 
     # Finding 4: the canary must be priced from what is WIRED, and a real run must refuse to start
     # without one. The first optimization run priced three firings per iteration and executed
@@ -1790,9 +1858,17 @@ def _integration_checks(schemas) -> list[tuple[str, bool]]:
         # The previous version matched "maximize 3-way macro-F1", which broke the moment the
         # objective moved -- and would have gone on passing if the prompt kept the old wording
         # while the scorer changed underneath it. The name is the seam both sides share.
+        #
+        # Since 2026-10-15 the instructions carry the run's objective paragraph, filled in per run; the
+        # check is on that paragraph and the metric the SCORER of the same components reports, and is
+        # made for both objectives (the default here, 2-way from `two_way` below).
         ("...which loads the hot-path prompt as its instructions, naming the objective the "
          "adapter actually reports",
-         adapter.PRIMARY_METRIC_NAME in parts["agent"].inner.agent_instructions()),
+         all(adapter.metric_name(p["scorer"].objective) in p["agent"].inner.agent_instructions()
+             and _objective_paragraph(p["scorer"].objective) in p["agent"].inner.agent_instructions()
+             for p in (parts, two_way))
+         and parts["scorer"].objective == "accuracy_9class" and two_way["scorer"].objective == "macro_f1_2way"
+         and adapter.PRIMARY_METRIC_NAME in parts["agent"].inner.agent_instructions()),
         # The engine renders the description's `max_budget_usd` as `--max-budget-usd` on the session
         # argv (its contained_argv); what paper-trail owns is that the cap is set and is the one stated.
         ("the optimizer session also carries a hard budget cap",
@@ -1889,9 +1965,11 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
             notebook = tmp / f"{name}-meta-learnings.md"
             return repo, notebook
 
-        def _run(repo, notebook, runner, *, run_id, start="program-v0", iterations=1, resume=False, budget=None):
+        def _run(repo, notebook, runner, *, run_id, start="program-v0", iterations=1, resume=False, budget=None,
+                 objective=None):
             store = SarolProgramStore(repo_root=repo)
             parts = {
+                "objective": objective or "accuracy_9class",
                 "program_store": store, "runner": runner, "scorer": _Scorer(),
                 "profile": profiles_mod.get("retrieval"),
                 "release_builder": adapter.SarolReleaseBuilder(setup_value="setup-v1:selftest"),
@@ -1906,6 +1984,7 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
                 iterations=iterations, run_id=run_id, train_input_ref=str(batch), val_input_ref=str(batch),
                 max_budget_usd=1e9, train_n=1, materialize_root=tmp / f"mat-{run_id}", start=start,
                 components=parts, run_summary_path=tmp / f"summary-{run_id}.json", resume=resume,
+                objective=objective,
             )
 
         def _archived(run_id):
@@ -2120,6 +2199,65 @@ def _lifecycle_checks(schemas) -> list[tuple[str, bool]]:
             (f"a resume skips the run-start reset; a plain run calls it (the resume ended: {resume_stop})",
              [c["run_id"] for c in calls] == ["res-2"]),
             ("...and a resume still takes the lock (D2)", resume_locked == "version_lock_held"),
+        ]
+
+        # -- the objective is part of the run's identity (plan 2026-10-15) ----------------------------
+        # Two real offline runs through the driver, one per objective, then resumes across them.
+        def _resume_stop(repo, nb, run_id, objective):
+            try:
+                # `newest`: after a run the tree is the version it committed, which a resume starts from.
+                _run(repo, nb, _Runner(f"{run_id}-r"), run_id=run_id, resume=True, objective=objective,
+                     start="newest")
+                return None
+            except LoopStop as exc:
+                return exc
+            except KeyError as exc:  # the engine reading a row under the other objective's metric key
+                return exc
+
+        repo_o9, nb_o9 = _repo("o9")
+        _run(repo_o9, nb_o9, _Runner("obj-9"), run_id="obj-9")
+        repo_o2, nb_o2 = _repo("o2")
+        _run(repo_o2, nb_o2, _Runner("obj-2"), run_id="obj-2", objective="macro_f1_2way")
+        cfg9 = json.loads((tmp / "summary-obj-9.json").read_text(encoding="utf-8"))["config"]
+        cfg2 = json.loads((tmp / "summary-obj-2.json").read_text(encoding="utf-8"))["config"]
+        rows2 = json.loads((tmp / "summary-obj-2.json").read_text(encoding="utf-8"))["iters"]
+        stop_9_to_2 = _resume_stop(repo_o9, nb_o9, "obj-9", "macro_f1_2way")
+        stop_2_to_9 = _resume_stop(repo_o2, nb_o2, "obj-2", None)
+        stop_2_to_2 = _resume_stop(repo_o2, nb_o2, "obj-2", "macro_f1_2way")
+        # Negative control: with this module's objective check switched off, the engine's own hard-field
+        # check still refuses a 2-way resume of a default run (the identity recorded nothing, so None !=
+        # the 2-way value) -- but a DEFAULT resume of a 2-way run passes it, because a default run names
+        # no objective to compare, and then dies reading its rows under the wrong metric key (a KeyError,
+        # not a recorded stop). That gap is what the check exists for.
+        real_problem = globals()["resume_objective_problem"]
+        globals()["resume_objective_problem"] = lambda *_a, **_k: None
+        try:
+            bare_9_to_2 = _resume_stop(repo_o9, nb_o9, "obj-9", "macro_f1_2way")
+            bare_2_to_9 = _resume_stop(repo_o2, nb_o2, "obj-2", None)
+        finally:
+            globals()["resume_objective_problem"] = real_problem
+
+        def _objective_refusal(stop):
+            return getattr(stop, "reason", None) == "consumer_refused" and "objective" in str(stop)
+
+        checks += [
+            ("the objective is recorded in the run's identity off the default, and a default run's identity "
+             "is what it was before the setting existed",
+             cfg2.get("objective") == "macro_f1_2way" and "objective" not in cfg9
+             and set(cfg9) == {"profile", "retrieval_k", "rubric_variant", "model"}),
+            ("...and a 2-way run stores its VAL scores under the 2-way metric's key",
+             bool(rows2) and all("sarol_macro_f1_2way" in r and "sarol_accuracy_9class" not in r for r in rows2)),
+            (f"a 2-way --resume of a 9-class run is REFUSED as a recorded stop ({stop_9_to_2})",
+             _objective_refusal(stop_9_to_2)),
+            (f"...and a 9-class --resume of a 2-way run is refused too ({stop_2_to_9})",
+             _objective_refusal(stop_2_to_9)),
+            (f"...while a resume under the run's own objective is not refused for its objective ({stop_2_to_2})",
+             not _objective_refusal(stop_2_to_2)),
+            ("negative control: without the check the engine still catches 9->2 by its hard field ...",
+             bare_9_to_2 is not None and "objective" in str(bare_9_to_2)),
+            (f"...but not 2->9, which passes the identity check and crashes on the metric key, which is why "
+             f"the check exists ({type(bare_2_to_9).__name__}: {bare_2_to_9})",
+             isinstance(bare_2_to_9, KeyError)),
         ]
     return checks
 
@@ -2777,6 +2915,28 @@ def print_schedule(args, schedule: "dict | None") -> int:
     return 0 if all(ok for _n, ok in checks) else 1
 
 
+def _stops_parser(argv) -> bool:
+    """True when the real parser rejects ``argv`` (argparse exits 2), output swallowed."""
+    with contextlib.redirect_stderr(io.StringIO()):
+        try:
+            _parser().parse_args(argv)
+        except SystemExit as exc:
+            return exc.code == 2
+    return False
+
+
+def _objective_paragraph(objective: str) -> str:
+    import score_sarol3  # noqa: PLC0415
+
+    return score_sarol3.OBJECTIVE_DESCRIPTIONS[objective]
+
+
+def _objective_choices() -> tuple:
+    import score_sarol3  # noqa: PLC0415
+
+    return score_sarol3.OBJECTIVES
+
+
 def _parser() -> "argparse.ArgumentParser":
     """The CLI, built separately from `main` so the selftests can gate flags by PARSING them.
 
@@ -2926,6 +3086,13 @@ def _parser() -> "argparse.ArgumentParser":
              "recorded run (a curve must not mix two systems).",
     )
     ap.add_argument(
+        "--objective",
+        default=None,
+        choices=_objective_choices(),
+        help="what the run climbs: accuracy_9class (default) or macro_f1_2way (ACCURATE vs not). Part of "
+             "the run's identity: a --resume under a different objective is refused.",
+    )
+    ap.add_argument(
         "--state-root",
         default=None,
         help="where the run's lasting state lives: the optimizer's notes history, the run store and "
@@ -3025,6 +3192,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 # `build_components`, which hands it to the Runner.
                 run_summary_path=(pathlib.Path(args.run_summary) if args.run_summary else None),
                 resume=args.resume,
+                objective=args.objective,
                 start=args.start,
                 state_root=pathlib.Path(args.state_root) if args.state_root else None,
                 **({"optimizer_max_budget_usd": args.optimizer_max_budget_usd}

@@ -62,19 +62,23 @@ nine-label vocabulary. Up to three prompt-driven stages — **extractor** → **
 
 ## The objective
 
-**Maximize accuracy over the nine classes on the held-out VAL split.** The fraction of claims whose
-predicted label equals the gold label — nothing collapsed, nothing renormalised. One number,
-reported as `primary_metric` under the name `sarol_accuracy_9class`. It is the key the adapter
-emits, so it is the key you read.
+**Maximize the metric your release names, against its floor, on the held-out VAL split.** Each run
+climbs one objective, fixed when the run starts. The release names it (`primary_metric_name` on
+TRAIN, `primary_metric.name` on VAL) and reports its value as `primary_metric`. That is the key the
+adapter emits, so it is the key you read. This run's objective:
+
+{{objective}}
 
 **Compare it against `do_nothing_floor`, never against zero — and read that key, do not remember a
 number.** A program that answers ACCURATE every time and does no work scores the floor. The release
-computes it from *your batch's own gold*, so it is right for the batch you are actually on.
+computes it from *your batch's own gold* and under *your run's objective*, so it is right for the
+batch you are actually on.
 
 ⚠ **Do not carry a floor forward from memory.** The floor depends on which claims VAL holds, and VAL
-grows during the run (below), so it moves with it: on the first 50 VAL claims gold is ACCURATE 35 of 50
-(floor 0.70), over all 311 Dev claims it is about 0.6. In September the best program then scored 0.62
-on those 50 claims, *eight points below its own floor*; in October program-v13 scored 0.76 on them. Read
+grows during the run (below), so it moves with it. On the first 50 VAL claims gold is ACCURATE 35 of
+50, which puts the 9-class accuracy floor at 0.70 and the 2-way macro-F1 floor at 0.41; over all 311
+Dev claims they are about 0.6 and 0.37. In September the best program scored 0.62 accuracy on those 50
+claims, *eight points below its own floor*; in October program-v13 scored 0.76 on them. Read
 `do_nothing_floor` from the VAL release every iteration and state the gap against it, signed.
 
 ## How TRAIN and VAL change during a run
@@ -97,17 +101,24 @@ The engine draws both each iteration, on a schedule fixed before the run starts.
   your session starts, and "best" means best on the current VAL. `run_summary.json` lists every score
   with its VAL batch id.
 
-**The cost of this objective, stated plainly so you can plan around it.** Accuracy is dominated by
+**When your release names `sarol_accuracy_9class`** (accuracy over the nine labels), two things
+follow. **The cost of that objective, stated plainly so you can plan around it.** Accuracy is dominated by
 the common classes. MISQUOTE and INDIRECT have six dev instances each, so getting both perfectly
 right moves the number by about four points at most, and getting them wrong costs about the same.
 You will not be rewarded much for rare-class work. That is a known property of the objective, not
 a signal that the rare classes are unimportant.
 
-**Read `macro_f1_renormalised` beside it, every time.** It is macro-F1 over the classes present,
+**Under that objective, read `macro_f1_renormalised` beside it, every time.** It is macro-F1 over the classes present,
 and it is the diagnostic that catches the one degenerate strategy this objective admits: collapsing
 toward ACCURATE raises accuracy and craters macro. Accuracy up **and** macro down means you bought
 the gain by answering ACCURATE more often, which is not an improvement to the rubric. Accuracy up
 and macro flat or up is a real gain.
+
+**When your release names `sarol_macro_f1_2way`** (ACCURATE versus NOT), the only mistake that costs
+is one that crosses that line: a confusion among the eight NOT labels is free, and every claim is
+right or wrong by the 2-way collapse on TRAIN too (the mistakes file, retirement). Answering
+`ACCURATE` by default scores the floor, not above it. The TRAIN breakdown still carries 9-class
+`accuracy_9class` and the per-class fields, as diagnostics.
 
 `micro_f1` and `macro_f1_3way` are also reported. `micro_f1` is accuracy computed *after* the
 collapse into ACCURATE / NOT_ACCURATE / IRRELEVANT, so it forgives every confusion **inside**
@@ -185,7 +196,8 @@ predecessor: say so and go to step 2.
 
 Before you look at any individual failure, write down what this batch actually says:
 
-- `primary_metric` (accuracy) and `do_nothing_floor` beside it — the gap between them is the work.
+- `primary_metric` (your run's objective) and `do_nothing_floor` beside it — the gap between them is
+  the work.
 - `macro_f1_renormalised`, to see whether any gain came from collapsing toward `ACCURATE`.
 - `n_correct` and `n_mistakes` from the corpus. Three mistakes out of ten and three out of three
   hundred are different situations and look identical in a list.

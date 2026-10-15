@@ -374,14 +374,17 @@ def _selftest() -> int:
              problems_for(name="odd", stages=("adjudicator", "summarizer")))),
     ]
 
-    def _objective_classes() -> tuple:
-        """The scorer's own objective class set -- read, never restated."""
+    def _scorer():
         import sys as _sys
         d = pathlib.Path(__file__).resolve().parents[1] / "scripts"
         if str(d) not in _sys.path:
             _sys.path.insert(0, str(d))
         import score_sarol3  # noqa: PLC0415
-        return score_sarol3.OBJECTIVE_CLASSES
+        return score_sarol3
+
+    def _objective_classes() -> tuple:
+        """The scorer's own objective class set -- read, never restated."""
+        return _scorer().OBJECTIVE_CLASSES
 
     def _emits(token: str) -> bool:
         """Does any module in this package actually produce `token`?"""
@@ -408,6 +411,10 @@ def _selftest() -> int:
             if cited.startswith(prefix):
                 return (host / cited[len(prefix):]).exists()
         return not cited.startswith("/") and (root / cited).exists()
+
+    def _render(objective):
+        import sarol_optimizer  # noqa: PLC0415 -- imported late; it imports this module
+        return sarol_optimizer.render_instructions(objective)
 
     def _unresolvable_doc_paths(docs: dict) -> list:
         """Every repo-relative `.md` path the optimizer-facing docs cite that does not exist.
@@ -565,8 +572,28 @@ def _selftest() -> int:
         # These exist because the objective has now changed twice (3-way macro -> renormalised
         # macro -> accuracy) and each time a doc was left describing the previous one. A doc that
         # names the wrong objective sends the agent to hill-climb a number nothing computes.
-        ("the standing prompt states the objective as ACCURACY over the nine classes",
-         "Maximize accuracy over the nine classes" in docs["optimizer-instructions.md"]),
+        #
+        # Since 2026-10-15 the objective is a run setting. The docs say "maximize the metric your release
+        # names, against its floor", and the paragraph naming WHICH metric is filled in per run from
+        # `score_sarol3.OBJECTIVE_DESCRIPTIONS` (`sarol_optimizer.render_instructions`). So the old pin on
+        # "Maximize accuracy over the nine classes" moved onto the default's paragraph, and each
+        # objective's paragraph is pinned to its own objective and kept off the other's.
+        ("the standing prompt states the objective neutrally, against its floor, and carries the "
+         "per-run objective slot exactly once",
+         "Maximize the metric your release names, against its floor" in docs["optimizer-instructions.md"]
+         and docs["optimizer-instructions.md"].count("{{objective}}") == 1
+         and "Maximize the metric your release names, against its floor" in docs["task-and-scoring.md"]),
+        ("...the default's paragraph states ACCURACY over the nine classes, and the 2-way paragraph 2-way "
+         "macro-F1 of ACCURATE versus NOT -- each naming its own metric and not the other's",
+         "maximize accuracy over the nine classes" in _scorer().OBJECTIVE_DESCRIPTIONS["accuracy_9class"].lower()
+         and "2-way macro-F1, ACCURATE versus NOT" in _scorer().OBJECTIVE_DESCRIPTIONS["macro_f1_2way"]
+         and "accuracy over the nine" not in _scorer().OBJECTIVE_DESCRIPTIONS["macro_f1_2way"]
+         and all(_scorer().METRIC_NAMES[o] in _scorer().OBJECTIVE_DESCRIPTIONS[o]
+                 and not any(_scorer().METRIC_NAMES[x] in _scorer().OBJECTIVE_DESCRIPTIONS[o]
+                             for x in _scorer().OBJECTIVES if x != o)
+                 for o in _scorer().OBJECTIVES)),
+        ("...and the scoring doc defines every objective the scorer offers, by its metric name",
+         all(f"`{_scorer().METRIC_NAMES[o]}`" in docs["task-and-scoring.md"] for o in _scorer().OBJECTIVES)),
         ("...and points at the do-nothing floor beside it, read from the release, since accuracy against "
          "zero is meaningless and the floor moves as VAL grows (plan 2026-10-08)",
          "do_nothing_floor" in docs["optimizer-instructions.md"]
@@ -575,9 +602,24 @@ def _selftest() -> int:
         ("...and no optimizer-facing doc sends the agent to the draw history the data schedule replaced",
          not [name for name, text in docs.items() if "draw_history.json" in text]
          and "train_schedule.json" in docs["optimizer-instructions.md"]),
-        ("...and no optimizer-facing doc still tells the agent to maximize a macro-F1",
-         not [name for name, text in docs.items()
+        # The objective paragraphs are held to the same rule except the 2-way one, whose objective IS a
+        # macro-F1 (it names it, and says "maximize" only through the neutral sentence above).
+        ("...and no optimizer-facing doc still tells the agent to maximize a macro-F1, nor does the "
+         "default objective's paragraph",
+         not [name for name, text in {**docs, "default objective": _scorer().OBJECTIVE_DESCRIPTIONS[
+              _scorer().DEFAULT_OBJECTIVE]}.items()
               if re.search(r"maximiz\w*\s+(?:\S+\s+){0,3}macro[- ]?F1", text, re.I)]),
+        # Review 2026-10-15: with two objectives, "accuracy" is the WRONG target for a 2-way run, so the
+        # shared docs may no more tell the agent to maximize accuracy than to maximize a macro-F1 --
+        # which objective to maximize lives only in the per-run paragraph. And each rendered prompt is
+        # held to its own objective: the 2-way prompt never says maximize accuracy, the default never
+        # says maximize a macro-F1.
+        ("...and no shared optimizer-facing doc tells the agent to maximize accuracy either",
+         not [name for name, text in docs.items()
+              if re.search(r"maximiz\w*\s+(?:\S+\s+){0,3}accuracy", text, re.I)]),
+        ("...and each objective's rendered prompt never tells the agent to maximize the other's metric",
+         not re.search(r"maximiz\w*\s+(?:\S+\s+){0,3}accuracy", _render("macro_f1_2way"), re.I)
+         and not re.search(r"maximiz\w*\s+(?:\S+\s+){0,3}macro[- ]?F1", _render(None), re.I)),
         ("...while the macro survives, named as the diagnostic it now is",
          "macro_f1_renormalised" in docs["task-and-scoring.md"]
          and "macro_f1_renormalised" in docs["optimizer-instructions.md"]),

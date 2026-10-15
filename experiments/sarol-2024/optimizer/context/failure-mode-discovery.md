@@ -47,7 +47,10 @@ Then pick a draw. Use one, or several in parallel:
   is scoring zero. ⚠ **Weigh it by mass now.** Under the old macro objective a class with six gold
   instances moved the number as much as one with two hundred; under accuracy it moves it thirty-three
   times less. Reading a rare class is still worth doing — it is often where a mechanism is clearest —
-  but expect to spend the iteration's *score* on the classes that carry claims.
+  but expect to spend the iteration's *score* on the classes that carry claims. Under the 2-way
+  objective (`sarol_macro_f1_2way`) the weighing changes: the two sides count equally, so a real problem
+  called ACCURATE costs as much as a false flag, and the NOT side's rare classes matter far more than
+  their counts suggest.
 - **By confusion cell.** Everything where gold is X and the prediction was Y. The most diagnostic
   draw once you suspect a specific boundary is being crossed, because every example in it failed the
   same way by construction.
@@ -128,7 +131,8 @@ bottom of the scale:
 The 2-3 band is the one that needs judgement, and the tie-breaker is the mechanism rather than the
 count: three claims failing the same clearly-named step is worth more than three claims that merely
 share a gold class. When two modes tie, take the one whose claims are more common in the batch —
-under accuracy that is where the points are.
+under accuracy that is where the points are. Under the 2-way objective, prefer instead the mode that
+moves claims across the ACCURATE / NOT line; a mix-up between two problem labels scores nothing there.
 
 Watch for two things the counts will not tell you:
 
