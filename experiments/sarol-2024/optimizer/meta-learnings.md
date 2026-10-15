@@ -195,7 +195,7 @@ visible in a 5-record mistake corpus: CONTRADICT fired **0%** against a 7.1% dev
 **4.1%** against 12.2%, OVERSIMPLIFY **10.2%** against 2.6%. **Two further things this found that
 per-claim reading cannot:**
 (i) the rubric's own house base-rate note matched the **TRAIN** pool on all five of its figures and
-was wrong by **2.5x** on CONTRADICT for the split actually scored;
+was wrong by **2.5x** on CONTRADICT for the split actually scored; ⚠ *(2026-10-14: the v13 restore brought this note back unchanged. It was re-corrected at `hillclimb-2026-10-14` iter 3.)*
 (ii) **the fixed TRAIN roster systematically mis-ranks exactly the miscalibrated classes** - it drew
 CONTRADICT 1 (2% vs dev 7.1%), ETIQUETTE 3 (6% vs 12.2%), OVERSIMPLIFY 3 (6% vs 2.6%) - which is
 *why* fourteen versions of mistake-corpus reading never found any of it. **Run this in step 2, before
@@ -227,6 +227,134 @@ something. If it is a characterisation, it is not yet bound.**
 ## Pending
 
 *(Claims seen once. Most single-iteration deltas belong here, not above.)*
+
+**2026-10-15 (`hillclimb-2026-10-14d` iter 1) — when the evidence condition changes under the rubric, grep the rubric for every
+numeric or descriptive claim about the window before reading any failure. The judge quotes them as reasons.** k went 20 → 100
+between runs. The rubric still said the window is "typically under a tenth" of the paper, "a sliver". Measured from the trace
+envelopes, it is now 24–83% (median ≈ 37%). 3 of 25 ledgers argued from "sliver", and one invented a "25 of 280" count. Corrected
+in E1, with no routing rule changed (F1–F4 pending). ⚠ **Every silence-route entry on this sheet (gate-8 sink "right 2:1",
+"one missing is a retrieval hole", the window-holes in 14c iter 3) was measured at k = 20.** Re-census them at k = 100 on fresh
+claims before relying on them, by gold of the claims routed, since the destination label decides the net. Also: k = 100 did not move
+v27-content's VAL n50 outside scatter (0.78 against 0.72–0.82 for v25/v26 at k = 20).
+**Graded 2026-10-15 (iter 2):** F1–F3 held, so the correction was verdict-neutral as predicted (0 "sliver" ledgers). The k = 100
+re-census of the silence route on 50 fresh claims found the genuine one-missing route firing **once** (`1178-88`, gold IRR). Gate 8 ACC
+was 31 right / 6 wrong, and the wrong ones split over 5 gold classes. **At k = 100 the one-missing route is too rare to edit in either direction.**
+
+**2026-10-15 (`hillclimb-2026-10-14d` iter 2) — grep the notes for every miss's claim id before treating it as new evidence.
+"Newly drawn" in a run is not new to the lineage.** All 5 misses among this run's 25 newly drawn TRAIN claims already had blame
+rows in 2–4 earlier findings, each under a refusal that had been measured. Reading them as fresh evidence would have re-opened
+gate 2 for the fifth time. One `grep -rl <id> /workspace/ro/notes` per miss settles it. **If every miss is lineage-chronic and
+under a measured refusal, that is the no-edit terminal-stop case.** Also: state any "fire rate" prediction *relative to the batch's
+gold rate for the same classes*. F4 (non-ACC share ≤ 25%) failed only because the batch's gold non-ACC share was 40%.
+
+**2026-10-14 (`hillclimb-2026-10-14c` iter 1) — audit each emittable label's lifetime precision across the notes, not one batch's.
+A label whose fires gold has never confirmed is a free edit.** One batch's INR count looks like noise (0/1). Grepping every findings
+note gave **about 0/9 across two runs**, mostly on gold ACC, and dev holds 0 INR. So every INR fire on VAL is a guaranteed miss.
+Edit: gate 5 now fires only on a review, with the test written in the window (an own-study passage means not a review). INR is
+no longer routed to. Pending (Y1–Y6). **Procedure: in step 2, grep the notes for "precision by predicted label" per class. Any
+class at 0/n with n ≥ 5 that also has 0 or tiny dev support should be cut out of the ladder, not bounded again.**
+
+**2026-10-14 (14c iter 2) — graded: the "gate 5 only on a review" cut held on every program-side observable, and it showed that
+gold does not use the review axis.** INR fires 0/50, `145-50` → ACC, ETIQ unchanged (Y1–Y4, Y6 held). But two gold-INDIRECT claims
+in *primary* studies were refused *because* "not a review". So gold applies INDIRECT to relays whatever the paper type, as the paper's
+own INDIRECT definition does. The cut still pays under accuracy, because past non-review gate-5 fires were mostly gold ACC. **Two
+lessons.** (i) A house restriction that narrows a paper definition can be a net gain and still be wrong about gold. Record both
+facts, so that nobody later reads "held" as "gold agrees". (ii) A gate with a cheap disqualifier ("not a review") gets disposed of on
+that disqualifier first. 30+ of 50 ledgers now skip the marker check entirely. Expect any one-word exit you add to become the default
+answer to its gate.
+
+**2026-10-14 (14c iter 3) — when pricing a cut that un-fires a gate, count as gains only the wrong fires whose gold equals the
+fallback label.** A cut on gate 2 (common-noun lists, as opposed to proper identifiers) looked strong on precision: identifier lists were 6/7
+right and common-noun lists 3/9. But un-firing sends a claim to gate 8, which emits ACC, and only 3 of the 6 wrong fires were gold ACC.
+The other 3 (gold NS, INR) stay wrong. So the cut is +3 −3 to 4, net ≤ 0, and it was refused. Measure it on each claim's
+**first-draw** verdict (from `outcome` across `iter/*/train_schedule.json`), not on the carry-weighted batch. Gate 2 has now
+been measured three iterations running at about 50% TRAIN precision with no structural discriminator ("such as", list length, item
+lexical class). Treat its residual as gold-side inconsistency on list citations (e.g. two companion sentences from one citing paper,
+same shape, gold ACC vs ETIQ), not as an open edit.
+
+**2026-10-14 (14c iter 2) — before declaring "no discriminator" for a gate, tabulate its fires by one structural feature of the trigger
+over right and wrong fires together.** Gate 2: "such as" 2/4, two-item lists 2/5, three-plus items 3/3. The tabulation took one script
+over `files/*.json` and showed that the only clean split loses 2 to win 1. That is a measured refusal, not an impression.
+
+**2026-10-14 (14c iter 1) — the 0.06 scatter is re-confirmed on the current program.** Byte-identical v25 on the same first-50 VAL
+claims scored 0.72 (14b) and 0.78 (14c). v13 0.76/0.76, v21 0.76, v22 0.74 and v25 0.75 (mean) are all one cluster. **No
+version since v13 has separated from it on n50.** Do not read any n50 step under 0.06 as a result.
+
+**2026-10-14 (`hillclimb-2026-10-14b` iter 1) — before you grade a prediction or plan an edit, check that the TRAIN batch can grade it.
+A small TRAIN batch that has lost calls to crashes cannot.** This batch had 25 claims and 11 crashed, leaving 14 scored, with gold
+CONTRADICT support 0. Eight of nine predictions about a CONTRADICT edit came out "could not tell". The one that could be graded was
+a *ledger* observable (whether the `gate 3:` write-down is produced: 11/15, up from 5/149), and that is the only kind of observable
+that does not need gold support for the class. **Procedure:** when you write a prediction for a rare class, pair it with a
+ledger-level observable (write-down produced, gate walked), so the prediction can still be partly graded on a thin batch. When
+every real miss maps to a standing decision and the previous edit is still ungraded, a no-edit terminal stop is the right call. Do
+not reach for a third untested change.
+
+**2026-10-14 (`hillclimb-2026-10-14b` iter 1) — the gate-5 "entities but not the fact" sub-shape now has 4 instances across two runs**
+(`100-80`, `843-45`, `687-84` (unmarked heading), and `1391-43` (unmarked results heading carrying the entities, while the clause's
+"has been proposed" predicate is carried only by the marked line)). It is still not edited under accuracy (see the 2026-10-09 iter 2
+gate-5 entry). If the objective moves to macro, the edit is to require the unmarked passage to state the clause's *predicate*,
+not just name its entities.
+
+**2026-10-14 (`hillclimb-2026-10-14` iter 4) — a gate that can be disposed of in one unquoted line stays dead whatever the
+preamble says about its base rate. And the TRAIN pool cannot show you how dead it is when the class is denser in dev.**
+The corrected base-rate note (iter 3, E2) moved CONTRADICT from 0 fires to 0 fires. 144 of 149 ledgers disposed of gate 3 in
+prose ("no passage states the opposite"). This is the second time this lineage has seen it (10-08b iter 4 was the first). In
+both cases the gate became live only when it was given a **required refusal write-down**: the version in directory
+`restored-program-v15` fired it 2/49 at 1/2 precision, and the v13 restore deleted that write-down and the rate fell back to 0.
+Separately, **CONTRADICT is 2.8% of the TRAIN pool and 7.1% of dev**. A gate tuned on TRAIN false fires alone will be set too
+strict for VAL, and every precision it shows on TRAIN understates its VAL precision by roughly that ratio. Iter 4 re-added the
+refusal write-down and replaced the "cannot also be true" bar with a direction test (X1–X7 in that iteration's findings).
+**Procedure: for a class with a 0% firing rate, first count the ledgers that write the gate down. If almost none do, add the
+write-down before you touch the gate's threshold or the preamble.**
+
+**2026-10-14 (`hillclimb-2026-10-14` iter 3) — a closed list that is narrower than another section of the same rubric silences
+a class without anyone seeing it. Check every "closed list" against the sections that route into it.** Gate 7's axis list
+(strength / population / stage) had been narrowed to stop NS over-firing. But the subset section still said a passage that "reports
+the same relationship more weakly" is NOT_SUBSTANTIATE, and the judge had nowhere to write that shortfall. It wrote "not one of the
+three closed shortfall axes" and emitted ACC. NS fired at **1% against an 8% dev prior**, and 4 gold-NS claims died that way.
+Edit: a fourth, literal axis (`null part`: the source's own *no difference / did not / smaller than* on part of the clause's
+predicate). Pending (W1–W4 in that iteration's findings).
+**Graded 2026-10-14 (iter 4): W1–W4 held.** Both named gold-NS claims → NS, NS F1 0 → 0.19, and `null part` fired 3 times (2 right).
+Six gold-ACC ledgers considered the axis and correctly declined it, so the literature-level exclusion binds. One false fire came on a
+null about a *subcase* of the clause's predicate (`789-44`), and that is the same shape as the correct `846-45`. Do not try to bound it.
+**Method worth reusing — window-level exposure census:** every claim's evidence envelope is the first `tool_result` in its trace
+whose text starts with `"claim_id"`. Extracting all of them and grepping the windows for a candidate trigger phrase,
+cross-tabbed by gold, takes one 30-line script. It showed that "conflicting / inconsistent / unclear whether" sits in **13 of 67
+gold-ACC windows**, including two gold-ACC near-analogues of a gold-OS claim. That kept the literature-level phrasing out of the
+trigger. It is the first exposure measurement in this lineage over *passage text* rather than over ledgers. It still measures
+TRAIN exposure only (see Confirmed, iter 4).
+
+**2026-10-14 (iter 3) — a defect the notebook already recorded came back with a wholesale restore, and nobody re-checked it.**
+The house base-rate note (CONTRADICT "under one in thirty", gate 3 "least room") was corrected at 10-08b iter 4. It came back
+with the v13 restore at sched iter 1, and it sat there for 8 iterations while CONTRADICT fired 0–3 times per batch (all false since
+the design rule) against a 7.1% dev prior. **After any restore, grep the restored text for every defect the notebook names as
+fixed in the versions you are skipping.** Corrected to dev figures; pending (W5).
+**Graded 2026-10-14 (iter 4): W5 did not hold.** CONTRADICT fired 0/149 after the note was corrected. **A base-rate sentence does not
+make a silent gate fire.** See the iter-4 entry above.
+
+**2026-10-14 (iter 2 → graded at iter 3): the deletion of the gate-3 design-attribute rule held.** `137-50` → ACC, `1689-72` →
+ACC, `523-19` off CONTRADICT, and 0 false C fires in 100. VAL n100: v23 0.768 against v22 0.75. That is scatter-sized but
+not negative. The "audit an 'always fires' rule by its fire record" method worked once. It cost nothing measurable, and it
+left CONTRADICT recall at 0/4, but the four gold C misses did not run through the deleted rule.
+
+**2026-10-14 (`hillclimb-2026-10-14` iter 2) — a house rule that says a gate "always" fires on some shape overrides the gate's
+own general test. Audit such rules by their fire record, not by their target.** Gate 3's design-attribute rule ("a different
+value *always* opposes") was added for one claim (`2093-18`) that it never converted. Afterwards it fired 3 times across two
+iterations, all wrong (`523-19` twice, gold ETIQ; `137-50`, where the clause named the source "a meta-analysis", gold ACC). It
+also displaced the "both cannot be true" test that had been keeping those claims ACC. It was replaced, net −3 lines, with a
+statement that how the citing authors name the source is not the source's statement. That edit is pending (V1–V2). The method
+generalises: grep the manifest for the rule's write-down, and count right versus wrong fires since it landed.
+
+**2026-10-14 (`hillclimb-2026-10-14` iter 1) — when a miss's `nuance` gives its reason in phrasing that sounds like the rubric, grep the
+rubric for that phrase before blaming anything else.** `952-76` (gold ACC → NS) justified "outside" with "loss at an earlier stage
+than the one the clause names", which is close to verbatim the gate-1 example "linkage failing at an earlier stage of care than the
+clause names" (in the rubric since v9). That makes it a rule-followed `rubric` blame. The locator was one grep, not a trace read.
+Edit: example deleted, plus a status-word test for "earlier stage". Pending until graded (U1–U3 in that iteration's findings).
+**Graded 2026-10-14 (iter 2): U1–U3 held.** `952-76` → ACC, and NS fired 0 times in 50 (the NS fires lost were all false). VAL
+v22 vs v21: −0.02 on n50 and +0.02 on n100, which is scatter. The grep-the-phrase locator worked, so move this lesson to Confirmed if it
+works again.
+**Also measured:** v21 (lone-marker gate-2 extension) scored **0.76 on the first-50 VAL claims, tying v13 (0.76, 0.76)**. The
+extension did not cost VAL on that batch. Its TRAIN precision was 2/4, which is ungradable at that size.
 
 **2026-10-09 (`hillclimb-sched-2026-10-09` iter 5) — a house *precondition* on a gate can encode the inverse of how gold uses
 the label. Find it by splitting the gold class on the precondition's own variable.** Gate 2 required a quotable sibling
@@ -757,3 +885,58 @@ denominators** — do not combine them into a precision figure without allowing 
   × ~21 claims covered all 84 misses (68 rubric, 5 execution with quotes). **Two edits, 437 → 447 lines:** gate 2's sibling
   precondition deleted, so lone-marker partial carry of a named list → ETIQUETTE, with four competing passages repaired. And a
   gate-4 rounding "no". NS residual (16), gate-5 bound (9) and IRR axis widening (5) recorded, not edited. **Not yet measured.**
+- **iter 1 (2026-10-14, `hillclimb-2026-10-14`)** — Measured v21: VAL n50 **0.76 vs floor 0.70 (+0.06)**, which ties the lineage
+  best on the same 50 claims. TRAIN 0.72 vs floor 0.72 (18/25), macro-renorm 0.419 at 5 classes. Of iteration 5's T1–T8, only T6
+  held (on its count). The rest could not tell (new run, new batch, VAL back to n50). There were 7 misses across 5 mechanisms, none
+  ≥4, so I read them directly with no fan-out. **One edit, rubric 447 → 452:** deleted gate 1's "earlier stage of care" example
+  and added a stage-containment rule (a stage of the programme the clause names is inside it; earlier = outside only against a
+  printed status word). Gate-2 lone-marker false fires (2 vs 2 right), gate 5 (2) and gate-8 one-missing (1) recorded, not edited.
+  **Not yet measured.**
+- **iter 2 (2026-10-14, `hillclimb-2026-10-14`)** — Measured v22: VAL n100 **0.75 vs floor 0.69 (+0.06)**. v21 regraded on n100
+  scored 0.73, and on n50 v22 was 0.74 against v21's 0.76, so the difference is scatter. TRAIN 0.70 vs floor 0.66 (35/50),
+  macro-renorm 0.340 at 6 classes. U1–U3 and U5 held, and U4 partly held (ETIQ precision 0.625). There were 15 misses, read
+  directly with no fan-out, all rule-followed. CONTRADICT fired 0/3. **Two gate-3 edits, rubric 452 → 453:** the
+  design-attribute "always opposes" paragraph was deleted and replaced by "naming the source is not its statement", and a
+  pooled-result bound was added. The 8 gate-5/gate-8/closed-axis ACC misses (standing decisions), the 3 gate-2 false fires and
+  the "not clear whether" NS anecdote were recorded and not edited. **Not yet measured.**
+- **iter 3 (2026-10-14, `hillclimb-2026-10-14`)** — v23: TRAIN 0.687 against floor 0.69 (n100, 31 misses), VAL n150 0.70
+  against floor 0.647 (+0.053). Iter-2 predictions V1–V3, V5 and V6 held. V4 half-held: 0 false C, but gold C 0/4. 68% of misses
+  are gate-8 ACC on gold non-ACC. Edits: a gate-7 `null part` axis (NS) and the base-rate note corrected to dev (C). 453 →
+  466 lines.
+- **iter 4 (2026-10-14, `hillclimb-2026-10-14`)** — Measured v24: VAL n250 **0.676 vs floor 0.612 (+0.064)**, with v23 regraded at
+  0.668 on the same claims (scatter). TRAIN 0.644 vs floor 0.647 (96/149), macro-renorm 0.212 at 8 classes. Iter-3 predictions W1–W4 and
+  W6–W8 held. W5 did not: the base-rate correction left CONTRADICT at 0 fires. 72% of misses are gate-8 ACC on gold non-ACC,
+  split across standing decisions. A control census showed the silence route is right 2:1, with its errors spread over six
+  classes, so it was not edited. Two subagents blamed the 25 new misses (20 rubric, 1 execution). **One boundary, rubric 466 →
+  481:** gate 3's "cannot also be true" bar was deleted and replaced by a direction test, plus a required refusal write-down
+  and a gate-2 exception that sends an opposed carried item to gate 3. **Not yet measured.**
+- **iter 1 (2026-10-14, `hillclimb-2026-10-14b`)** — Measured v25 (the gate-3 E1 edit). VAL n50 **0.72 against floor 0.70** (v13 scored 0.76/0.76
+  and v22 0.74 on the same claims, so this is inside scatter). TRAIN had 11 of 25 calls crash (exit 143, infrastructure), leaving 14 scored and 2 misses.
+  Both misses fall under standing decisions (gate-5 third bound; gate-8 silence route). E1 could not be graded except through X5 (the
+  gate-3 write-down is now produced on 11/15 ledgers). **No edit. Terminal stop for human triage of the crash burst.**
+- **iter 1 (2026-10-14, `hillclimb-2026-10-14c`)** — Re-measured v25 on the same 25 TRAIN claims as 14/14b, with 0 crashes:
+  TRAIN 0.76 vs floor 0.72, VAL n50 **0.78 vs floor 0.70 (+0.08)**, against 0.72 at 14b (scatter). X5 and X8 held, the rest
+  could not tell (no gold C on the roster). 6 misses, read directly, all rule-followed. **One edit, rubric 481 → 488 plus a
+  dispatch sentence:** gate 5 fires only on a review, so INDIRECT_NOT_REVIEW (about 0/9 lifetime, 0 in dev) is no longer routed to.
+  **Not yet measured.**
+- **iter 2 (2026-10-14, `hillclimb-2026-10-14c`)** — Measured v26: TRAIN 0.76 (floor 0.66), **VAL n100 0.75 (floor 0.69, +0.06)**, the
+  first score on n100. Y1–Y4 and Y6 held, Y5 could not tell. E1's review restriction blocked 2 gold IND in primary studies. Kept on
+  expected value. 7/12 misses are the gate-8 sink (standing decision). One edit, E2: gate 5's sole-support bound is defeated only by an
+  unmarked passage that names the entities to gate 8's standard (not a broader category) and asserts the clause's predicate (5th instance
+  across runs of "entities, not the fact"). The gate-2 two-item cut was measured and refused. **Not yet measured.**
+- **iter 3 (2026-10-14, `hillclimb-2026-10-14c`)** — Measured v27: TRAIN 0.758 vs floor 0.69 (75/99, 1 crash), **VAL n150 0.72 vs
+  floor 0.647 (+0.073)**, the first score on n150. Z1, Z3–Z6 and Z8 held. Z2 and Z7 could not tell (n=1, and no base on n150). Two subagents
+  blamed 16 new misses: 20 rubric, 3 retrieval, 0 execution over 24. Modes: gate 2 coin flip (9), gate-8 sink (6, standing), gate-5 IND
+  refusals (3), C→NS/ACC (3, 2 retrieval), OS via containment (2). Gate-2 cuts were measured on first-draw verdicts and were net ≤ 0.
+  **No edit. Terminal stop for human triage.** The ask is a repeat measurement of v27 on n150, plus retrieval (3–4 misses are window holes).
+- **iter 1 (2026-10-15, `hillclimb-2026-10-14d`)** — First measurement at **k = 100**: v27 TRAIN 0.80 vs floor 0.72 (20/25, the same 25
+  ids as the three previous runs' iter 1), **VAL n50 0.78 vs floor 0.70 (+0.08)**, inside the k = 20 cluster. Canary ok. Predecessor P1 and P2
+  could not tell. All 5 misses are long-carried and under standing decisions, with 1 instance per mechanism. **One edit, E1, a factual
+  correction:** the rubric's "under a tenth / sliver" window description was replaced by the measured "a quarter to a half", and one
+  archaeology sentence was deleted. No routing rule changed, and the edit is expected to be verdict-neutral. **Not yet measured.**
+- **iter 2 (2026-10-15, `hillclimb-2026-10-14d`)** — Measured v28: TRAIN 0.80 vs floor 0.66 (40/50), **VAL n100 0.76 vs floor 0.69
+  (+0.07)**, with v27 regraded at 0.75 on the same claims (scatter). Canary ok. F1–F3 held. F4 failed on its number but not on its
+  mechanism (the batch is denser in gold non-ACC). H was measured: the one-missing route fires 1 in 50 at k = 100. All 10 misses are
+  lineage-chronic and rule-followed: gate-8 sink 6 (5 gold classes), gate-2 coin flip 3 (5/8; two-item lists pooled 4/9), anecdote 1.
+  Each candidate cut was priced against its control and refused. **No edit. Terminal stop for human triage.** The asks are a repeat
+  measurement on larger VAL, and a C-stratified TRAIN draw (C is 7% of dev and invisible on TRAIN).
