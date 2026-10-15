@@ -130,14 +130,18 @@ class Profile:
 #: BM25 + MonoT5 top-20, so *k*=20 matches its retrieval budget (Open Questions §10). One session
 #: per claim — the judge, and nothing else. Report *k* alongside every number; a macro-F1 without
 #: the *k* is not a result.
+#: **k raised 20 -> 100 on 2026-10-14 (Phil).** Measured offline over all 311 Dev claims: at 20, BM25
+#: retrieved NONE of the annotators' marked passages for 30% of claims (CONTRADICT 41%); at 100, 3%
+#: (CONTRADICT 9%), for ~+4k tokens a claim. Numbers from here on are not comparable to the k=20
+#: MultiVerS budget, nor to this lineage's own k=20 scores.
 RETRIEVAL = Profile(
     name="retrieval",
     phase="1",
     stages=("adjudicator",),
     editable=JUDGE_SCOPE,
     evidence_producer="bm25",
-    selector="bm25-top20",
-    retrieval_k=20,
+    selector="bm25-top100",
+    retrieval_k=100,
     source_mode="sarol_corpus",
     requires_paperclip_cli=False,  # one stage, the adjudicator; its prompt never mentions paperclip
 )
@@ -327,9 +331,9 @@ def _selftest() -> int:
         ("retrieval declares the corpus provenance it actually has",
          RETRIEVAL.source_mode == "sarol_corpus"),
         ("...and declares its selector, so a reader can tell it from an agentic search",
-         RETRIEVAL.selector == "bm25-top20"),
-        ("...at k=20, matching the budget MultiVerS's best result used",
-         RETRIEVAL.retrieval_k == 20),
+         RETRIEVAL.selector == f"bm25-top{RETRIEVAL.retrieval_k}"),
+        ("...at k=100, the budget chosen 2026-10-14 so the annotators' passage is retrieved for 97% of Dev claims",
+         RETRIEVAL.retrieval_k == 100),
         ("an agentic profile declares no mechanical selector",
          AGENTIC.selector is None and AGENTIC.retrieval_k is None),
         ("retrieval is mechanical, agentic is not",

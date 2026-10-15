@@ -362,7 +362,7 @@ def _selftest() -> int:
              all(pg.line != 2 for _, pg in ranked)),
             ("the budget truncates to k", len(small["sub_claims"][0]["evidence"]) == 2),
             ("...and k is recorded, since a macro-F1 without it is not a result",
-             env["attestation"]["retrieval_k"] == 20),
+             env["attestation"]["retrieval_k"] == profiles_mod.RETRIEVAL.retrieval_k),
             ("evidence carries a resolvable locator back into content.txt",
              env["sub_claims"][0]["evidence"][0]["locator"]
              == f"pdfs/ref_abc123/content.txt#L{ranked[0][1].line}"),
@@ -375,7 +375,7 @@ def _selftest() -> int:
 
             # -- honesty about what it did -----------------------------------------------------
             ("the selector is declared, so a reader can tell this from an agentic search",
-             env["attestation"]["selector"] == "bm25-top20"),
+             env["attestation"]["selector"] == profiles_mod.RETRIEVAL.selector),
             ("phrasings_tried holds the one query actually issued, unpadded",
              env["attestation"]["phrasings_tried"] == [claim]),
             ("provenance says the corpus, not a PDF ingest that never happened",

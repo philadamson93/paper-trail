@@ -238,7 +238,7 @@ directions** — is window-silence read as paper-absence, and because the obviou
 one thing you cannot do.
 
 **Under the `retrieval` profile the window is a fixed experimental condition and is not yours to
-change.** BM25, top-20, one query. That fixity is deliberate: it isolates judgment from acquisition so
+change.** BM25, top-100, one query (raised from 20 on 2026-10-14 so the annotators' passage is in the window for 97% of Dev claims). That fixity is deliberate: it isolates judgment from acquisition so
 that Phase 1 measures the adjudicator alone. It is not an oversight to be engineered around, and
 proposing a different `k`, a different ranker, or a second query is proposing to leave the experiment
 rather than to improve the program.

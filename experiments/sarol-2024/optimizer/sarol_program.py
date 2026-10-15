@@ -706,7 +706,7 @@ def _selftest() -> int:
              all((r["stages"]["adjudicator"].get("trace_ref") or "").endswith("events.jsonl")
                  and pathlib.Path(r["stages"]["adjudicator"]["trace_ref"]).is_file() for r in records.values())),
             ("the manifest carries the run identity the scorer reads",
-             manifest["profile"] == "retrieval" and manifest["retrieval_k"] == 20 and manifest["requested_count"] == 3
+             manifest["profile"] == "retrieval" and manifest["retrieval_k"] == profiles_mod.RETRIEVAL.retrieval_k and manifest["requested_count"] == 3
              and manifest["model"] == "claude-haiku-fake" and manifest["failed_calls"]["count"] == 0),
         ]
         from isolation.setup_fingerprint import fingerprint_hash, setup_fingerprint  # noqa: PLC0415
