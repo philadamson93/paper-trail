@@ -150,7 +150,9 @@ Above them sits the layer that **is** yours:
 
 - `experiments/sarol-2024/specs/verdict_schema_sarol.md` — the **clarifications layer**. How to apply
   the frozen definitions: boundaries between adjacent labels, worked examples, tie-breaks,
-  decomposition, multi-citation attribution, sufficiency thresholds.
+  decomposition, multi-citation attribution, sufficiency thresholds. Worked examples are allowed, but
+  one built from a specific TRAIN claim (its names, numbers or wording) **may lead to overfitting**:
+  the rule then fits that claim rather than the shape it stands for.
 
 Nearly every rubric-blamed failure mode is a defect in the clarifications layer, and improving it is
 much of the point of this loop. The division is: the definitions say what `OVERSIMPLIFY` *is*; the

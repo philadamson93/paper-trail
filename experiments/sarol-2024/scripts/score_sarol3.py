@@ -157,7 +157,15 @@ OBJECTIVE_DESCRIPTIONS: dict[str, str] = {
         "the nine is a miss. `do_nothing_floor` is the 2-way macro-F1 of a program that answers "
         "`ACCURATE` every time on the same batch (about 0.37 on Dev), so defaulting to `ACCURATE` is "
         "punished here, not rewarded. You still emit the nine labels; right and wrong on TRAIN, the "
-        "mistakes file and retirement all follow the 2-way collapse."
+        "mistakes file and retirement all follow the 2-way collapse. Every route to a NOT label is a "
+        "trade: each real problem it catches raises the score, each `ACCURATE` claim it flags lowers it. "
+        "Work out the break-even from your own TRAIN `confusion_matrix_2way`: recompute the score with one "
+        "more problem caught and with one more false flag, and the ratio of the two changes is how often "
+        "a route must be right to pay. While missed problems outnumber false flags it is below one half, "
+        "so do not tighten a route that is right more often than its break-even. Write your predictions "
+        "in this objective's currency: per edit, how many TRAIN claims you expect to cross the "
+        "ACCURATE/NOT line the right way and the wrong way, graded next iteration from the per-claim "
+        "right/wrong."
     ),
 }
 

@@ -177,9 +177,11 @@ distribution, then fix what carries mass.
 prompt. On a run's first iteration, take the newest folder from an earlier run of this lineage in
 `/workspace/ro/notes/` (or `legacy/`, notes from before that layout); a folder ending `-failed` holds
 the notes of a session that failed. It contains the previous iteration's edits and, per
-edit, which verdict classes it predicted would move and in which direction. Check each against
-`per_class_f1_9way` in the release you have just been handed. (`per_class_f1` carries only the three
-collapsed buckets and cannot answer a nine-class prediction.)
+edit, which verdict classes it predicted would move and in which direction. Check each against the
+movement your objective scores: under `sarol_accuracy_9class`, `per_class_f1_9way` in the release you
+have just been handed (`per_class_f1` carries only the three collapsed buckets and cannot answer a
+nine-class prediction); under `sarol_macro_f1_2way`, the claims that crossed the ACCURATE/NOT line,
+read from the per-claim right/wrong and `confusion_matrix_2way`.
 
 Write down, for each prediction: **held / did not hold / could not tell.** The third answer is real
 and is not a cop-out — use it when the class had too little support to say (check `support_9way`), or
@@ -270,9 +272,11 @@ judge supplies the missing test itself, and it supplies one that reaches whateve
 preferred. This loop has paid two iterations to learn that, once for a threshold and once for the
 scope the threshold applied to.
 
-**Make as many edits as the evidence supports.** There is no separability requirement and no limit.
-The sweep costs the same whether the iteration carries one edit or twelve, so a single-edit
-iteration is not the cautious choice, it is the expensive one. Edits aimed at the same verdict class will not be
+**How many edits per iteration is a tradeoff, and it is yours.** More edits converge faster, but a
+bundle hides which change worked and which hurt: on 2026-10-15 a three-edit iteration lost score and
+the one edit that caused most of the loss could not be told apart from the two that helped. Prefer
+small, targeted edits unless you are highly confident, and when you do bundle, say so and predict the
+joint movement. Edits aimed at the same verdict class will not be
 individually attributable next iteration — that is accepted; say in your predictions that you are
 testing them jointly and predict the joint movement.
 
@@ -317,8 +321,10 @@ check happens because step 1 of the next iteration does it by hand. That is why 
 to be specific enough to be wrong: "accuracy should improve" cannot fail.
 
 **Write it as a prediction record**, not a sentence of hope. Per edit: the class or boundary you
-expect to move, the direction, and **the observable you will read next time** — a named
-`per_class_f1_9way` entry, the VAL trend, or a specific `claim_id`'s label. Next iteration resolve
+expect to move, the direction, and **the observable you will read next time** — in your objective's
+currency (a named `per_class_f1_9way` entry under `sarol_accuracy_9class`; under `sarol_macro_f1_2way`,
+TRAIN claims crossing the ACCURATE/NOT line the right way and the wrong way), the VAL trend, or a
+specific `claim_id`'s label. Next iteration resolve
 each as **held / did not hold / could not tell** — three outcomes, and the third is not a cop-out.
 "Could not tell" is the honest answer when the class had too little support (check `support_9way`) or
 the move was inside the instrument's scatter. A prediction you can only half-grade was not specific
@@ -393,7 +399,10 @@ per-claim tokens, slows every run, and makes the next failure harder to localize
 
 **The noise floor is measured, not derived.** It has been measured directly, so do not estimate it
 from a sampling formula. Re-scoring a **byte-identical** program on the same 50 VAL claims produced
-**0.48 and 0.42**, disagreeing on **16 of 50 labels** (32% churn). That was at 50 claims; the scatter
+**0.48 and 0.42**, disagreeing on **16 of 50 labels** (32% churn) — that is the nine-class figure.
+Under `sarol_macro_f1_2way` the churn is far lower: four re-grades of unchanged versions in the
+2026-10-15 run moved 2 of 50, 5 of 100, 5 of 150 and 20 of 250 claims across the ACCURATE/NOT line
+(2–8%). That was at 50 claims; the scatter
 shrinks as VAL grows, but a single iteration's move is still often smaller than the instrument's own
 scatter.
 
