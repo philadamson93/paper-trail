@@ -215,6 +215,14 @@ def _count(counts: dict[str, int], key: str) -> None:
 
 def _classify(label: Any, counts: dict[str, int], where: str, violations: list[str]) -> None:
     """Sort one verdict value into: valid / wrong-rubric (reject) / unknown (miss)."""
+    if not isinstance(label, (str, type(None))):
+        # A judge once wrote a sub-claim verdict as an object ({"label": ..., "rationale": ...}).
+        # The set membership below raises on an unhashable value, and that took down a whole
+        # 200-claim pass at finalize (2026-10-18, claim 269-83). It is an invalid output like any
+        # other: charged as a miss, counted, never raised.
+        _count(counts, "invalid_label")
+        _count(counts, f"invalid_label:<{type(label).__name__}>")
+        return
     if label in SAROL_9:
         return
     if label in NATIVE_VERDICTS:
@@ -312,7 +320,7 @@ def validate_obj(
                 f"{rubric_path or DEFAULT_RUBRIC_PATH}"
             )
         else:
-            valid_subs = [v for v in sub_verdicts if v in SAROL_9]
+            valid_subs = [v for v in sub_verdicts if isinstance(v, str) and v in SAROL_9]
             expected = worst_wins(valid_subs, order)
             # When no sub-claim carries a usable label there is nothing to roll up from; the
             # invalid labels themselves are already recorded above.
@@ -416,7 +424,16 @@ def _selftest() -> int:
     bad_rollup = validate_file(FIXTURE_DIR / "bad_rollup.json")
     order = load_rollup_order()
 
+    _obj = _fixture("valid_all_sarol.json")
+    _obj["sub_claims"] = [{**_obj["sub_claims"][0], "verdict": {"label": "ETIQUETTE", "rationale": "x"}}] + _obj["sub_claims"][1:]
+    try:
+        object_verdict = validate_obj(_obj)
+    except Exception as exc:  # noqa: BLE001 -- the regression is precisely that this raised
+        object_verdict = exc
     checks = [
+        ("a verdict written as an object is an invalid output, charged and counted, never raised (2026-10-18)",
+         not isinstance(object_verdict, Exception) and not object_verdict.ok is None
+         and object_verdict.error_class_counts.get("invalid_label:<dict>") == 1),
         # Fixture 1 -- the gate the adapter smoke actually depends on.
         ("a correct all-Sarol file validates", valid.ok),
         ("...and returns its labels for scoring", valid.overall_verdict == "OVERSIMPLIFY"),
